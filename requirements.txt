@@ -1,0 +1,11 @@
+# ============================================
+# SAP Transformation Management Platform
+# requirements.txt
+# Python 3.11
+# ============================================
+# Sprint 1 – Minimal foundation dependencies only.
+# Additional packages will be added per MASTER_PLAN.md task scope.
+# ============================================
+
+Flask==3.1.0
+SQLAlchemy==2.0.36
