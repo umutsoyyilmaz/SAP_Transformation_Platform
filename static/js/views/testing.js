@@ -183,9 +183,9 @@ const TestingView = (() => {
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modalContainer');
         modal.innerHTML = `
-            <div class="modal__header"><h2>${title}</h2>
-                <button class="modal__close" onclick="App.closeModal()">&times;</button></div>
-            <div class="modal__body">
+            <div class="modal-header"><h2>${title}</h2>
+                <button class="modal-close" onclick="App.closeModal()">&times;</button></div>
+            <div class="modal-body">
                 <div class="form-group"><label>Title *</label>
                     <input id="tcTitle" class="form-control" value="${isEdit ? tc.title : ''}"></div>
                 <div class="form-row">
@@ -195,7 +195,7 @@ const TestingView = (() => {
                                 `<option value="${l}" ${(isEdit && tc.test_layer === l) ? 'selected' : ''}>${l.toUpperCase()}</option>`).join('')}
                         </select></div>
                     <div class="form-group"><label>Module</label>
-                        <input id="tcModule" class="form-control" value="${isEdit ? tc.module : ''}" placeholder="FI, MM, SD..."></div>
+                        <input id="tcModule" class="form-control" value="${isEdit ? (tc.module || '') : ''}" placeholder="FI, MM, SD..."></div>
                     <div class="form-group"><label>Priority</label>
                         <select id="tcPriority" class="form-control">
                             ${['low','medium','high','critical'].map(p =>
@@ -203,28 +203,28 @@ const TestingView = (() => {
                         </select></div>
                 </div>
                 <div class="form-group"><label>Description</label>
-                    <textarea id="tcDesc" class="form-control" rows="2">${isEdit ? tc.description : ''}</textarea></div>
+                    <textarea id="tcDesc" class="form-control" rows="2">${isEdit ? (tc.description || '') : ''}</textarea></div>
                 <div class="form-group"><label>Preconditions</label>
-                    <textarea id="tcPrecond" class="form-control" rows="2">${isEdit ? tc.preconditions : ''}</textarea></div>
+                    <textarea id="tcPrecond" class="form-control" rows="2">${isEdit ? (tc.preconditions || '') : ''}</textarea></div>
                 <div class="form-group"><label>Test Steps</label>
-                    <textarea id="tcSteps" class="form-control" rows="3">${isEdit ? tc.test_steps : ''}</textarea></div>
+                    <textarea id="tcSteps" class="form-control" rows="3">${isEdit ? (tc.test_steps || '') : ''}</textarea></div>
                 <div class="form-group"><label>Expected Result</label>
-                    <textarea id="tcExpected" class="form-control" rows="2">${isEdit ? tc.expected_result : ''}</textarea></div>
+                    <textarea id="tcExpected" class="form-control" rows="2">${isEdit ? (tc.expected_result || '') : ''}</textarea></div>
                 <div class="form-group"><label>Test Data Set</label>
-                    <input id="tcData" class="form-control" value="${isEdit ? tc.test_data_set : ''}"></div>
+                    <input id="tcData" class="form-control" value="${isEdit ? (tc.test_data_set || '') : ''}"></div>
                 <div class="form-row">
                     <div class="form-group"><label>Assigned To</label>
-                        <input id="tcAssigned" class="form-control" value="${isEdit ? tc.assigned_to : ''}"></div>
+                        <input id="tcAssigned" class="form-control" value="${isEdit ? (tc.assigned_to || '') : ''}"></div>
                     <div class="form-group"><label>
                         <input type="checkbox" id="tcRegression" ${isEdit && tc.is_regression ? 'checked' : ''}> Regression Set</label></div>
                 </div>
             </div>
-            <div class="modal__footer">
+            <div class="modal-footer">
                 <button class="btn" onclick="App.closeModal()">Cancel</button>
                 <button class="btn btn-primary" onclick="TestingView.saveCase(${isEdit ? tc.id : 'null'})">${isEdit ? 'Update' : 'Create'}</button>
             </div>
         `;
-        overlay.classList.add('active');
+        overlay.classList.add('open');
     }
 
     async function saveCase(id) {
@@ -332,9 +332,9 @@ const TestingView = (() => {
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modalContainer');
         modal.innerHTML = `
-            <div class="modal__header"><h2>New Test Plan</h2>
-                <button class="modal__close" onclick="App.closeModal()">&times;</button></div>
-            <div class="modal__body">
+            <div class="modal-header"><h2>New Test Plan</h2>
+                <button class="modal-close" onclick="App.closeModal()">&times;</button></div>
+            <div class="modal-body">
                 <div class="form-group"><label>Name *</label>
                     <input id="planName" class="form-control" placeholder="e.g. SIT Master Plan"></div>
                 <div class="form-group"><label>Description</label>
@@ -350,12 +350,12 @@ const TestingView = (() => {
                 <div class="form-group"><label>Exit Criteria</label>
                     <textarea id="planExit" class="form-control" rows="2"></textarea></div>
             </div>
-            <div class="modal__footer">
+            <div class="modal-footer">
                 <button class="btn" onclick="App.closeModal()">Cancel</button>
                 <button class="btn btn-primary" onclick="TestingView.savePlan()">Create</button>
             </div>
         `;
-        overlay.classList.add('active');
+        overlay.classList.add('open');
     }
 
     async function savePlan() {
@@ -385,9 +385,9 @@ const TestingView = (() => {
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modalContainer');
         modal.innerHTML = `
-            <div class="modal__header"><h2>New Test Cycle</h2>
-                <button class="modal__close" onclick="App.closeModal()">&times;</button></div>
-            <div class="modal__body">
+            <div class="modal-header"><h2>New Test Cycle</h2>
+                <button class="modal-close" onclick="App.closeModal()">&times;</button></div>
+            <div class="modal-body">
                 <div class="form-group"><label>Name *</label>
                     <input id="cycleName" class="form-control" placeholder="e.g. SIT Cycle 1"></div>
                 <div class="form-row">
@@ -404,12 +404,12 @@ const TestingView = (() => {
                 <div class="form-group"><label>Description</label>
                     <textarea id="cycleDesc" class="form-control" rows="2"></textarea></div>
             </div>
-            <div class="modal__footer">
+            <div class="modal-footer">
                 <button class="btn" onclick="App.closeModal()">Cancel</button>
                 <button class="btn btn-primary" onclick="TestingView.saveCycle(${planId})">Create</button>
             </div>
         `;
-        overlay.classList.add('active');
+        overlay.classList.add('open');
     }
 
     async function saveCycle(planId) {
@@ -446,9 +446,9 @@ const TestingView = (() => {
         };
 
         modal.innerHTML = `
-            <div class="modal__header"><h2>${data.name} — Executions</h2>
-                <button class="modal__close" onclick="App.closeModal()">&times;</button></div>
-            <div class="modal__body">
+            <div class="modal-header"><h2>${data.name} — Executions</h2>
+                <button class="modal-close" onclick="App.closeModal()">&times;</button></div>
+            <div class="modal-body">
                 <div style="margin-bottom:12px">
                     <button class="btn btn-primary btn-sm" onclick="TestingView.showExecModal(${cycleId})">+ Add Execution</button>
                 </div>
@@ -470,20 +470,20 @@ const TestingView = (() => {
                     </tbody>
                 </table>`}
             </div>
-            <div class="modal__footer">
+            <div class="modal-footer">
                 <button class="btn" onclick="App.closeModal()">Close</button>
             </div>
         `;
-        overlay.classList.add('active');
+        overlay.classList.add('open');
     }
 
     function showExecModal(cycleId) {
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modalContainer');
         modal.innerHTML = `
-            <div class="modal__header"><h2>Add Test Execution</h2>
-                <button class="modal__close" onclick="App.closeModal()">&times;</button></div>
-            <div class="modal__body">
+            <div class="modal-header"><h2>Add Test Execution</h2>
+                <button class="modal-close" onclick="App.closeModal()">&times;</button></div>
+            <div class="modal-body">
                 <div class="form-group"><label>Test Case ID *</label>
                     <input id="execCaseId" class="form-control" type="number" placeholder="Test case ID"></div>
                 <div class="form-group"><label>Result</label>
@@ -500,12 +500,12 @@ const TestingView = (() => {
                 <div class="form-group"><label>Notes</label>
                     <textarea id="execNotes" class="form-control" rows="2"></textarea></div>
             </div>
-            <div class="modal__footer">
+            <div class="modal-footer">
                 <button class="btn" onclick="App.closeModal()">Cancel</button>
                 <button class="btn btn-primary" onclick="TestingView.saveExec(${cycleId})">Create</button>
             </div>
         `;
-        overlay.classList.add('active');
+        overlay.classList.add('open');
     }
 
     async function saveExec(cycleId) {
@@ -528,9 +528,9 @@ const TestingView = (() => {
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modalContainer');
         modal.innerHTML = `
-            <div class="modal__header"><h2>Edit Execution</h2>
-                <button class="modal__close" onclick="App.closeModal()">&times;</button></div>
-            <div class="modal__body">
+            <div class="modal-header"><h2>Edit Execution</h2>
+                <button class="modal-close" onclick="App.closeModal()">&times;</button></div>
+            <div class="modal-body">
                 <div class="form-group"><label>Result</label>
                     <select id="execResult" class="form-control">
                         ${['not_run','pass','fail','blocked','deferred'].map(r =>
@@ -545,12 +545,12 @@ const TestingView = (() => {
                 <div class="form-group"><label>Notes</label>
                     <textarea id="execNotes" class="form-control" rows="2">${e.notes || ''}</textarea></div>
             </div>
-            <div class="modal__footer">
+            <div class="modal-footer">
                 <button class="btn" onclick="App.closeModal()">Cancel</button>
                 <button class="btn btn-primary" onclick="TestingView.updateExec(${execId}, ${cycleId})">Update</button>
             </div>
         `;
-        overlay.classList.add('active');
+        overlay.classList.add('open');
     }
 
     async function updateExec(execId, cycleId) {
@@ -661,9 +661,9 @@ const TestingView = (() => {
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modalContainer');
         modal.innerHTML = `
-            <div class="modal__header"><h2>${title}</h2>
-                <button class="modal__close" onclick="App.closeModal()">&times;</button></div>
-            <div class="modal__body">
+            <div class="modal-header"><h2>${title}</h2>
+                <button class="modal-close" onclick="App.closeModal()">&times;</button></div>
+            <div class="modal-body">
                 <div class="form-group"><label>Title *</label>
                     <input id="defTitle" class="form-control" value="${isEdit ? d.title : ''}"></div>
                 <div class="form-row">
@@ -678,19 +678,19 @@ const TestingView = (() => {
                                 `<option value="${s}" ${(isEdit && d.status === s) ? 'selected' : ''}>${s}</option>`).join('')}
                         </select></div>
                     <div class="form-group"><label>Module</label>
-                        <input id="defModule" class="form-control" value="${isEdit ? d.module : ''}" placeholder="FI, MM, SD..."></div>
+                        <input id="defModule" class="form-control" value="${isEdit ? (d.module || '') : ''}" placeholder="FI, MM, SD..."></div>
                 </div>
                 <div class="form-group"><label>Description</label>
-                    <textarea id="defDesc" class="form-control" rows="2">${isEdit ? d.description : ''}</textarea></div>
+                    <textarea id="defDesc" class="form-control" rows="2">${isEdit ? (d.description || '') : ''}</textarea></div>
                 <div class="form-group"><label>Steps to Reproduce</label>
-                    <textarea id="defSteps" class="form-control" rows="3">${isEdit ? d.steps_to_reproduce : ''}</textarea></div>
+                    <textarea id="defSteps" class="form-control" rows="3">${isEdit ? (d.steps_to_reproduce || '') : ''}</textarea></div>
                 <div class="form-row">
                     <div class="form-group"><label>Reported By</label>
-                        <input id="defReporter" class="form-control" value="${isEdit ? d.reported_by : ''}"></div>
+                        <input id="defReporter" class="form-control" value="${isEdit ? (d.reported_by || '') : ''}"></div>
                     <div class="form-group"><label>Assigned To</label>
-                        <input id="defAssigned" class="form-control" value="${isEdit ? d.assigned_to : ''}"></div>
+                        <input id="defAssigned" class="form-control" value="${isEdit ? (d.assigned_to || '') : ''}"></div>
                     <div class="form-group"><label>Environment</label>
-                        <input id="defEnv" class="form-control" value="${isEdit ? d.environment : ''}" placeholder="DEV / QAS / PRD"></div>
+                        <input id="defEnv" class="form-control" value="${isEdit ? (d.environment || '') : ''}" placeholder="DEV / QAS / PRD"></div>
                 </div>
                 <div style="border-top:1px solid #e0e0e0;margin:12px 0 8px;padding-top:8px">
                     <label style="font-weight:600;font-size:13px;color:#666">🔗 Linked Items</label>
@@ -712,12 +712,12 @@ const TestingView = (() => {
                     <input id="defTransport" class="form-control" value="${d.transport_request || ''}"></div>
                 ` : ''}
             </div>
-            <div class="modal__footer">
+            <div class="modal-footer">
                 <button class="btn" onclick="App.closeModal()">Cancel</button>
                 <button class="btn btn-primary" onclick="TestingView.saveDefect(${isEdit ? d.id : 'null'})">${isEdit ? 'Update' : 'Create'}</button>
             </div>
         `;
-        overlay.classList.add('active');
+        overlay.classList.add('open');
     }
 
     async function saveDefect(id) {

@@ -111,12 +111,12 @@ run: deps
 test: deps
 	@echo ""
 	@echo "🧪 Testler çalıştırılıyor..."
-	@$(PYTEST) tests/ -v --tb=short
+	@GEMINI_API_KEY= $(PYTEST) tests/ -v --tb=short
 	@echo ""
 
 test-verbose: deps
 	@echo ""
-	@$(PYTEST) tests/ -v --tb=long -s
+	@GEMINI_API_KEY= $(PYTEST) tests/ -v --tb=long -s
 	@echo ""
 
 # ── Full Setup (first time) ────────────────────────────────────────────

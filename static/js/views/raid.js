@@ -12,7 +12,7 @@ const RaidView = (() => {
     async function render() {
         const main = document.getElementById('mainContent');
         const sel = document.getElementById('globalProjectSelector');
-        _programId = sel?.value || null;
+        _programId = sel?.value ? parseInt(sel.value, 10) : null;
 
         if (!_programId) {
             main.innerHTML = `

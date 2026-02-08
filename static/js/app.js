@@ -4,6 +4,13 @@
  */
 
 const App = (() => {
+    // ── Utility ──────────────────────────────────────────────────────────
+    function esc(str) {
+        const d = document.createElement('div');
+        d.textContent = str ?? '';
+        return d.innerHTML;
+    }
+
     // ── View registry ────────────────────────────────────────────────────
     const views = {
         dashboard:    () => renderDashboard(),
@@ -18,7 +25,8 @@ const App = (() => {
         cutover:      () => placeholder('Cutover Hub', 'Sprint 13'),
         raid:         () => RaidView.render(),
         reports:      () => placeholder('Reports', 'Sprint 11'),
-        'ai-query':   () => placeholder('AI Query', 'Sprint 8'),
+        'ai-query':   () => AIQueryView.render(),
+        'ai-admin':   () => AIAdminView.render(),
     };
 
     let currentView = 'dashboard';
@@ -163,11 +171,11 @@ const App = (() => {
                         <tbody>
                             ${recent.map(p => `
                                 <tr style="cursor:pointer" onclick="App.navigate('programs');setTimeout(()=>ProgramView.openDetail(${p.id}),100)">
-                                    <td><strong>${p.name}</strong></td>
-                                    <td>${p.project_type}</td>
-                                    <td>${p.methodology}</td>
-                                    <td><span class="badge badge-${p.status}">${p.status}</span></td>
-                                    <td>${p.sap_product}</td>
+                                    <td><strong>${esc(p.name)}</strong></td>
+                                    <td>${esc(p.project_type)}</td>
+                                    <td>${esc(p.methodology)}</td>
+                                    <td><span class="badge badge-${esc(p.status)}">${esc(p.status)}</span></td>
+                                    <td>${esc(p.sap_product)}</td>
                                 </tr>
                             `).join('')}
                         </tbody>
@@ -202,7 +210,7 @@ const App = (() => {
             try { programs = await API.get('/programs'); } catch { programs = []; }
         }
         selector.innerHTML = '<option value="">Select Program...</option>' +
-            programs.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+            programs.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
     }
 
     // ── Toast notifications ──────────────────────────────────────────────
@@ -243,6 +251,11 @@ const App = (() => {
         // Initialize notification panel (Sprint 6)
         if (typeof NotificationPanel !== 'undefined') {
             NotificationPanel.init();
+        }
+
+        // Initialize AI suggestion badge (Sprint 7)
+        if (typeof SuggestionBadge !== 'undefined') {
+            SuggestionBadge.init();
         }
 
         // Render default view

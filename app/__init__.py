@@ -57,6 +57,7 @@ def create_app(config_name=None):
     from app.models import scope as _scope_models           # noqa: F401
     from app.models import raid as _raid_models             # noqa: F401
     from app.models import notification as _notification_models  # noqa: F401
+    from app.models import ai as _ai_models                 # noqa: F401
 
     # ── Blueprints ───────────────────────────────────────────────────────
     from app.blueprints.program_bp import program_bp
@@ -66,6 +67,7 @@ def create_app(config_name=None):
     from app.blueprints.testing_bp import testing_bp
     from app.blueprints.scope_bp import scope_bp
     from app.blueprints.raid_bp import raid_bp
+    from app.blueprints.ai_bp import ai_bp
 
     app.register_blueprint(program_bp)
     app.register_blueprint(scenario_bp)
@@ -74,6 +76,7 @@ def create_app(config_name=None):
     app.register_blueprint(testing_bp)
     app.register_blueprint(scope_bp)
     app.register_blueprint(raid_bp)
+    app.register_blueprint(ai_bp)
 
     # ── SPA catch-all ────────────────────────────────────────────────────
     @app.route("/")
