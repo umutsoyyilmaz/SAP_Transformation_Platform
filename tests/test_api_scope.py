@@ -65,7 +65,7 @@ def _make_program(client, **kw):
 
 
 def _make_scenario(client, program_id, **kw):
-    payload = {"name": "Explore Scenario", "program_id": program_id, "scenario_type": "as_is"}
+    payload = {"name": "Explore Scenario", "program_id": program_id}
     payload.update(kw)
     res = client.post(f"/api/v1/programs/{program_id}/scenarios", json=payload)
     assert res.status_code == 201

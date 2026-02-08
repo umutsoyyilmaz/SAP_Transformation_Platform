@@ -1,30 +1,29 @@
 """
 SAP Transformation Management Platform
-Scenario Blueprint — CRUD API for scenarios and scenario parameters.
+Scenario & Workshop Blueprint — CRUD API for business scenarios and workshops.
 
-Endpoints (Sprint 3 scope):
+Endpoints:
     Scenarios:
-        GET    /api/v1/programs/<pid>/scenarios            — List scenarios
-        POST   /api/v1/programs/<pid>/scenarios            — Create scenario
-        GET    /api/v1/scenarios/<id>                       — Detail (+ parameters)
-        PUT    /api/v1/scenarios/<id>                       — Update scenario
-        DELETE /api/v1/scenarios/<id>                       — Delete scenario
-        POST   /api/v1/scenarios/<id>/set-baseline          — Set as baseline
+        GET    /api/v1/programs/<pid>/scenarios             — List scenarios
+        POST   /api/v1/programs/<pid>/scenarios             — Create scenario
+        GET    /api/v1/scenarios/<id>                        — Detail (+ workshops)
+        PUT    /api/v1/scenarios/<id>                        — Update scenario
+        DELETE /api/v1/scenarios/<id>                        — Delete scenario
+        GET    /api/v1/programs/<pid>/scenarios/stats        — Aggregated stats
 
-    Scenario Parameters:
-        POST   /api/v1/scenarios/<sid>/parameters           — Add parameter
-        PUT    /api/v1/scenario-parameters/<id>             — Update parameter
-        DELETE /api/v1/scenario-parameters/<id>             — Delete parameter
-
-    Comparison:
-        GET    /api/v1/programs/<pid>/scenarios/compare     — Compare scenarios
+    Workshops:
+        GET    /api/v1/scenarios/<sid>/workshops             — List workshops
+        POST   /api/v1/scenarios/<sid>/workshops             — Create workshop
+        GET    /api/v1/workshops/<id>                        — Detail (+ requirements)
+        PUT    /api/v1/workshops/<id>                        — Update workshop
+        DELETE /api/v1/workshops/<id>                        — Delete workshop
 """
 
 from flask import Blueprint, jsonify, request
 
 from app.models import db
 from app.models.program import Program
-from app.models.scenario import Scenario, ScenarioParameter
+from app.models.scenario import Scenario, Workshop
 
 scenario_bp = Blueprint("scenario", __name__, url_prefix="/api/v1")
 
@@ -44,18 +43,34 @@ def _get_or_404(model, pk):
 
 @scenario_bp.route("/programs/<int:program_id>/scenarios", methods=["GET"])
 def list_scenarios(program_id):
-    """List all scenarios for a program."""
+    """List all scenarios for a program with optional filters."""
     program, err = _get_or_404(Program, program_id)
     if err:
         return err
-    scenarios = Scenario.query.filter_by(program_id=program_id)\
-        .order_by(Scenario.created_at.desc()).all()
+
+    query = Scenario.query.filter_by(program_id=program_id)
+
+    # Optional filters
+    status = request.args.get("status")
+    if status:
+        query = query.filter_by(status=status)
+    module = request.args.get("sap_module")
+    if module:
+        query = query.filter_by(sap_module=module)
+    area = request.args.get("process_area")
+    if area:
+        query = query.filter_by(process_area=area)
+    priority = request.args.get("priority")
+    if priority:
+        query = query.filter_by(priority=priority)
+
+    scenarios = query.order_by(Scenario.created_at.desc()).all()
     return jsonify([s.to_dict() for s in scenarios]), 200
 
 
 @scenario_bp.route("/programs/<int:program_id>/scenarios", methods=["POST"])
 def create_scenario(program_id):
-    """Create a scenario under a program."""
+    """Create a business scenario under a program."""
     program, err = _get_or_404(Program, program_id)
     if err:
         return err
@@ -69,27 +84,22 @@ def create_scenario(program_id):
         program_id=program_id,
         name=name,
         description=data.get("description", ""),
-        scenario_type=data.get("scenario_type", "approach"),
+        sap_module=data.get("sap_module", ""),
+        process_area=data.get("process_area", "other"),
         status=data.get("status", "draft"),
-        is_baseline=data.get("is_baseline", False),
-        estimated_duration_weeks=data.get("estimated_duration_weeks"),
-        estimated_cost=data.get("estimated_cost"),
-        estimated_resources=data.get("estimated_resources"),
-        risk_level=data.get("risk_level", "medium"),
-        confidence_pct=data.get("confidence_pct", 50),
-        pros=data.get("pros", ""),
-        cons=data.get("cons", ""),
-        assumptions=data.get("assumptions", ""),
-        recommendation=data.get("recommendation", ""),
+        priority=data.get("priority", "medium"),
+        owner=data.get("owner", ""),
+        workstream=data.get("workstream", ""),
+        notes=data.get("notes", ""),
     )
     db.session.add(scenario)
     db.session.commit()
-    return jsonify(scenario.to_dict(include_children=True)), 201
+    return jsonify(scenario.to_dict()), 201
 
 
 @scenario_bp.route("/scenarios/<int:scenario_id>", methods=["GET"])
 def get_scenario(scenario_id):
-    """Get a single scenario with parameters."""
+    """Get a single scenario with workshops."""
     scenario, err = _get_or_404(Scenario, scenario_id)
     if err:
         return err
@@ -106,22 +116,17 @@ def update_scenario(scenario_id):
     data = request.get_json(silent=True) or {}
 
     for field in [
-        "name", "description", "scenario_type", "status",
-        "risk_level", "pros", "cons", "assumptions", "recommendation",
+        "name", "description", "sap_module", "process_area",
+        "status", "priority", "owner", "workstream", "notes",
     ]:
         if field in data:
             val = data[field].strip() if isinstance(data[field], str) else data[field]
             setattr(scenario, field, val)
 
-    for int_field in ["estimated_duration_weeks", "estimated_resources", "confidence_pct"]:
-        if int_field in data:
-            setattr(scenario, int_field, data[int_field])
-
-    if "estimated_cost" in data:
-        scenario.estimated_cost = data["estimated_cost"]
-
-    if "is_baseline" in data:
-        scenario.is_baseline = bool(data["is_baseline"])
+    if "total_workshops" in data:
+        scenario.total_workshops = data["total_workshops"]
+    if "total_requirements" in data:
+        scenario.total_requirements = data["total_requirements"]
 
     db.session.commit()
     return jsonify(scenario.to_dict()), 200
@@ -129,7 +134,7 @@ def update_scenario(scenario_id):
 
 @scenario_bp.route("/scenarios/<int:scenario_id>", methods=["DELETE"])
 def delete_scenario(scenario_id):
-    """Delete a scenario and its parameters."""
+    """Delete a scenario and its workshops."""
     scenario, err = _get_or_404(Scenario, scenario_id)
     if err:
         return err
@@ -138,119 +143,155 @@ def delete_scenario(scenario_id):
     return jsonify({"message": f"Scenario '{scenario.name}' deleted"}), 200
 
 
-@scenario_bp.route("/scenarios/<int:scenario_id>/set-baseline", methods=["POST"])
-def set_baseline(scenario_id):
-    """Set a scenario as the baseline for its program.
-    Clears is_baseline on all other scenarios of the same program."""
-    scenario, err = _get_or_404(Scenario, scenario_id)
-    if err:
-        return err
-
-    # Clear baseline flag on siblings
-    Scenario.query.filter_by(program_id=scenario.program_id)\
-        .update({"is_baseline": False})
-    scenario.is_baseline = True
-    db.session.commit()
-    return jsonify(scenario.to_dict()), 200
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# SCENARIO PARAMETERS
-# ═════════════════════════════════════════════════════════════════════════════
-
-@scenario_bp.route("/scenarios/<int:scenario_id>/parameters", methods=["GET"])
-def list_parameters(scenario_id):
-    """List parameters for a scenario."""
-    scenario, err = _get_or_404(Scenario, scenario_id)
-    if err:
-        return err
-    params = ScenarioParameter.query.filter_by(scenario_id=scenario_id)\
-        .order_by(ScenarioParameter.category, ScenarioParameter.key).all()
-    return jsonify([p.to_dict() for p in params]), 200
-
-
-@scenario_bp.route("/scenarios/<int:scenario_id>/parameters", methods=["POST"])
-def create_parameter(scenario_id):
-    """Add a parameter to a scenario."""
-    scenario, err = _get_or_404(Scenario, scenario_id)
-    if err:
-        return err
-
-    data = request.get_json(silent=True) or {}
-    key = data.get("key", "").strip()
-    if not key:
-        return jsonify({"error": "Parameter key is required"}), 400
-
-    param = ScenarioParameter(
-        scenario_id=scenario_id,
-        key=key,
-        value=data.get("value", ""),
-        category=data.get("category", "general"),
-        notes=data.get("notes", ""),
-    )
-    db.session.add(param)
-    db.session.commit()
-    return jsonify(param.to_dict()), 201
-
-
-@scenario_bp.route("/scenario-parameters/<int:param_id>", methods=["PUT"])
-def update_parameter(param_id):
-    """Update a scenario parameter."""
-    param, err = _get_or_404(ScenarioParameter, param_id)
-    if err:
-        return err
-
-    data = request.get_json(silent=True) or {}
-    for field in ["key", "value", "category", "notes"]:
-        if field in data:
-            setattr(param, field, data[field].strip() if isinstance(data[field], str) else data[field])
-
-    db.session.commit()
-    return jsonify(param.to_dict()), 200
-
-
-@scenario_bp.route("/scenario-parameters/<int:param_id>", methods=["DELETE"])
-def delete_parameter(param_id):
-    """Delete a scenario parameter."""
-    param, err = _get_or_404(ScenarioParameter, param_id)
-    if err:
-        return err
-    db.session.delete(param)
-    db.session.commit()
-    return jsonify({"message": f"Parameter '{param.key}' deleted"}), 200
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# COMPARISON
-# ═════════════════════════════════════════════════════════════════════════════
-
-@scenario_bp.route("/programs/<int:program_id>/scenarios/compare", methods=["GET"])
-def compare_scenarios(program_id):
-    """Compare all scenarios for a program side by side.
-
-    Returns a structured comparison:
-        - scenarios: list of scenario dicts with parameters
-        - parameter_keys: union of all parameter keys across scenarios
-    """
+@scenario_bp.route("/programs/<int:program_id>/scenarios/stats", methods=["GET"])
+def scenario_stats(program_id):
+    """Aggregated statistics for scenarios in a program."""
     program, err = _get_or_404(Program, program_id)
     if err:
         return err
 
-    scenarios = Scenario.query.filter_by(program_id=program_id)\
-        .order_by(Scenario.created_at).all()
+    scenarios = Scenario.query.filter_by(program_id=program_id).all()
+    total = len(scenarios)
 
-    # Collect all unique parameter keys
-    all_keys = set()
-    scenario_dicts = []
+    by_status = {}
+    by_priority = {}
+    by_module = {}
     for s in scenarios:
-        d = s.to_dict(include_children=True)
-        param_map = {p["key"]: p["value"] for p in d.get("parameters", [])}
-        d["parameter_map"] = param_map
-        all_keys.update(param_map.keys())
-        scenario_dicts.append(d)
+        by_status[s.status] = by_status.get(s.status, 0) + 1
+        by_priority[s.priority] = by_priority.get(s.priority, 0) + 1
+        if s.sap_module:
+            by_module[s.sap_module] = by_module.get(s.sap_module, 0) + 1
 
     return jsonify({
-        "program_id": program_id,
-        "scenarios": scenario_dicts,
-        "parameter_keys": sorted(all_keys),
+        "total": total,
+        "by_status": by_status,
+        "by_priority": by_priority,
+        "by_module": by_module,
     }), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WORKSHOPS
+# ═════════════════════════════════════════════════════════════════════════════
+
+@scenario_bp.route("/scenarios/<int:scenario_id>/workshops", methods=["GET"])
+def list_workshops(scenario_id):
+    """List workshops for a scenario."""
+    scenario, err = _get_or_404(Scenario, scenario_id)
+    if err:
+        return err
+    workshops = Workshop.query.filter_by(scenario_id=scenario_id)\
+        .order_by(Workshop.session_date.asc().nullslast(), Workshop.created_at.desc()).all()
+    return jsonify([w.to_dict() for w in workshops]), 200
+
+
+@scenario_bp.route("/scenarios/<int:scenario_id>/workshops", methods=["POST"])
+def create_workshop(scenario_id):
+    """Create a workshop under a scenario."""
+    scenario, err = _get_or_404(Scenario, scenario_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    title = data.get("title", "").strip()
+    if not title:
+        return jsonify({"error": "Workshop title is required"}), 400
+
+    # Parse session_date if provided
+    session_date = None
+    if data.get("session_date"):
+        try:
+            from datetime import datetime
+            session_date = datetime.fromisoformat(data["session_date"])
+        except (ValueError, TypeError):
+            pass
+
+    workshop = Workshop(
+        scenario_id=scenario_id,
+        title=title,
+        description=data.get("description", ""),
+        session_type=data.get("session_type", "fit_gap_workshop"),
+        status=data.get("status", "planned"),
+        session_date=session_date,
+        duration_minutes=data.get("duration_minutes"),
+        location=data.get("location", ""),
+        facilitator=data.get("facilitator", ""),
+        attendees=data.get("attendees", ""),
+        agenda=data.get("agenda", ""),
+        notes=data.get("notes", ""),
+        decisions=data.get("decisions", ""),
+        action_items=data.get("action_items", ""),
+    )
+    db.session.add(workshop)
+
+    # Update cached count
+    scenario.total_workshops = Workshop.query.filter_by(scenario_id=scenario_id).count() + 1
+    db.session.commit()
+    return jsonify(workshop.to_dict()), 201
+
+
+@scenario_bp.route("/workshops/<int:workshop_id>", methods=["GET"])
+def get_workshop(workshop_id):
+    """Get a single workshop with its requirements."""
+    workshop, err = _get_or_404(Workshop, workshop_id)
+    if err:
+        return err
+    return jsonify(workshop.to_dict(include_requirements=True)), 200
+
+
+@scenario_bp.route("/workshops/<int:workshop_id>", methods=["PUT"])
+def update_workshop(workshop_id):
+    """Update a workshop."""
+    workshop, err = _get_or_404(Workshop, workshop_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+
+    for field in [
+        "title", "description", "session_type", "status",
+        "location", "facilitator", "attendees",
+        "agenda", "notes", "decisions", "action_items",
+    ]:
+        if field in data:
+            val = data[field].strip() if isinstance(data[field], str) else data[field]
+            setattr(workshop, field, val)
+
+    for int_field in [
+        "duration_minutes", "requirements_identified",
+        "fit_count", "gap_count", "partial_fit_count",
+    ]:
+        if int_field in data:
+            setattr(workshop, int_field, data[int_field])
+
+    if "session_date" in data:
+        if data["session_date"]:
+            try:
+                from datetime import datetime
+                workshop.session_date = datetime.fromisoformat(data["session_date"])
+            except (ValueError, TypeError):
+                pass
+        else:
+            workshop.session_date = None
+
+    db.session.commit()
+    return jsonify(workshop.to_dict()), 200
+
+
+@scenario_bp.route("/workshops/<int:workshop_id>", methods=["DELETE"])
+def delete_workshop(workshop_id):
+    """Delete a workshop."""
+    workshop, err = _get_or_404(Workshop, workshop_id)
+    if err:
+        return err
+
+    scenario_id = workshop.scenario_id
+    db.session.delete(workshop)
+
+    # Update cached count
+    scenario = db.session.get(Scenario, scenario_id)
+    if scenario:
+        scenario.total_workshops = max(0, Workshop.query.filter_by(scenario_id=scenario_id).count() - 1)
+
+    db.session.commit()
+    return jsonify({"message": f"Workshop '{workshop.title}' deleted"}), 200

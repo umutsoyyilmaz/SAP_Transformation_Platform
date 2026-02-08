@@ -52,20 +52,18 @@ def _build_requirement_text(r):
 
 def _build_scenario_text(s):
     parts = [f"Scenario: {s.name or ''}"]
-    if s.scenario_type:
-        parts.append(f"Type: {s.scenario_type}")
-    if s.risk_level:
-        parts.append(f"Risk Level: {s.risk_level}")
+    if s.sap_module:
+        parts.append(f"SAP Module: {s.sap_module}")
+    if s.process_area:
+        parts.append(f"Process Area: {s.process_area}")
+    if s.priority:
+        parts.append(f"Priority: {s.priority}")
+    if s.owner:
+        parts.append(f"Owner: {s.owner}")
     if s.description:
         parts.append(f"Description: {s.description}")
-    if s.pros:
-        parts.append(f"Pros: {s.pros}")
-    if s.cons:
-        parts.append(f"Cons: {s.cons}")
-    if s.assumptions:
-        parts.append(f"Assumptions: {s.assumptions}")
-    if s.recommendation:
-        parts.append(f"Recommendation: {s.recommendation}")
+    if s.notes:
+        parts.append(f"Notes: {s.notes}")
     return "\n".join(parts)
 
 
@@ -218,7 +216,7 @@ def _build_analysis_text(a):
 def _get_entity_registry():
     """Lazy-import models and return entity registry."""
     from app.models.requirement import Requirement
-    from app.models.scenario import Scenario
+    from app.models.scenario import Scenario, Workshop
     from app.models.backlog import BacklogItem, ConfigItem
     from app.models.testing import TestCase, Defect
     from app.models.raid import Risk, Decision, Issue, Action

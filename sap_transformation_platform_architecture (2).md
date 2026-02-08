@@ -1,9 +1,16 @@
 # SAP Transformation Management Platform — Uygulama Mimarisi
 
-**Versiyon:** 1.0  
-**Tarih:** 2026-02-07  
+**Versiyon:** 1.1  
+**Tarih:** 2026-02-09  
 **Hazırlayan:** Umut Soyyılmaz  
 **Kaynak:** SAP Transformation PM Playbook (S/4HANA + Public Cloud)
+
+### Revizyon Geçmişi
+
+| Versiyon | Tarih | Değişiklik |
+|----------|-------|------------|
+| 1.0 | 2026-02-07 | İlk yayın |
+| 1.1 | 2026-02-09 | **[REVISED]** Program Selector → Context-Based Program Selection (card grid + sidebar disable). **[REVISED]** Scenario modülü what-if karşılaştırmadan → İş Senaryosu + Workshop/Analiz Oturumu modeline geçirildi. Workshop CRUD, requirement bağlantısı eklendi. |
 
 ---
 
@@ -102,25 +109,28 @@ Project → Scenario → Analysis → Requirement (Fit/Partial Fit/Gap)
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                      SCOPE & REQUIREMENTS DOMAIN                        │
+│                                [REVISED v1.1]                           │
 │                                                                         │
-│  Project ──1:N──▶ Scenario (L1 Process Area, e.g., O2C, P2P)          │
+│  Program ──1:N──▶ Scenario (İş Senaryosu: Sevkiyat, Satın Alma, vb.)  │
 │                     │                                                   │
-│                     └──1:N──▶ Process (L2/L3)                          │
+│                     ├──1:N──▶ Workshop / Analiz Oturumu                │
+│                     │           (fit_gap_workshop, requirement_gathering,│
+│                     │            process_mapping, review, design_workshop│
+│                     │            demo, sign_off, training)              │
+│                     │           │                                       │
+│                     │           └──0:N──▶ Requirement                  │
+│                     │               (workshop_id nullable — doğrudan    │
+│                     │                da eklenebilir)                    │
+│                     │               (Fit | Partial Fit | Gap)           │
+│                     │                                                   │
+│                     └──1:N──▶ Process (L1/L2/L3)                       │
 │                                 │                                       │
 │                                 └──1:N──▶ Scope Item (SAP Best Practice)│
 │                                             │                           │
 │                                             └──1:N──▶ Analysis         │
-│                                                        │                │
-│                                                        └──1:N──▶ Requirement │
-│                                                          (Fit | Partial Fit | Gap) │
-│                                                          │  decision_log          │
-│                                                          │  priority, owner       │
-│                                                          │  workstream_ref        │
-│                                                          │                        │
-│                              ┌────────────────────────────┤                        │
-│                              ▼                            ▼                        │
-│                    WRICEF Item              Configuration Item                     │
-│                    (type: W/R/I/C/E/F)     (config_key, module)                   │
+│                                                                         │
+│  Requirement ──▶ WRICEF Item (type: W/R/I/C/E/F)                       │
+│              ──▶ Configuration Item (config_key, module)                │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                         │                            │
                         ▼                            ▼
@@ -275,24 +285,27 @@ Project → Scenario → Analysis → Requirement (Fit/Partial Fit/Gap)
 ### 3.2 Uçtan Uca İzlenebilirlik Zinciri (Traceability Chain)
 
 ```
-Scenario
-  └─▶ Process (L2/L3)
-       └─▶ Scope Item
-            └─▶ Analysis
-                 └─▶ Requirement [Fit | Partial Fit | Gap]
-                      ├─▶ WRICEF Item ──▶ FS ──▶ TS ──▶ Unit Evidence
-                      │                                      │
-                      ├─▶ Config Item ──▶ Config Log ────────┤
-                      │                                      │
-                      └─▶ Test Case(s) ◀─────────────────────┘
-                           │
-                           └─▶ Defect(s)
-                                │
-                                └─▶ Cutover Task(s)
-                                     │
-                                     └─▶ Hypercare Incident(s)
-                                          │
-                                          └─▶ RFC (backlog)
+> **[REVISED v1.1]** Scenario artık "İş Senaryosu" olarak tanımlanır.
+> Workshop/Analiz Oturumu katmanı eklendi. Requirement'lar workshop'tan da doğrudan da çıkabilir.
+
+```
+Scenario (İş Senaryosu)
+  ├─▶ Workshop / Analiz Oturumu
+  │     └─▶ Requirement [Fit | Partial Fit | Gap]
+  │           ├─▶ WRICEF Item ──▶ FS ──▶ TS ──▶ Unit Evidence
+  │           │                                      │
+  │           ├─▶ Config Item ──▶ Config Log ────────┤
+  │           │                                      │
+  │           └─▶ Test Case(s) ◀─────────────────────┘
+  │                 │
+  │                 └─▶ Defect(s)
+  │                      └─▶ Cutover Task(s)
+  │                           └─▶ Hypercare Incident(s) ──▶ RFC
+  │
+  └─▶ Process (L1/L2/L3)
+        └─▶ Scope Item
+             └─▶ Analysis
+```
 ```
 
 Platform herhangi bir noktadan, zincirin tamamını yukarı ve aşağı gezebilmelidir.
@@ -343,7 +356,13 @@ Public Cloud seçildi →
 
 | Katman | Açıklama | Örnek |
 |--------|----------|-------|
-| L0 — Scenario | Ana iş alanı | Order to Cash |
+> **[REVISED v1.1]** Scenario artık what-if karşılaştırma değil, iş senaryosu (business process scenario).
+> Her senaryo altında Workshop/Analiz Oturumları planlanır ve requirement'lar bu oturumlardan çıkar.
+
+| Katman | Açıklama | Örnek |
+|--------|----------|-------|
+| Scenario (İş Senaryosu) | Uçtan uca iş süreci | Sevkiyat Süreci, Satın Alma, Pricing |
+| Workshop | Analiz oturumu | Fit-Gap Workshop, Design Workshop, Demo, Sign-Off |
 | L1 — Process Group | Süreç grubu | Sales Order Processing |
 | L2 — Process | Bireysel süreç | Standard Sales Order |
 | L3 — Process Step | Adım/aktivite | Credit Check |
@@ -633,11 +652,21 @@ Operational Layer
 │   ├── GET    /:projectId/raci
 │   └── GET    /:projectId/dashboard      # Aggregated KPIs
 │
-├── /scenarios
-│   ├── GET    /?projectId=               # List scenarios
-│   ├── POST   /
-│   ├── GET    /:scenarioId/processes     # Process hierarchy
+├── /scenarios                              # [REVISED v1.1]
+│   ├── GET    /?programId=&status=&module= # List business scenarios (filterable)
+│   ├── POST   /                           # Create business scenario
+│   ├── GET    /:scenarioId                # Detail + workshops
+│   ├── PUT    /:scenarioId                # Update scenario
+│   ├── DELETE /:scenarioId                # Delete scenario + cascade
+│   ├── GET    /:scenarioId/workshops      # List workshops/sessions
+│   ├── POST   /:scenarioId/workshops      # Create workshop
+│   ├── GET    /:scenarioId/processes      # Process hierarchy
 │   └── GET    /:scenarioId/scope-items
+│
+├── /workshops                              # [NEW v1.1]
+│   ├── GET    /:workshopId                # Detail + linked requirements
+│   ├── PUT    /:workshopId                # Update (notes, decisions, counts)
+│   └── DELETE /:workshopId                # Delete workshop
 │
 ├── /requirements
 │   ├── GET    /?filters...               # Search/filter
@@ -747,14 +776,21 @@ Operational Layer
 ### 6.1 Navigation Yapısı
 
 ```
+> **[REVISED v1.1]** Header'daki "Program Seçici" dropdown kaldırıldı.
+> Program seçimi artık Programs sayfasındaki kart bazlı grid üzerinden yapılır.
+> Program seçilmeden sidebar navigasyonu devre dışı kalır (disabled state).
+> Seçilen program `localStorage` üzerinden persist edilir ve tüm modüllerde kullanılır.
+
+```
 ┌────────────────────────────────────────────────────────────┐
-│  [Logo]  Program Seçici ▾   Faz: Realize ▾    🔔  👤     │
+│  [Logo]  SAP Transformation Platform        🔔  👤       │
 ├──────────┬─────────────────────────────────────────────────┤
 │          │                                                 │
 │ Dashboard│  ┌─────────────────────────────────────────┐   │
 │ ────────►│  │         MAIN CONTENT AREA               │   │
-│ Program  │  │                                         │   │
-│  Setup   │  │  Contextual based on selected module    │   │
+│ Programs │  │                                         │   │
+│(card grid│  │  Contextual based on selected module    │   │
+│  select) │  │                                         │   │
 │ ────────►│  │                                         │   │
 │ Scope &  │  │  ┌──────┐ ┌──────┐ ┌──────┐            │   │
 │  Require.│  │  │ KPI  │ │ KPI  │ │ KPI  │            │   │

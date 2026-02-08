@@ -28,12 +28,12 @@ from app.models import db
 from app.models.backlog import BacklogItem, ConfigItem
 from app.models.program import Phase, Program, Workstream
 from app.models.requirement import Requirement, RequirementTrace
-from app.models.scenario import Scenario
+from app.models.scenario import Scenario, Workshop
 
 requirement_bp = Blueprint("requirement", __name__, url_prefix="/api/v1")
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# ── helpers ──────────────────────────────────────────────────────────────────────
 
 def _get_or_404(model, pk):
     obj = db.session.get(model, pk)
@@ -42,12 +42,13 @@ def _get_or_404(model, pk):
     return obj, None
 
 
-VALID_TARGET_TYPES = {"phase", "workstream", "scenario", "requirement", "gate"}
+VALID_TARGET_TYPES = {"phase", "workstream", "scenario", "workshop", "requirement", "gate"}
 
 TARGET_MODELS = {
     "phase": Phase,
     "workstream": Workstream,
     "scenario": Scenario,
+    "workshop": Workshop,
     "requirement": Requirement,
 }
 

@@ -1,6 +1,6 @@
 # SAP Transformation Platform — Progress Report
-**Tarih:** 8 Şubat 2026  
-**Sprint:** 1-7 Tamamlandı (Release 1 + Release 2 başlangıç)  
+**Tarih:** 9 Şubat 2026  
+**Sprint:** 1-7 Tamamlandı + 2 Revizyon (Release 1 + Release 2 başlangıç)  
 **Repo:** [umutsoyyilmaz/SAP_Transformation_Platform](https://github.com/umutsoyyilmaz/SAP_Transformation_Platform)
 
 ---
@@ -13,12 +13,12 @@
 | Toplam Commit | 9 |
 | Toplam Dosya | 85+ |
 | Python LOC | 12,500+ |
-| JavaScript LOC | 5,140+ |
-| CSS LOC | 1,285 |
-| API Endpoint | ~166 |
+| JavaScript LOC | 5,600+ |
+| CSS LOC | 1,400+ |
+| API Endpoint | ~170 |
 | Pytest Test | 353 (tümü geçiyor) |
-| Veritabanı Modeli | 32 tablo |
-| Alembic Migration | 8 |
+| Veritabanı Modeli | 33 tablo |
+| Alembic Migration | 9 |
 | Seed Data | 193 kayıt |
 
 ---
@@ -38,6 +38,8 @@
 | 9 | **Sprint 6**: RAID Module + Notification Foundation | `pending` | 2026-02-08 | +2,100 satır — Risk/Action/Issue/Decision, Notification, Heatmap |
 | 10 | **Sprint 7**: AI Infrastructure Setup | `pending` | 2026-02-08 | +2,800 satır — LLM Gateway, RAG Pipeline, Suggestion Queue, Prompt Registry |
 | 11 | **Sprint 7.5**: Gemini Free-Tier Integration | `pending` | 2026-02-08 | +230 satır — GeminiProvider (chat+embeddings), demo default, 7 yeni test |
+| 12 | **Revizyon R1**: Program Selector → Context-Based | `789d6cc` | 2026-02-09 | +438/-213 satır — Program card grid, sidebar disable, localStorage context, 10 dosya değişikliği |
+| 13 | **Revizyon R2**: Scenario → İş Senaryosu + Workshop | `pending` | 2026-02-09 | Scenario modeli yeniden yazıldı, Workshop modeli eklendi, ScenarioParameter kaldırıldı, 16+ dosya |
 
 ---
 
@@ -103,6 +105,8 @@
 | 3.10 | Commit + push + progress report | ✅ |
 
 **Çıktı:** Senaryo karşılaştırma, gereksinim yönetimi (MoSCoW + fit/gap), izlenebilirlik matrisi.
+
+> **[REVISED]** Sprint 3 Scenario modeli v1.1'de tamamen yeniden yazıldı — bkz. Revizyon R2.
 
 ---
 
@@ -227,8 +231,8 @@ programs
 | Workstreams | 4 | CRUD under program |
 | Team Members | 4 | CRUD under program |
 | Committees | 4 | CRUD under program |
-| Scenarios | 6 | CRUD + baseline + compare |
-| Scenario Parameters | 4 | CLUD under scenario |
+| Scenarios | 6 | CRUD + filter + stats |
+| Workshops | 5 | CRUD under scenario |
 | Requirements | 5 | CRUD + filtered list |
 | Requirement Traces | 3 | CLD under requirement |
 | Traceability Matrix | 1 | GET program matrix |
@@ -422,11 +426,11 @@ programs
 ├── team_members
 ├── committees
 ├── scenarios
-│   ├── scenario_parameters
+│   ├── workshops (analiz oturumları)
 │   └── processes (L1/L2/L3)
 │       └── scope_items
 │           └── analyses (fit-gap workshop)
-├── requirements
+├── requirements (workshop_id FK — nullable)
 │   ├── requirements (self-ref: parent/child hiyerarşi)
 │   └── requirement_traces (polymorphic → phase/workstream/scenario/requirement/gate)
 ├── sprints
@@ -452,7 +456,7 @@ programs
 └── notifications ← YENİ
 ```
 
-**28 tablo:** programs, phases, gates, workstreams, team_members, committees, scenarios, scenario_parameters, requirements, requirement_traces, processes, scope_items, analyses, sprints, backlog_items, config_items, functional_specs, technical_specs, test_plans, test_cycles, test_cases, test_executions, defects, **risks**, **actions**, **issues**, **decisions**, **notifications**, **ai_usage_logs**, **ai_embeddings**, **ai_suggestions**, **ai_audit_logs**
+**28 tablo:** programs, phases, gates, workstreams, team_members, committees, scenarios, **workshops** *(yeni — v1.1)*, requirements, requirement_traces, processes, scope_items, analyses, sprints, backlog_items, config_items, functional_specs, technical_specs, test_plans, test_cycles, test_cases, test_executions, defects, **risks**, **actions**, **issues**, **decisions**, **notifications**, **ai_usage_logs**, **ai_embeddings**, **ai_suggestions**, **ai_audit_logs**\n\n> **Not:** `scenario_parameters` tablosu v1.1 revizyonunda kaldırıldı. `workshops` tablosu eklendi.
 
 ---
 
@@ -509,6 +513,92 @@ programs
 - `POST /api/v1/ai/embeddings/index` — Batch embedding
 - `GET /api/v1/ai/admin/dashboard` — Dashboard verisi
 - `GET /api/v1/ai/prompts` — Kayıtlı şablonlar
+
+---
+
+## Revizyon R1 — Program Selector → Context-Based Program Selection ✅
+
+**Tarih:** 9 Şubat 2026  
+**Commit:** `789d6cc`  
+**Amaç:** Header'daki program selector dropdown'ı kaldırıp, kart bazlı program seçim modeline geçmek.
+
+| Değişiklik | Dosya | Açıklama |
+|------------|-------|----------|
+| Program card grid | `static/js/views/program.js` | Grid'de programa tıklayınca `App.setActiveProgram()` ile seçim |
+| Sidebar disable state | `static/js/app.js` | Program seçilmeden sidebar menüleri opacity 0.5 + pointer-events:none |
+| Program-specific dashboard | `static/js/app.js` | Seçili program bilgisi sidebar'da gösterilir |
+| localStorage persist | `static/js/app.js` | `sap_active_program` key ile kalıcı seçim |
+| Header cleanup | `templates/index.html` | Program selector dropdown kaldırıldı |
+| CSS güncellemesi | `static/css/main.css` | `.sidebar-program-badge`, disabled state stilleri |
+| View güncellemeleri | `scenario.js, requirement.js, backlog.js, raid.js, ai_query.js, testing.js` | `App.getActiveProgram()` ile merkezi erişim |
+
+**Etki:** 10 dosya, +438/-213 satır.
+
+---
+
+## Revizyon R2 — Scenario → İş Senaryosu + Workshop Modeli ✅
+
+**Tarih:** 9 Şubat 2026  
+**Amaç:** "What-if yaklaşım karşılaştırma" olan Scenario modülünü gerçek "İş Senaryosu" modeline dönüştürmek. Workshop/Analiz Oturumu katmanı ekleyerek requirement akışını Scenario → Workshop → Requirement olarak yapılandırmak.
+
+### Mimari Değişiklik
+
+**Eski model (kaldırıldı):**
+```
+Scenario (what-if: Greenfield vs Brownfield)
+  └── ScenarioParameter (key/value)
+```
+
+**Yeni model:**
+```
+Scenario (İş Senaryosu: Sevkiyat Süreci, Satın Alma, Pricing)
+  ├── Workshop (Fit-Gap Workshop, Design Workshop, Demo, Sign-Off, Training)
+  │     └── Requirement (workshop_id nullable — doğrudan da eklenebilir)
+  └── Process (L1/L2/L3 — mevcut yapı korundu)
+```
+
+### Yapılan Değişiklikler
+
+| Kategori | Dosya | Değişiklik |
+|----------|-------|------------|
+| **Model** | `app/models/scenario.py` | Scenario yeniden yazıldı (sap_module, process_area, priority, owner, workstream). ScenarioParameter → silindi. Workshop modeli eklendi (session_type, status, session_date, facilitator, attendees, agenda, notes, decisions, fit/gap/partial counts) |
+| **Model** | `app/models/requirement.py` | `workshop_id` FK eklendi (nullable, SET NULL on delete) |
+| **Migration** | `migrations/versions/d1f5a7b3c890_...` | workshops tablosu oluşturuldu, scenario eski kolonlar drop, yeni kolonlar add, scenario_parameters tablosu drop, requirements'a workshop_id eklendi |
+| **API** | `app/blueprints/scenario_bp.py` | Tamamen yeniden yazıldı — business scenario CRUD (filtreleme: status, module, process_area, priority) + Workshop CRUD (list/create/get/update/delete) + Stats endpoint |
+| **Frontend** | `static/js/views/scenario.js` | Tamamen yeniden yazıldı — business scenario kart grid, filtre bar, scenario detail → workshop listesi, workshop detail → requirement tablosu, CRUD modallar |
+| **CSS** | `static/css/main.css` | Workshop card stilleri, session type badge renkleri, fit/gap/partial count stilleri, priority badge'leri |
+| **Seed Data** | `scripts/seed_demo_data.py` | 5 approach scenario → 5 iş senaryosu (Sevkiyat, Satın Alma, Üretim Planlama, Finansal Kapanış, İnsan Kaynakları). Workshop seed data eklendi. ScenarioParameter seed kaldırıldı |
+| **Tests** | `tests/test_api_scenario.py` | Workshop CRUD testleri eklendi, ScenarioParameter temizlendi |
+| **Refs** | `traceability.py, requirement_bp.py, scope_bp.py, nl_query.py, db_status.py, embed_knowledge_base.py` | ScenarioParameter → Workshop import güncellemeleri, şema açıklamaları güncellendi |
+
+### Workshop Session Types
+
+| Tip | Açıklama |
+|-----|----------|
+| `fit_gap_workshop` | Fit/Gap analiz oturumu — standart SAP süreçleri vs müşteri gereksinimleri |
+| `requirement_gathering` | Gereksinim toplama oturumu |
+| `process_mapping` | Süreç haritalama (AS-IS → TO-BE) |
+| `review` | Gözden geçirme toplantısı |
+| `design_workshop` | Tasarım workshop'u (çözüm tasarımı) |
+| `demo` | Demo / prototip sunumu |
+| `sign_off` | Onay toplantısı (resmi kabul) |
+| `training` | Eğitim oturumu |
+
+### Yeni API Endpoints
+
+| Method | Path | Açıklama |
+|--------|------|----------|
+| GET | `/api/v1/programs/<pid>/scenarios?status=&module=&priority=` | Filtrelenen senaryo listesi |
+| GET | `/api/v1/programs/<pid>/scenarios/stats` | İstatistikler (by_status, by_priority, by_module) |
+| GET | `/api/v1/scenarios/<sid>/workshops` | Senaryo workshop listesi |
+| POST | `/api/v1/scenarios/<sid>/workshops` | Workshop oluştur |
+| GET | `/api/v1/workshops/<wid>` | Workshop detay + linked requirements |
+| PUT | `/api/v1/workshops/<wid>` | Workshop güncelle |
+| DELETE | `/api/v1/workshops/<wid>` | Workshop sil |
+
+**Kaldırılan Endpoints:** `/scenarios/<id>/set-baseline`, `/scenarios/<sid>/parameters`, `/scenario-parameters/<id>`, `/programs/<pid>/scenarios/compare`
+
+**Etki:** 16+ dosya, ~1,200 satır değişiklik.
 
 ---
 

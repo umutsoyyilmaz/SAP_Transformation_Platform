@@ -1,12 +1,11 @@
 """
 SAP Transformation Management Platform
-Tests — Scenario API (Sprint 3).
+Tests — Scenario & Workshop API.
 
 Covers:
-    - Scenario CRUD
-    - Scenario Parameters CRUD
-    - Baseline setting
-    - Scenario comparison
+    - Scenario CRUD (business scenarios)
+    - Workshop CRUD
+    - Scenario stats
 """
 
 import pytest
@@ -14,7 +13,7 @@ import pytest
 from app import create_app
 from app.models import db as _db
 from app.models.program import Program
-from app.models.scenario import Scenario, ScenarioParameter
+from app.models.scenario import Scenario, Workshop
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -43,7 +42,7 @@ def session(app, _setup_db):
     with app.app_context():
         yield
         _db.session.rollback()
-        for model in [ScenarioParameter, Scenario, Program]:
+        for model in [Workshop, Scenario, Program]:
             _db.session.query(model).delete()
         _db.session.commit()
 
@@ -62,9 +61,17 @@ def _create_program(client, **kw):
 
 
 def _create_scenario(client, pid, **kw):
-    payload = {"name": "Greenfield Option", "scenario_type": "approach"}
+    payload = {"name": "Sevkiyat Süreci", "sap_module": "SD", "process_area": "order_to_cash"}
     payload.update(kw)
     res = client.post(f"/api/v1/programs/{pid}/scenarios", json=payload)
+    assert res.status_code == 201
+    return res.get_json()
+
+
+def _create_workshop(client, sid, **kw):
+    payload = {"title": "Fit-Gap Workshop #1", "session_type": "fit_gap_workshop"}
+    payload.update(kw)
+    res = client.post(f"/api/v1/scenarios/{sid}/workshops", json=payload)
     assert res.status_code == 201
     return res.get_json()
 
@@ -76,17 +83,17 @@ def _create_scenario(client, pid, **kw):
 def test_create_scenario(client):
     prog = _create_program(client)
     res = client.post(f"/api/v1/programs/{prog['id']}/scenarios", json={
-        "name": "Cloud RISE",
-        "scenario_type": "approach",
-        "estimated_duration_weeks": 40,
-        "estimated_cost": 500000,
-        "risk_level": "medium",
+        "name": "Satın Alma Süreci",
+        "sap_module": "MM",
+        "process_area": "procure_to_pay",
+        "priority": "critical",
+        "owner": "Emre Koç",
     })
     assert res.status_code == 201
     data = res.get_json()
-    assert data["name"] == "Cloud RISE"
-    assert data["estimated_duration_weeks"] == 40
-    assert data["estimated_cost"] == 500000
+    assert data["name"] == "Satın Alma Süreci"
+    assert data["sap_module"] == "MM"
+    assert data["priority"] == "critical"
 
 
 def test_create_scenario_missing_name(client):
@@ -103,25 +110,34 @@ def test_create_scenario_program_not_found(client):
 def test_list_scenarios(client):
     prog = _create_program(client)
     pid = prog["id"]
-    _create_scenario(client, pid, name="Opt A")
-    _create_scenario(client, pid, name="Opt B")
+    _create_scenario(client, pid, name="Scenario A")
+    _create_scenario(client, pid, name="Scenario B")
     res = client.get(f"/api/v1/programs/{pid}/scenarios")
     assert res.status_code == 200
     assert len(res.get_json()) == 2
 
 
-def test_get_scenario_with_params(client):
+def test_list_scenarios_filter_status(client):
+    prog = _create_program(client)
+    pid = prog["id"]
+    _create_scenario(client, pid, name="A", status="draft")
+    _create_scenario(client, pid, name="B", status="approved")
+    res = client.get(f"/api/v1/programs/{pid}/scenarios?status=approved")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert len(data) == 1
+    assert data[0]["status"] == "approved"
+
+
+def test_get_scenario_with_workshops(client):
     prog = _create_program(client)
     sc = _create_scenario(client, prog["id"])
-    # Add a parameter
-    client.post(f"/api/v1/scenarios/{sc['id']}/parameters", json={
-        "key": "deployment", "value": "Cloud"
-    })
+    _create_workshop(client, sc["id"])
     res = client.get(f"/api/v1/scenarios/{sc['id']}")
     assert res.status_code == 200
     data = res.get_json()
-    assert len(data["parameters"]) == 1
-    assert data["parameters"][0]["key"] == "deployment"
+    assert "workshops" in data
+    assert len(data["workshops"]) == 1
 
 
 def test_get_scenario_not_found(client):
@@ -134,14 +150,14 @@ def test_update_scenario(client):
     sc = _create_scenario(client, prog["id"])
     res = client.put(f"/api/v1/scenarios/{sc['id']}", json={
         "status": "approved",
-        "estimated_cost": 750000,
-        "confidence_pct": 80,
+        "priority": "critical",
+        "owner": "Test User",
     })
     assert res.status_code == 200
     data = res.get_json()
     assert data["status"] == "approved"
-    assert data["estimated_cost"] == 750000
-    assert data["confidence_pct"] == 80
+    assert data["priority"] == "critical"
+    assert data["owner"] == "Test User"
 
 
 def test_delete_scenario(client):
@@ -152,107 +168,87 @@ def test_delete_scenario(client):
     assert client.get(f"/api/v1/scenarios/{sc['id']}").status_code == 404
 
 
-def test_set_baseline(client):
+def test_scenario_stats(client):
     prog = _create_program(client)
     pid = prog["id"]
-    s1 = _create_scenario(client, pid, name="Opt A", is_baseline=True)
-    s2 = _create_scenario(client, pid, name="Opt B")
-
-    # Set s2 as baseline
-    res = client.post(f"/api/v1/scenarios/{s2['id']}/set-baseline", json={})
+    _create_scenario(client, pid, name="A", status="draft", priority="high")
+    _create_scenario(client, pid, name="B", status="approved", priority="critical")
+    res = client.get(f"/api/v1/programs/{pid}/scenarios/stats")
     assert res.status_code == 200
-    assert res.get_json()["is_baseline"] is True
-
-    # s1 should no longer be baseline
-    s1_check = client.get(f"/api/v1/scenarios/{s1['id']}").get_json()
-    assert s1_check["is_baseline"] is False
+    data = res.get_json()
+    assert data["total"] == 2
+    assert "draft" in data["by_status"]
+    assert "approved" in data["by_status"]
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# SCENARIO PARAMETERS
+# WORKSHOPS
 # ═════════════════════════════════════════════════════════════════════════════
 
-def test_create_parameter(client):
+def test_create_workshop(client):
     prog = _create_program(client)
     sc = _create_scenario(client, prog["id"])
-    res = client.post(f"/api/v1/scenarios/{sc['id']}/parameters", json={
-        "key": "go_live_strategy",
-        "value": "Big-Bang",
-        "category": "technical",
+    res = client.post(f"/api/v1/scenarios/{sc['id']}/workshops", json={
+        "title": "SD Fit-Gap Workshop",
+        "session_type": "fit_gap_workshop",
+        "facilitator": "Mehmet Kaya",
+        "duration_minutes": 240,
     })
     assert res.status_code == 201
     data = res.get_json()
-    assert data["key"] == "go_live_strategy"
-    assert data["category"] == "technical"
+    assert data["title"] == "SD Fit-Gap Workshop"
+    assert data["session_type"] == "fit_gap_workshop"
 
 
-def test_create_parameter_missing_key(client):
+def test_create_workshop_missing_title(client):
     prog = _create_program(client)
     sc = _create_scenario(client, prog["id"])
-    res = client.post(f"/api/v1/scenarios/{sc['id']}/parameters", json={"value": "X"})
+    res = client.post(f"/api/v1/scenarios/{sc['id']}/workshops", json={})
     assert res.status_code == 400
 
 
-def test_list_parameters(client):
+def test_list_workshops(client):
     prog = _create_program(client)
     sc = _create_scenario(client, prog["id"])
     sid = sc["id"]
-    client.post(f"/api/v1/scenarios/{sid}/parameters", json={"key": "k1", "value": "v1"})
-    client.post(f"/api/v1/scenarios/{sid}/parameters", json={"key": "k2", "value": "v2"})
-    res = client.get(f"/api/v1/scenarios/{sid}/parameters")
+    _create_workshop(client, sid, title="WS 1")
+    _create_workshop(client, sid, title="WS 2")
+    res = client.get(f"/api/v1/scenarios/{sid}/workshops")
     assert res.status_code == 200
     assert len(res.get_json()) == 2
 
 
-def test_update_parameter(client):
+def test_get_workshop(client):
     prog = _create_program(client)
     sc = _create_scenario(client, prog["id"])
-    param = client.post(f"/api/v1/scenarios/{sc['id']}/parameters", json={
-        "key": "infra", "value": "AWS"
-    }).get_json()
-    res = client.put(f"/api/v1/scenario-parameters/{param['id']}", json={"value": "Azure"})
-    assert res.status_code == 200
-    assert res.get_json()["value"] == "Azure"
-
-
-def test_delete_parameter(client):
-    prog = _create_program(client)
-    sc = _create_scenario(client, prog["id"])
-    param = client.post(f"/api/v1/scenarios/{sc['id']}/parameters", json={
-        "key": "x", "value": "y"
-    }).get_json()
-    res = client.delete(f"/api/v1/scenario-parameters/{param['id']}")
-    assert res.status_code == 200
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# COMPARISON
-# ═════════════════════════════════════════════════════════════════════════════
-
-def test_compare_scenarios(client):
-    prog = _create_program(client)
-    pid = prog["id"]
-    s1 = _create_scenario(client, pid, name="Opt A")
-    s2 = _create_scenario(client, pid, name="Opt B")
-
-    # Add different params
-    client.post(f"/api/v1/scenarios/{s1['id']}/parameters", json={"key": "infra", "value": "AWS"})
-    client.post(f"/api/v1/scenarios/{s2['id']}/parameters", json={"key": "infra", "value": "Azure"})
-    client.post(f"/api/v1/scenarios/{s2['id']}/parameters", json={"key": "db", "value": "HANA Cloud"})
-
-    res = client.get(f"/api/v1/programs/{pid}/scenarios/compare")
+    ws = _create_workshop(client, sc["id"])
+    res = client.get(f"/api/v1/workshops/{ws['id']}")
     assert res.status_code == 200
     data = res.get_json()
-    assert len(data["scenarios"]) == 2
-    assert "infra" in data["parameter_keys"]
-    assert "db" in data["parameter_keys"]
-    # Check parameter_map
-    for sc in data["scenarios"]:
-        assert "parameter_map" in sc
+    assert "requirements" in data
 
 
-def test_compare_empty(client):
+def test_update_workshop(client):
     prog = _create_program(client)
-    res = client.get(f"/api/v1/programs/{prog['id']}/scenarios/compare")
+    sc = _create_scenario(client, prog["id"])
+    ws = _create_workshop(client, sc["id"])
+    res = client.put(f"/api/v1/workshops/{ws['id']}", json={
+        "status": "completed",
+        "fit_count": 10,
+        "gap_count": 3,
+        "notes": "Workshop completed successfully",
+    })
     assert res.status_code == 200
-    assert len(res.get_json()["scenarios"]) == 0
+    data = res.get_json()
+    assert data["status"] == "completed"
+    assert data["fit_count"] == 10
+    assert data["gap_count"] == 3
+
+
+def test_delete_workshop(client):
+    prog = _create_program(client)
+    sc = _create_scenario(client, prog["id"])
+    ws = _create_workshop(client, sc["id"])
+    res = client.delete(f"/api/v1/workshops/{ws['id']}")
+    assert res.status_code == 200
+    assert client.get(f"/api/v1/workshops/{ws['id']}").status_code == 404

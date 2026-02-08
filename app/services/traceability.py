@@ -12,7 +12,7 @@ The engine builds a chain dict showing upstream (parents) and downstream
 from app.models import db
 from app.models.backlog import BacklogItem, ConfigItem, FunctionalSpec, TechnicalSpec
 from app.models.requirement import Requirement
-from app.models.scenario import Scenario
+from app.models.scenario import Scenario, Workshop
 from app.models.scope import Process, ScopeItem, Analysis
 from app.models.testing import TestCase, Defect
 
@@ -20,6 +20,7 @@ from app.models.testing import TestCase, Defect
 # Supported entity types for chain traversal
 ENTITY_TYPES = {
     "scenario": Scenario,
+    "workshop": Workshop,
     "process": Process,
     "scope_item": ScopeItem,
     "analysis": Analysis,

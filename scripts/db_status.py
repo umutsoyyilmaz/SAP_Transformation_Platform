@@ -8,7 +8,7 @@ from app.models import db
 
 TABLES = [
     "programs", "phases", "gates", "workstreams", "team_members",
-    "committees", "scenarios", "scenario_parameters", "requirements",
+    "committees", "scenarios", "workshops", "requirements",
     "requirement_traces", "sprints", "backlog_items", "config_items",
     "functional_specs", "technical_specs",
 ]

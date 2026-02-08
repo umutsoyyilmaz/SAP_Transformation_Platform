@@ -690,7 +690,7 @@ a:hover { text-decoration: underline; }
     margin-bottom: 20px;
 }
 
-/* ── Scenario Cards (Sprint 3) ────────────────────────────────────────── */
+/* ── Scenario Cards ────────────────────────────────────────────────────── */
 .scenario-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
@@ -707,11 +707,6 @@ a:hover { text-decoration: underline; }
 
 .scenario-card:hover {
     box-shadow: var(--shadow-md);
-}
-
-.scenario-card--baseline {
-    border-color: var(--sap-positive);
-    border-width: 2px;
 }
 
 .scenario-card__header {
@@ -736,7 +731,7 @@ a:hover { text-decoration: underline; }
 
 .scenario-card__meta {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
     gap: 8px;
     margin-bottom: 12px;
 }
@@ -762,11 +757,108 @@ a:hover { text-decoration: underline; }
     border-top: 1px solid var(--sap-border);
 }
 
-/* ── Compare Table ────────────────────────────────────────────────────── */
-.compare-table th,
-.compare-table td {
-    text-align: center;
-    min-width: 120px;
+/* ── Workshop Cards ───────────────────────────────────────────────────── */
+.workshop-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 0;
+}
+
+.workshop-card {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--sap-border);
+    border-radius: var(--radius);
+    background: var(--sap-card-bg);
+    transition: box-shadow var(--transition);
+    overflow: hidden;
+}
+
+.workshop-card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.workshop-card__type {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    min-height: 56px;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+    color: #fff;
+}
+
+.workshop-card__body {
+    flex: 1;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.workshop-card__body h4 {
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+.workshop-card__meta {
+    display: flex;
+    gap: 16px;
+    font-size: 0.8rem;
+    color: var(--sap-text-secondary);
+}
+
+.workshop-card__counts {
+    display: flex;
+    gap: 12px;
+    font-size: 0.8rem;
+    margin-top: 4px;
+}
+
+.count-fit { color: #107e3e; font-weight: 600; }
+.count-gap { color: #cc1919; font-weight: 600; }
+.count-partial { color: #e76500; font-weight: 600; }
+
+.workshop-card__actions {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+}
+
+/* ── Priority badges ──────────────────────────────────────────────────── */
+.badge-priority-critical { background: #f8d7da; color: #721c24; }
+.badge-priority-high     { background: #ffe0cc; color: #cc5500; }
+.badge-priority-medium   { background: #fff3cd; color: #856404; }
+.badge-priority-low      { background: #e8e8e8; color: #555; }
+
+/* ── Scenario status badges ───────────────────────────────────────────── */
+.badge-draft       { background: #e8e8e8; color: #555; }
+.badge-in_analysis { background: #e8f4fd; color: #0070f2; }
+.badge-analyzed    { background: #fff3cd; color: #856404; }
+.badge-approved    { background: #d4edda; color: #155724; }
+
+/* ── Workshop status badges ───────────────────────────────────────────── */
+.badge-planned     { background: #e8e8e8; color: #555; }
+
+/* ── Info & Fit-Gap badges ────────────────────────────────────────────── */
+.badge-info        { background: #e8f4fd; color: #0070f2; }
+.badge-fit         { background: #d4edda; color: #155724; }
+.badge-gap         { background: #f8d7da; color: #721c24; }
+.badge-partial_fit { background: #fff3cd; color: #856404; }
+
+/* ── Filter bar ───────────────────────────────────────────────────────── */
+.filter-bar {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.form-input--sm {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    min-width: 140px;
 }
 
 .compare-table td:first-child,

@@ -38,7 +38,7 @@ from app.models import db
 from app.models.program import (
     Committee, Gate, Phase, Program, TeamMember, Workstream,
 )
-from app.models.scenario import Scenario, ScenarioParameter
+from app.models.scenario import Scenario, Workshop
 from app.models.requirement import Requirement, RequirementTrace
 from app.models.backlog import (
     BacklogItem, ConfigItem, FunctionalSpec, Sprint, TechnicalSpec,
@@ -181,72 +181,71 @@ COMMITTEES = [
 
 SCENARIOS = [
     {
-        "name": "Greenfield — S/4HANA Cloud (Seçilen)",
-        "description": "Sıfırdan S/4HANA Cloud kurulumu. Tüm süreçler SAP Best Practice üzerine inşa edilir.",
-        "scenario_type": "approach", "status": "approved", "is_baseline": True,
-        "estimated_duration_weeks": 78, "estimated_cost": 45000000.0, "estimated_resources": 35,
-        "risk_level": "medium", "confidence_pct": 75,
-        "pros": "Temiz süreç tasarımı\nSAP Best Practice kullanımı\nTeknik borç yok\nGelecek yükseltmeler kolay",
-        "cons": "Daha uzun süre\nYüksek maliyet\nKullanıcı değişim yönetimi zorluk",
-        "recommendation": "Uzun vadeli stratejik yatırım olarak önerilmektedir.",
-        "parameters": [
-            {"key": "deployment", "value": "S/4HANA Cloud Public Edition", "category": "technical"},
-            {"key": "user_count", "value": "2500", "category": "organizational"},
-            {"key": "location_count", "value": "15", "category": "organizational"},
+        "name": "Sevkiyat Süreci (Shipping Process)",
+        "description": "Satış siparişinden sevkiyata kadar uçtan uca sevkiyat süreci. Teslimat oluşturma, toplama, paketleme, yükleme ve mal çıkışı.",
+        "sap_module": "SD", "process_area": "order_to_cash",
+        "status": "in_analysis", "priority": "critical",
+        "owner": "Ayşe Yılmaz", "workstream": "Lojistik",
+        "workshops": [
+            {"title": "SD Sevkiyat Fit-Gap Workshop #1", "session_type": "fit_gap_workshop", "status": "completed",
+             "facilitator": "Mehmet Kaya", "attendees": "Ayşe Yılmaz, Emre Koç, Fatma Çelik",
+             "location": "İstanbul Merkez Ofis — Toplantı Odası A",
+             "duration_minutes": 240, "fit_count": 8, "gap_count": 3, "partial_fit_count": 2,
+             "notes": "Standart teslimat türleri SAP standard ile karşılanıyor. Özel paketleme gereksinimi gap.",
+             "decisions": "Özel paketleme için WRICEF geliştirme açılacak."},
+            {"title": "SD Sevkiyat Requirement Gathering", "session_type": "requirement_gathering", "status": "completed",
+             "facilitator": "Mehmet Kaya", "attendees": "Ayşe Yılmaz, Lojistik Ekibi",
+             "duration_minutes": 180, "requirements_identified": 6},
         ],
     },
     {
-        "name": "Brownfield — System Conversion",
-        "description": "Mevcut ECC 6.0 sisteminin S/4HANA'ya teknik dönüşümü.",
-        "scenario_type": "approach", "status": "rejected", "is_baseline": False,
-        "estimated_duration_weeks": 52, "estimated_cost": 28000000.0, "estimated_resources": 25,
-        "risk_level": "high", "confidence_pct": 60,
-        "pros": "Daha kısa süre\nDaha düşük maliyet\nMevcut özelleştirmeler korunur",
-        "cons": "Teknik borç taşınır\nEski süreç tasarımları kalır\nKarmaşık migrasyon",
-        "parameters": [
-            {"key": "deployment", "value": "S/4HANA On-Premise", "category": "technical"},
-            {"key": "custom_code_objects", "value": "4200", "category": "technical"},
-            {"key": "conversion_risk", "value": "high", "category": "general"},
+        "name": "Satın Alma Süreci (Procurement)",
+        "description": "Satınalma talebi, teklif toplama, sipariş oluşturma, mal girişi ve fatura doğrulama süreci.",
+        "sap_module": "MM", "process_area": "procure_to_pay",
+        "status": "in_analysis", "priority": "critical",
+        "owner": "Emre Koç", "workstream": "Tedarik Zinciri",
+        "workshops": [
+            {"title": "MM Satınalma Fit-Gap Workshop", "session_type": "fit_gap_workshop", "status": "completed",
+             "facilitator": "Selin Doğan", "attendees": "Emre Koç, Ahmet Demir, Satınalma Ekibi",
+             "duration_minutes": 300, "fit_count": 12, "gap_count": 5, "partial_fit_count": 3,
+             "notes": "4 kademeli onay iş akışı SAP standard + workflow ile mümkün. Tedarikçi portalı gap."},
+            {"title": "MM Satınalma Design Workshop", "session_type": "design_workshop", "status": "planned",
+             "facilitator": "Selin Doğan", "duration_minutes": 240},
         ],
     },
     {
-        "name": "Selective Data Transition",
-        "description": "Shell/landscape dönüşümü — yeni sistem, seçili verilerle. Hybrid yaklaşım.",
-        "scenario_type": "approach", "status": "under_review", "is_baseline": False,
-        "estimated_duration_weeks": 65, "estimated_cost": 35000000.0, "estimated_resources": 30,
-        "risk_level": "medium", "confidence_pct": 65,
-        "pros": "Temiz sistem + tarihi veri\nOrta maliyet\nEsnek geçiş",
-        "cons": "Karmaşık veri göçü\nUzmanlık gerektirir",
-        "parameters": [
-            {"key": "deployment", "value": "S/4HANA Private Cloud", "category": "technical"},
-            {"key": "data_volume_tb", "value": "12.5", "category": "technical"},
+        "name": "Fiyatlandırma Süreci (Pricing)",
+        "description": "Satış fiyat belirleme, iskonto yönetimi, kampanya fiyatları ve transfer fiyatlandırma.",
+        "sap_module": "SD", "process_area": "order_to_cash",
+        "status": "draft", "priority": "high",
+        "owner": "Fatma Çelik", "workstream": "Satış",
+        "workshops": [
+            {"title": "SD Pricing Process Mapping", "session_type": "process_mapping", "status": "planned",
+             "facilitator": "Mehmet Kaya", "duration_minutes": 180},
         ],
     },
     {
-        "name": "Big-Bang Go-Live (Seçilen)",
-        "description": "Tüm lokasyonlar tek seferde go-live. Cutover süresi: 3 hafta sonu.",
-        "scenario_type": "timeline", "status": "approved", "is_baseline": True,
-        "estimated_duration_weeks": 78, "estimated_cost": 45000000.0, "estimated_resources": 35,
-        "risk_level": "high", "confidence_pct": 70,
-        "pros": "Tek cutover\nHızlı ROI\nDüşük çift bakım maliyeti",
-        "cons": "Yüksek risk\nBüyük organizasyonel etki\nKarmaşık cutover",
-        "parameters": [
-            {"key": "go_live_date", "value": "2027-07-01", "category": "timeline"},
-            {"key": "cutover_weekend_count", "value": "3", "category": "timeline"},
+        "name": "Finansal Kapanış Süreci (Financial Close)",
+        "description": "Aylık/yıllık kapanış süreci. Dönem sonu işlemler, mutabakat, raporlama.",
+        "sap_module": "FI", "process_area": "record_to_report",
+        "status": "analyzed", "priority": "critical",
+        "owner": "Ahmet Demir", "workstream": "Finans",
+        "workshops": [
+            {"title": "FI Kapanış Fit-Gap Workshop", "session_type": "fit_gap_workshop", "status": "completed",
+             "facilitator": "Ahmet Demir", "attendees": "Finans Ekibi, Denetim",
+             "duration_minutes": 360, "fit_count": 15, "gap_count": 2, "partial_fit_count": 4,
+             "decisions": "IFRS/TFRS paralel muhasebe SAP standard ile destekleniyor."},
+            {"title": "FI Kapanış Sign-Off", "session_type": "sign_off", "status": "planned",
+             "facilitator": "Ahmet Demir", "duration_minutes": 120},
         ],
     },
     {
-        "name": "Phased Rollout (Reddedilen)",
-        "description": "Lokasyon bazlı aşamalı go-live: İstanbul → Bursa → Ankara → diğerleri.",
-        "scenario_type": "timeline", "status": "rejected", "is_baseline": False,
-        "estimated_duration_weeks": 104, "estimated_cost": 52000000.0, "estimated_resources": 30,
-        "risk_level": "low", "confidence_pct": 80,
-        "pros": "Düşük risk\nAşamalı öğrenme\nDaha kolay yönetim",
-        "cons": "Uzun süre\nYüksek maliyet\nÇift bakım dönemi\nEntegrasyon karmaşıklığı",
-        "parameters": [
-            {"key": "wave_count", "value": "4", "category": "timeline"},
-            {"key": "wave_interval_months", "value": "3", "category": "timeline"},
-        ],
+        "name": "Üretim Planlama Süreci (Production Planning)",
+        "description": "MRP çalıştırma, üretim emirleri, kapasite planlama, iş emirleri ve üretim onayları.",
+        "sap_module": "PP", "process_area": "plan_to_produce",
+        "status": "draft", "priority": "high",
+        "owner": "Can Öztürk", "workstream": "Üretim",
+        "workshops": [],
     },
 ]
 
@@ -459,7 +458,7 @@ def seed_all(app, append=False, verbose=False):
                           TechnicalSpec, FunctionalSpec, ConfigItem, BacklogItem,
                           Sprint, RequirementTrace, Requirement,
                           Analysis, ScopeItem, Process,
-                          ScenarioParameter,
+                          Workshop,
                           Scenario, Committee, TeamMember, Workstream, Gate, Phase, Program]:
                 db.session.query(model).delete()
             db.session.commit()
@@ -527,22 +526,25 @@ def seed_all(app, append=False, verbose=False):
             _p(f"   🏛️  {comm.name}", verbose)
         print(f"   ✅ {len(COMMITTEES)} committees")
 
-        # ── 6. Scenarios + Parameters ────────────────────────────────────
-        print("\n🔮 Creating scenarios & parameters...")
+        # ── 6. Scenarios + Workshops ─────────────────────────────────────
+        print("\n🔮 Creating scenarios & workshops...")
         scenario_ids = {}
+        total_workshops = 0
         for s_data in SCENARIOS:
-            params = s_data.pop("parameters", [])
+            ws_list = s_data.pop("workshops", [])
             scenario = Scenario(program_id=pid, **s_data)
             db.session.add(scenario)
             db.session.flush()
             scenario_ids[s_data["name"]] = scenario.id
             _p(f"   🔮 Scenario: {scenario.name} ({scenario.status})", verbose)
-            for param in params:
-                sp = ScenarioParameter(scenario_id=scenario.id, **param)
-                db.session.add(sp)
-            # Restore params for potential re-run
-            s_data["parameters"] = params
-        print(f"   ✅ {len(SCENARIOS)} scenarios, {sum(len(s.get('parameters', [])) for s in SCENARIOS)} parameters")
+            for w_data in ws_list:
+                workshop = Workshop(scenario_id=scenario.id, **w_data)
+                db.session.add(workshop)
+                total_workshops += 1
+            scenario.total_workshops = len(ws_list)
+            # Restore workshops for potential re-run
+            s_data["workshops"] = ws_list
+        print(f"   ✅ {len(SCENARIOS)} scenarios, {total_workshops} workshops")
 
         # ── 6b. Processes, Scope Items, Analyses ─────────────────────────
         print("\n🔍 Creating processes, scope items & analyses...")

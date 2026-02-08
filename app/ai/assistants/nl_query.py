@@ -92,12 +92,12 @@ team_members (id, program_id, name, email, role, raci, workstream_id, organizati
 committees (id, program_id, name, description, committee_type, meeting_frequency, chair_name, created_at)
 
 -- Scope & Requirements
-scenarios (id, program_id, name, description, scenario_type, status, is_baseline, estimated_duration_weeks, estimated_cost, estimated_resources, risk_level, confidence_pct, pros, cons, assumptions, recommendation, created_at, updated_at)
-scenario_parameters (id, scenario_id, key, value, category, notes, created_at)
+scenarios (id, program_id, name, description, sap_module, process_area, status, priority, owner, workstream, total_workshops, total_requirements, notes, created_at, updated_at)
+workshops (id, scenario_id, title, description, session_type, status, session_date, duration_minutes, location, facilitator, attendees, agenda, notes, decisions, action_items, fit_count, gap_count, partial_fit_count, created_at, updated_at)
 processes (id, scenario_id, parent_id, name, description, level, process_id_code, module, "order", created_at, updated_at)
 scope_items (id, process_id, code, name, description, sap_reference, status, priority, module, notes, created_at, updated_at)
 analyses (id, scope_item_id, name, description, analysis_type, status, fit_gap_result, decision, attendees, date, notes, created_at, updated_at)
-requirements (id, program_id, req_parent_id, code, title, description, req_type, priority, status, source, module, fit_gap, effort_estimate, acceptance_criteria, notes, created_at, updated_at)
+requirements (id, program_id, workshop_id, req_parent_id, code, title, description, req_type, priority, status, source, module, fit_gap, effort_estimate, acceptance_criteria, notes, created_at, updated_at)
 requirement_traces (id, requirement_id, target_type, target_id, trace_type, notes, created_at)
 
 -- Backlog & Development
@@ -129,6 +129,8 @@ Key relationships:
 - workstreams.program_id → programs.id
 - team_members.workstream_id → workstreams.id
 - scenarios.program_id → programs.id
+- workshops.scenario_id → scenarios.id
+- requirements.workshop_id → workshops.id
 - processes.scenario_id → scenarios.id
 - scope_items.process_id → processes.id
 - analyses.scope_item_id → scope_items.id
@@ -180,7 +182,7 @@ _FORBIDDEN_RE = re.compile('|'.join(_FORBIDDEN_PATTERNS), re.IGNORECASE)
 # Allowed table names
 _ALLOWED_TABLES = {
     "programs", "phases", "gates", "workstreams", "team_members", "committees",
-    "scenarios", "scenario_parameters",
+    "scenarios", "workshops",
     "processes", "scope_items", "analyses",
     "requirements", "requirement_traces",
     "sprints", "backlog_items", "config_items",
@@ -219,9 +221,13 @@ _ENUM_DEFINITIONS: dict[str, list[str]] = {
     "requirements.fit_gap": ["fit", "gap", "partial_fit"],
     "requirements.effort_estimate": ["xs", "s", "m", "l", "xl"],
     # Scenarios
-    "scenarios.scenario_type": ["approach", "timeline", "scope", "cost", "resource"],
-    "scenarios.status": ["draft", "under_review", "approved", "rejected", "archived"],
-    "scenarios.risk_level": ["low", "medium", "high", "critical"],
+    "scenarios.status": ["draft", "in_analysis", "analyzed", "approved", "on_hold"],
+    "scenarios.priority": ["critical", "high", "medium", "low"],
+    "scenarios.sap_module": ["FI", "CO", "SD", "MM", "PP", "QM", "PM", "HR", "WM", "LE", "PS", "BW", "BASIS"],
+    "scenarios.process_area": ["order_to_cash", "procure_to_pay", "record_to_report", "plan_to_produce", "hire_to_retire", "warehouse_management", "project_management", "quality_management", "plant_maintenance", "general"],
+    # Workshops
+    "workshops.session_type": ["requirement_gathering", "process_mapping", "fit_gap_workshop", "design_workshop", "review", "demo", "sign_off", "training"],
+    "workshops.status": ["planned", "in_progress", "completed", "cancelled"],
     # Scope
     "scope_items.status": ["active", "deferred", "out_of_scope", "in_scope"],
     "scope_items.priority": ["low", "medium", "high", "critical"],

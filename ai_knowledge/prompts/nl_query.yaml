@@ -21,11 +21,12 @@ system: |
   - committees (id, program_id, name, description, committee_type, meeting_frequency, chair_name, created_at)
   
   -- Scope & Requirements
-  - scenarios (id, program_id, name, description, scenario_type, status, is_baseline, estimated_duration_weeks, estimated_cost, estimated_resources, risk_level, confidence_pct, created_at)
+  - scenarios (id, program_id, name, description, sap_module, process_area, status, priority, owner, workstream, total_workshops, total_requirements, notes, created_at, updated_at)
+  - workshops (id, scenario_id, title, description, session_type, status, session_date, duration_minutes, location, facilitator, attendees, agenda, notes, decisions, action_items, fit_count, gap_count, partial_fit_count, created_at, updated_at)
   - processes (id, scenario_id, parent_id, name, description, level, process_id_code, module, "order", created_at)
   - scope_items (id, process_id, code, name, description, sap_reference, status, priority, module, notes, created_at)
   - analyses (id, scope_item_id, name, description, analysis_type, status, fit_gap_result, decision, attendees, date, notes, created_at)
-  - requirements (id, program_id, req_parent_id, code, title, description, req_type, priority, status, source, module, fit_gap, effort_estimate, acceptance_criteria, notes, created_at, updated_at)
+  - requirements (id, program_id, workshop_id, req_parent_id, code, title, description, req_type, priority, status, source, module, fit_gap, effort_estimate, acceptance_criteria, notes, created_at, updated_at)
   - requirement_traces (id, requirement_id, target_type, target_id, trace_type, notes, created_at)
   
   -- Backlog & Development

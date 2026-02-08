@@ -27,6 +27,10 @@ class Requirement(db.Model):
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False
     )
+    workshop_id = db.Column(
+        db.Integer, db.ForeignKey("workshops.id", ondelete="SET NULL"),
+        nullable=True, comment="Workshop that produced this requirement (nullable — can also be added directly)",
+    )
     req_parent_id = db.Column(
         db.Integer, db.ForeignKey("requirements.id", ondelete="SET NULL"),
         nullable=True, comment="Parent requirement for hierarchy",
@@ -95,6 +99,7 @@ class Requirement(db.Model):
         result = {
             "id": self.id,
             "program_id": self.program_id,
+            "workshop_id": self.workshop_id,
             "req_parent_id": self.req_parent_id,
             "code": self.code,
             "title": self.title,
