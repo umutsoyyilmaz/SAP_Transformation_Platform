@@ -62,6 +62,16 @@ const App = (() => {
                     <div class="kpi-card__label">Completed</div>
                 </div>
             </div>
+            <div class="dashboard-grid">
+                <div class="card">
+                    <div class="card-header"><h2>Program Status Distribution</h2></div>
+                    <canvas id="statusChart" height="220"></canvas>
+                </div>
+                <div class="card">
+                    <div class="card-header"><h2>Programs by Type</h2></div>
+                    <canvas id="typeChart" height="220"></canvas>
+                </div>
+            </div>
             <div class="card">
                 <div class="card-header">
                     <h2>Recent Programs</h2>
@@ -73,13 +83,57 @@ const App = (() => {
 
         try {
             const programs = await API.get('/programs');
+            const active = programs.filter(p => p.status === 'active').length;
+            const planning = programs.filter(p => p.status === 'planning').length;
+            const completed = programs.filter(p => p.status === 'completed').length;
+            const onHold = programs.filter(p => p.status === 'on_hold').length;
+            const cancelled = programs.filter(p => p.status === 'cancelled').length;
+
             document.getElementById('kpiTotalPrograms').textContent = programs.length;
-            document.getElementById('kpiActive').textContent =
-                programs.filter(p => p.status === 'active').length;
-            document.getElementById('kpiPlanning').textContent =
-                programs.filter(p => p.status === 'planning').length;
-            document.getElementById('kpiCompleted').textContent =
-                programs.filter(p => p.status === 'completed').length;
+            document.getElementById('kpiActive').textContent = active;
+            document.getElementById('kpiPlanning').textContent = planning;
+            document.getElementById('kpiCompleted').textContent = completed;
+
+            // Status distribution doughnut chart
+            if (typeof Chart !== 'undefined') {
+                new Chart(document.getElementById('statusChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Active', 'Planning', 'Completed', 'On Hold', 'Cancelled'],
+                        datasets: [{
+                            data: [active, planning, completed, onHold, cancelled],
+                            backgroundColor: ['#0070f2', '#e76500', '#30914c', '#a9b4be', '#cc1919'],
+                        }],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'bottom' } },
+                    },
+                });
+
+                // Programs by type bar chart
+                const typeCount = {};
+                programs.forEach(p => { typeCount[p.project_type] = (typeCount[p.project_type] || 0) + 1; });
+                new Chart(document.getElementById('typeChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: Object.keys(typeCount),
+                        datasets: [{
+                            label: 'Programs',
+                            data: Object.values(typeCount),
+                            backgroundColor: '#0070f2',
+                            borderRadius: 6,
+                        }],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+                    },
+                });
+            }
 
             const recent = programs.slice(0, 5);
             if (recent.length === 0) {
@@ -101,15 +155,17 @@ const App = (() => {
                             <tr>
                                 <th>Name</th>
                                 <th>Type</th>
+                                <th>Methodology</th>
                                 <th>Status</th>
                                 <th>SAP Product</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${recent.map(p => `
-                                <tr onclick="App.navigate('programs')">
+                                <tr style="cursor:pointer" onclick="App.navigate('programs');setTimeout(()=>ProgramView.openDetail(${p.id}),100)">
                                     <td><strong>${p.name}</strong></td>
                                     <td>${p.project_type}</td>
+                                    <td>${p.methodology}</td>
                                     <td><span class="badge badge-${p.status}">${p.status}</span></td>
                                     <td>${p.sap_product}</td>
                                 </tr>

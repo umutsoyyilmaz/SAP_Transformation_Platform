@@ -9,7 +9,11 @@ Usage:
 
 import os
 
-basedir = os.path.abspath(os.path.dirname(__file__))
+basedir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+
+# Default SQLite path for local dev when PostgreSQL is not running
+_SQLITE_DEV = f"sqlite:///{os.path.join(basedir, 'instance', 'sap_platform_dev.db')}"
+_SQLITE_TEST = "sqlite:///:memory:"
 
 
 class Config:
@@ -31,20 +35,14 @@ class DevelopmentConfig(Config):
     """Development environment configuration."""
 
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "DATABASE_URL",
-        "postgresql://sap_user:sap_pass@localhost:5432/sap_platform_dev",
-    )
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", _SQLITE_DEV)
 
 
 class TestingConfig(Config):
     """Testing environment configuration."""
 
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "TEST_DATABASE_URL",
-        "postgresql://sap_user:sap_pass@localhost:5432/sap_platform_test",
-    )
+    SQLALCHEMY_DATABASE_URI = os.getenv("TEST_DATABASE_URL", _SQLITE_TEST)
 
 
 class ProductionConfig(Config):

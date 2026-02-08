@@ -478,3 +478,169 @@ a:hover { text-decoration: underline; }
     .form-row { grid-template-columns: 1fr; }
     .kpi-row { grid-template-columns: 1fr 1fr; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Sprint 2 — Tabs, Phase Cards, Detail Grid, Completion Bar
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Tabs ──────────────────────────────────────────────────────────────── */
+.tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 0;
+}
+
+.tab-btn {
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+    margin-bottom: -2px;
+}
+
+.tab-btn:hover {
+    color: var(--sap-blue);
+    background: var(--sap-blue-light);
+}
+
+.tab-btn.active {
+    color: var(--sap-blue);
+    border-bottom-color: var(--sap-blue);
+}
+
+/* ── Detail Grid ──────────────────────────────────────────────────────── */
+.detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-top: 20px;
+}
+
+.detail-section h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.detail-list {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 8px 12px;
+}
+
+.detail-list dt {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.detail-list dd {
+    margin: 0;
+    font-size: 0.85rem;
+}
+
+/* ── Phase Card ───────────────────────────────────────────────────────── */
+.phase-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+
+.phase-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--sap-blue-light);
+    gap: 12px;
+}
+
+.phase-header > div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.phase-body {
+    padding: 12px 16px;
+}
+
+.gates-section {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-secondary);
+}
+
+/* ── Completion Bar ───────────────────────────────────────────────────── */
+.completion-bar {
+    display: inline-block;
+    width: 80px;
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    vertical-align: middle;
+}
+
+.completion-fill {
+    display: block;
+    height: 100%;
+    background: var(--sap-positive);
+    border-radius: 4px;
+    transition: width 0.3s;
+}
+
+/* ── Additional Badge Variants ────────────────────────────────────────── */
+.badge-not_started { background: #e8e8e8; color: #555; }
+.badge-in_progress { background: #fff3cd; color: #856404; }
+.badge-skipped     { background: #f0f0f0; color: #888; }
+.badge-pending     { background: #e8e8e8; color: #555; }
+.badge-passed      { background: #d4edda; color: #155724; }
+.badge-failed      { background: #f8d7da; color: #721c24; }
+.badge-waived      { background: #fff3cd; color: #856404; }
+.badge-responsible { background: #cce5ff; color: #004085; }
+.badge-accountable { background: #d4edda; color: #155724; }
+.badge-consulted   { background: #fff3cd; color: #856404; }
+.badge-informed    { background: #e8e8e8; color: #555; }
+.badge-low         { background: #e8e8e8; color: #555; }
+.badge-medium      { background: #fff3cd; color: #856404; }
+.badge-high        { background: #ffe0cc; color: #cc5500; }
+.badge-critical    { background: #f8d7da; color: #721c24; }
+.badge-on_hold     { background: #fff3cd; color: #856404; }
+
+/* ── Card Header ──────────────────────────────────────────────────────── */
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.card-header h2 {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+@media (max-width: 768px) {
+    .detail-grid { grid-template-columns: 1fr; }
+    .tabs { overflow-x: auto; }
+    .tab-btn { white-space: nowrap; padding: 8px 14px; font-size: 0.8rem; }
+    .dashboard-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Dashboard Grid ───────────────────────────────────────────────────── */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
