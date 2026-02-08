@@ -10,7 +10,7 @@
 | Metrik | Değer |
 |--------|-------|
 | Tamamlanan Sprint | 7 / 24 |
-| Toplam Commit | 9 |
+| Toplam Commit | 11 |
 | Toplam Dosya | 85+ |
 | Python LOC | 12,500+ |
 | JavaScript LOC | 5,600+ |
@@ -27,19 +27,17 @@
 
 | # | Commit | Hash | Tarih | Değişiklik |
 |---|--------|------|-------|------------|
-| 1 | **Sprint 1**: Repository Bootstrap | `3e42f06` | 2026-02-07 | .gitignore, requirements.txt, README |
-| 2 | **Sprint 1**: Flask App Factory | `502e8af` | 2026-02-07 | create_app + config classes |
-| 3 | **Sprint 1**: Mimari Refactoring — tüm 12 task | `2736abb` | 2026-02-08 | +1,672 satır — Flask app, Program CRUD, SPA UI, Docker, testler |
-| 4 | **Sprint 2**: PostgreSQL migration + Program Setup | `847e785` | 2026-02-08 | +2,933 satır — 6 model, 24 endpoint, Alembic, Dashboard |
-| 5 | **Sprint 3**: Scenario Planner + Requirements Base | `a970b82` | 2026-02-08 | +3,026 satır — Senaryo, Gereksinim, İzlenebilirlik matrisi |
-| 6 | **Sprint 4**: Backlog Workbench (WRICEF) + Sprints | `pending` | 2026-02-08 | +1,897 satır — WRICEF kanban, Sprint planlama, Tahminleme |
-| 7 | **Sprint 5**: Test Hub — Catalog & Execution | `pending` | 2026-02-08 | +2,300 satır — Test Plan/Cycle/Case/Execution/Defect, KPI Dashboard |
-| 8 | **Sprint 5 Gate Check**: Audit + 9 Düzeltme | `pending` | 2026-02-08 | +1,200 satır — Scope modülü, auto-code, convert, env stability |
-| 9 | **Sprint 6**: RAID Module + Notification Foundation | `pending` | 2026-02-08 | +2,100 satır — Risk/Action/Issue/Decision, Notification, Heatmap |
-| 10 | **Sprint 7**: AI Infrastructure Setup | `pending` | 2026-02-08 | +2,800 satır — LLM Gateway, RAG Pipeline, Suggestion Queue, Prompt Registry |
-| 11 | **Sprint 7.5**: Gemini Free-Tier Integration | `pending` | 2026-02-08 | +230 satır — GeminiProvider (chat+embeddings), demo default, 7 yeni test |
-| 12 | **Revizyon R1**: Program Selector → Context-Based | `789d6cc` | 2026-02-09 | +438/-213 satır — Program card grid, sidebar disable, localStorage context, 10 dosya değişikliği |
-| 13 | **Revizyon R2**: Scenario → İş Senaryosu + Workshop | `pending` | 2026-02-09 | Scenario modeli yeniden yazıldı, Workshop modeli eklendi, ScenarioParameter kaldırıldı, 16+ dosya |
+| 1 | Initial commit | `446d6cd` | 2026-02-07 | Repo oluşturma |
+| 2 | **Sprint 1**: Repository Bootstrap | `3e42f06` | 2026-02-07 | .gitignore, requirements.txt, README |
+| 3 | **Sprint 1**: Flask App Factory | `502e8af` | 2026-02-07 | create_app + config classes |
+| 4 | **Sprint 1**: Mimari Refactoring — tüm 12 task | `2736abb` | 2026-02-08 | +1,672 satır — Flask app, Program CRUD, SPA UI, Docker, testler |
+| 5 | **Sprint 2**: PostgreSQL migration + Program Setup | `847e785` | 2026-02-08 | +2,933 satır — 6 model, 24 endpoint, Alembic, Dashboard |
+| 6 | **Sprint 3**: Scenario Planner + Requirements Base | `a970b82` | 2026-02-08 | +3,026 satır — Senaryo, Gereksinim, İzlenebilirlik matrisi |
+| 7 | **Sprint 1-3**: Progress report | `2a90993` | 2026-02-08 | PROGRESS_REPORT.md eklendi |
+| 8 | **Sprint 4-6**: RAID + Notification + Backlog + Test Hub + Gate Check | `a995200` | 2026-02-08 | +8,500 satır — Sprint 4 (WRICEF kanban, Sprint planlama), Sprint 5 (Test Hub, Defect), Gate Check (Scope modülü, 9 düzeltme), Sprint 6 (RAID, Notification, Heatmap) |
+| 9 | **Sprint 7-7.5**: AI Infrastructure + Gemini | `db9a8a8` | 2026-02-09 | +7,426 satır — LLM Gateway, RAG Pipeline, Suggestion Queue, 3 AI Asistan, Gemini Free-Tier, 33 yeni dosya |
+| 10 | **Revizyon R1**: Program Selector → Context-Based | `789d6cc` | 2026-02-09 | +438/-213 satır — Program card grid, sidebar disable, localStorage context, 10 dosya |
+| 11 | **Revizyon R2**: Scenario → İş Senaryosu + Workshop | `133edca` | 2026-02-09 | +1,320/-703 satır — Scenario yeniden yazıldı, Workshop eklendi, ScenarioParameter kaldırıldı, 17 dosya |
 
 ---
 
