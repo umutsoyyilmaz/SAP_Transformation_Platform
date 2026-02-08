@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAP Transformation Platform</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+
+    <!-- ── Shell Header ────────────────────────────────────────────────── -->
+    <header class="shell-header">
+        <div class="shell-header__logo">
+            SAP <span>Transformation Platform</span>
+        </div>
+        <div class="shell-header__spacer"></div>
+        <select id="globalProjectSelector" class="shell-header__project-selector">
+            <option value="">Select Program...</option>
+        </select>
+        <div class="shell-header__actions">
+            <button class="shell-header__icon-btn" title="Notifications">🔔</button>
+            <button class="shell-header__icon-btn" title="User">👤</button>
+        </div>
+    </header>
+
+    <!-- ── Sidebar Navigation ──────────────────────────────────────────── -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar__section-title">Program Management</div>
+        <div class="sidebar__item active" data-view="dashboard">
+            <span class="sidebar__item-icon">📊</span>
+            <span>Dashboard</span>
+        </div>
+        <div class="sidebar__item" data-view="programs">
+            <span class="sidebar__item-icon">📋</span>
+            <span>Programs</span>
+        </div>
+
+        <div class="sidebar__section-title">Scope & Requirements</div>
+        <div class="sidebar__item" data-view="scenarios">
+            <span class="sidebar__item-icon">🎯</span>
+            <span>Scenarios</span>
+        </div>
+        <div class="sidebar__item" data-view="requirements">
+            <span class="sidebar__item-icon">📝</span>
+            <span>Requirements</span>
+        </div>
+
+        <div class="sidebar__section-title">Delivery</div>
+        <div class="sidebar__item" data-view="backlog">
+            <span class="sidebar__item-icon">⚙️</span>
+            <span>Backlog (WRICEF)</span>
+        </div>
+        <div class="sidebar__item" data-view="testing">
+            <span class="sidebar__item-icon">🧪</span>
+            <span>Test Hub</span>
+        </div>
+        <div class="sidebar__item" data-view="integration">
+            <span class="sidebar__item-icon">🔌</span>
+            <span>Integration Factory</span>
+        </div>
+        <div class="sidebar__item" data-view="data-factory">
+            <span class="sidebar__item-icon">🗄️</span>
+            <span>Data Factory</span>
+        </div>
+
+        <div class="sidebar__section-title">Go-Live & Run</div>
+        <div class="sidebar__item" data-view="cutover">
+            <span class="sidebar__item-icon">🚀</span>
+            <span>Cutover Hub</span>
+        </div>
+        <div class="sidebar__item" data-view="raid">
+            <span class="sidebar__item-icon">⚠️</span>
+            <span>RAID</span>
+        </div>
+        <div class="sidebar__item" data-view="reports">
+            <span class="sidebar__item-icon">📈</span>
+            <span>Reports</span>
+        </div>
+
+        <div class="sidebar__section-title">AI Assistant</div>
+        <div class="sidebar__item" data-view="ai-query">
+            <span class="sidebar__item-icon">🤖</span>
+            <span>AI Query</span>
+        </div>
+    </nav>
+
+    <!-- ── Main Content Area ───────────────────────────────────────────── -->
+    <main class="main-content" id="mainContent">
+        <!-- Views are rendered here by app.js SPA router -->
+        <div class="spinner" id="loadingSpinner"></div>
+    </main>
+
+    <!-- ── Modal container ─────────────────────────────────────────────── -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal" id="modalContainer"></div>
+    </div>
+
+    <!-- ── Toast container ─────────────────────────────────────────────── -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- ── JavaScript ──────────────────────────────────────────────────── -->
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/views/program.js"></script>
+    <script src="/static/js/app.js"></script>
+
+</body>
+</html>

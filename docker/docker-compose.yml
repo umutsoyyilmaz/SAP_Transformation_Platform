@@ -1,0 +1,53 @@
+# SAP Transformation Management Platform
+# Docker Compose — Production-like environment
+# Usage: docker compose -f docker/docker-compose.yml up --build
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql://sap_user:sap_pass@postgres:5432/sap_platform_dev
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: change-me-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: sap_user
+      POSTGRES_PASSWORD: sap_pass
+      POSTGRES_DB: sap_platform_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sap_user -d sap_platform_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:

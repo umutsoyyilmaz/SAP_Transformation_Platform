@@ -10,9 +10,14 @@ Usage:
 
 import os
 
-from flask import Flask
+from flask import Flask, send_from_directory
+from flask_cors import CORS
+from flask_migrate import Migrate
 
 from app.config import config
+from app.models import db
+
+migrate = Migrate()
 
 
 def create_app(config_name=None):
@@ -30,7 +35,32 @@ def create_app(config_name=None):
     if config_name is None:
         config_name = os.getenv("APP_ENV", "development")
 
-    app = Flask(__name__, instance_relative_config=True)
+    app = Flask(
+        __name__,
+        instance_relative_config=True,
+        static_folder="../static",
+        template_folder="../templates",
+    )
     app.config.from_object(config[config_name])
+
+    # ── Extensions ───────────────────────────────────────────────────────
+    db.init_app(app)
+    migrate.init_app(app, db)
+    CORS(app)
+
+    # ── Blueprints ───────────────────────────────────────────────────────
+    from app.blueprints.program_bp import program_bp
+
+    app.register_blueprint(program_bp)
+
+    # ── SPA catch-all ────────────────────────────────────────────────────
+    @app.route("/")
+    def index():
+        return send_from_directory(app.template_folder, "index.html")
+
+    # ── Health check ─────────────────────────────────────────────────────
+    @app.route("/api/v1/health")
+    def health():
+        return {"status": "ok", "app": "SAP Transformation Platform"}
 
     return app
