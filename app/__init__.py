@@ -48,10 +48,19 @@ def create_app(config_name=None):
     migrate.init_app(app, db)
     CORS(app)
 
+    # ── Import all models so Alembic can detect them ─────────────────────
+    from app.models import program as _program_models       # noqa: F401
+    from app.models import scenario as _scenario_models     # noqa: F401
+    from app.models import requirement as _requirement_models  # noqa: F401
+
     # ── Blueprints ───────────────────────────────────────────────────────
     from app.blueprints.program_bp import program_bp
+    from app.blueprints.scenario_bp import scenario_bp
+    from app.blueprints.requirement_bp import requirement_bp
 
     app.register_blueprint(program_bp)
+    app.register_blueprint(scenario_bp)
+    app.register_blueprint(requirement_bp)
 
     # ── SPA catch-all ────────────────────────────────────────────────────
     @app.route("/")

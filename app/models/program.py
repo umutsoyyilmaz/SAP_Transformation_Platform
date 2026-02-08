@@ -1,6 +1,6 @@
 """
 SAP Transformation Management Platform
-Program domain models — Sprint 1 + Sprint 2 scope.
+Program domain models — Sprint 1-3 scope.
 
 Models:
     - Program: top-level project entity (SAP transformation program)
@@ -92,6 +92,14 @@ class Program(db.Model):
     )
     committees = db.relationship(
         "Committee", backref="program", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    scenarios = db.relationship(
+        "Scenario", backref="program", lazy="dynamic",
+        cascade="all, delete-orphan", order_by="Scenario.created_at",
+    )
+    requirements = db.relationship(
+        "Requirement", backref="program", lazy="dynamic",
         cascade="all, delete-orphan",
     )
 

@@ -9,8 +9,8 @@ const App = (() => {
         dashboard:    () => renderDashboard(),
         programs:     () => ProgramView.render(),
         // Future Sprint views — placeholder
-        scenarios:    () => placeholder('Scenarios', 'Sprint 3'),
-        requirements: () => placeholder('Requirements', 'Sprint 3'),
+        scenarios:    () => ScenarioView.render(),
+        requirements: () => RequirementView.render(),
         backlog:      () => placeholder('Backlog Workbench', 'Sprint 4'),
         testing:      () => placeholder('Test Hub', 'Sprint 5'),
         integration:  () => placeholder('Integration Factory', 'Sprint 9'),

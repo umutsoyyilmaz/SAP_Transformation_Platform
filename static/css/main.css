@@ -644,3 +644,173 @@ a:hover { text-decoration: underline; }
     gap: 20px;
     margin-bottom: 20px;
 }
+
+/* ── Scenario Cards (Sprint 3) ────────────────────────────────────────── */
+.scenario-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 20px;
+}
+
+.scenario-card {
+    border: 1px solid var(--sap-border);
+    border-radius: var(--radius);
+    padding: 20px;
+    background: var(--sap-card-bg);
+    transition: box-shadow var(--transition);
+}
+
+.scenario-card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.scenario-card--baseline {
+    border-color: var(--sap-positive);
+    border-width: 2px;
+}
+
+.scenario-card__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.scenario-card__header h3 {
+    font-size: 1.05rem;
+    flex: 1;
+}
+
+.scenario-card__desc {
+    font-size: 0.85rem;
+    color: var(--sap-text-secondary);
+    margin-bottom: 12px;
+    line-height: 1.4;
+}
+
+.scenario-card__meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.scenario-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.meta-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--sap-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.scenario-card__actions {
+    display: flex;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--sap-border);
+}
+
+/* ── Compare Table ────────────────────────────────────────────────────── */
+.compare-table th,
+.compare-table td {
+    text-align: center;
+    min-width: 120px;
+}
+
+.compare-table td:first-child,
+.compare-table th:first-child {
+    text-align: left;
+    min-width: 100px;
+}
+
+/* ── Requirement Filters (Sprint 3) ───────────────────────────────────── */
+.req-filters {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.form-input--sm {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    min-width: 130px;
+}
+
+/* ── Traceability Matrix ──────────────────────────────────────────────── */
+.matrix-table th,
+.matrix-table td {
+    text-align: center;
+    padding: 8px 6px;
+    font-size: 0.8rem;
+}
+
+.matrix-table td:first-child,
+.matrix-table th:first-child,
+.matrix-table td:nth-child(2),
+.matrix-table th:nth-child(2) {
+    text-align: left;
+    min-width: 80px;
+}
+
+.matrix-col-header {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    max-width: 32px;
+    font-size: 0.75rem;
+    color: var(--sap-blue);
+}
+
+.matrix-col-header.ws-col {
+    color: var(--sap-positive);
+}
+
+.ws-col {
+    background: #f0faf3;
+}
+
+.matrix-cell {
+    font-size: 1rem;
+    color: var(--sap-positive);
+    font-weight: 700;
+}
+
+/* ── Fit/Gap badges ───────────────────────────────────────────────────── */
+.badge-fit        { background: #d4edda; color: #155724; }
+.badge-gap        { background: #f8d7da; color: #721c24; }
+.badge-partial_fit { background: #fff3cd; color: #856404; }
+
+/* ── Requirement status badges ────────────────────────────────────────── */
+.badge-draft       { background: #e8e8e8; color: #555; }
+.badge-approved    { background: #d4edda; color: #155724; }
+.badge-implemented { background: #cce5ff; color: #004085; }
+.badge-verified    { background: #b8daff; color: #004085; }
+.badge-deferred    { background: #fff3cd; color: #856404; }
+.badge-rejected    { background: #f8d7da; color: #721c24; }
+
+/* ── Scenario status badges ───────────────────────────────────────────── */
+.badge-under_review { background: #fff3cd; color: #856404; }
+.badge-archived     { background: #e8e8e8; color: #555; }
+
+/* ── Form row (horizontal form layout) ────────────────────────────────── */
+.form-row {
+    display: flex;
+    gap: 12px;
+}
+
+.form-row .form-group {
+    flex: 1;
+}
+
+@media (max-width: 768px) {
+    .scenario-grid { grid-template-columns: 1fr; }
+    .scenario-card__meta { grid-template-columns: 1fr 1fr; }
+    .req-filters { flex-direction: column; }
+    .form-row { flex-direction: column; }
+}
