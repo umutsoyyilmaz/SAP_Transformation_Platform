@@ -52,15 +52,28 @@ def create_app(config_name=None):
     from app.models import program as _program_models       # noqa: F401
     from app.models import scenario as _scenario_models     # noqa: F401
     from app.models import requirement as _requirement_models  # noqa: F401
+    from app.models import backlog as _backlog_models       # noqa: F401
+    from app.models import testing as _testing_models       # noqa: F401
+    from app.models import scope as _scope_models           # noqa: F401
+    from app.models import raid as _raid_models             # noqa: F401
+    from app.models import notification as _notification_models  # noqa: F401
 
     # ── Blueprints ───────────────────────────────────────────────────────
     from app.blueprints.program_bp import program_bp
     from app.blueprints.scenario_bp import scenario_bp
     from app.blueprints.requirement_bp import requirement_bp
+    from app.blueprints.backlog_bp import backlog_bp
+    from app.blueprints.testing_bp import testing_bp
+    from app.blueprints.scope_bp import scope_bp
+    from app.blueprints.raid_bp import raid_bp
 
     app.register_blueprint(program_bp)
     app.register_blueprint(scenario_bp)
     app.register_blueprint(requirement_bp)
+    app.register_blueprint(backlog_bp)
+    app.register_blueprint(testing_bp)
+    app.register_blueprint(scope_bp)
+    app.register_blueprint(raid_bp)
 
     # ── SPA catch-all ────────────────────────────────────────────────────
     @app.route("/")

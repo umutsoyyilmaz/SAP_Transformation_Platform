@@ -102,6 +102,18 @@ class Program(db.Model):
         "Requirement", backref="program", lazy="dynamic",
         cascade="all, delete-orphan",
     )
+    backlog_items = db.relationship(
+        "BacklogItem", backref="program", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    config_items = db.relationship(
+        "ConfigItem", backref="program", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    sprints = db.relationship(
+        "Sprint", backref="program", lazy="dynamic",
+        cascade="all, delete-orphan", order_by="Sprint.order",
+    )
 
     def to_dict(self, include_children=False):
         """Serialize program to dictionary."""

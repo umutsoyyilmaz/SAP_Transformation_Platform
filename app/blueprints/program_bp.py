@@ -263,6 +263,16 @@ def delete_phase(phase_id):
 # GATES
 # ═════════════════════════════════════════════════════════════════════════════
 
+@program_bp.route("/phases/<int:phase_id>/gates", methods=["GET"])
+def list_gates(phase_id):
+    """List all gates for a phase."""
+    phase, err = _get_or_404(Phase, phase_id)
+    if err:
+        return err
+    gates = Gate.query.filter_by(phase_id=phase_id).order_by(Gate.id).all()
+    return jsonify([g.to_dict() for g in gates]), 200
+
+
 @program_bp.route("/phases/<int:phase_id>/gates", methods=["POST"])
 def create_gate(phase_id):
     """Create a gate under a phase."""

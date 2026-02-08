@@ -11,12 +11,12 @@ const App = (() => {
         // Future Sprint views — placeholder
         scenarios:    () => ScenarioView.render(),
         requirements: () => RequirementView.render(),
-        backlog:      () => placeholder('Backlog Workbench', 'Sprint 4'),
-        testing:      () => placeholder('Test Hub', 'Sprint 5'),
+        backlog:      () => BacklogView.render(),
+        testing:      () => TestingView.render(),
         integration:  () => placeholder('Integration Factory', 'Sprint 9'),
         'data-factory': () => placeholder('Data Factory', 'Sprint 10'),
         cutover:      () => placeholder('Cutover Hub', 'Sprint 13'),
-        raid:         () => placeholder('RAID', 'Sprint 6'),
+        raid:         () => RaidView.render(),
         reports:      () => placeholder('Reports', 'Sprint 11'),
         'ai-query':   () => placeholder('AI Query', 'Sprint 8'),
     };
@@ -239,6 +239,11 @@ const App = (() => {
         document.getElementById('modalOverlay').addEventListener('click', e => {
             if (e.target.id === 'modalOverlay') closeModal();
         });
+
+        // Initialize notification panel (Sprint 6)
+        if (typeof NotificationPanel !== 'undefined') {
+            NotificationPanel.init();
+        }
 
         // Render default view
         navigate('dashboard');

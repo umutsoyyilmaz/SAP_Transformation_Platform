@@ -25,6 +25,7 @@ Endpoints (Sprint 3 scope):
 from flask import Blueprint, jsonify, request
 
 from app.models import db
+from app.models.backlog import BacklogItem, ConfigItem
 from app.models.program import Phase, Program, Workstream
 from app.models.requirement import Requirement, RequirementTrace
 from app.models.scenario import Scenario
@@ -97,10 +98,19 @@ def create_requirement(program_id):
     if not title:
         return jsonify({"error": "Requirement title is required"}), 400
 
+    # ── Auto-code generation ──────────────────────────────────────────
+    code = data.get("code", "").strip()
+    if not code:
+        module_prefix = (data.get("module", "") or "GEN").upper()[:3]
+        existing_count = Requirement.query.filter_by(
+            program_id=program_id
+        ).count()
+        code = f"REQ-{module_prefix}-{existing_count + 1:04d}"
+
     req = Requirement(
         program_id=program_id,
         req_parent_id=data.get("req_parent_id"),
-        code=data.get("code", ""),
+        code=code,
         title=title,
         description=data.get("description", ""),
         req_type=data.get("req_type", "functional"),
@@ -164,6 +174,75 @@ def delete_requirement(req_id):
     db.session.delete(req)
     db.session.commit()
     return jsonify({"message": f"Requirement '{req.title}' deleted"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# CONVERT REQUIREMENT → WRICEF / CONFIG
+# ═════════════════════════════════════════════════════════════════════════════
+
+@requirement_bp.route("/requirements/<int:req_id>/convert", methods=["POST"])
+def convert_requirement(req_id):
+    """Convert a requirement into a BacklogItem (WRICEF) or ConfigItem.
+
+    Body:
+        target_type: "backlog" or "config" (required)
+        wricef_type:  required when target_type=backlog
+                      (workflow, report, interface, conversion, enhancement, form)
+        module:       SAP module override (default: req.module)
+    """
+    req, err = _get_or_404(Requirement, req_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    target = data.get("target_type", "").strip().lower()
+    if target not in ("backlog", "config"):
+        return jsonify({"error": "target_type must be 'backlog' or 'config'"}), 400
+
+    module = data.get("module", req.module or "")
+
+    if target == "backlog":
+        wricef_type = data.get("wricef_type", "").strip().lower()
+        valid_wricef = {"workflow", "report", "interface", "conversion",
+                        "enhancement", "form"}
+        if wricef_type not in valid_wricef:
+            return jsonify({"error": f"wricef_type must be one of: {', '.join(sorted(valid_wricef))}"}), 400
+
+        # Auto-generate backlog code
+        prefix = wricef_type[0].upper()
+        count = BacklogItem.query.filter_by(program_id=req.program_id).count()
+        code = f"{prefix}-{count + 1:04d}"
+
+        item = BacklogItem(
+            program_id=req.program_id,
+            requirement_id=req.id,
+            code=code,
+            title=req.title,
+            description=req.description,
+            wricef_type=wricef_type,
+            module=module,
+            status="open",
+        )
+        db.session.add(item)
+        db.session.commit()
+        return jsonify(item.to_dict()), 201
+
+    else:  # config
+        count = ConfigItem.query.filter_by(program_id=req.program_id).count()
+        code = f"CFG-{count + 1:04d}"
+
+        item = ConfigItem(
+            program_id=req.program_id,
+            requirement_id=req.id,
+            code=code,
+            title=req.title,
+            description=req.description,
+            module=module,
+            status="open",
+        )
+        db.session.add(item)
+        db.session.commit()
+        return jsonify(item.to_dict()), 201
 
 
 # ═════════════════════════════════════════════════════════════════════════════
