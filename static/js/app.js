@@ -31,9 +31,80 @@ const App = (() => {
 
     let currentView = 'dashboard';
 
+    // ── Program Context ─────────────────────────────────────────────────
+    // Views that require a program to be selected
+    const programRequiredViews = new Set([
+        'scenarios', 'requirements', 'backlog', 'testing',
+        'integration', 'data-factory', 'cutover', 'raid',
+        'reports', 'ai-query',
+    ]);
+
+    function getActiveProgram() {
+        const stored = localStorage.getItem('sap_active_program');
+        if (!stored) return null;
+        try { return JSON.parse(stored); } catch { return null; }
+    }
+
+    function setActiveProgram(program) {
+        if (program) {
+            localStorage.setItem('sap_active_program', JSON.stringify({
+                id: program.id,
+                name: program.name,
+                status: program.status,
+                project_type: program.project_type,
+            }));
+        } else {
+            localStorage.removeItem('sap_active_program');
+        }
+        updateProgramBadge();
+        updateSidebarState();
+    }
+
+    function updateProgramBadge() {
+        const prog = getActiveProgram();
+        const nameEl = document.getElementById('activeProgramName');
+        const badge = document.getElementById('activeProgramBadge');
+        if (prog) {
+            nameEl.textContent = prog.name;
+            badge.classList.add('shell-header__program-badge--active');
+            badge.title = `${prog.name} (${prog.project_type}) — Click to switch`;
+        } else {
+            nameEl.textContent = 'No program selected';
+            badge.classList.remove('shell-header__program-badge--active');
+            badge.title = 'Click to select a program';
+        }
+    }
+
+    function updateSidebarState() {
+        const hasProgram = !!getActiveProgram();
+        document.querySelectorAll('.sidebar__item').forEach(item => {
+            const view = item.dataset.view;
+            if (programRequiredViews.has(view)) {
+                item.classList.toggle('sidebar__item--disabled', !hasProgram);
+            }
+        });
+
+        // Hide AI suggestion badge button when no program selected
+        const suggBtn = document.querySelector('.shell-header__actions .shell-header__icon-btn[title="AI Suggestions"]');
+        if (suggBtn) {
+            suggBtn.style.opacity = hasProgram ? '1' : '0.3';
+            suggBtn.style.pointerEvents = hasProgram ? 'auto' : 'none';
+        }
+        const suggDropdown = document.getElementById('suggDropdown');
+        if (suggDropdown && !hasProgram) suggDropdown.style.display = 'none';
+    }
+
     // ── Navigation ───────────────────────────────────────────────────────
     function navigate(viewName) {
         if (!views[viewName]) return;
+
+        // Guard: program-required views need an active program
+        if (programRequiredViews.has(viewName) && !getActiveProgram()) {
+            toast('Please select a program first', 'warning');
+            navigate('programs');
+            return;
+        }
+
         currentView = viewName;
 
         // Update sidebar active state
@@ -45,149 +116,126 @@ const App = (() => {
         views[viewName]();
     }
 
-    // ── Dashboard ────────────────────────────────────────────────────────
+    // ── Dashboard (Program-Specific) ─────────────────────────────────────
     async function renderDashboard() {
         const main = document.getElementById('mainContent');
+        const prog = getActiveProgram();
+
+        if (!prog) {
+            main.innerHTML = `
+                <div class="page-header"><h1>Dashboard</h1></div>
+                <div class="empty-state">
+                    <div class="empty-state__icon">📋</div>
+                    <div class="empty-state__title">Welcome to SAP Transformation Platform</div>
+                    <p>Select a program to get started.</p>
+                    <br>
+                    <button class="btn btn-primary" onclick="App.navigate('programs')">
+                        Go to Programs
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
         main.innerHTML = `
             <div class="page-header">
-                <h1>Dashboard</h1>
+                <h1>${esc(prog.name)} — Dashboard</h1>
+                <span class="badge badge-${esc(prog.status)}">${esc(prog.status)}</span>
             </div>
             <div class="kpi-row" id="kpiRow">
                 <div class="kpi-card">
-                    <div class="kpi-card__value" id="kpiTotalPrograms">—</div>
-                    <div class="kpi-card__label">Total Programs</div>
+                    <div class="kpi-card__value" id="kpiScenarios">—</div>
+                    <div class="kpi-card__label">Scenarios</div>
                 </div>
                 <div class="kpi-card">
-                    <div class="kpi-card__value" id="kpiActive">—</div>
-                    <div class="kpi-card__label">Active</div>
+                    <div class="kpi-card__value" id="kpiRequirements">—</div>
+                    <div class="kpi-card__label">Requirements</div>
                 </div>
                 <div class="kpi-card">
-                    <div class="kpi-card__value" id="kpiPlanning">—</div>
-                    <div class="kpi-card__label">Planning</div>
+                    <div class="kpi-card__value" id="kpiBacklog">—</div>
+                    <div class="kpi-card__label">Backlog Items</div>
                 </div>
                 <div class="kpi-card">
-                    <div class="kpi-card__value" id="kpiCompleted">—</div>
-                    <div class="kpi-card__label">Completed</div>
+                    <div class="kpi-card__value" id="kpiDefects">—</div>
+                    <div class="kpi-card__label">Open Defects</div>
                 </div>
             </div>
             <div class="dashboard-grid">
                 <div class="card">
-                    <div class="card-header"><h2>Program Status Distribution</h2></div>
-                    <canvas id="statusChart" height="220"></canvas>
+                    <div class="card-header"><h2>Requirement Fit/Gap</h2></div>
+                    <canvas id="fitGapChart" height="220"></canvas>
                 </div>
                 <div class="card">
-                    <div class="card-header"><h2>Programs by Type</h2></div>
-                    <canvas id="typeChart" height="220"></canvas>
+                    <div class="card-header"><h2>Backlog by Status</h2></div>
+                    <canvas id="backlogChart" height="220"></canvas>
                 </div>
             </div>
             <div class="card">
                 <div class="card-header">
-                    <h2>Recent Programs</h2>
-                    <button class="btn btn-primary" onclick="App.navigate('programs')">View All</button>
+                    <h2>Quick Navigation</h2>
                 </div>
-                <div id="recentProgramsList"></div>
+                <div class="dashboard-quick-nav">
+                    <button class="btn btn-secondary" onclick="App.navigate('scenarios')">🎯 Scenarios</button>
+                    <button class="btn btn-secondary" onclick="App.navigate('requirements')">📝 Requirements</button>
+                    <button class="btn btn-secondary" onclick="App.navigate('backlog')">⚙️ Backlog</button>
+                    <button class="btn btn-secondary" onclick="App.navigate('testing')">🧪 Test Hub</button>
+                    <button class="btn btn-secondary" onclick="App.navigate('raid')">⚠️ RAID</button>
+                </div>
             </div>
         `;
 
+        // Load program-specific KPIs
         try {
-            const programs = await API.get('/programs');
-            const active = programs.filter(p => p.status === 'active').length;
-            const planning = programs.filter(p => p.status === 'planning').length;
-            const completed = programs.filter(p => p.status === 'completed').length;
-            const onHold = programs.filter(p => p.status === 'on_hold').length;
-            const cancelled = programs.filter(p => p.status === 'cancelled').length;
+            const pid = prog.id;
+            const [scenarios, reqStats, backlogStats, defects] = await Promise.allSettled([
+                API.get(`/programs/${pid}/scenarios`),
+                API.get(`/programs/${pid}/requirements/stats`),
+                API.get(`/programs/${pid}/backlog/stats`),
+                API.get(`/programs/${pid}/testing/defects`),
+            ]);
 
-            document.getElementById('kpiTotalPrograms').textContent = programs.length;
-            document.getElementById('kpiActive').textContent = active;
-            document.getElementById('kpiPlanning').textContent = planning;
-            document.getElementById('kpiCompleted').textContent = completed;
-
-            // Status distribution doughnut chart
-            if (typeof Chart !== 'undefined') {
-                new Chart(document.getElementById('statusChart'), {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Active', 'Planning', 'Completed', 'On Hold', 'Cancelled'],
-                        datasets: [{
-                            data: [active, planning, completed, onHold, cancelled],
-                            backgroundColor: ['#0070f2', '#e76500', '#30914c', '#a9b4be', '#cc1919'],
-                        }],
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { position: 'bottom' } },
-                    },
-                });
-
-                // Programs by type bar chart
-                const typeCount = {};
-                programs.forEach(p => { typeCount[p.project_type] = (typeCount[p.project_type] || 0) + 1; });
-                new Chart(document.getElementById('typeChart'), {
-                    type: 'bar',
-                    data: {
-                        labels: Object.keys(typeCount),
-                        datasets: [{
-                            label: 'Programs',
-                            data: Object.values(typeCount),
-                            backgroundColor: '#0070f2',
-                            borderRadius: 6,
-                        }],
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
-                    },
-                });
+            if (scenarios.status === 'fulfilled') {
+                document.getElementById('kpiScenarios').textContent = scenarios.value.length ?? 0;
             }
 
-            const recent = programs.slice(0, 5);
-            if (recent.length === 0) {
-                document.getElementById('recentProgramsList').innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state__icon">📋</div>
-                        <div class="empty-state__title">No programs yet</div>
-                        <p>Create your first SAP transformation program to get started.</p>
-                        <br>
-                        <button class="btn btn-primary" onclick="App.navigate('programs')">
-                            + Create Program
-                        </button>
-                    </div>
-                `;
-            } else {
-                document.getElementById('recentProgramsList').innerHTML = `
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Type</th>
-                                <th>Methodology</th>
-                                <th>Status</th>
-                                <th>SAP Product</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${recent.map(p => `
-                                <tr style="cursor:pointer" onclick="App.navigate('programs');setTimeout(()=>ProgramView.openDetail(${p.id}),100)">
-                                    <td><strong>${esc(p.name)}</strong></td>
-                                    <td>${esc(p.project_type)}</td>
-                                    <td>${esc(p.methodology)}</td>
-                                    <td><span class="badge badge-${esc(p.status)}">${esc(p.status)}</span></td>
-                                    <td>${esc(p.sap_product)}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
+            if (reqStats.status === 'fulfilled') {
+                const rs = reqStats.value;
+                document.getElementById('kpiRequirements').textContent = rs.total ?? 0;
+                // Fit/Gap chart
+                if (typeof Chart !== 'undefined' && rs.by_fit_gap) {
+                    new Chart(document.getElementById('fitGapChart'), {
+                        type: 'doughnut',
+                        data: {
+                            labels: Object.keys(rs.by_fit_gap),
+                            datasets: [{ data: Object.values(rs.by_fit_gap), backgroundColor: ['#30914c','#e76500','#0070f2','#a9b4be'] }],
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
+                    });
+                }
             }
 
-            // Update global project selector
-            updateProjectSelector(programs);
+            if (backlogStats.status === 'fulfilled') {
+                const bs = backlogStats.value;
+                document.getElementById('kpiBacklog').textContent = bs.total ?? 0;
+                // Backlog by status chart
+                if (typeof Chart !== 'undefined' && bs.by_status) {
+                    new Chart(document.getElementById('backlogChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: Object.keys(bs.by_status),
+                            datasets: [{ label: 'Items', data: Object.values(bs.by_status), backgroundColor: '#0070f2', borderRadius: 6 }],
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+                    });
+                }
+            }
+
+            if (defects.status === 'fulfilled') {
+                const openDefects = (defects.value || []).filter(d => d.status !== 'closed' && d.status !== 'cancelled');
+                document.getElementById('kpiDefects').textContent = openDefects.length;
+            }
         } catch (err) {
-            document.getElementById('recentProgramsList').innerHTML =
-                `<div class="empty-state"><p>⚠️ ${err.message}</p></div>`;
+            console.warn('Dashboard KPI load error:', err);
         }
     }
 
@@ -201,16 +249,6 @@ const App = (() => {
                 <p>This module will be implemented in <strong>${sprint}</strong>.</p>
             </div>
         `;
-    }
-
-    // ── Global Project Selector ──────────────────────────────────────────
-    async function updateProjectSelector(programs) {
-        const selector = document.getElementById('globalProjectSelector');
-        if (!programs) {
-            try { programs = await API.get('/programs'); } catch { programs = []; }
-        }
-        selector.innerHTML = '<option value="">Select Program...</option>' +
-            programs.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
     }
 
     // ── Toast notifications ──────────────────────────────────────────────
@@ -258,6 +296,10 @@ const App = (() => {
             SuggestionBadge.init();
         }
 
+        // Set up program context from localStorage
+        updateProgramBadge();
+        updateSidebarState();
+
         // Render default view
         navigate('dashboard');
     }
@@ -266,5 +308,9 @@ const App = (() => {
     document.addEventListener('DOMContentLoaded', init);
 
     // Public API
-    return { navigate, toast, openModal, closeModal, updateProjectSelector };
+    return {
+        navigate, toast, openModal, closeModal,
+        getActiveProgram, setActiveProgram,
+        updateProgramBadge, updateSidebarState,
+    };
 })();

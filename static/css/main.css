@@ -90,18 +90,43 @@ a:hover { text-decoration: underline; }
 
 .shell-header__spacer { flex: 1; }
 
-.shell-header__project-selector {
-    background: rgba(255,255,255,0.12);
-    border: 1px solid rgba(255,255,255,0.2);
+/* ── Program Badge (replaces old selector) ─────────────────────────── */
+.shell-header__program-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
     border-radius: var(--radius);
-    color: #fff;
-    padding: 4px 12px;
+    color: rgba(255,255,255,0.6);
+    padding: 5px 14px;
     font-size: 13px;
     cursor: pointer;
-    outline: none;
+    transition: all var(--transition);
+    max-width: 320px;
 }
-
-.shell-header__project-selector option { color: #333; }
+.shell-header__program-badge:hover {
+    background: rgba(255,255,255,0.15);
+    border-color: rgba(255,255,255,0.3);
+}
+.shell-header__program-badge--active {
+    color: #fff;
+    background: rgba(0, 112, 242, 0.3);
+    border-color: rgba(0, 112, 242, 0.5);
+}
+.shell-header__program-icon { font-size: 15px; }
+#activeProgramName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 220px;
+}
+.shell-header__program-switch {
+    font-size: 14px;
+    opacity: 0.6;
+    transition: opacity var(--transition);
+}
+.shell-header__program-badge:hover .shell-header__program-switch { opacity: 1; }
 
 .shell-header__actions {
     display: flex;
@@ -170,6 +195,13 @@ a:hover { text-decoration: underline; }
     width: 20px;
     text-align: center;
     font-size: 16px;
+}
+
+/* Disabled sidebar items (no program selected) */
+.sidebar__item--disabled {
+    opacity: 0.35;
+    pointer-events: none;
+    cursor: default;
 }
 
 /* ── Main Content ──────────────────────────────────────────────────────── */
@@ -1613,4 +1645,119 @@ a:hover { text-decoration: underline; }
     text-align: center;
     color: var(--sap-text-secondary);
     font-size: 0.85rem;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Program Card Grid & Banners
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Banner: active / select prompt */
+.program-active-banner,
+.program-select-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-radius: var(--radius);
+    margin-bottom: 16px;
+    font-size: 13px;
+}
+.program-active-banner {
+    background: rgba(48, 145, 76, 0.1);
+    border: 1px solid rgba(48, 145, 76, 0.3);
+    color: #1a5c2e;
+}
+.program-select-banner {
+    background: rgba(231, 101, 0, 0.1);
+    border: 1px solid rgba(231, 101, 0, 0.3);
+    color: #b85000;
+}
+
+/* Card grid */
+.program-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 16px;
+}
+
+.program-card {
+    background: var(--sap-card-bg);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border: 2px solid transparent;
+    transition: all var(--transition);
+    overflow: hidden;
+}
+.program-card:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    transform: translateY(-2px);
+}
+.program-card--active {
+    border-color: var(--sap-brand);
+    box-shadow: 0 0 0 1px var(--sap-brand), var(--shadow);
+}
+
+.program-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 16px 8px;
+}
+.program-card__title {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--sap-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 220px;
+}
+
+.program-card__body {
+    padding: 0 16px 12px;
+}
+.program-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--sap-text-secondary);
+    margin-bottom: 8px;
+}
+.program-card__desc {
+    font-size: 12px;
+    color: var(--sap-text-secondary);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+.program-card__timeline {
+    font-size: 11px;
+    color: var(--sap-text-secondary);
+    display: flex;
+    gap: 12px;
+}
+
+.program-card__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--sap-bg);
+    border-top: 1px solid var(--sap-border);
+}
+.program-card__active-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #30914c;
+}
+
+/* Dashboard quick nav */
+.dashboard-quick-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
 }

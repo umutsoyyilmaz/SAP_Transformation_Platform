@@ -15,6 +15,7 @@ const ProgramView = (() => {
         currentProgram = null;
         currentTab = 'overview';
         const main = document.getElementById('mainContent');
+        const activeProgram = App.getActiveProgram();
         main.innerHTML = `
             <div class="page-header">
                 <h1>Programs</h1>
@@ -22,10 +23,14 @@ const ProgramView = (() => {
                     + New Program
                 </button>
             </div>
-            <div class="card">
-                <div id="programTableContainer">
-                    <div style="text-align:center;padding:40px"><div class="spinner"></div></div>
-                </div>
+            ${activeProgram ? `<div class="program-active-banner">
+                <span>✅ Active: <strong>${escHtml(activeProgram.name)}</strong></span>
+                <button class="btn btn-secondary btn-sm" onclick="ProgramView.clearActiveProgram()">Clear Selection</button>
+            </div>` : `<div class="program-select-banner">
+                <span>⚠️ No program selected — choose one below to get started</span>
+            </div>`}
+            <div id="programCardContainer">
+                <div style="text-align:center;padding:40px"><div class="spinner"></div></div>
             </div>
         `;
         await loadPrograms();
@@ -34,15 +39,17 @@ const ProgramView = (() => {
     async function loadPrograms() {
         try {
             programs = await API.get('/programs');
-            renderTable();
+            renderCards();
         } catch (err) {
-            document.getElementById('programTableContainer').innerHTML =
+            document.getElementById('programCardContainer').innerHTML =
                 `<div class="empty-state"><p>⚠️ ${err.message}</p></div>`;
         }
     }
 
-    function renderTable() {
-        const container = document.getElementById('programTableContainer');
+    function renderCards() {
+        const container = document.getElementById('programCardContainer');
+        const activeProgram = App.getActiveProgram();
+
         if (programs.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
@@ -55,30 +62,52 @@ const ProgramView = (() => {
         }
 
         container.innerHTML = `
-            <table class="data-table">
-                <thead><tr>
-                    <th>ID</th><th>Name</th><th>Type</th><th>Methodology</th>
-                    <th>Status</th><th>Priority</th><th>SAP Product</th><th>Start Date</th><th>Actions</th>
-                </tr></thead>
-                <tbody>
-                    ${programs.map(p => `
-                        <tr>
-                            <td>${p.id}</td>
-                            <td><a href="#" onclick="ProgramView.openDetail(${p.id});return false"><strong>${escHtml(p.name)}</strong></a></td>
-                            <td>${p.project_type}</td>
-                            <td>${p.methodology}</td>
-                            <td><span class="badge badge-${p.status}">${p.status}</span></td>
-                            <td>${p.priority}</td>
-                            <td>${p.sap_product}</td>
-                            <td>${p.start_date || '—'}</td>
-                            <td>
-                                <button class="btn btn-secondary btn-sm" onclick="ProgramView.openDetail(${p.id})">View</button>
-                                <button class="btn btn-danger btn-sm" onclick="ProgramView.deleteProgram(${p.id})">Delete</button>
-                            </td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>`;
+            <div class="program-card-grid">
+                ${programs.map(p => {
+                    const isActive = activeProgram && activeProgram.id === p.id;
+                    return `
+                    <div class="program-card ${isActive ? 'program-card--active' : ''}">
+                        <div class="program-card__header">
+                            <div class="program-card__title">${escHtml(p.name)}</div>
+                            <span class="badge badge-${p.status}">${p.status}</span>
+                        </div>
+                        <div class="program-card__body">
+                            <div class="program-card__meta">
+                                <span>🏗️ ${p.project_type}</span>
+                                <span>📐 ${p.methodology}</span>
+                                <span>💻 ${p.sap_product}</span>
+                            </div>
+                            <div class="program-card__desc">${escHtml(p.description || 'No description')}</div>
+                            <div class="program-card__timeline">
+                                ${p.start_date ? `<span>📅 ${p.start_date}</span>` : ''}
+                                ${p.go_live_date ? `<span>🚀 Go-Live: ${p.go_live_date}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="program-card__actions">
+                            ${isActive
+                                ? '<span class="program-card__active-label">✅ Active Program</span>'
+                                : `<button class="btn btn-primary btn-sm" onclick="ProgramView.selectProgram(${p.id})">Select & Open</button>`
+                            }
+                            <button class="btn btn-secondary btn-sm" onclick="ProgramView.openDetail(${p.id})">Details</button>
+                            <button class="btn btn-danger btn-sm" onclick="ProgramView.deleteProgram(${p.id})">Delete</button>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>`;
+    }
+
+    function selectProgram(id) {
+        const p = programs.find(x => x.id === id);
+        if (!p) return;
+        App.setActiveProgram(p);
+        App.toast(`Program "${p.name}" selected`, 'success');
+        renderCards(); // refresh cards to show active state
+    }
+
+    function clearActiveProgram() {
+        App.setActiveProgram(null);
+        App.toast('Program selection cleared', 'info');
+        renderCards();
     }
 
     // ═════════════════════════════════════════════════════════════════════
@@ -435,8 +464,13 @@ const ProgramView = (() => {
         const data = Object.fromEntries(new FormData(event.target).entries());
         try {
             if (id) {
-                await API.put(`/programs/${id}`, data);
+                const updated = await API.put(`/programs/${id}`, data);
                 App.toast('Program updated', 'success');
+                // Sync active program badge if this is the active one
+                const active = App.getActiveProgram();
+                if (active && active.id === id) {
+                    App.setActiveProgram(updated);
+                }
             } else {
                 await API.post('/programs', data);
                 App.toast('Program created', 'success');
@@ -447,7 +481,6 @@ const ProgramView = (() => {
             } else {
                 await loadPrograms();
             }
-            App.updateProjectSelector();
         } catch (err) { App.toast(err.message, 'error'); }
     }
 
@@ -457,8 +490,12 @@ const ProgramView = (() => {
         try {
             await API.delete(`/programs/${id}`);
             App.toast('Program deleted', 'success');
+            // Clear active program if it was the deleted one
+            const active = App.getActiveProgram();
+            if (active && active.id === id) {
+                App.setActiveProgram(null);
+            }
             await loadPrograms();
-            App.updateProjectSelector();
         } catch (err) { App.toast(err.message, 'error'); }
     }
 
@@ -769,7 +806,7 @@ const ProgramView = (() => {
 
     // ── Public API ───────────────────────────────────────────────────────
     return {
-        render, openDetail,
+        render, openDetail, selectProgram, clearActiveProgram,
         showCreateModal, showEditModal, handleSubmit, deleteProgram,
         showPhaseModal, handlePhaseSubmit, deletePhase,
         showGateModal, handleGateSubmit, deleteGate,

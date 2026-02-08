@@ -11,7 +11,8 @@ const RequirementView = (() => {
     // ── Render requirement list ──────────────────────────────────────────
     async function render() {
         currentReq = null;
-        programId = _getSelectedProgramId();
+        const prog = App.getActiveProgram();
+        programId = prog ? prog.id : null;
         const main = document.getElementById('mainContent');
 
         if (!programId) {
@@ -20,7 +21,7 @@ const RequirementView = (() => {
                 <div class="empty-state">
                     <div class="empty-state__icon">📝</div>
                     <div class="empty-state__title">Select a Program</div>
-                    <p>Choose a program from the header dropdown to manage requirements.</p>
+                    <p>Go to <a href="#" onclick="App.navigate('programs');return false">Programs</a> to select one.</p>
                 </div>`;
             return;
         }
@@ -78,8 +79,8 @@ const RequirementView = (() => {
     }
 
     function _getSelectedProgramId() {
-        const sel = document.getElementById('globalProjectSelector');
-        return sel ? parseInt(sel.value) || null : null;
+        const prog = App.getActiveProgram();
+        return prog ? prog.id : null;
     }
 
     async function loadRequirements() {

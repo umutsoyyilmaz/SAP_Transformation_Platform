@@ -14,9 +14,11 @@
             SAP <span>Transformation Platform</span>
         </div>
         <div class="shell-header__spacer"></div>
-        <select id="globalProjectSelector" class="shell-header__project-selector">
-            <option value="">Select Program...</option>
-        </select>
+        <div id="activeProgramBadge" class="shell-header__program-badge" onclick="App.navigate('programs')" title="Click to switch program">
+            <span class="shell-header__program-icon">📋</span>
+            <span id="activeProgramName">No program selected</span>
+            <span class="shell-header__program-switch">⟳</span>
+        </div>
         <div class="shell-header__actions">
             <button class="shell-header__icon-btn" title="Notifications">🔔</button>
             <button class="shell-header__icon-btn" title="User">👤</button>

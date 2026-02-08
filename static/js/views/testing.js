@@ -18,15 +18,24 @@ const TestingView = (() => {
 
     // ── Main render ───────────────────────────────────────────────────────
     async function render() {
+        const prog = App.getActiveProgram();
+        selectedProgramId = prog ? prog.id : null;
         const main = document.getElementById('mainContent');
+
+        if (!selectedProgramId) {
+            main.innerHTML = `
+                <div class="page-header"><h1>🧪 Test Hub</h1></div>
+                <div class="empty-state">
+                    <div class="empty-state__icon">🧪</div>
+                    <div class="empty-state__title">Select a Program</div>
+                    <p>Go to <a href="#" onclick="App.navigate('programs');return false">Programs</a> to select one.</p>
+                </div>`;
+            return;
+        }
+
         main.innerHTML = `
             <div class="page-header">
                 <h1>🧪 Test Hub</h1>
-                <div style="display:flex;gap:12px;align-items:center">
-                    <select id="testProgramSelect" class="form-control" style="width:280px" onchange="TestingView.onProgramChange()">
-                        <option value="">— Select Program —</option>
-                    </select>
-                </div>
             </div>
             <div class="tabs" id="testTabs">
                 <div class="tab active" data-tab="catalog" onclick="TestingView.switchTab('catalog')">📋 Catalog</div>
@@ -36,35 +45,15 @@ const TestingView = (() => {
                 <div class="tab" data-tab="dashboard" onclick="TestingView.switchTab('dashboard')">📊 Dashboard</div>
             </div>
             <div class="card" id="testContent">
-                <div class="empty-state">
-                    <div class="empty-state__icon">🧪</div>
-                    <div class="empty-state__title">Select a program to view Test Hub</div>
-                </div>
+                <div style="text-align:center;padding:40px"><div class="spinner"></div></div>
             </div>
         `;
-        await loadPrograms();
-    }
-
-    async function loadPrograms() {
-        try {
-            programs = await API.get('/programs');
-            const sel = document.getElementById('testProgramSelect');
-            programs.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p.id;
-                opt.textContent = p.name;
-                sel.appendChild(opt);
-            });
-            if (selectedProgramId) {
-                sel.value = selectedProgramId;
-                await loadTabData();
-            }
-        } catch (e) { console.error(e); }
+        await loadTabData();
     }
 
     async function onProgramChange() {
-        const sel = document.getElementById('testProgramSelect');
-        selectedProgramId = sel.value ? parseInt(sel.value) : null;
+        const prog = App.getActiveProgram();
+        selectedProgramId = prog ? prog.id : null;
         if (selectedProgramId) {
             await loadTabData();
         }

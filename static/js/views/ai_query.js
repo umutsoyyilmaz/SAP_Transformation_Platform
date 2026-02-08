@@ -16,7 +16,8 @@ const AIQueryView = (() => {
 
     // ── Render ────────────────────────────────────────────────────────────
     function render() {
-        currentProgramId = document.getElementById('globalProjectSelector')?.value || null;
+        const prog = App.getActiveProgram();
+        currentProgramId = prog ? prog.id : null;
 
         const main = document.getElementById('mainContent');
         main.innerHTML = `

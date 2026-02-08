@@ -11,15 +11,15 @@ const RaidView = (() => {
     // ── Main Render ──────────────────────────────────────────────────────
     async function render() {
         const main = document.getElementById('mainContent');
-        const sel = document.getElementById('globalProjectSelector');
-        _programId = sel?.value ? parseInt(sel.value, 10) : null;
+        const prog = App.getActiveProgram();
+        _programId = prog ? prog.id : null;
 
         if (!_programId) {
             main.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state__icon">⚠️</div>
                     <div class="empty-state__title">RAID Log</div>
-                    <p>Please select a programme from the header dropdown first.</p>
+                    <p>Go to <a href="#" onclick="App.navigate('programs');return false">Programs</a> to select one first.</p>
                 </div>`;
             return;
         }
