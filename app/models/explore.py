@@ -1,0 +1,1324 @@
+"""
+SAP Transformation Management Platform
+Explore Phase Management System — Domain Models v1.0
+
+Implements the SAP Activate Explore Phase with 4 interconnected modules:
+  Module A: Process Hierarchy Manager (L1-L4)
+  Module B: Workshop Hub
+  Module C: Workshop Detail
+  Module D: Requirement & Open Item Hub
+
+Models (Phase 0 — 16 tables):
+  Core:
+    1.  ProcessLevel          — L1-L4 self-referential tree
+    2.  ExploreWorkshop       — Fit-to-Standard workshop sessions
+    3.  WorkshopScopeItem     — N:M Workshop ↔ L3 Process Level
+    4.  WorkshopAttendee      — Workshop participants
+    5.  WorkshopAgendaItem    — Workshop agenda entries
+    6.  ProcessStep           — L4 sub-process within workshop context
+    7.  ExploreDecision       — Decisions captured per process step
+    8.  ExploreOpenItem       — Independent action items / investigation tasks
+    9.  ExploreRequirement    — Delta requirements from Fit-to-Standard
+    10. RequirementOpenItemLink — N:M Requirement ↔ Open Item
+    11. RequirementDependency — N:M self-referential Requirement deps
+    12. OpenItemComment       — Activity log per open item
+    13. CloudALMSyncLog       — SAP Cloud ALM sync audit trail
+
+  Gap Analysis:
+    14. L4SeedCatalog         — SAP Best Practice L4 reference catalog
+    15. ProjectRole           — Role-based access control per project
+    16. PhaseGate             — Formal phase closure tracking
+
+References:
+  - explore-phase-fs-ts.md Sections 2, 13.1, 13.5, 13.11, 13.12
+  - EXPLORE_PHASE_TASK_LIST.md Tasks T-001 → T-015, T-025
+"""
+
+import uuid
+from datetime import date, datetime, time, timezone
+
+from app.models import db
+
+
+# ── Helper ───────────────────────────────────────────────────────────────────
+
+def _uuid():
+    """Generate a new UUID4 string for primary keys."""
+    return str(uuid.uuid4())
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 1. ProcessLevel — L1-L4 SAP Signavio hierarchy (T-001)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class ProcessLevel(db.Model):
+    """
+    L1-L4 SAP Signavio process hierarchy. Self-referential tree.
+
+    L1 = Value Chain, L2 = Process Area, L3 = E2E Process, L4 = Sub-Process.
+    Replaces legacy Scenario (L1) + Process (L2-L4) with unified tree.
+
+    L3 nodes carry consolidated fit decisions (GAP-11) and sign-off status.
+    L2 nodes carry scope confirmation milestones (GAP-12).
+    """
+
+    __tablename__ = "process_levels"
+    __table_args__ = (
+        db.UniqueConstraint("project_id", "code", name="uq_pl_project_code"),
+        db.Index("idx_pl_project_parent", "project_id", "parent_id"),
+        db.Index("idx_pl_project_level", "project_id", "level"),
+        db.Index("idx_pl_scope_item", "project_id", "scope_item_code"),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    project_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    parent_id = db.Column(
+        db.String(36), db.ForeignKey("process_levels.id", ondelete="CASCADE"),
+        nullable=True, comment="NULL for L1 roots",
+    )
+    level = db.Column(
+        db.Integer, nullable=False,
+        comment="1=Value Chain, 2=Process Area, 3=E2E Process, 4=Sub-Process",
+    )
+    code = db.Column(
+        db.String(20), nullable=False,
+        comment="Unique within project. L1: VC-001, L2: PA-FIN, L3: J58, L4: J58.01",
+    )
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+
+    # Scope & Fit
+    scope_status = db.Column(
+        db.String(20), nullable=False, default="under_review",
+        comment="in_scope | out_of_scope | under_review",
+    )
+    fit_status = db.Column(
+        db.String(20), nullable=True,
+        comment="fit | gap | partial_fit | pending. NULL for L1/L2 (calculated).",
+    )
+    scope_item_code = db.Column(
+        db.String(10), nullable=True,
+        comment="SAP scope item code (L3 only, e.g. J58, BD9)",
+    )
+
+    # BPMN
+    bpmn_available = db.Column(db.Boolean, nullable=False, default=False)
+    bpmn_reference = db.Column(db.String(500), nullable=True)
+
+    # Classification
+    process_area_code = db.Column(
+        db.String(5), nullable=True,
+        comment="Denormalized: FI, CO, SD, MM, PP, QM, PM, WM, HR, PS",
+    )
+    wave = db.Column(db.Integer, nullable=True, comment="Implementation wave (1-4+)")
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+
+    # ── GAP-11: L3 Consolidated Fit Decision ─────────────────────────────
+    consolidated_fit_decision = db.Column(
+        db.String(20), nullable=True,
+        comment="Business-level: fit | gap | partial_fit. NULL = not decided yet.",
+    )
+    system_suggested_fit = db.Column(
+        db.String(20), nullable=True,
+        comment="Auto-calculated from L4 children: fit | gap | partial_fit",
+    )
+    consolidated_decision_override = db.Column(
+        db.Boolean, nullable=False, default=False,
+        comment="True = business overrode system suggestion",
+    )
+    consolidated_decision_rationale = db.Column(db.Text, nullable=True)
+    consolidated_decided_by = db.Column(db.String(36), nullable=True)
+    consolidated_decided_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    # ── GAP-12: L2 Scope Confirmation Milestone ─────────────────────────
+    confirmation_status = db.Column(
+        db.String(30), nullable=True,
+        comment="L2 only: not_ready | ready | confirmed | confirmed_with_risks",
+    )
+    confirmation_note = db.Column(db.Text, nullable=True)
+    confirmed_by = db.Column(db.String(36), nullable=True)
+    confirmed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    readiness_pct = db.Column(
+        db.Numeric(5, 2), nullable=True,
+        comment="L2: (assessed L3 / total in-scope L3) * 100",
+    )
+
+    # Timestamps
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False,
+        default=_utcnow, onupdate=_utcnow,
+    )
+
+    # ── Relationships ────────────────────────────────────────────────────
+    children = db.relationship(
+        "ProcessLevel",
+        backref=db.backref("parent", remote_side="ProcessLevel.id"),
+        lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    workshop_scope_items = db.relationship(
+        "WorkshopScopeItem", backref="process_level", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    process_steps = db.relationship(
+        "ProcessStep", backref="process_level", lazy="dynamic",
+    )
+
+    def to_dict(self, include_children=False):
+        d = {
+            "id": self.id,
+            "project_id": self.project_id,
+            "parent_id": self.parent_id,
+            "level": self.level,
+            "code": self.code,
+            "name": self.name,
+            "description": self.description,
+            "scope_status": self.scope_status,
+            "fit_status": self.fit_status,
+            "scope_item_code": self.scope_item_code,
+            "bpmn_available": self.bpmn_available,
+            "bpmn_reference": self.bpmn_reference,
+            "process_area_code": self.process_area_code,
+            "wave": self.wave,
+            "sort_order": self.sort_order,
+            # GAP-11
+            "consolidated_fit_decision": self.consolidated_fit_decision,
+            "system_suggested_fit": self.system_suggested_fit,
+            "consolidated_decision_override": self.consolidated_decision_override,
+            "consolidated_decision_rationale": self.consolidated_decision_rationale,
+            # GAP-12
+            "confirmation_status": self.confirmation_status,
+            "readiness_pct": float(self.readiness_pct) if self.readiness_pct else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_children:
+            d["children"] = [
+                c.to_dict(include_children=True)
+                for c in self.children.order_by(ProcessLevel.sort_order)
+            ]
+        return d
+
+    def __repr__(self):
+        return f"<ProcessLevel L{self.level} {self.code}: {self.name}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 2. ExploreWorkshop — Fit-to-Standard sessions (T-002)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class ExploreWorkshop(db.Model):
+    """
+    Fit-to-Standard workshop session. A scope item (L3) may have 1-N workshops.
+
+    Code auto-generated: WS-{area}-{seq}{session_letter}
+    Supports multi-session workshops (session_number / total_sessions).
+    Delta design workshops link to original via original_workshop_id (GAP-04).
+    """
+
+    __tablename__ = "explore_workshops"
+    __table_args__ = (
+        db.UniqueConstraint("project_id", "code", name="uq_ews_project_code"),
+        db.Index("idx_ews_project_status", "project_id", "status"),
+        db.Index("idx_ews_project_date", "project_id", "date"),
+        db.Index("idx_ews_project_area", "project_id", "process_area"),
+        db.Index("idx_ews_facilitator", "facilitator_id", "date"),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    project_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    code = db.Column(
+        db.String(20), nullable=False,
+        comment="Auto: WS-{area}-{seq}{letter}. E.g. WS-SD-01, WS-FI-03A",
+    )
+    name = db.Column(db.String(200), nullable=False)
+    type = db.Column(
+        db.String(20), nullable=False, default="fit_to_standard",
+        comment="fit_to_standard | deep_dive | follow_up | delta_design",
+    )
+    status = db.Column(
+        db.String(20), nullable=False, default="draft",
+        comment="draft | scheduled | in_progress | completed | cancelled",
+    )
+
+    # Scheduling
+    date = db.Column(db.Date, nullable=True)
+    start_time = db.Column(db.Time, nullable=True)
+    end_time = db.Column(db.Time, nullable=True)
+    facilitator_id = db.Column(db.String(36), nullable=True, comment="FK → user (future)")
+    location = db.Column(db.String(200), nullable=True)
+    meeting_link = db.Column(db.String(500), nullable=True)
+
+    # Classification
+    process_area = db.Column(
+        db.String(5), nullable=False,
+        comment="FI, CO, SD, MM, PP, QM, PM, WM, HR, PS",
+    )
+    wave = db.Column(db.Integer, nullable=True)
+
+    # Multi-session
+    session_number = db.Column(db.Integer, nullable=False, default=1)
+    total_sessions = db.Column(db.Integer, nullable=False, default=1)
+
+    # Content
+    notes = db.Column(db.Text, nullable=True)
+    summary = db.Column(db.Text, nullable=True, comment="AI-generated or manual summary")
+
+    # GAP-04: Reopen / Delta Design
+    original_workshop_id = db.Column(
+        db.String(36), db.ForeignKey("explore_workshops.id", ondelete="SET NULL"),
+        nullable=True, comment="Delta design → original workshop",
+    )
+    reopen_count = db.Column(db.Integer, nullable=False, default=0)
+    reopen_reason = db.Column(db.Text, nullable=True)
+    revision_number = db.Column(db.Integer, nullable=False, default=1)
+
+    # Timestamps
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False,
+        default=_utcnow, onupdate=_utcnow,
+    )
+    started_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    # ── Relationships ────────────────────────────────────────────────────
+    scope_items = db.relationship(
+        "WorkshopScopeItem", backref="workshop", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    attendees = db.relationship(
+        "WorkshopAttendee", backref="workshop", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    agenda_items = db.relationship(
+        "WorkshopAgendaItem", backref="workshop", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    process_steps = db.relationship(
+        "ProcessStep", backref="workshop", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    delta_workshops = db.relationship(
+        "ExploreWorkshop",
+        backref=db.backref("original_workshop", remote_side="ExploreWorkshop.id"),
+        lazy="dynamic",
+    )
+
+    def to_dict(self, include_details=False):
+        d = {
+            "id": self.id,
+            "project_id": self.project_id,
+            "code": self.code,
+            "name": self.name,
+            "type": self.type,
+            "status": self.status,
+            "date": self.date.isoformat() if self.date else None,
+            "start_time": self.start_time.isoformat() if self.start_time else None,
+            "end_time": self.end_time.isoformat() if self.end_time else None,
+            "facilitator_id": self.facilitator_id,
+            "process_area": self.process_area,
+            "wave": self.wave,
+            "session_number": self.session_number,
+            "total_sessions": self.total_sessions,
+            "location": self.location,
+            "meeting_link": self.meeting_link,
+            "notes": self.notes,
+            "summary": self.summary,
+            "original_workshop_id": self.original_workshop_id,
+            "reopen_count": self.reopen_count,
+            "revision_number": self.revision_number,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_details:
+            d["scope_items"] = [si.to_dict() for si in self.scope_items]
+            d["attendees"] = [a.to_dict() for a in self.attendees]
+            d["agenda_items"] = [
+                ai.to_dict() for ai in self.agenda_items.order_by(WorkshopAgendaItem.sort_order)
+            ]
+        return d
+
+    def __repr__(self):
+        return f"<ExploreWorkshop {self.code}: {self.name}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 3. WorkshopScopeItem — N:M Workshop ↔ L3 (T-003)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class WorkshopScopeItem(db.Model):
+    """N:M bridge between Workshop and ProcessLevel (L3 scope items)."""
+
+    __tablename__ = "workshop_scope_items"
+    __table_args__ = (
+        db.UniqueConstraint("workshop_id", "process_level_id", name="uq_wsi_ws_pl"),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    workshop_id = db.Column(
+        db.String(36), db.ForeignKey("explore_workshops.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    process_level_id = db.Column(
+        db.String(36), db.ForeignKey("process_levels.id", ondelete="CASCADE"),
+        nullable=False, index=True, comment="Must be level=3",
+    )
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "workshop_id": self.workshop_id,
+            "process_level_id": self.process_level_id,
+            "sort_order": self.sort_order,
+        }
+
+    def __repr__(self):
+        return f"<WorkshopScopeItem WS:{self.workshop_id} ↔ PL:{self.process_level_id}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 4. WorkshopAttendee (T-004)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class WorkshopAttendee(db.Model):
+    """Workshop participant with role and attendance tracking."""
+
+    __tablename__ = "workshop_attendees"
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    workshop_id = db.Column(
+        db.String(36), db.ForeignKey("explore_workshops.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    user_id = db.Column(db.String(36), nullable=True, comment="FK → user (if registered)")
+    name = db.Column(db.String(100), nullable=False)
+    role = db.Column(db.String(100), nullable=True, comment='E.g. "Sales Director"')
+    organization = db.Column(
+        db.String(20), nullable=False, default="customer",
+        comment="customer | consultant | partner | vendor",
+    )
+    attendance_status = db.Column(
+        db.String(20), nullable=False, default="confirmed",
+        comment="confirmed | tentative | declined | present | absent",
+    )
+    is_required = db.Column(db.Boolean, nullable=False, default=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "workshop_id": self.workshop_id,
+            "user_id": self.user_id,
+            "name": self.name,
+            "role": self.role,
+            "organization": self.organization,
+            "attendance_status": self.attendance_status,
+            "is_required": self.is_required,
+        }
+
+    def __repr__(self):
+        return f"<WorkshopAttendee {self.name}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 5. WorkshopAgendaItem (T-005)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class WorkshopAgendaItem(db.Model):
+    """Time-ordered agenda entry for a workshop session."""
+
+    __tablename__ = "workshop_agenda_items"
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    workshop_id = db.Column(
+        db.String(36), db.ForeignKey("explore_workshops.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    time = db.Column(db.Time, nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    duration_minutes = db.Column(db.Integer, nullable=False)
+    type = db.Column(
+        db.String(20), nullable=False, default="session",
+        comment="session | break | demo | discussion | wrap_up",
+    )
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    notes = db.Column(db.Text, nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "workshop_id": self.workshop_id,
+            "time": self.time.isoformat() if self.time else None,
+            "title": self.title,
+            "duration_minutes": self.duration_minutes,
+            "type": self.type,
+            "sort_order": self.sort_order,
+            "notes": self.notes,
+        }
+
+    def __repr__(self):
+        return f"<WorkshopAgendaItem {self.title}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 6. ProcessStep — L4 within workshop context (T-006)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class ProcessStep(db.Model):
+    """
+    Workshop-scoped execution record for each L4 sub-process discussed.
+    Created when workshop starts. Links L4 process definition to workshop outcomes.
+
+    Business Rule: When fit_decision is set, propagate to process_level.fit_status.
+    GAP-10: previous_session_step_id links to same L4 in a previous session.
+    """
+
+    __tablename__ = "process_steps"
+    __table_args__ = (
+        db.UniqueConstraint("workshop_id", "process_level_id", name="uq_ps_ws_pl"),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    workshop_id = db.Column(
+        db.String(36), db.ForeignKey("explore_workshops.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    process_level_id = db.Column(
+        db.String(36), db.ForeignKey("process_levels.id", ondelete="CASCADE"),
+        nullable=False, index=True, comment="Must be level=4",
+    )
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+
+    fit_decision = db.Column(
+        db.String(20), nullable=True,
+        comment="fit | gap | partial_fit. NULL = not assessed",
+    )
+    notes = db.Column(db.Text, nullable=True)
+    demo_shown = db.Column(db.Boolean, nullable=False, default=False)
+    bpmn_reviewed = db.Column(db.Boolean, nullable=False, default=False)
+    assessed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    assessed_by = db.Column(db.String(36), nullable=True, comment="FK → user")
+
+    # GAP-10: Multi-session continuity
+    previous_session_step_id = db.Column(
+        db.String(36), db.ForeignKey("process_steps.id", ondelete="SET NULL"),
+        nullable=True, comment="Same L4 in previous session",
+    )
+    carried_from_session = db.Column(
+        db.Integer, nullable=True,
+        comment="Which session number this was carried from",
+    )
+
+    # ── Relationships ────────────────────────────────────────────────────
+    decisions = db.relationship(
+        "ExploreDecision", backref="process_step", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    open_items = db.relationship(
+        "ExploreOpenItem", backref="process_step", lazy="dynamic",
+    )
+    requirements = db.relationship(
+        "ExploreRequirement", backref="process_step", lazy="dynamic",
+    )
+    previous_session_step = db.relationship(
+        "ProcessStep", remote_side="ProcessStep.id", uselist=False,
+        foreign_keys=[previous_session_step_id],
+    )
+
+    def to_dict(self, include_children=False):
+        d = {
+            "id": self.id,
+            "workshop_id": self.workshop_id,
+            "process_level_id": self.process_level_id,
+            "sort_order": self.sort_order,
+            "fit_decision": self.fit_decision,
+            "notes": self.notes,
+            "demo_shown": self.demo_shown,
+            "bpmn_reviewed": self.bpmn_reviewed,
+            "assessed_at": self.assessed_at.isoformat() if self.assessed_at else None,
+            "assessed_by": self.assessed_by,
+            "previous_session_step_id": self.previous_session_step_id,
+            "carried_from_session": self.carried_from_session,
+        }
+        if include_children:
+            d["decisions"] = [dec.to_dict() for dec in self.decisions]
+            d["open_items"] = [oi.to_dict() for oi in self.open_items]
+            d["requirements"] = [req.to_dict() for req in self.requirements]
+        return d
+
+    def __repr__(self):
+        return f"<ProcessStep {self.id[:8]} WS:{self.workshop_id[:8]}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 7. ExploreDecision — Workshop step decisions (T-007)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class ExploreDecision(db.Model):
+    """
+    Decision captured during a workshop process step review.
+    Separate from RAID Decision (raid.py) — this is Explore-specific.
+    Code auto-generated: DEC-{seq} (3-digit, project-wide).
+    """
+
+    __tablename__ = "explore_decisions"
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    project_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    process_step_id = db.Column(
+        db.String(36), db.ForeignKey("process_steps.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    code = db.Column(
+        db.String(10), nullable=False,
+        comment="Auto: DEC-{seq}. Project-wide.",
+    )
+    text = db.Column(db.Text, nullable=False, comment="Decision statement")
+    decided_by = db.Column(db.String(100), nullable=False, comment="Name of decider")
+    decided_by_user_id = db.Column(db.String(36), nullable=True, comment="FK → user")
+    category = db.Column(
+        db.String(20), nullable=False, default="process",
+        comment="process | technical | scope | organizational | data",
+    )
+    status = db.Column(
+        db.String(20), nullable=False, default="active",
+        comment="active | superseded | revoked",
+    )
+    rationale = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "process_step_id": self.process_step_id,
+            "code": self.code,
+            "text": self.text,
+            "decided_by": self.decided_by,
+            "decided_by_user_id": self.decided_by_user_id,
+            "category": self.category,
+            "status": self.status,
+            "rationale": self.rationale,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<ExploreDecision {self.code}: {self.text[:40]}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 8. ExploreOpenItem — Independent action items (T-008)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class ExploreOpenItem(db.Model):
+    """
+    Action items and investigation tasks. Born in workshops but live independently.
+    Code auto-generated: OI-{seq} (3-digit, project-wide).
+
+    Replaces legacy OpenItem (requirement.py) which was dependent on Requirement FK.
+    This entity is fully independent with optional workshop/step context.
+    """
+
+    __tablename__ = "explore_open_items"
+    __table_args__ = (
+        db.UniqueConstraint("project_id", "code", name="uq_eoi_project_code"),
+        db.Index("idx_eoi_project_status", "project_id", "status"),
+        db.Index("idx_eoi_assignee_status", "assignee_id", "status"),
+        db.Index("idx_eoi_workshop", "workshop_id"),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    project_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    process_step_id = db.Column(
+        db.String(36), db.ForeignKey("process_steps.id", ondelete="SET NULL"),
+        nullable=True, comment="Origin process step",
+    )
+    workshop_id = db.Column(
+        db.String(36), db.ForeignKey("explore_workshops.id", ondelete="SET NULL"),
+        nullable=True, comment="Origin workshop",
+    )
+    process_level_id = db.Column(
+        db.String(36), db.ForeignKey("process_levels.id", ondelete="SET NULL"),
+        nullable=True, comment="Scope item context",
+    )
+    code = db.Column(
+        db.String(10), nullable=False,
+        comment="Auto: OI-{seq}. Project-wide.",
+    )
+    title = db.Column(db.String(500), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+
+    status = db.Column(
+        db.String(20), nullable=False, default="open",
+        comment="open | in_progress | blocked | closed | cancelled",
+    )
+    priority = db.Column(
+        db.String(5), nullable=False, default="P2",
+        comment="P1 | P2 | P3 | P4",
+    )
+    category = db.Column(
+        db.String(20), nullable=False, default="clarification",
+        comment="clarification | technical | scope | data | process | organizational",
+    )
+
+    # Assignment
+    assignee_id = db.Column(db.String(36), nullable=True, comment="FK → user")
+    assignee_name = db.Column(db.String(100), nullable=True)
+    created_by_id = db.Column(db.String(36), nullable=False, comment="FK → user")
+
+    # Dates
+    due_date = db.Column(db.Date, nullable=True)
+    resolved_date = db.Column(db.Date, nullable=True)
+
+    # Resolution
+    resolution = db.Column(db.Text, nullable=True)
+    blocked_reason = db.Column(db.Text, nullable=True)
+
+    # Denormalized
+    process_area = db.Column(db.String(5), nullable=True)
+    wave = db.Column(db.Integer, nullable=True)
+
+    # Timestamps
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False,
+        default=_utcnow, onupdate=_utcnow,
+    )
+
+    # ── Relationships ────────────────────────────────────────────────────
+    comments = db.relationship(
+        "OpenItemComment", backref="open_item", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    requirement_links = db.relationship(
+        "RequirementOpenItemLink", backref="open_item", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+
+    # ── Computed properties ──────────────────────────────────────────────
+    @property
+    def is_overdue(self):
+        if self.status in ("open", "in_progress") and self.due_date:
+            return self.due_date < date.today()
+        return False
+
+    @property
+    def days_overdue(self):
+        if self.is_overdue:
+            return (date.today() - self.due_date).days
+        return 0
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "process_step_id": self.process_step_id,
+            "workshop_id": self.workshop_id,
+            "process_level_id": self.process_level_id,
+            "code": self.code,
+            "title": self.title,
+            "description": self.description,
+            "status": self.status,
+            "priority": self.priority,
+            "category": self.category,
+            "assignee_id": self.assignee_id,
+            "assignee_name": self.assignee_name,
+            "created_by_id": self.created_by_id,
+            "due_date": self.due_date.isoformat() if self.due_date else None,
+            "resolved_date": self.resolved_date.isoformat() if self.resolved_date else None,
+            "resolution": self.resolution,
+            "blocked_reason": self.blocked_reason,
+            "process_area": self.process_area,
+            "wave": self.wave,
+            "is_overdue": self.is_overdue,
+            "days_overdue": self.days_overdue,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self):
+        return f"<ExploreOpenItem {self.code}: {self.title[:40]}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 9. ExploreRequirement — Delta requirements (T-009)
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Valid status transitions for requirement lifecycle
+REQUIREMENT_TRANSITIONS = {
+    "submit_for_review": {"from": ["draft"], "to": "under_review"},
+    "approve": {"from": ["under_review"], "to": "approved"},
+    "reject": {"from": ["under_review"], "to": "rejected"},
+    "return_to_draft": {"from": ["under_review"], "to": "draft"},
+    "defer": {"from": ["draft", "approved"], "to": "deferred"},
+    "push_to_alm": {"from": ["approved"], "to": "in_backlog"},
+    "mark_realized": {"from": ["in_backlog"], "to": "realized"},
+    "verify": {"from": ["realized"], "to": "verified"},
+    "reactivate": {"from": ["deferred"], "to": "draft"},
+}
+
+
+class ExploreRequirement(db.Model):
+    """
+    Delta requirements from Fit-to-Standard analysis.
+    Full lifecycle: draft → under_review → approved → in_backlog → realized → verified.
+
+    Code auto-generated: REQ-{seq} (3-digit, project-wide).
+    Replaces legacy Requirement for Explore Phase context.
+    """
+
+    __tablename__ = "explore_requirements"
+    __table_args__ = (
+        db.UniqueConstraint("project_id", "code", name="uq_ereq_project_code"),
+        db.Index("idx_ereq_project_status", "project_id", "status"),
+        db.Index("idx_ereq_project_priority", "project_id", "priority"),
+        db.Index("idx_ereq_project_area", "project_id", "process_area"),
+        db.Index("idx_ereq_workshop", "workshop_id"),
+        db.Index("idx_ereq_scope_item", "scope_item_id"),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    project_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    process_step_id = db.Column(
+        db.String(36), db.ForeignKey("process_steps.id", ondelete="SET NULL"),
+        nullable=True, comment="Origin process step",
+    )
+    workshop_id = db.Column(
+        db.String(36), db.ForeignKey("explore_workshops.id", ondelete="SET NULL"),
+        nullable=True, comment="Origin workshop",
+    )
+    process_level_id = db.Column(
+        db.String(36), db.ForeignKey("process_levels.id", ondelete="SET NULL"),
+        nullable=True, comment="L4 where gap identified",
+    )
+    scope_item_id = db.Column(
+        db.String(36), db.ForeignKey("process_levels.id", ondelete="SET NULL"),
+        nullable=True, comment="L3 scope item (denormalized)",
+    )
+
+    code = db.Column(
+        db.String(10), nullable=False,
+        comment="Auto: REQ-{seq}. Project-wide.",
+    )
+    title = db.Column(db.String(500), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+
+    priority = db.Column(
+        db.String(5), nullable=False, default="P2",
+        comment="P1 | P2 | P3 | P4",
+    )
+    type = db.Column(
+        db.String(20), nullable=False, default="configuration",
+        comment="development | configuration | integration | migration | enhancement | workaround",
+    )
+    fit_status = db.Column(
+        db.String(20), nullable=False, default="gap",
+        comment="gap | partial_fit — what triggered this requirement",
+    )
+    status = db.Column(
+        db.String(20), nullable=False, default="draft",
+        comment="draft | under_review | approved | in_backlog | realized | verified | deferred | rejected",
+    )
+
+    # Effort
+    effort_hours = db.Column(db.Integer, nullable=True, comment="Estimated person-hours")
+    effort_story_points = db.Column(db.Integer, nullable=True, comment="Agile alternative")
+    complexity = db.Column(
+        db.String(10), nullable=True,
+        comment="low | medium | high | very_high",
+    )
+
+    # Ownership
+    created_by_id = db.Column(db.String(36), nullable=False, comment="FK → user")
+    created_by_name = db.Column(db.String(100), nullable=True)
+    approved_by_id = db.Column(db.String(36), nullable=True, comment="FK → user")
+    approved_by_name = db.Column(db.String(100), nullable=True)
+    approved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    # Denormalized
+    process_area = db.Column(db.String(5), nullable=True)
+    wave = db.Column(db.Integer, nullable=True)
+
+    # Cloud ALM sync
+    alm_id = db.Column(db.String(50), nullable=True, comment="Cloud ALM item ID")
+    alm_synced = db.Column(db.Boolean, nullable=False, default=False)
+    alm_synced_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    alm_sync_status = db.Column(
+        db.String(20), nullable=True,
+        comment="pending | synced | sync_error | out_of_sync",
+    )
+
+    # Deferred / Rejected
+    deferred_to_phase = db.Column(db.String(50), nullable=True)
+    rejection_reason = db.Column(db.Text, nullable=True)
+
+    # Timestamps
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False,
+        default=_utcnow, onupdate=_utcnow,
+    )
+
+    # ── Relationships ────────────────────────────────────────────────────
+    open_item_links = db.relationship(
+        "RequirementOpenItemLink", backref="requirement", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    dependencies_from = db.relationship(
+        "RequirementDependency",
+        foreign_keys="RequirementDependency.requirement_id",
+        backref="requirement", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    dependencies_to = db.relationship(
+        "RequirementDependency",
+        foreign_keys="RequirementDependency.depends_on_id",
+        backref="dependency", lazy="dynamic",
+    )
+    alm_sync_logs = db.relationship(
+        "CloudALMSyncLog", backref="requirement", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+
+    # Scope item relationship (L3)
+    scope_item = db.relationship(
+        "ProcessLevel", foreign_keys=[scope_item_id], uselist=False,
+    )
+    # L4 process level
+    process_level = db.relationship(
+        "ProcessLevel", foreign_keys=[process_level_id], uselist=False,
+    )
+
+    def to_dict(self, include_links=False):
+        d = {
+            "id": self.id,
+            "project_id": self.project_id,
+            "process_step_id": self.process_step_id,
+            "workshop_id": self.workshop_id,
+            "process_level_id": self.process_level_id,
+            "scope_item_id": self.scope_item_id,
+            "code": self.code,
+            "title": self.title,
+            "description": self.description,
+            "priority": self.priority,
+            "type": self.type,
+            "fit_status": self.fit_status,
+            "status": self.status,
+            "effort_hours": self.effort_hours,
+            "effort_story_points": self.effort_story_points,
+            "complexity": self.complexity,
+            "created_by_id": self.created_by_id,
+            "created_by_name": self.created_by_name,
+            "approved_by_id": self.approved_by_id,
+            "approved_by_name": self.approved_by_name,
+            "approved_at": self.approved_at.isoformat() if self.approved_at else None,
+            "process_area": self.process_area,
+            "wave": self.wave,
+            "alm_id": self.alm_id,
+            "alm_synced": self.alm_synced,
+            "alm_sync_status": self.alm_sync_status,
+            "deferred_to_phase": self.deferred_to_phase,
+            "rejection_reason": self.rejection_reason,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_links:
+            d["open_item_links"] = [l.to_dict() for l in self.open_item_links]
+            d["dependencies"] = [dep.to_dict() for dep in self.dependencies_from]
+        return d
+
+    def __repr__(self):
+        return f"<ExploreRequirement {self.code}: {self.title[:40]}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 10. RequirementOpenItemLink — N:M REQ ↔ OI (T-010)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class RequirementOpenItemLink(db.Model):
+    """
+    N:M link between requirements and open items.
+    link_type 'blocks' means the OI blocks the REQ transition.
+    """
+
+    __tablename__ = "requirement_open_item_links"
+    __table_args__ = (
+        db.UniqueConstraint("requirement_id", "open_item_id", name="uq_roil_req_oi"),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    requirement_id = db.Column(
+        db.String(36), db.ForeignKey("explore_requirements.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    open_item_id = db.Column(
+        db.String(36), db.ForeignKey("explore_open_items.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    link_type = db.Column(
+        db.String(10), nullable=False, default="related",
+        comment="blocks | related | triggers",
+    )
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "requirement_id": self.requirement_id,
+            "open_item_id": self.open_item_id,
+            "link_type": self.link_type,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<ReqOILink REQ:{self.requirement_id[:8]} ↔ OI:{self.open_item_id[:8]} ({self.link_type})>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 11. RequirementDependency — REQ ↔ REQ self-ref (T-011)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class RequirementDependency(db.Model):
+    """Self-referential N:M for requirement-to-requirement dependencies."""
+
+    __tablename__ = "requirement_dependencies"
+    __table_args__ = (
+        db.UniqueConstraint("requirement_id", "depends_on_id", name="uq_rdep_req_dep"),
+        db.CheckConstraint(
+            "requirement_id != depends_on_id", name="ck_rdep_no_self_ref",
+        ),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    requirement_id = db.Column(
+        db.String(36), db.ForeignKey("explore_requirements.id", ondelete="CASCADE"),
+        nullable=False, index=True, comment="Dependent requirement",
+    )
+    depends_on_id = db.Column(
+        db.String(36), db.ForeignKey("explore_requirements.id", ondelete="CASCADE"),
+        nullable=False, index=True, comment="Dependency (upstream)",
+    )
+    dependency_type = db.Column(
+        db.String(10), nullable=False, default="related",
+        comment="blocks | related | extends",
+    )
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "requirement_id": self.requirement_id,
+            "depends_on_id": self.depends_on_id,
+            "dependency_type": self.dependency_type,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<ReqDep {self.requirement_id[:8]} → {self.depends_on_id[:8]}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 12. OpenItemComment — Activity log (T-012)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class OpenItemComment(db.Model):
+    """Activity log entry for an open item — comments, status changes, etc."""
+
+    __tablename__ = "open_item_comments"
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    open_item_id = db.Column(
+        db.String(36), db.ForeignKey("explore_open_items.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    user_id = db.Column(db.String(36), nullable=False, comment="FK → user")
+    type = db.Column(
+        db.String(20), nullable=False, default="comment",
+        comment="comment | status_change | reassignment | due_date_change",
+    )
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "open_item_id": self.open_item_id,
+            "user_id": self.user_id,
+            "type": self.type,
+            "content": self.content,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<OpenItemComment {self.id[:8]} on OI:{self.open_item_id[:8]}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 13. CloudALMSyncLog — Sync audit trail (T-013)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class CloudALMSyncLog(db.Model):
+    """Audit log for SAP Cloud ALM synchronization of requirements."""
+
+    __tablename__ = "cloud_alm_sync_logs"
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    requirement_id = db.Column(
+        db.String(36), db.ForeignKey("explore_requirements.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    sync_direction = db.Column(
+        db.String(5), nullable=False,
+        comment="push | pull",
+    )
+    sync_status = db.Column(
+        db.String(10), nullable=False,
+        comment="success | error | partial",
+    )
+    alm_item_id = db.Column(db.String(50), nullable=True)
+    error_message = db.Column(db.Text, nullable=True)
+    payload = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "requirement_id": self.requirement_id,
+            "sync_direction": self.sync_direction,
+            "sync_status": self.sync_status,
+            "alm_item_id": self.alm_item_id,
+            "error_message": self.error_message,
+            "payload": self.payload,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<CloudALMSyncLog {self.id[:8]} {self.sync_direction}:{self.sync_status}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 14. L4SeedCatalog — SAP Best Practice reference catalog (T-014, GAP-01)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class L4SeedCatalog(db.Model):
+    """
+    SAP Best Practice L4 sub-process reference catalog.
+    Project-independent global data — used to seed L4 process levels.
+    """
+
+    __tablename__ = "l4_seed_catalog"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "scope_item_code", "sub_process_code", name="uq_l4cat_scope_sub",
+        ),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    scope_item_code = db.Column(
+        db.String(10), nullable=False, index=True,
+        comment="L3 scope item code (J58, BD9, etc.)",
+    )
+    sub_process_code = db.Column(
+        db.String(20), nullable=False,
+        comment="Standard L4 code (J58.01, BD9.03)",
+    )
+    sub_process_name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    standard_sequence = db.Column(db.Integer, nullable=False, default=0)
+    bpmn_activity_id = db.Column(
+        db.String(100), nullable=True,
+        comment="Signavio activity reference",
+    )
+    sap_release = db.Column(
+        db.String(20), nullable=True,
+        comment='SAP release version, e.g. "2402", "2311"',
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "scope_item_code": self.scope_item_code,
+            "sub_process_code": self.sub_process_code,
+            "sub_process_name": self.sub_process_name,
+            "description": self.description,
+            "standard_sequence": self.standard_sequence,
+            "bpmn_activity_id": self.bpmn_activity_id,
+            "sap_release": self.sap_release,
+        }
+
+    def __repr__(self):
+        return f"<L4SeedCatalog {self.sub_process_code}: {self.sub_process_name}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 15. ProjectRole — RBAC per project (T-015, GAP-05)
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Permission matrix: role → set of allowed actions
+PERMISSION_MATRIX = {
+    "pm": {
+        "workshop_schedule", "workshop_start", "workshop_complete", "workshop_reopen",
+        "fit_decision_set",
+        "req_create", "req_submit_for_review", "req_approve", "req_reject",
+        "req_push_to_alm", "req_mark_realized", "req_verify", "req_defer",
+        "oi_create", "oi_reassign", "oi_close",
+        "scope_change",
+    },
+    "module_lead": {
+        "workshop_schedule", "workshop_start", "workshop_complete", "workshop_reopen",
+        "fit_decision_set",
+        "req_create", "req_submit_for_review", "req_approve", "req_reject", "req_verify",
+        "oi_create", "oi_reassign", "oi_close",
+    },
+    "facilitator": {
+        "workshop_start", "workshop_complete",
+        "fit_decision_set",
+        "req_create", "req_submit_for_review",
+        "oi_create", "oi_reassign",
+    },
+    "bpo": {
+        "fit_decision_set",
+        "req_create", "req_approve", "req_verify", "req_defer",
+        "scope_change",
+    },
+    "tech_lead": {
+        "req_push_to_alm", "req_mark_realized",
+        "oi_create", "oi_close",
+    },
+    "tester": {
+        "req_verify",
+    },
+    "viewer": set(),  # read-only
+}
+
+
+class ProjectRole(db.Model):
+    """
+    Role-based access control per project.
+    A user can have multiple roles (e.g. pm + facilitator in different areas).
+    process_area NULL = all areas, else area-specific (e.g. SD module lead).
+    """
+
+    __tablename__ = "project_roles"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "project_id", "user_id", "role", "process_area",
+            name="uq_prole_project_user_role_area",
+        ),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    project_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    user_id = db.Column(
+        db.String(36), nullable=False, index=True,
+        comment="FK → user",
+    )
+    role = db.Column(
+        db.String(20), nullable=False,
+        comment="pm | module_lead | facilitator | bpo | tech_lead | tester | viewer",
+    )
+    process_area = db.Column(
+        db.String(5), nullable=True,
+        comment="NULL = all areas, else area-specific",
+    )
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "user_id": self.user_id,
+            "role": self.role,
+            "process_area": self.process_area,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<ProjectRole {self.user_id[:8]} → {self.role} ({self.process_area or 'all'})>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 16. PhaseGate — Formal phase closure tracking (T-025, GAP-12)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class PhaseGate(db.Model):
+    """
+    Formal phase closure / area confirmation gate.
+    Tracks explore phase readiness and steering committee approvals.
+    """
+
+    __tablename__ = "phase_gates"
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    project_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    phase = db.Column(
+        db.String(10), nullable=False,
+        comment="explore | realize | deploy",
+    )
+    gate_type = db.Column(
+        db.String(20), nullable=False,
+        comment="area_confirmation | phase_closure",
+    )
+    process_level_id = db.Column(
+        db.String(36), db.ForeignKey("process_levels.id", ondelete="SET NULL"),
+        nullable=True, comment="L2 process level for area_confirmation gates",
+    )
+    status = db.Column(
+        db.String(30), nullable=False, default="pending",
+        comment="pending | approved | approved_with_conditions | rejected",
+    )
+    conditions = db.Column(db.Text, nullable=True)
+    approved_by = db.Column(db.String(36), nullable=True, comment="FK → user")
+    approved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    # ── Relationship ─────────────────────────────────────────────────────
+    process_level = db.relationship("ProcessLevel", uselist=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "phase": self.phase,
+            "gate_type": self.gate_type,
+            "process_level_id": self.process_level_id,
+            "status": self.status,
+            "conditions": self.conditions,
+            "approved_by": self.approved_by,
+            "approved_at": self.approved_at.isoformat() if self.approved_at else None,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<PhaseGate {self.phase}:{self.gate_type} [{self.status}]>"

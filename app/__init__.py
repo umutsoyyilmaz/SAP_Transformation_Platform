@@ -112,6 +112,7 @@ def create_app(config_name=None):
     from app.models import notification as _notification_models  # noqa: F401
     from app.models import ai as _ai_models                 # noqa: F401
     from app.models import integration as _integration_models  # noqa: F401
+    from app.models import explore as _explore_models       # noqa: F401
 
     # ── Blueprints ───────────────────────────────────────────────────────
     from app.blueprints.program_bp import program_bp
@@ -125,6 +126,7 @@ def create_app(config_name=None):
     from app.blueprints.integration_bp import integration_bp
     from app.blueprints.health_bp import health_bp
     from app.blueprints.metrics_bp import metrics_bp
+    from app.blueprints.explore_bp import explore_bp
 
     app.register_blueprint(program_bp)
     app.register_blueprint(scenario_bp)
@@ -137,6 +139,7 @@ def create_app(config_name=None):
     app.register_blueprint(integration_bp)
     app.register_blueprint(health_bp)
     app.register_blueprint(metrics_bp)
+    app.register_blueprint(explore_bp)
 
     # ── SPA catch-all ────────────────────────────────────────────────────
     @app.route("/")
