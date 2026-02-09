@@ -288,6 +288,13 @@ const App = (() => {
             if (e.target.id === 'modalOverlay') closeModal();
         });
 
+        // Close modal on ESC key
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && document.getElementById('modalOverlay').classList.contains('open')) {
+                closeModal();
+            }
+        });
+
         // Initialize notification panel (Sprint 6)
         if (typeof NotificationPanel !== 'undefined') {
             NotificationPanel.init();
