@@ -1,9 +1,10 @@
 """
 SAP Transformation Management Platform
-Traceability Engine v1 — Sprint 4 scope.
+Traceability Engine v2 — Sprint 9 scope.
 
 Provides the ability to trace from any entity up and down the full chain:
     Scenario → Requirement → WRICEF Item / Config Item → FS → TS
+                           → Interface → ConnectivityTest / SwitchPlan
 
 The engine builds a chain dict showing upstream (parents) and downstream
 (children) links for a given entity.
@@ -11,6 +12,7 @@ The engine builds a chain dict showing upstream (parents) and downstream
 
 from app.models import db
 from app.models.backlog import BacklogItem, ConfigItem, FunctionalSpec, TechnicalSpec
+from app.models.integration import Interface, Wave, ConnectivityTest, SwitchPlan
 from app.models.requirement import Requirement
 from app.models.scenario import Scenario, Workshop
 from app.models.scope import Process, Analysis
@@ -30,6 +32,11 @@ ENTITY_TYPES = {
     "technical_spec": TechnicalSpec,
     "test_case": TestCase,
     "defect": Defect,
+    # Sprint 9 — Integration Factory
+    "interface": Interface,
+    "wave": Wave,
+    "connectivity_test": ConnectivityTest,
+    "switch_plan": SwitchPlan,
 }
 
 
@@ -87,6 +94,16 @@ def get_chain(entity_type: str, entity_id: int) -> dict:
         _trace_test_case_downstream(entity, downstream)
     elif entity_type == "defect":
         _trace_defect_upstream(entity, upstream)
+    # Sprint 9 — Integration Factory
+    elif entity_type == "interface":
+        _trace_interface_upstream(entity, upstream)
+        _trace_interface_downstream(entity, downstream)
+    elif entity_type == "wave":
+        _trace_wave_downstream(entity, downstream)
+    elif entity_type == "connectivity_test":
+        _trace_connectivity_test_upstream(entity, upstream)
+    elif entity_type == "switch_plan":
+        _trace_switch_plan_upstream(entity, upstream)
 
     links_summary = {}
     for item in upstream + downstream:
@@ -213,6 +230,8 @@ def get_program_traceability_summary(program_id: int) -> dict:
                 len(req_ids_with_tests) / len(requirements) * 100
             ) if requirements else 0,
         },
+        # Sprint 9 — Integration Factory
+        "interfaces": _program_interface_summary(program_id),
     }
 
 
@@ -258,11 +277,16 @@ def _trace_backlog_upstream(bi, chain):
 
 
 def _trace_backlog_downstream(bi, chain):
-    """BacklogItem → FS → TS."""
+    """BacklogItem → FS → TS + Interfaces."""
     if bi.functional_spec:
         chain.append({"type": "functional_spec", "id": bi.functional_spec.id,
                        "title": bi.functional_spec.title})
         _trace_fs_downstream(bi.functional_spec, chain)
+    # Sprint 9: linked interfaces
+    interfaces = Interface.query.filter_by(backlog_item_id=bi.id).all()
+    for iface in interfaces:
+        chain.append({"type": "interface", "id": iface.id, "title": iface.name,
+                       "code": iface.code, "direction": iface.direction})
 
 
 def _trace_config_upstream(ci, chain):
@@ -402,3 +426,99 @@ def _trace_analysis_upstream(analysis, chain):
         chain.append({"type": "process", "id": process.id, "title": process.name,
                        "level": process.level})
         _trace_process_upstream(process, chain)
+
+
+# ── Sprint 9 — Interface / Wave / ConnectivityTest / SwitchPlan tracing ──
+
+def _trace_interface_upstream(iface, chain):
+    """Interface → BacklogItem → Requirement → Scenario  (+ Wave)."""
+    if iface.wave_id:
+        wave = db.session.get(Wave, iface.wave_id)
+        if wave:
+            chain.append({"type": "wave", "id": wave.id, "title": wave.name})
+    if iface.backlog_item_id:
+        bi = db.session.get(BacklogItem, iface.backlog_item_id)
+        if bi:
+            chain.append({"type": "backlog_item", "id": bi.id, "title": bi.title,
+                          "wricef_type": bi.wricef_type})
+            _trace_backlog_upstream(bi, chain)
+
+
+def _trace_interface_downstream(iface, chain):
+    """Interface → ConnectivityTests + SwitchPlans."""
+    for ct in iface.connectivity_tests:
+        chain.append({"type": "connectivity_test", "id": ct.id,
+                       "title": f"{ct.environment}: {ct.result}",
+                       "environment": ct.environment, "result": ct.result})
+    for sp in iface.switch_plans:
+        chain.append({"type": "switch_plan", "id": sp.id,
+                       "title": f"#{sp.sequence} {sp.action}",
+                       "action": sp.action, "status": sp.status})
+
+
+def _trace_wave_downstream(wave, chain):
+    """Wave → Interfaces → ConnectivityTests + SwitchPlans."""
+    for iface in wave.interfaces:
+        chain.append({"type": "interface", "id": iface.id, "title": iface.name,
+                       "code": iface.code, "direction": iface.direction,
+                       "status": iface.status})
+        _trace_interface_downstream(iface, chain)
+
+
+def _trace_connectivity_test_upstream(ct, chain):
+    """ConnectivityTest → Interface → BacklogItem → Requirement."""
+    iface = db.session.get(Interface, ct.interface_id)
+    if iface:
+        chain.append({"type": "interface", "id": iface.id, "title": iface.name,
+                       "code": iface.code})
+        _trace_interface_upstream(iface, chain)
+
+
+def _trace_switch_plan_upstream(sp, chain):
+    """SwitchPlan → Interface → BacklogItem → Requirement."""
+    iface = db.session.get(Interface, sp.interface_id)
+    if iface:
+        chain.append({"type": "interface", "id": iface.id, "title": iface.name,
+                       "code": iface.code})
+        _trace_interface_upstream(iface, chain)
+
+
+# ── Program-level interface summary helper ────────────────────────────────
+
+def _program_interface_summary(program_id):
+    """Build interface/wave summary for program traceability report."""
+    interfaces = Interface.query.filter_by(program_id=program_id).all()
+    waves = Wave.query.filter_by(program_id=program_id).all()
+
+    by_status = {}
+    by_direction = {}
+    with_backlog = 0
+    with_wave = 0
+    connectivity_tested = 0
+
+    for iface in interfaces:
+        by_status[iface.status] = by_status.get(iface.status, 0) + 1
+        by_direction[iface.direction] = by_direction.get(iface.direction, 0) + 1
+        if iface.backlog_item_id:
+            with_backlog += 1
+        if iface.wave_id:
+            with_wave += 1
+        # Check if any successful connectivity test exists
+        success = ConnectivityTest.query.filter_by(
+            interface_id=iface.id, result="success",
+        ).first()
+        if success:
+            connectivity_tested += 1
+
+    return {
+        "total": len(interfaces),
+        "by_status": by_status,
+        "by_direction": by_direction,
+        "with_backlog_item": with_backlog,
+        "assigned_to_wave": with_wave,
+        "connectivity_tested": connectivity_tested,
+        "waves": {
+            "total": len(waves),
+            "by_status": {w.status: sum(1 for ww in waves if ww.status == w.status) for w in waves},
+        },
+    }

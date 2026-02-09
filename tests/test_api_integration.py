@@ -741,3 +741,188 @@ class TestModels:
         d = iface.to_dict()
         assert d["wave_id"] is None
         assert d["checklist_progress"] == "0/0"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TRACEABILITY CHAIN TESTS (Sprint 9.3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+from app.models.backlog import BacklogItem
+from app.models.requirement import Requirement
+from app.services.traceability import get_chain, get_program_traceability_summary
+
+
+class TestInterfaceTraceability:
+    """Test traceability chain traversal for Interface entities."""
+
+    def test_interface_chain_with_backlog(self, program, wave):
+        """Interface → upstream: Wave + BacklogItem."""
+        req = Requirement(program_id=program.id, title="PO Integration Req", code="REQ-IT-001")
+        _db.session.add(req)
+        _db.session.flush()
+        bi = BacklogItem(
+            program_id=program.id, title="PO Interface Dev",
+            wricef_type="interface", requirement_id=req.id,
+        )
+        _db.session.add(bi)
+        _db.session.flush()
+        iface = Interface(
+            program_id=program.id, name="PO Outbound", code="IF-MM-001",
+            direction="outbound", protocol="idoc",
+            wave_id=wave.id, backlog_item_id=bi.id,
+        )
+        _db.session.add(iface)
+        _db.session.commit()
+
+        chain = get_chain("interface", iface.id)
+        assert chain is not None
+        types = [u["type"] for u in chain["upstream"]]
+        assert "wave" in types
+        assert "backlog_item" in types
+        assert "requirement" in types
+
+    def test_interface_chain_downstream(self, program):
+        """Interface → downstream: ConnectivityTests + SwitchPlans."""
+        iface = Interface(
+            program_id=program.id, name="Test IF", direction="inbound", protocol="odata",
+        )
+        _db.session.add(iface)
+        _db.session.flush()
+
+        ct = ConnectivityTest(interface_id=iface.id, result="success", environment="qas")
+        sp = SwitchPlan(interface_id=iface.id, sequence=1, action="activate")
+        _db.session.add_all([ct, sp])
+        _db.session.commit()
+
+        chain = get_chain("interface", iface.id)
+        downstream_types = [d["type"] for d in chain["downstream"]]
+        assert "connectivity_test" in downstream_types
+        assert "switch_plan" in downstream_types
+        assert chain["links_summary"]["connectivity_test"] == 1
+        assert chain["links_summary"]["switch_plan"] == 1
+
+    def test_interface_not_found(self):
+        chain = get_chain("interface", 99999)
+        assert chain is None
+
+
+class TestWaveTraceability:
+    """Test traceability chain traversal for Wave entities."""
+
+    def test_wave_chain_downstream(self, program, wave):
+        """Wave → Interfaces → ConnectivityTests."""
+        iface = Interface(
+            program_id=program.id, name="Wave IF", direction="outbound",
+            protocol="rest", wave_id=wave.id,
+        )
+        _db.session.add(iface)
+        _db.session.flush()
+        ct = ConnectivityTest(interface_id=iface.id, result="success", environment="dev")
+        _db.session.add(ct)
+        _db.session.commit()
+
+        chain = get_chain("wave", wave.id)
+        assert chain is not None
+        downstream_types = [d["type"] for d in chain["downstream"]]
+        assert "interface" in downstream_types
+        assert "connectivity_test" in downstream_types
+
+    def test_wave_not_found(self):
+        chain = get_chain("wave", 99999)
+        assert chain is None
+
+
+class TestConnectivityTestTraceability:
+    """Test upstream tracing from ConnectivityTest."""
+
+    def test_ct_upstream(self, program, wave):
+        iface = Interface(
+            program_id=program.id, name="CT IF", direction="inbound",
+            protocol="rfc", wave_id=wave.id,
+        )
+        _db.session.add(iface)
+        _db.session.flush()
+        ct = ConnectivityTest(interface_id=iface.id, result="failed", environment="prod")
+        _db.session.add(ct)
+        _db.session.commit()
+
+        chain = get_chain("connectivity_test", ct.id)
+        assert chain is not None
+        upstream_types = [u["type"] for u in chain["upstream"]]
+        assert "interface" in upstream_types
+        assert "wave" in upstream_types
+
+
+class TestSwitchPlanTraceability:
+    """Test upstream tracing from SwitchPlan."""
+
+    def test_sp_upstream(self, program):
+        iface = Interface(
+            program_id=program.id, name="SP IF", direction="outbound", protocol="file",
+        )
+        _db.session.add(iface)
+        _db.session.flush()
+        sp = SwitchPlan(interface_id=iface.id, sequence=1, action="deactivate")
+        _db.session.add(sp)
+        _db.session.commit()
+
+        chain = get_chain("switch_plan", sp.id)
+        assert chain is not None
+        upstream_types = [u["type"] for u in chain["upstream"]]
+        assert "interface" in upstream_types
+
+
+class TestBacklogInterfaceTraceability:
+    """Test that BacklogItem downstream now includes linked Interfaces."""
+
+    def test_backlog_downstream_includes_interface(self, program):
+        bi = BacklogItem(
+            program_id=program.id, title="IF Dev Item",
+            wricef_type="interface",
+        )
+        _db.session.add(bi)
+        _db.session.flush()
+        iface = Interface(
+            program_id=program.id, name="Linked IF", direction="outbound",
+            protocol="idoc", backlog_item_id=bi.id,
+        )
+        _db.session.add(iface)
+        _db.session.commit()
+
+        chain = get_chain("backlog_item", bi.id)
+        downstream_types = [d["type"] for d in chain["downstream"]]
+        assert "interface" in downstream_types
+
+
+class TestProgramTraceabilitySummary:
+    """Test program-level traceability summary includes Integration Factory."""
+
+    def test_summary_includes_interfaces(self, program, wave):
+        bi = BacklogItem(
+            program_id=program.id, title="IF WRICEF",
+            wricef_type="interface",
+        )
+        _db.session.add(bi)
+        _db.session.flush()
+        iface = Interface(
+            program_id=program.id, name="Summary IF", direction="inbound",
+            protocol="odata", wave_id=wave.id, backlog_item_id=bi.id,
+        )
+        _db.session.add(iface)
+        _db.session.flush()
+        ct = ConnectivityTest(interface_id=iface.id, result="success", environment="qas")
+        _db.session.add(ct)
+        _db.session.commit()
+
+        summary = get_program_traceability_summary(program.id)
+        assert "interfaces" in summary
+        iface_summary = summary["interfaces"]
+        assert iface_summary["total"] == 1
+        assert iface_summary["with_backlog_item"] == 1
+        assert iface_summary["assigned_to_wave"] == 1
+        assert iface_summary["connectivity_tested"] == 1
+        assert iface_summary["waves"]["total"] == 1
+
+    def test_summary_empty_interfaces(self, program):
+        summary = get_program_traceability_summary(program.id)
+        assert summary["interfaces"]["total"] == 0
