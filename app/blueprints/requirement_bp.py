@@ -84,7 +84,12 @@ def list_requirements(program_id):
         query = query.filter(Requirement.req_parent_id.is_(None))
 
     reqs = query.order_by(Requirement.code, Requirement.id).all()
-    return jsonify([r.to_dict() for r in reqs]), 200
+    results = []
+    for r in reqs:
+        d = r.to_dict()
+        d["scope_item_count"] = r.scope_items.count() if r.scope_items else 0
+        results.append(d)
+    return jsonify(results), 200
 
 
 @requirement_bp.route("/programs/<int:program_id>/requirements", methods=["POST"])
@@ -131,11 +136,14 @@ def create_requirement(program_id):
 
 @requirement_bp.route("/requirements/<int:req_id>", methods=["GET"])
 def get_requirement(req_id):
-    """Get a single requirement with children and traces."""
+    """Get a single requirement with children, traces and linked scope items."""
     req, err = _get_or_404(Requirement, req_id)
     if err:
         return err
-    return jsonify(req.to_dict(include_children=True)), 200
+    result = req.to_dict(include_children=True)
+    # Include linked scope items for cross-page traceability
+    result["scope_items"] = [si.to_dict() for si in req.scope_items]
+    return jsonify(result), 200
 
 
 @requirement_bp.route("/requirements/<int:req_id>", methods=["PUT"])

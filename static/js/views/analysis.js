@@ -492,6 +492,7 @@ const AnalysisView = (() => {
                         <dt>Status</dt><dd><span class="badge badge-${item.status}">${fmtStatus(item.status)}</span></dd>
                         <dt>Priority</dt><dd><span class="badge badge-priority-${item.priority}">${item.priority}</span></dd>
                         <dt>Module</dt><dd>${esc(item.module || '—')}</dd>
+                        <dt>Linked Requirement</dt><dd>${item.requirement ? `<a href="#" onclick="App.navigate('requirements');setTimeout(()=>RequirementView.openDetail(${item.requirement.id}),300);App.closeModal();return false">${esc(item.requirement.code)} — ${esc(item.requirement.title)}</a>` : '<em>Not linked</em>'}</dd>
                     </dl>
                     ${item.description ? `<p>${esc(item.description)}</p>` : ''}
                     ${item.notes ? `<p style="color:var(--sap-text-secondary)">${esc(item.notes)}</p>` : ''}
@@ -1036,38 +1037,67 @@ const AnalysisView = (() => {
         const pid = parseInt(document.getElementById('siProcessId').value);
         const fitGap = document.getElementById('siFitGap').value;
         const name = document.getElementById('siName').value;
-        const body = {
-            code: document.getElementById('siCode').value,
-            name: name,
-            description: document.getElementById('siDesc').value,
-            sap_reference: document.getElementById('siRef').value,
-            module: document.getElementById('siModule').value,
-            status: 'in_scope',
-            priority: document.getElementById('siPriority').value,
-            notes: document.getElementById('siNotes').value,
-        };
+        const code = document.getElementById('siCode').value;
+        const description = document.getElementById('siDesc').value;
+        const module = document.getElementById('siModule').value;
+        const priority = document.getElementById('siPriority').value;
+        const notes = document.getElementById('siNotes').value;
+        const sapRef = document.getElementById('siRef').value;
+
         try {
-            // 1) Create scope item
-            const si = await API.post(`/processes/${pid}/scope-items`, body);
-            // 2) Auto-create analysis with fit/gap result
+            // 1) Create a Requirement in the requirements table (single source of truth)
+            const req = await API.post(`/programs/${programId}/requirements`, {
+                code: code,
+                title: name,
+                description: description,
+                req_type: 'functional',
+                priority: priority === 'high' ? 'must_have' : priority === 'medium' ? 'should_have' : 'could_have',
+                status: 'draft',
+                source: 'process_tree',
+                module: module,
+                fit_gap: fitGap,
+                notes: notes,
+            });
+
+            // 2) Create scope item linked to both process AND requirement
+            const si = await API.post(`/processes/${pid}/scope-items`, {
+                code: code,
+                name: name,
+                description: description,
+                sap_reference: sapRef,
+                module: module,
+                status: 'in_scope',
+                priority: priority,
+                notes: notes,
+                requirement_id: req.id,
+            });
+
+            // 3) Auto-create analysis with fit/gap result
             await API.post(`/scope-items/${si.id}/analyses`, {
                 name: `${name} — Fit/Gap Assessment`,
                 analysis_type: 'fit_gap',
                 status: 'completed',
                 fit_gap_result: fitGap,
                 date: new Date().toISOString().slice(0, 10),
-                decision: document.getElementById('siNotes').value,
+                decision: notes,
             });
+
             App.closeModal();
-            App.toast('Requirement created', 'success');
+            App.toast('Requirement created (visible on all pages)', 'success');
             await selectProcess(pid);
         } catch(e) { App.toast(e.message, 'error'); }
     }
 
     async function deleteScopeItem(siid, processId) {
-        if (!confirm('Delete this scope item?')) return;
+        if (!confirm('Delete this scope item and its linked requirement?')) return;
         try {
+            // Get linked requirement before deleting
+            const si = await API.get(`/scope-items/${siid}`);
             await API.delete(`/scope-items/${siid}`);
+            // Also delete linked requirement if it was created from process tree
+            if (si.requirement_id && si.requirement && si.requirement.source === 'process_tree') {
+                try { await API.delete(`/requirements/${si.requirement_id}`); } catch(e) { /* ignore if already deleted */ }
+            }
             App.toast('Scope item deleted', 'success');
             await selectProcess(processId);
         } catch(e) { App.toast(e.message, 'error'); }

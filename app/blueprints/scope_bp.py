@@ -218,6 +218,7 @@ def create_scope_item(pid):
         priority=data.get("priority", "medium"),
         module=data.get("module", ""),
         notes=data.get("notes", ""),
+        requirement_id=data.get("requirement_id"),
     )
     db.session.add(item)
     db.session.commit()
@@ -226,12 +227,14 @@ def create_scope_item(pid):
 
 @scope_bp.route("/scope-items/<int:siid>", methods=["GET"])
 def get_scope_item(siid):
-    """Get a single scope item with its analyses."""
+    """Get a single scope item with its analyses and linked requirement."""
     item = db.session.get(ScopeItem, siid)
     if not item:
         return jsonify({"error": "Scope item not found"}), 404
     result = item.to_dict()
     result["analyses"] = [a.to_dict() for a in item.analyses]
+    if item.requirement:
+        result["requirement"] = item.requirement.to_dict()
     return jsonify(result)
 
 
@@ -250,6 +253,8 @@ def update_scope_item(siid):
         if data["status"] not in SCOPE_ITEM_STATUSES:
             return jsonify({"error": f"Invalid status. Must be one of {sorted(SCOPE_ITEM_STATUSES)}"}), 400
         item.status = data["status"]
+    if "requirement_id" in data:
+        item.requirement_id = data["requirement_id"]
 
     db.session.commit()
     return jsonify(item.to_dict())

@@ -124,19 +124,20 @@ const RequirementView = (() => {
             <table class="data-table">
                 <thead><tr>
                     <th>Code</th><th>Title</th><th>Type</th><th>Module</th>
-                    <th>Priority</th><th>Fit/Gap</th><th>Status</th><th>Effort</th><th>Actions</th>
+                    <th>Priority</th><th>Fit/Gap</th><th>Status</th><th>Effort</th><th>🔗</th><th>Actions</th>
                 </tr></thead>
                 <tbody>
                     ${reqs.map(r => `
                         <tr>
                             <td><strong>${escHtml(r.code || '—')}</strong></td>
-                            <td><a href="#" onclick="RequirementView.openDetail(${r.id});return false">${escHtml(r.title)}</a></td>
+                            <td><a href="#" onclick="RequirementView.openDetail(${r.id});return false">${escHtml(r.title)}</a>${r.source === 'process_tree' ? ' <span title="Created from Process Tree" style="font-size:11px">🔗</span>' : ''}</td>
                             <td>${r.req_type}</td>
                             <td>${r.module || '—'}</td>
                             <td><span class="badge badge-${_priorityClass(r.priority)}">${r.priority}</span></td>
                             <td>${r.fit_gap ? `<span class="badge badge-${_fitGapClass(r.fit_gap)}">${r.fit_gap}</span>` : '—'}</td>
                             <td><span class="badge badge-${_statusClass(r.status)}">${r.status}</span></td>
                             <td>${r.effort_estimate || '—'}</td>
+                            <td>${r.scope_item_count ? `<span class="badge badge-info" title="${r.scope_item_count} linked scope item(s)">🔗 ${r.scope_item_count}</span>` : ''}</td>
                             <td>
                                 <button class="btn btn-secondary btn-sm" onclick="RequirementView.openDetail(${r.id})">View</button>
                                 <button class="btn btn-danger btn-sm" onclick="RequirementView.deleteReq(${r.id})">Delete</button>
@@ -206,6 +207,28 @@ const RequirementView = (() => {
                 </div>
                 <div id="traceList"></div>
             </div>
+
+            ${(r.scope_items && r.scope_items.length) ? `
+            <div class="card" style="margin-top:20px">
+                <div class="card-header">
+                    <h3>🔗 Linked Scope Items</h3>
+                </div>
+                <table class="data-table">
+                    <thead><tr><th>Code</th><th>Name</th><th>SAP Ref</th><th>Status</th><th>Priority</th><th>Module</th></tr></thead>
+                    <tbody>
+                        ${r.scope_items.map(si => `
+                            <tr>
+                                <td><strong>${escHtml(si.code || '—')}</strong></td>
+                                <td>${escHtml(si.name)}</td>
+                                <td>${escHtml(si.sap_reference || '—')}</td>
+                                <td><span class="badge badge-${_statusClass(si.status)}">${si.status}</span></td>
+                                <td><span class="badge badge-${_priorityClass(si.priority)}">${si.priority}</span></td>
+                                <td>${si.module || '—'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>` : ''}
 
             ${(r.children && r.children.length) ? `
             <div class="card" style="margin-top:20px">

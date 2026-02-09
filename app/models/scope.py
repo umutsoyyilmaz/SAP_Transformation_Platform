@@ -117,6 +117,11 @@ class ScopeItem(db.Model):
     process_id = db.Column(
         db.Integer, db.ForeignKey("processes.id", ondelete="CASCADE"), nullable=False
     )
+    requirement_id = db.Column(
+        db.Integer, db.ForeignKey("requirements.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Linked requirement for single-source-of-truth traceability",
+    )
     code = db.Column(
         db.String(50), default="",
         comment="SAP scope item code, e.g. 1NS, 2OC, BD9",
@@ -149,6 +154,10 @@ class ScopeItem(db.Model):
     )
 
     # ── Relationships
+    requirement = db.relationship(
+        "Requirement", backref=db.backref("scope_items", lazy="dynamic"),
+        foreign_keys=[requirement_id],
+    )
     analyses = db.relationship(
         "Analysis", backref="scope_item", lazy="dynamic",
         cascade="all, delete-orphan",
@@ -158,6 +167,7 @@ class ScopeItem(db.Model):
         return {
             "id": self.id,
             "process_id": self.process_id,
+            "requirement_id": self.requirement_id,
             "code": self.code,
             "name": self.name,
             "description": self.description,
