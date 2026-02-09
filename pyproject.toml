@@ -1,0 +1,14 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: Unit tests (fast, default)",
+    "integration: Cross-module integration tests",
+    "performance: Performance / benchmark tests (slow, optional)",
+    "ai_accuracy: AI assistant accuracy baseline tests (requires API key)",
+    "slow: Tests that take > 5 seconds",
+]
+# Default: run unit + integration only (skip performance/ai_accuracy)
+addopts = "-m 'not performance and not ai_accuracy' --tb=short -q"
+filterwarnings = [
+    "ignore::pytest.PytestCollectionWarning",
+]

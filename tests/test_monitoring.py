@@ -16,6 +16,12 @@ def app():
         db.drop_all()
 
 
+@pytest.fixture(autouse=True)
+def session(app):
+    """Override conftest autouse session fixture."""
+    yield
+
+
 @pytest.fixture()
 def client(app):
     reset_metrics()
