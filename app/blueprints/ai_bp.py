@@ -655,3 +655,167 @@ def triage_defects_batch():
         create_suggestion=data.get("create_suggestion", True),
     )
     return jsonify({"results": results, "total": len(results)})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# KB VERSIONING (Sprint 9.5 — P9)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@ai_bp.route("/kb/versions", methods=["GET"])
+def list_kb_versions():
+    """List all KB versions."""
+    from app.models.ai import KBVersion
+    versions = KBVersion.query.order_by(KBVersion.created_at.desc()).all()
+    return jsonify([v.to_dict() for v in versions])
+
+
+@ai_bp.route("/kb/versions", methods=["POST"])
+def create_kb_version():
+    """Create a new KB version."""
+    from app.models.ai import KBVersion
+    data = request.get_json(silent=True) or {}
+    version = data.get("version")
+    if not version:
+        return jsonify({"error": "version is required"}), 400
+
+    existing = KBVersion.query.filter_by(version=version).first()
+    if existing:
+        return jsonify({"error": f"Version {version} already exists"}), 409
+
+    kbv = KBVersion(
+        version=version,
+        description=data.get("description", ""),
+        embedding_model=data.get("embedding_model"),
+        embedding_dim=data.get("embedding_dim"),
+        created_by=data.get("created_by", "system"),
+    )
+    db.session.add(kbv)
+    db.session.commit()
+    return jsonify(kbv.to_dict()), 201
+
+
+@ai_bp.route("/kb/versions/<int:vid>", methods=["GET"])
+def get_kb_version(vid):
+    """Get a specific KB version with stats."""
+    from app.models.ai import KBVersion, AIEmbedding
+    kbv = db.session.get(KBVersion, vid)
+    if not kbv:
+        return jsonify({"error": "KB version not found"}), 404
+
+    # Count chunks for this version
+    chunk_count = AIEmbedding.query.filter_by(
+        kb_version=kbv.version, is_active=True,
+    ).count()
+
+    entity_count = db.session.query(
+        db.func.count(db.distinct(
+            db.func.concat(AIEmbedding.entity_type, "-", AIEmbedding.entity_id)
+        ))
+    ).filter_by(kb_version=kbv.version, is_active=True).scalar() or 0
+
+    result = kbv.to_dict()
+    result["live_chunks"] = chunk_count
+    result["live_entities"] = entity_count
+    return jsonify(result)
+
+
+@ai_bp.route("/kb/versions/<int:vid>/activate", methods=["PATCH"])
+def activate_kb_version(vid):
+    """Activate a KB version (archives the currently active one)."""
+    from app.models.ai import KBVersion, AIEmbedding
+    kbv = db.session.get(KBVersion, vid)
+    if not kbv:
+        return jsonify({"error": "KB version not found"}), 404
+
+    # Deactivate embeddings from other versions
+    old_active = KBVersion.query.filter(
+        KBVersion.status == "active", KBVersion.id != kbv.id,
+    ).first()
+    if old_active:
+        AIEmbedding.query.filter_by(
+            kb_version=old_active.version, is_active=True,
+        ).update({"is_active": False})
+
+    # Activate embeddings from this version
+    AIEmbedding.query.filter_by(
+        kb_version=kbv.version,
+    ).update({"is_active": True})
+
+    kbv.activate()
+    db.session.commit()
+    return jsonify(kbv.to_dict())
+
+
+@ai_bp.route("/kb/versions/<int:vid>/archive", methods=["PATCH"])
+def archive_kb_version(vid):
+    """Archive a KB version."""
+    from app.models.ai import KBVersion, AIEmbedding
+    kbv = db.session.get(KBVersion, vid)
+    if not kbv:
+        return jsonify({"error": "KB version not found"}), 404
+
+    if kbv.status == "active":
+        return jsonify({"error": "Cannot archive the active version. Activate another version first."}), 400
+
+    # Deactivate associated embeddings
+    AIEmbedding.query.filter_by(kb_version=kbv.version).update({"is_active": False})
+
+    kbv.archive()
+    db.session.commit()
+    return jsonify(kbv.to_dict())
+
+
+@ai_bp.route("/kb/stale", methods=["GET"])
+def find_stale_embeddings():
+    """Find embeddings without content hashes (potential staleness)."""
+    from app.ai.rag import RAGPipeline
+    program_id = request.args.get("program_id", type=int)
+    rag = RAGPipeline()
+    stale = rag.find_stale_embeddings(program_id)
+    return jsonify({"stale_entities": stale, "total": len(stale)})
+
+
+@ai_bp.route("/kb/diff/<version_a>/<version_b>", methods=["GET"])
+def diff_kb_versions(version_a, version_b):
+    """Compare two KB versions — entities added, removed, changed."""
+    from app.models.ai import AIEmbedding
+
+    entities_a = set()
+    for row in db.session.query(
+        AIEmbedding.entity_type, AIEmbedding.entity_id, AIEmbedding.content_hash,
+    ).filter_by(kb_version=version_a).distinct().all():
+        entities_a.add((row[0], row[1], row[2]))
+
+    entities_b = set()
+    for row in db.session.query(
+        AIEmbedding.entity_type, AIEmbedding.entity_id, AIEmbedding.content_hash,
+    ).filter_by(kb_version=version_b).distinct().all():
+        entities_b.add((row[0], row[1], row[2]))
+
+    # Extract entity keys (type, id)
+    keys_a = {(e[0], e[1]) for e in entities_a}
+    keys_b = {(e[0], e[1]) for e in entities_b}
+
+    added = keys_b - keys_a
+    removed = keys_a - keys_b
+    common = keys_a & keys_b
+
+    # Check for content changes in common entities
+    hash_a = {(e[0], e[1]): e[2] for e in entities_a}
+    hash_b = {(e[0], e[1]): e[2] for e in entities_b}
+    changed = [k for k in common if hash_a.get(k) != hash_b.get(k)]
+
+    return jsonify({
+        "version_a": version_a,
+        "version_b": version_b,
+        "added": [{"entity_type": k[0], "entity_id": k[1]} for k in added],
+        "removed": [{"entity_type": k[0], "entity_id": k[1]} for k in removed],
+        "changed": [{"entity_type": k[0], "entity_id": k[1]} for k in changed],
+        "unchanged": len(common) - len(changed),
+        "summary": {
+            "added_count": len(added),
+            "removed_count": len(removed),
+            "changed_count": len(changed),
+            "unchanged_count": len(common) - len(changed),
+        },
+    })

@@ -1,6 +1,6 @@
 """
 SAP Transformation Management Platform
-RAG Pipeline — Sprint 7.
+RAG Pipeline — Sprint 7 + 9.5 KB Versioning.
 
 Entity-aware chunking + hybrid search (semantic + keyword).
 
@@ -9,6 +9,8 @@ Features:
     - Embedding generation (via LLM Gateway)
     - Hybrid search: semantic (cosine) + keyword (FTS) + RRF fusion
     - Batch indexing for bulk operations
+    - Content-hash-based staleness detection (Sprint 9.5)
+    - Non-destructive versioned re-indexing
 
 Usage:
     from app.ai.rag import RAGPipeline
@@ -17,6 +19,7 @@ Usage:
     results = rag.search("payment posting error", program_id=1, top_k=5)
 """
 
+import hashlib
 import json
 import logging
 import math
@@ -24,7 +27,7 @@ import re
 from collections import defaultdict
 
 from app.models import db
-from app.models.ai import AIEmbedding
+from app.models.ai import AIEmbedding, compute_content_hash
 
 logger = logging.getLogger(__name__)
 
@@ -266,9 +269,14 @@ class RAGPipeline:
         entity_data: dict,
         program_id: int | None = None,
         embed: bool = True,
+        kb_version: str = "1.0.0",
+        source_updated_at=None,
     ) -> list[AIEmbedding]:
         """
         Chunk an entity, generate embeddings, and store in vector DB.
+
+        Uses content hashing for staleness detection. If the entity content
+        has not changed since the last indexing, skips re-embedding.
 
         Args:
             entity_type: Entity type string.
@@ -276,29 +284,49 @@ class RAGPipeline:
             entity_data: Full entity dict.
             program_id: Program association.
             embed: Whether to generate embeddings (requires gateway).
+            kb_version: Version tag for this indexing run.
+            source_updated_at: Timestamp of the source entity's last update.
 
         Returns:
-            List of created AIEmbedding records.
+            List of created AIEmbedding records (empty if skipped).
         """
-        # Remove old embeddings for this entity
-        AIEmbedding.query.filter_by(
-            entity_type=entity_type, entity_id=entity_id,
-        ).delete()
-
-        # Generate chunks
+        # Generate chunks and compute content hash
         chunks = self.chunker.chunk_entity(entity_type, entity_data)
+        full_text = " ".join(c["text"] for c in chunks)
+        content_hash = compute_content_hash(full_text)
+
+        # Check if content is unchanged (skip re-embedding)
+        existing = AIEmbedding.query.filter_by(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            is_active=True,
+        ).first()
+        if existing and existing.content_hash == content_hash:
+            logger.debug("Entity %s/%d unchanged (hash match), skipping", entity_type, entity_id)
+            return []
+
+        # Deactivate old embeddings (non-destructive)
+        AIEmbedding.query.filter_by(
+            entity_type=entity_type, entity_id=entity_id, is_active=True,
+        ).update({"is_active": False})
+
         if not chunks:
             db.session.commit()
             return []
 
         # Generate embeddings if gateway available
         embeddings_vectors = None
+        embedding_model_name = None
+        embedding_dim = None
         if embed and self.gateway:
             try:
                 texts = [c["text"] for c in chunks]
                 embeddings_vectors = self.gateway.embed(
                     texts, purpose="rag_indexing", program_id=program_id,
                 )
+                embedding_model_name = getattr(self.gateway, "embedding_model", None)
+                if embeddings_vectors and embeddings_vectors[0]:
+                    embedding_dim = len(embeddings_vectors[0])
             except Exception as e:
                 logger.warning("Embedding generation failed, storing without vectors: %s", e)
 
@@ -319,6 +347,12 @@ class RAGPipeline:
                 module=chunk.get("module", ""),
                 phase=chunk.get("phase", ""),
                 metadata_json=chunk.get("metadata", "{}"),
+                kb_version=kb_version,
+                content_hash=content_hash,
+                embedding_model=embedding_model_name,
+                embedding_dim=embedding_dim,
+                is_active=True,
+                source_updated_at=source_updated_at,
             )
             db.session.add(rec)
             records.append(rec)
@@ -384,7 +418,7 @@ class RAGPipeline:
             List of result dicts sorted by combined score.
         """
         # Build base query with filters
-        base_q = AIEmbedding.query
+        base_q = AIEmbedding.query.filter(AIEmbedding.is_active.is_(True))
         if program_id:
             base_q = base_q.filter(AIEmbedding.program_id == program_id)
         if entity_type:
@@ -478,7 +512,7 @@ class RAGPipeline:
     @staticmethod
     def get_index_stats(program_id: int | None = None) -> dict:
         """Get embedding index statistics."""
-        base_q = AIEmbedding.query
+        base_q = AIEmbedding.query.filter(AIEmbedding.is_active.is_(True))
         if program_id:
             base_q = base_q.filter(AIEmbedding.program_id == program_id)
 
@@ -490,15 +524,49 @@ class RAGPipeline:
         for row in db.session.query(
             AIEmbedding.entity_type,
             db.func.count(AIEmbedding.id),
-        ).group_by(AIEmbedding.entity_type).all():
+        ).filter(AIEmbedding.is_active.is_(True)).group_by(AIEmbedding.entity_type).all():
             type_counts[row[0]] = row[1]
+
+        # Group by kb_version
+        version_counts = {}
+        for row in db.session.query(
+            AIEmbedding.kb_version,
+            db.func.count(AIEmbedding.id),
+        ).filter(AIEmbedding.is_active.is_(True)).group_by(AIEmbedding.kb_version).all():
+            version_counts[row[0] or "unknown"] = row[1]
+
+        # Count inactive (archived) embeddings
+        inactive = AIEmbedding.query.filter(AIEmbedding.is_active.is_(False)).count()
 
         return {
             "total_chunks": total,
             "with_embeddings": with_embedding,
             "without_embeddings": total - with_embedding,
             "by_entity_type": type_counts,
+            "by_kb_version": version_counts,
+            "archived_chunks": inactive,
         }
+
+    @staticmethod
+    def find_stale_embeddings(program_id: int | None = None) -> list[dict]:
+        """
+        Find embeddings that may be stale (no content_hash or old).
+
+        Returns list of entity_type/entity_id pairs without content hashes.
+        """
+        q = AIEmbedding.query.filter(
+            AIEmbedding.is_active.is_(True),
+            AIEmbedding.content_hash.is_(None),
+        )
+        if program_id:
+            q = q.filter(AIEmbedding.program_id == program_id)
+
+        stale = q.with_entities(
+            AIEmbedding.entity_type,
+            AIEmbedding.entity_id,
+        ).distinct().all()
+
+        return [{"entity_type": s[0], "entity_id": s[1]} for s in stale]
 
 
 # ── Helper Functions ──────────────────────────────────────────────────────────

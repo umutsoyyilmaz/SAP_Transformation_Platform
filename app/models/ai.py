@@ -1,14 +1,16 @@
 """
 SAP Transformation Management Platform
-AI domain models — Sprint 7.
+AI domain models — Sprint 7 + 9.5 KB Versioning.
 
 Models:
     - AIUsageLog: Token/cost tracking per LLM call
     - AIEmbedding: Vector store for RAG (pgvector-ready, SQLite-safe)
     - AISuggestion: AI recommendation queue (approve/reject workflow)
     - AIAuditLog: Full audit trail for every AI invocation
+    - KBVersion: Knowledge Base version tracking
 """
 
+import hashlib
 from datetime import datetime, timezone
 
 from app.models import db
@@ -133,6 +135,20 @@ class AIEmbedding(db.Model):
     phase = db.Column(db.String(50), nullable=True)
     metadata_json = db.Column(db.Text, default="{}", comment="Extra metadata as JSON")
 
+    # ── KB Versioning (Sprint 9.5) ──
+    kb_version = db.Column(db.String(30), default="1.0.0", index=True,
+                           comment="KB version that produced this embedding")
+    content_hash = db.Column(db.String(64), nullable=True,
+                             comment="SHA-256 of source text for staleness detection")
+    embedding_model = db.Column(db.String(80), nullable=True,
+                                comment="Model used to generate embedding, e.g. gemini-embedding-001")
+    embedding_dim = db.Column(db.Integer, nullable=True,
+                              comment="Dimension of the embedding vector")
+    is_active = db.Column(db.Boolean, default=True, index=True,
+                          comment="Soft-delete: only active embeddings are searched")
+    source_updated_at = db.Column(db.DateTime(timezone=True), nullable=True,
+                                  comment="Entity updated_at at embed time")
+
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
@@ -152,8 +168,81 @@ class AIEmbedding(db.Model):
             "module": self.module,
             "phase": self.phase,
             "has_embedding": self.embedding_json is not None,
+            "kb_version": self.kb_version,
+            "content_hash": self.content_hash,
+            "embedding_model": self.embedding_model,
+            "embedding_dim": self.embedding_dim,
+            "is_active": self.is_active,
+            "source_updated_at": self.source_updated_at.isoformat() if self.source_updated_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+# ── KBVersion ─────────────────────────────────────────────────────────────────
+
+KB_VERSION_STATUSES = {"building", "active", "archived"}
+
+
+class KBVersion(db.Model):
+    """
+    Tracks Knowledge Base versions for reproducibility and rollback.
+
+    Lifecycle: building → active → archived
+    Only ONE version can be active at a time.
+    """
+
+    __tablename__ = "kb_versions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    version = db.Column(db.String(30), unique=True, nullable=False, comment="Semantic version, e.g. 1.0.0")
+    description = db.Column(db.Text, default="")
+    embedding_model = db.Column(db.String(80), nullable=True)
+    embedding_dim = db.Column(db.Integer, nullable=True)
+    total_entities = db.Column(db.Integer, default=0)
+    total_chunks = db.Column(db.Integer, default=0)
+    status = db.Column(db.String(20), default="building", index=True,
+                       comment="building | active | archived")
+    created_by = db.Column(db.String(150), default="system")
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    activated_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    archived_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    metadata_json = db.Column(db.Text, default="{}")
+
+    def activate(self):
+        """Mark this version as active, archiving any previously active version."""
+        # Archive currently active versions
+        KBVersion.query.filter(
+            KBVersion.status == "active",
+            KBVersion.id != self.id,
+        ).update({"status": "archived", "archived_at": datetime.now(timezone.utc)})
+        self.status = "active"
+        self.activated_at = datetime.now(timezone.utc)
+
+    def archive(self):
+        """Archive this version."""
+        self.status = "archived"
+        self.archived_at = datetime.now(timezone.utc)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "version": self.version,
+            "description": self.description,
+            "embedding_model": self.embedding_model,
+            "embedding_dim": self.embedding_dim,
+            "total_entities": self.total_entities,
+            "total_chunks": self.total_chunks,
+            "status": self.status,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "activated_at": self.activated_at.isoformat() if self.activated_at else None,
+            "archived_at": self.archived_at.isoformat() if self.archived_at else None,
+        }
+
+
+def compute_content_hash(text: str) -> str:
+    """Compute SHA-256 hash of text for content equality checks."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 # ── AISuggestion ──────────────────────────────────────────────────────────────
@@ -185,6 +274,7 @@ class AISuggestion(db.Model):
     confidence = db.Column(db.Float, default=0.0, comment="0.0 – 1.0 confidence score")
     model_used = db.Column(db.String(80), default="")
     prompt_version = db.Column(db.String(20), default="v1")
+    kb_version = db.Column(db.String(30), nullable=True, comment="KB version used for RAG context")
     reasoning = db.Column(db.Text, default="", comment="AI's reasoning / explanation")
 
     # Lifecycle
@@ -226,6 +316,7 @@ class AISuggestion(db.Model):
             "confidence": round(self.confidence, 3),
             "model_used": self.model_used,
             "prompt_version": self.prompt_version,
+            "kb_version": self.kb_version,
             "reasoning": self.reasoning,
             "status": self.status,
             "reviewed_by": self.reviewed_by,
