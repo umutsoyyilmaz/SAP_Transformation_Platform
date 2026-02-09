@@ -266,6 +266,8 @@ const ScenarioView = (() => {
         const typeInfo = SESSION_TYPES[w.session_type] || { label: w.session_type, icon: '📄', color: '#5b738b' };
         const dateStr = w.session_date ? new Date(w.session_date).toLocaleDateString('tr-TR') : '—';
         const requirements = w.requirements || [];
+        const l3Steps = w.l3_process_steps || [];
+        const documents = w.documents || [];
         const main = document.getElementById('mainContent');
 
         main.innerHTML = `
@@ -306,35 +308,112 @@ const ScenarioView = (() => {
             ${w.decisions ? `<div class="card" style="margin-top:12px"><h3>Decisions</h3><p style="white-space:pre-line">${escHtml(w.decisions)}</p></div>` : ''}
             ${w.action_items ? `<div class="card" style="margin-top:12px"><h3>Action Items</h3><p style="white-space:pre-line">${escHtml(w.action_items)}</p></div>` : ''}
 
+            <!-- ── Requirements List ──────────────────────────────────── -->
             <div class="card" style="margin-top:20px">
                 <div class="card-header">
-                    <h3>Requirements from this Workshop</h3>
+                    <h3>📝 Requirements from this Workshop</h3>
+                    <button class="btn btn-primary btn-sm" onclick="ScenarioView.showAddWorkshopRequirementModal()">+ Add Requirement</button>
                 </div>
                 <div id="workshopRequirements"></div>
+            </div>
+
+            <!-- ── L3 Process Steps List ──────────────────────────────── -->
+            <div class="card" style="margin-top:16px">
+                <div class="card-header">
+                    <h3>🔗 Linked L3 Process Steps</h3>
+                </div>
+                <div id="workshopL3Steps"></div>
+            </div>
+
+            <!-- ── Documents ──────────────────────────────────────────── -->
+            <div class="card" style="margin-top:16px">
+                <div class="card-header">
+                    <h3>📎 Documents</h3>
+                    <button class="btn btn-primary btn-sm" onclick="ScenarioView.showAddDocumentModal()">+ Add Document</button>
+                </div>
+                <div id="workshopDocuments"></div>
+                <p style="font-size:0.8rem;color:var(--sap-text-secondary);padding:4px 16px 12px">
+                    📌 File upload & AI Document Analysis will be available in a future phase.
+                </p>
             </div>`;
 
         renderWorkshopRequirements(requirements);
+        renderWorkshopL3Steps(l3Steps);
+        renderWorkshopDocuments(documents);
     }
 
     function renderWorkshopRequirements(requirements) {
         const c = document.getElementById('workshopRequirements');
         if (!requirements || requirements.length === 0) {
-            c.innerHTML = '<p style="color:var(--sap-text-secondary);padding:16px">No requirements linked to this workshop yet. Add requirements via the Requirements module and link them to this workshop.</p>';
+            c.innerHTML = '<p style="color:var(--sap-text-secondary);padding:16px">No requirements linked to this workshop yet.</p>';
             return;
         }
 
         c.innerHTML = `
             <table class="data-table">
-                <thead><tr><th>Code</th><th>Title</th><th>Type</th><th>Priority</th><th>Fit/Gap</th><th>Status</th></tr></thead>
+                <thead><tr><th>Code</th><th>Title</th><th>Type</th><th>Priority</th><th>Status</th><th>Open Items</th></tr></thead>
                 <tbody>
                     ${requirements.map(r => `
-                        <tr>
+                        <tr style="cursor:pointer" onclick="RequirementView.openDetail(${r.id})">
                             <td><strong>${escHtml(r.code || '—')}</strong></td>
                             <td>${escHtml(r.title)}</td>
                             <td>${r.req_type}</td>
                             <td><span class="badge badge-priority-${r.priority}">${r.priority}</span></td>
-                            <td>${r.fit_gap ? `<span class="badge badge-${r.fit_gap}">${r.fit_gap}</span>` : '—'}</td>
                             <td><span class="badge badge-${r.status}">${r.status}</span></td>
+                            <td>${r.open_item_count ? `<span class="badge badge-warning">${r.open_item_count}</span>` : '—'} ${r.blocker_count ? `<span class="badge badge-danger">${r.blocker_count}B</span>` : ''}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>`;
+    }
+
+    function renderWorkshopL3Steps(steps) {
+        const c = document.getElementById('workshopL3Steps');
+        if (!steps || steps.length === 0) {
+            c.innerHTML = '<p style="color:var(--sap-text-secondary);padding:16px">No L3 process steps linked via requirements yet.</p>';
+            return;
+        }
+
+        c.innerHTML = `
+            <table class="data-table">
+                <thead><tr><th>L3 Step</th><th>Parent L2</th><th>Scope</th><th>Fit/Gap</th><th>SAP TCode</th><th>Coverage</th><th>Req</th></tr></thead>
+                <tbody>
+                    ${steps.map(s => `
+                        <tr>
+                            <td><strong>${escHtml(s.name)}</strong>${s.code ? ` <small>(${escHtml(s.code)})</small>` : ''}</td>
+                            <td>${escHtml(s.parent_l2_name || '—')}</td>
+                            <td>${s.scope_decision ? `<span class="badge badge-${s.scope_decision}">${s.scope_decision}</span>` : '—'}</td>
+                            <td>${s.fit_gap ? `<span class="badge badge-${s.fit_gap}">${s.fit_gap}</span>` : '—'}</td>
+                            <td>${escHtml(s.sap_tcode || '—')}</td>
+                            <td><span class="badge badge-${s.coverage_type}">${s.coverage_type}</span></td>
+                            <td>${escHtml(s.requirement_code || '—')}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>`;
+    }
+
+    function renderWorkshopDocuments(documents) {
+        const c = document.getElementById('workshopDocuments');
+        if (!documents || documents.length === 0) {
+            c.innerHTML = '<p style="color:var(--sap-text-secondary);padding:16px">No documents attached yet.</p>';
+            return;
+        }
+
+        const typeIcons = { pdf: '📕', docx: '📘', xlsx: '📗', pptx: '📙', image: '🖼️', other: '📄' };
+        c.innerHTML = `
+            <table class="data-table">
+                <thead><tr><th>Type</th><th>Title</th><th>File</th><th>Size</th><th>Uploaded By</th><th>Notes</th><th>Actions</th></tr></thead>
+                <tbody>
+                    ${documents.map(d => `
+                        <tr>
+                            <td style="font-size:1.3rem">${typeIcons[d.file_type] || '📄'}</td>
+                            <td><strong>${escHtml(d.title)}</strong></td>
+                            <td>${escHtml(d.file_name)}</td>
+                            <td>${d.file_size ? (d.file_size > 1048576 ? (d.file_size/1048576).toFixed(1)+' MB' : (d.file_size/1024).toFixed(0)+' KB') : '—'}</td>
+                            <td>${escHtml(d.uploaded_by || '—')}</td>
+                            <td>${escHtml(d.notes || '—')}</td>
+                            <td><button class="btn btn-danger btn-sm" onclick="ScenarioView.deleteDocument(${d.id})">Delete</button></td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -619,6 +698,134 @@ const ScenarioView = (() => {
         } catch (err) { App.toast(err.message, 'error'); }
     }
 
+    // ── Add Requirement from Workshop ────────────────────────────────────
+    async function showAddWorkshopRequirementModal() {
+        // Fetch L2 processes for the scenario so user can pick target L2
+        let l2Options = '<option value="">— Auto (first L2) —</option>';
+        try {
+            const processes = await API.get(`/scenarios/${currentWorkshop.scenario_id}/processes?level=L2`);
+            l2Options += processes.map(p =>
+                `<option value="${p.id}">${escHtml(p.name)}${p.module ? ' ('+p.module+')' : ''}</option>`
+            ).join('');
+        } catch (_) { /* ignore — dropdown will just have auto option */ }
+
+        App.openModal(`
+            <div class="modal-header"><h2>Add Requirement to Workshop</h2></div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group"><label>Code</label><input id="wrCode" class="form-input" placeholder="REQ-SD-001"></div>
+                    <div class="form-group" style="flex:2"><label>Title *</label><input id="wrTitle" class="form-input"></div>
+                </div>
+                <div class="form-group"><label>Description</label><textarea id="wrDesc" class="form-input" rows="3"></textarea></div>
+                <div class="form-row">
+                    <div class="form-group"><label>Type</label>
+                        <select id="wrType" class="form-input">
+                            <option value="functional">Functional</option>
+                            <option value="business">Business</option>
+                            <option value="technical">Technical</option>
+                            <option value="non_functional">Non-Functional</option>
+                            <option value="integration">Integration</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>Priority (MoSCoW)</label>
+                        <select id="wrPriority" class="form-input">
+                            <option value="must_have">Must Have</option>
+                            <option value="should_have" selected>Should Have</option>
+                            <option value="could_have">Could Have</option>
+                            <option value="wont_have">Won't Have</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>L2 Business Process</label>
+                        <select id="wrProcessId" class="form-input">${l2Options}</select>
+                    </div>
+                    <div class="form-group"><label>Module</label><input id="wrModule" class="form-input" placeholder="FI, CO, MM, SD..."></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="ScenarioView.doAddWorkshopRequirement()">Create</button>
+            </div>
+        `);
+    }
+
+    async function doAddWorkshopRequirement() {
+        const body = {
+            code: document.getElementById('wrCode').value,
+            title: document.getElementById('wrTitle').value,
+            description: document.getElementById('wrDesc').value,
+            req_type: document.getElementById('wrType').value,
+            priority: document.getElementById('wrPriority').value,
+            module: document.getElementById('wrModule').value,
+        };
+        const processId = document.getElementById('wrProcessId').value;
+        if (processId) body.process_id = parseInt(processId);
+
+        try {
+            await API.post(`/workshops/${currentWorkshop.id}/requirements`, body);
+            App.closeModal();
+            App.toast('Requirement created and linked to workshop', 'success');
+            await openWorkshop(currentWorkshop.id);
+        } catch (err) { App.toast(err.message, 'error'); }
+    }
+
+    // ── Add Document to Workshop ─────────────────────────────────────────
+    function showAddDocumentModal() {
+        App.openModal(`
+            <div class="modal-header"><h2>Add Document</h2></div>
+            <div class="modal-body">
+                <div class="form-group"><label>Title *</label><input id="docTitle" class="form-input" placeholder="e.g. SD Workshop Minutes"></div>
+                <div class="form-group"><label>File Name *</label><input id="docFileName" class="form-input" placeholder="e.g. sd_workshop_minutes.pdf"></div>
+                <div class="form-row">
+                    <div class="form-group"><label>File Type</label>
+                        <select id="docFileType" class="form-input">
+                            <option value="pdf">PDF</option>
+                            <option value="docx">Word (docx)</option>
+                            <option value="xlsx">Excel (xlsx)</option>
+                            <option value="pptx">PowerPoint (pptx)</option>
+                            <option value="image">Image</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>File Size (bytes)</label><input id="docFileSize" type="number" class="form-input" placeholder="0"></div>
+                </div>
+                <div class="form-group"><label>Uploaded By</label><input id="docUploadedBy" class="form-input"></div>
+                <div class="form-group"><label>Notes</label><textarea id="docNotes" class="form-input" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="ScenarioView.doAddDocument()">Add Document</button>
+            </div>
+        `);
+    }
+
+    async function doAddDocument() {
+        const body = {
+            title: document.getElementById('docTitle').value,
+            file_name: document.getElementById('docFileName').value,
+            file_type: document.getElementById('docFileType').value,
+            file_size: parseInt(document.getElementById('docFileSize').value) || 0,
+            uploaded_by: document.getElementById('docUploadedBy').value,
+            notes: document.getElementById('docNotes').value,
+        };
+        try {
+            await API.post(`/workshops/${currentWorkshop.id}/documents`, body);
+            App.closeModal();
+            App.toast('Document added', 'success');
+            await openWorkshop(currentWorkshop.id);
+        } catch (err) { App.toast(err.message, 'error'); }
+    }
+
+    async function deleteDocument(docId) {
+        if (!confirm('Delete this document?')) return;
+        try {
+            await API.delete(`/workshop-documents/${docId}`);
+            App.toast('Document deleted', 'success');
+            await openWorkshop(currentWorkshop.id);
+        } catch (err) { App.toast(err.message, 'error'); }
+    }
+
     // ── Utility ──────────────────────────────────────────────────────────
     function escHtml(s) {
         const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
@@ -629,5 +836,7 @@ const ScenarioView = (() => {
     return {
         render, loadScenarios, openDetail, showCreateModal, doCreate, showEditModal, doEdit, deleteScenario,
         showCreateWorkshopModal, doCreateWorkshop, openWorkshop, showEditWorkshopModal, doEditWorkshop, deleteWorkshop,
+        showAddWorkshopRequirementModal, doAddWorkshopRequirement,
+        showAddDocumentModal, doAddDocument, deleteDocument,
     };
 })();

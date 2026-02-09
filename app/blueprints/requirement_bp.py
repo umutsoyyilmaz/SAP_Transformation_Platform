@@ -245,6 +245,78 @@ def convert_requirement(req_id):
 
 
 # ═════════════════════════════════════════════════════════════════════════
+# REQUIREMENT → CREATE L3 PROCESS STEP
+# ═════════════════════════════════════════════════════════════════════════
+
+@requirement_bp.route("/requirements/<int:req_id>/create-l3", methods=["POST"])
+def create_l3_from_requirement(req_id):
+    """Create a new L3 Process Step from a Requirement.
+
+    The L3 is created under the requirement's parent L2 process (process_id).
+    A RequirementProcessMapping is automatically created to link them.
+
+    Returns the created L3 process and its mapping.
+    """
+    req, err = _get_or_404(Requirement, req_id)
+    if err:
+        return err
+
+    if not req.process_id:
+        return jsonify({"error": "Requirement has no L2 process assigned (process_id is null)"}), 400
+
+    from app.models.scope import Process, RequirementProcessMapping
+
+    parent_l2 = db.session.get(Process, req.process_id)
+    if not parent_l2:
+        return jsonify({"error": "Parent L2 process not found"}), 404
+    if parent_l2.level != "L2":
+        return jsonify({"error": "Requirement's process_id must point to an L2 process"}), 400
+
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "L3 process step name is required"}), 400
+
+    # Determine order: next position under the parent L2
+    max_order = db.session.query(
+        db.func.max(Process.order)
+    ).filter_by(parent_id=parent_l2.id).scalar() or 0
+
+    process = Process(
+        scenario_id=parent_l2.scenario_id,
+        parent_id=parent_l2.id,
+        name=name,
+        description=data.get("description", ""),
+        level="L3",
+        code=data.get("code", ""),
+        module=data.get("module", parent_l2.module or ""),
+        order=max_order + 1,
+        scope_decision=data.get("scope_decision", "in_scope"),
+        fit_gap=data.get("fit_gap", ""),
+        sap_tcode=data.get("sap_tcode", ""),
+        sap_reference=data.get("sap_reference", ""),
+        priority=data.get("priority", "medium"),
+        notes=data.get("notes", ""),
+    )
+    db.session.add(process)
+    db.session.flush()  # Get process.id
+
+    # Auto-create mapping
+    mapping = RequirementProcessMapping(
+        requirement_id=req.id,
+        process_id=process.id,
+        coverage_type=data.get("coverage_type", "full"),
+        notes=data.get("mapping_notes", ""),
+    )
+    db.session.add(mapping)
+    db.session.commit()
+
+    result = process.to_dict()
+    result["mapping"] = mapping.to_dict()
+    return jsonify(result), 201
+
+
+# ═════════════════════════════════════════════════════════════════════════
 # OPEN ITEMS
 # ═════════════════════════════════════════════════════════════════════════
 

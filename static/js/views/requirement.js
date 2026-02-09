@@ -203,6 +203,7 @@ const RequirementView = (() => {
             <div class="card" style="margin-top:20px">
                 <div class="card-header">
                     <h3>🔗 Mapped L3 Process Steps</h3>
+                    <button class="btn btn-primary btn-sm" onclick="RequirementView.showAddL3Modal()">+ Add L3 Step</button>
                 </div>
                 <table class="data-table">
                     <thead><tr><th>L3 Step</th><th>Coverage</th><th>Fit/Gap</th><th>SAP TCode</th><th>Notes</th></tr></thead>
@@ -218,7 +219,14 @@ const RequirementView = (() => {
                         `).join('')}
                     </tbody>
                 </table>
-            </div>` : ''}
+            </div>` : `
+            <div class="card" style="margin-top:20px">
+                <div class="card-header">
+                    <h3>🔗 Mapped L3 Process Steps</h3>
+                    <button class="btn btn-primary btn-sm" onclick="RequirementView.showAddL3Modal()">+ Add L3 Step</button>
+                </div>
+                <p style="color:var(--sap-text-secondary);padding:16px">No L3 process steps mapped yet. Create one to define the scope.</p>
+            </div>`}
 
             <div class="card" style="margin-top:20px">
                 <div class="card-header">
@@ -741,6 +749,88 @@ const RequirementView = (() => {
         catch(e) { App.toast(e.message,'error'); }
     }
 
+    // ── Add L3 Process Step from Requirement ─────────────────────────────
+    function showAddL3Modal() {
+        if (!currentReq || !currentReq.process_id) {
+            App.toast('This requirement has no L2 process assigned. Edit the requirement first and set a process.', 'error');
+            return;
+        }
+        App.openModal(`
+            <div class="modal-header"><h2>Add L3 Process Step</h2></div>
+            <div class="modal-body">
+                <p style="margin-bottom:12px;color:var(--sap-text-secondary)">
+                    Creates a new L3 step under this requirement's L2 process and automatically links it.
+                </p>
+                <div class="form-group"><label>Name *</label><input id="l3Name" class="form-input" placeholder="e.g. Standard Sales Order (VA01)"></div>
+                <div class="form-group"><label>Description</label><textarea id="l3Desc" class="form-input" rows="2"></textarea></div>
+                <div class="form-row">
+                    <div class="form-group"><label>Code</label><input id="l3Code" class="form-input" placeholder="e.g. 1OC"></div>
+                    <div class="form-group"><label>SAP TCode</label><input id="l3TCode" class="form-input" placeholder="e.g. VA01"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Scope Decision</label>
+                        <select id="l3Scope" class="form-input">
+                            <option value="in_scope" selected>In Scope</option>
+                            <option value="out_of_scope">Out of Scope</option>
+                            <option value="deferred">Deferred</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>Fit/Gap</label>
+                        <select id="l3FitGap" class="form-input">
+                            <option value="">— Not Set —</option>
+                            <option value="fit">Fit</option>
+                            <option value="gap">Gap</option>
+                            <option value="partial_fit">Partial Fit</option>
+                            <option value="standard">Standard</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Priority</label>
+                        <select id="l3Priority" class="form-input">
+                            <option value="medium" selected>Medium</option>
+                            <option value="high">High</option>
+                            <option value="critical">Critical</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>Coverage</label>
+                        <select id="l3Coverage" class="form-input">
+                            <option value="full" selected>Full</option>
+                            <option value="partial">Partial</option>
+                            <option value="none">None</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group"><label>Notes</label><textarea id="l3Notes" class="form-input" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="RequirementView.doAddL3()">Create L3 Step</button>
+            </div>
+        `);
+    }
+
+    async function doAddL3() {
+        const body = {
+            name: document.getElementById('l3Name').value,
+            description: document.getElementById('l3Desc').value,
+            code: document.getElementById('l3Code').value,
+            sap_tcode: document.getElementById('l3TCode').value,
+            scope_decision: document.getElementById('l3Scope').value,
+            fit_gap: document.getElementById('l3FitGap').value,
+            priority: document.getElementById('l3Priority').value,
+            coverage_type: document.getElementById('l3Coverage').value,
+            notes: document.getElementById('l3Notes').value,
+        };
+        try {
+            await API.post(`/requirements/${currentReq.id}/create-l3`, body);
+            App.closeModal();
+            App.toast('L3 Process Step created and mapped', 'success');
+            await openDetail(currentReq.id);
+        } catch (err) { App.toast(err.message, 'error'); }
+    }
+
     // ── Utility ──────────────────────────────────────────────────────────
     function escHtml(s) {
         const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
@@ -752,5 +842,6 @@ const RequirementView = (() => {
         deleteReq, showMatrix, showStats, applyFilters,
         showAddTraceModal, doAddTrace, deleteTrace,
         showAddOpenItemModal, doAddOpenItem, showEditOpenItemModal, doEditOpenItem, deleteOpenItem,
+        showAddL3Modal, doAddL3,
     };
 })();

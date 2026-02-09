@@ -212,8 +212,12 @@ class Workshop(db.Model):
     requirements = db.relationship(
         "Requirement", backref="workshop", lazy="dynamic",
     )
+    documents = db.relationship(
+        "WorkshopDocument", backref="workshop", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
 
-    def to_dict(self, include_requirements=False):
+    def to_dict(self, include_requirements=False, include_documents=False):
         result = {
             "id": self.id,
             "scenario_id": self.scenario_id,
@@ -234,12 +238,64 @@ class Workshop(db.Model):
             "fit_count": self.fit_count,
             "gap_count": self.gap_count,
             "partial_fit_count": self.partial_fit_count,
+            "document_count": self.documents.count() if self.documents else 0,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
         if include_requirements:
             result["requirements"] = [r.to_dict() for r in self.requirements]
+        if include_documents:
+            result["documents"] = [d.to_dict() for d in self.documents]
         return result
 
     def __repr__(self):
         return f"<Workshop {self.id}: {self.title}>"
+
+
+class WorkshopDocument(db.Model):
+    """
+    Document / attachment linked to a Workshop session.
+
+    Stores metadata for uploaded documents that will later be used
+    for AI Document Analysis (OCR, summarisation, requirement extraction).
+    Actual file storage is file-system based (file_path).
+    """
+
+    __tablename__ = "workshop_documents"
+
+    id = db.Column(db.Integer, primary_key=True)
+    workshop_id = db.Column(
+        db.Integer, db.ForeignKey("workshops.id", ondelete="CASCADE"), nullable=False,
+    )
+    title = db.Column(db.String(300), nullable=False)
+    file_name = db.Column(db.String(300), nullable=False, comment="Original upload filename")
+    file_type = db.Column(
+        db.String(30), default="other",
+        comment="pdf | docx | xlsx | pptx | image | other",
+    )
+    file_size = db.Column(db.Integer, default=0, comment="Size in bytes")
+    file_path = db.Column(db.String(500), default="", comment="Server-side storage path")
+    uploaded_by = db.Column(db.String(200), default="")
+    notes = db.Column(db.Text, default="")
+
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "workshop_id": self.workshop_id,
+            "title": self.title,
+            "file_name": self.file_name,
+            "file_type": self.file_type,
+            "file_size": self.file_size,
+            "file_path": self.file_path,
+            "uploaded_by": self.uploaded_by,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<WorkshopDocument {self.id}: {self.file_name}>"

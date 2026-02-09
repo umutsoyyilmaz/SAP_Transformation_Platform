@@ -17,7 +17,8 @@ from app import create_app
 from app.models import db as _db
 from app.models.program import Phase, Program, Workstream
 from app.models.requirement import OpenItem, Requirement, RequirementTrace
-from app.models.scenario import Scenario
+from app.models.scenario import Scenario, Workshop
+from app.models.scope import Process, RequirementProcessMapping
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -46,8 +47,9 @@ def session(app, _setup_db):
     with app.app_context():
         yield
         _db.session.rollback()
-        for model in [OpenItem, RequirementTrace, Requirement,
-                       Phase, Workstream, Scenario, Program]:
+        for model in [RequirementProcessMapping, Process,
+                       OpenItem, RequirementTrace, Requirement,
+                       Workshop, Phase, Workstream, Scenario, Program]:
             _db.session.query(model).delete()
         _db.session.commit()
 
@@ -506,3 +508,80 @@ def test_requirement_stats_empty(client):
     res = client.get(f"/api/v1/programs/{prog['id']}/requirements/stats")
     assert res.status_code == 200
     assert res.get_json()["total"] == 0
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# REQUIREMENT → CREATE L3 PROCESS STEP
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _setup_scenario_with_l2(client, pid):
+    """Helper: create a scenario + L2 process, return (scenario, l2)."""
+    sc = client.post(f"/api/v1/programs/{pid}/scenarios", json={
+        "name": "SD Scenario", "sap_module": "SD",
+    }).get_json()
+    l2 = client.post(f"/api/v1/scenarios/{sc['id']}/processes", json={
+        "name": "Sales Order Processing", "level": "L2", "module": "SD",
+    }).get_json()
+    return sc, l2
+
+
+def test_create_l3_from_requirement(client):
+    """POST /requirements/<id>/create-l3 creates L3 + mapping."""
+    prog = _create_program(client)
+    sc, l2 = _setup_scenario_with_l2(client, prog["id"])
+
+    req = _create_req(client, prog["id"], title="VA01 Req", process_id=l2["id"])
+
+    res = client.post(f"/api/v1/requirements/{req['id']}/create-l3", json={
+        "name": "Standard Sales Order (VA01)",
+        "code": "1OC",
+        "sap_tcode": "VA01",
+        "scope_decision": "in_scope",
+        "fit_gap": "fit",
+        "priority": "high",
+    })
+    assert res.status_code == 201
+    data = res.get_json()
+    assert data["name"] == "Standard Sales Order (VA01)"
+    assert data["level"] == "L3"
+    assert data["parent_id"] == l2["id"]
+    assert data["scenario_id"] == sc["id"]
+    assert "mapping" in data
+    assert data["mapping"]["requirement_id"] == req["id"]
+    assert data["mapping"]["process_id"] == data["id"]
+    assert data["mapping"]["coverage_type"] == "full"
+
+
+def test_create_l3_from_requirement_no_process(client):
+    """Should fail if requirement has no L2 process assigned."""
+    prog = _create_program(client)
+    req = _create_req(client, prog["id"], title="Orphan Req")
+    res = client.post(f"/api/v1/requirements/{req['id']}/create-l3", json={
+        "name": "Some L3",
+    })
+    assert res.status_code == 400
+    assert "no L2 process" in res.get_json()["error"]
+
+
+def test_create_l3_from_requirement_missing_name(client):
+    prog = _create_program(client)
+    sc, l2 = _setup_scenario_with_l2(client, prog["id"])
+    req = _create_req(client, prog["id"], process_id=l2["id"])
+    res = client.post(f"/api/v1/requirements/{req['id']}/create-l3", json={})
+    assert res.status_code == 400
+
+
+def test_create_l3_appears_in_requirement_detail(client):
+    """After creating L3, it shows up in requirement GET process_mappings."""
+    prog = _create_program(client)
+    sc, l2 = _setup_scenario_with_l2(client, prog["id"])
+    req = _create_req(client, prog["id"], title="VA01 Req", process_id=l2["id"])
+
+    client.post(f"/api/v1/requirements/{req['id']}/create-l3", json={
+        "name": "Third-Party Order",
+        "sap_tcode": "VA01",
+    })
+
+    detail = client.get(f"/api/v1/requirements/{req['id']}").get_json()
+    assert len(detail["process_mappings"]) == 1
+    assert detail["process_mappings"][0]["process_name"] == "Third-Party Order"

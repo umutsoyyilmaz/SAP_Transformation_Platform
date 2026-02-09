@@ -13,7 +13,7 @@ import pytest
 from app import create_app
 from app.models import db as _db
 from app.models.program import Program
-from app.models.scenario import Scenario, Workshop
+from app.models.scenario import Scenario, Workshop, WorkshopDocument
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -42,7 +42,7 @@ def session(app, _setup_db):
     with app.app_context():
         yield
         _db.session.rollback()
-        for model in [Workshop, Scenario, Program]:
+        for model in [WorkshopDocument, Workshop, Scenario, Program]:
             _db.session.query(model).delete()
         _db.session.commit()
 
@@ -252,3 +252,139 @@ def test_delete_workshop(client):
     res = client.delete(f"/api/v1/workshops/{ws['id']}")
     assert res.status_code == 200
     assert client.get(f"/api/v1/workshops/{ws['id']}").status_code == 404
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WORKSHOP → REQUIREMENT CREATION
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_create_workshop_requirement(client):
+    """Create a requirement from a workshop — auto-links workshop_id & source."""
+    prog = _create_program(client)
+    sc = _create_scenario(client, prog["id"])
+    ws = _create_workshop(client, sc["id"])
+
+    res = client.post(f"/api/v1/workshops/{ws['id']}/requirements", json={
+        "title": "Shipment Tracking Requirement",
+        "req_type": "functional",
+        "priority": "must_have",
+    })
+    assert res.status_code == 201
+    data = res.get_json()
+    assert data["title"] == "Shipment Tracking Requirement"
+    assert data["workshop_id"] == ws["id"]
+    assert data["source"] == "workshop"
+    assert data["program_id"] == prog["id"]
+
+
+def test_create_workshop_requirement_missing_title(client):
+    prog = _create_program(client)
+    sc = _create_scenario(client, prog["id"])
+    ws = _create_workshop(client, sc["id"])
+    res = client.post(f"/api/v1/workshops/{ws['id']}/requirements", json={})
+    assert res.status_code == 400
+
+
+def test_create_workshop_requirement_with_l2(client):
+    """Create workshop requirement with explicit L2 process."""
+    prog = _create_program(client)
+    sc = _create_scenario(client, prog["id"])
+    ws = _create_workshop(client, sc["id"])
+
+    # Create an L2 process
+    l2_res = client.post(f"/api/v1/scenarios/{sc['id']}/processes", json={
+        "name": "Sales Order Processing", "level": "L2",
+    })
+    assert l2_res.status_code == 201
+    l2 = l2_res.get_json()
+
+    res = client.post(f"/api/v1/workshops/{ws['id']}/requirements", json={
+        "title": "VA01 Requirement",
+        "process_id": l2["id"],
+    })
+    assert res.status_code == 201
+    assert res.get_json()["process_id"] == l2["id"]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WORKSHOP DOCUMENTS
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_create_workshop_document(client):
+    prog = _create_program(client)
+    sc = _create_scenario(client, prog["id"])
+    ws = _create_workshop(client, sc["id"])
+
+    res = client.post(f"/api/v1/workshops/{ws['id']}/documents", json={
+        "title": "Workshop Minutes",
+        "file_name": "sd_workshop_minutes.pdf",
+        "file_type": "pdf",
+        "file_size": 204800,
+        "uploaded_by": "Ahmet",
+    })
+    assert res.status_code == 201
+    data = res.get_json()
+    assert data["title"] == "Workshop Minutes"
+    assert data["file_type"] == "pdf"
+    assert data["workshop_id"] == ws["id"]
+
+
+def test_create_workshop_document_missing_fields(client):
+    prog = _create_program(client)
+    sc = _create_scenario(client, prog["id"])
+    ws = _create_workshop(client, sc["id"])
+    res = client.post(f"/api/v1/workshops/{ws['id']}/documents", json={"title": "x"})
+    assert res.status_code == 400
+
+
+def test_list_workshop_documents(client):
+    prog = _create_program(client)
+    sc = _create_scenario(client, prog["id"])
+    ws = _create_workshop(client, sc["id"])
+
+    client.post(f"/api/v1/workshops/{ws['id']}/documents", json={
+        "title": "Doc 1", "file_name": "doc1.pdf",
+    })
+    client.post(f"/api/v1/workshops/{ws['id']}/documents", json={
+        "title": "Doc 2", "file_name": "doc2.xlsx", "file_type": "xlsx",
+    })
+    res = client.get(f"/api/v1/workshops/{ws['id']}/documents")
+    assert res.status_code == 200
+    assert len(res.get_json()) == 2
+
+
+def test_delete_workshop_document(client):
+    prog = _create_program(client)
+    sc = _create_scenario(client, prog["id"])
+    ws = _create_workshop(client, sc["id"])
+
+    doc = client.post(f"/api/v1/workshops/{ws['id']}/documents", json={
+        "title": "Temp Doc", "file_name": "temp.docx",
+    }).get_json()
+
+    res = client.delete(f"/api/v1/workshop-documents/{doc['id']}")
+    assert res.status_code == 200
+
+    # Verify it's gone
+    list_res = client.get(f"/api/v1/workshops/{ws['id']}/documents")
+    assert len(list_res.get_json()) == 0
+
+
+def test_workshop_get_includes_l3_and_documents(client):
+    """Workshop GET returns l3_process_steps and documents."""
+    prog = _create_program(client)
+    sc = _create_scenario(client, prog["id"])
+    ws = _create_workshop(client, sc["id"])
+
+    # Add a document
+    client.post(f"/api/v1/workshops/{ws['id']}/documents", json={
+        "title": "Spec", "file_name": "spec.pdf",
+    })
+
+    res = client.get(f"/api/v1/workshops/{ws['id']}")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert "l3_process_steps" in data
+    assert "documents" in data
+    assert len(data["documents"]) == 1
+    assert data["document_count"] == 1

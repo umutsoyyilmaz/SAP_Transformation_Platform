@@ -14,16 +14,24 @@ Endpoints:
     Workshops:
         GET    /api/v1/scenarios/<sid>/workshops             — List workshops
         POST   /api/v1/scenarios/<sid>/workshops             — Create workshop
-        GET    /api/v1/workshops/<id>                        — Detail (+ requirements)
+        GET    /api/v1/workshops/<id>                        — Detail (+ requirements + L3 steps + documents)
         PUT    /api/v1/workshops/<id>                        — Update workshop
         DELETE /api/v1/workshops/<id>                        — Delete workshop
+
+    Workshop Requirements:
+        POST   /api/v1/workshops/<id>/requirements           — Create requirement linked to workshop
+
+    Workshop Documents:
+        GET    /api/v1/workshops/<id>/documents              — List documents
+        POST   /api/v1/workshops/<id>/documents              — Create document metadata
+        DELETE /api/v1/workshop-documents/<id>               — Delete document
 """
 
 from flask import Blueprint, jsonify, request
 
 from app.models import db
 from app.models.program import Program
-from app.models.scenario import Scenario, Workshop
+from app.models.scenario import Scenario, Workshop, WorkshopDocument
 
 scenario_bp = Blueprint("scenario", __name__, url_prefix="/api/v1")
 
@@ -321,11 +329,40 @@ def create_workshop(scenario_id):
 
 @scenario_bp.route("/workshops/<int:workshop_id>", methods=["GET"])
 def get_workshop(workshop_id):
-    """Get a single workshop with its requirements."""
+    """Get a single workshop with requirements, linked L3 process steps, and documents."""
     workshop, err = _get_or_404(Workshop, workshop_id)
     if err:
         return err
-    return jsonify(workshop.to_dict(include_requirements=True)), 200
+    result = workshop.to_dict(include_requirements=True, include_documents=True)
+
+    # Collect L3 process steps linked through requirements → RequirementProcessMapping
+    from app.models.scope import RequirementProcessMapping, Process
+    l3_steps = []
+    seen_l3 = set()
+    for req in workshop.requirements:
+        for m in req.process_mappings:
+            if m.process_id not in seen_l3:
+                seen_l3.add(m.process_id)
+                proc = db.session.get(Process, m.process_id)
+                if proc and proc.level == "L3":
+                    parent_name = ""
+                    if proc.parent:
+                        parent_name = proc.parent.name
+                    l3_steps.append({
+                        "id": proc.id,
+                        "name": proc.name,
+                        "code": proc.code,
+                        "parent_id": proc.parent_id,
+                        "parent_l2_name": parent_name,
+                        "scope_decision": proc.scope_decision,
+                        "fit_gap": proc.fit_gap,
+                        "sap_tcode": proc.sap_tcode,
+                        "requirement_id": m.requirement_id,
+                        "requirement_code": req.code,
+                        "coverage_type": m.coverage_type,
+                    })
+    result["l3_process_steps"] = l3_steps
+    return jsonify(result), 200
 
 
 @scenario_bp.route("/workshops/<int:workshop_id>", methods=["PUT"])
@@ -384,3 +421,120 @@ def delete_workshop(workshop_id):
 
     db.session.commit()
     return jsonify({"message": f"Workshop '{workshop.title}' deleted"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WORKSHOP → REQUIREMENTS  (create requirement linked to workshop)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@scenario_bp.route("/workshops/<int:workshop_id>/requirements", methods=["POST"])
+def create_workshop_requirement(workshop_id):
+    """Create a requirement directly from a workshop.
+
+    Auto-sets workshop_id and source='workshop'.
+    If process_id (L2) is provided it is used; otherwise the first L2
+    under the workshop's scenario is chosen as default.
+    """
+    workshop, err = _get_or_404(Workshop, workshop_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    title = data.get("title", "").strip()
+    if not title:
+        return jsonify({"error": "Requirement title is required"}), 400
+
+    # Resolve program_id from scenario
+    scenario = db.session.get(Scenario, workshop.scenario_id)
+    if not scenario:
+        return jsonify({"error": "Workshop's scenario not found"}), 404
+
+    # Determine L2 process
+    process_id = data.get("process_id")
+    if not process_id:
+        # Default: first L2 under the scenario
+        from app.models.scope import Process
+        first_l2 = Process.query.filter_by(
+            scenario_id=scenario.id, level="L2", parent_id=None
+        ).order_by(Process.order).first()
+        if first_l2:
+            process_id = first_l2.id
+
+    from app.models.requirement import Requirement
+    req = Requirement(
+        program_id=scenario.program_id,
+        workshop_id=workshop.id,
+        process_id=process_id,
+        code=data.get("code", ""),
+        title=title,
+        description=data.get("description", ""),
+        req_type=data.get("req_type", "functional"),
+        priority=data.get("priority", "should_have"),
+        source="workshop",
+        module=data.get("module", scenario.sap_module or ""),
+    )
+    db.session.add(req)
+
+    # Update workshop counters
+    workshop.requirements_identified = (workshop.requirements_identified or 0) + 1
+
+    db.session.commit()
+    return jsonify(req.to_dict()), 201
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WORKSHOP DOCUMENTS
+# ═════════════════════════════════════════════════════════════════════════════
+
+@scenario_bp.route("/workshops/<int:workshop_id>/documents", methods=["GET"])
+def list_workshop_documents(workshop_id):
+    """List documents attached to a workshop."""
+    workshop, err = _get_or_404(Workshop, workshop_id)
+    if err:
+        return err
+    docs = WorkshopDocument.query.filter_by(workshop_id=workshop_id)\
+        .order_by(WorkshopDocument.created_at.desc()).all()
+    return jsonify([d.to_dict() for d in docs]), 200
+
+
+@scenario_bp.route("/workshops/<int:workshop_id>/documents", methods=["POST"])
+def create_workshop_document(workshop_id):
+    """Create document metadata for a workshop.
+
+    NOTE: Actual file upload will be implemented in a later phase
+    (AI Document Analysis). For now this stores metadata only.
+    """
+    workshop, err = _get_or_404(Workshop, workshop_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    title = data.get("title", "").strip()
+    file_name = data.get("file_name", "").strip()
+    if not title or not file_name:
+        return jsonify({"error": "title and file_name are required"}), 400
+
+    doc = WorkshopDocument(
+        workshop_id=workshop_id,
+        title=title,
+        file_name=file_name,
+        file_type=data.get("file_type", "other"),
+        file_size=data.get("file_size", 0),
+        file_path=data.get("file_path", ""),
+        uploaded_by=data.get("uploaded_by", ""),
+        notes=data.get("notes", ""),
+    )
+    db.session.add(doc)
+    db.session.commit()
+    return jsonify(doc.to_dict()), 201
+
+
+@scenario_bp.route("/workshop-documents/<int:doc_id>", methods=["DELETE"])
+def delete_workshop_document(doc_id):
+    """Delete a workshop document."""
+    doc = db.session.get(WorkshopDocument, doc_id)
+    if not doc:
+        return jsonify({"error": "Document not found"}), 404
+    db.session.delete(doc)
+    db.session.commit()
+    return jsonify({"message": "Document deleted"}), 200
