@@ -21,7 +21,7 @@ const App = (() => {
         requirements: () => RequirementView.render(),
         backlog:      () => BacklogView.render(),
         testing:      () => TestingView.render(),
-        integration:  () => placeholder('Integration Factory', 'Sprint 9'),
+        integration:  () => IntegrationView.render(),
         'data-factory': () => placeholder('Data Factory', 'Sprint 10'),
         cutover:      () => placeholder('Cutover Hub', 'Sprint 13'),
         raid:         () => RaidView.render(),
