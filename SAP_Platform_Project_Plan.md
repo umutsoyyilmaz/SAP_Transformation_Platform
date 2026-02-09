@@ -566,7 +566,7 @@ RELEASE 6: Advanced + AI Maturity (Sprint 21-24, 8 hafta)
 
 ---
 
-#### Sprint 10: Data Factory (Hafta 19-20)
+#### Sprint 10: Data Factory + Vue 3 Migration Phase 0 (Hafta 19-20)
 
 | # | Task | Dosya(lar) | Araç | Tahmini Süre |
 |---|------|-----------|------|-------------|
@@ -576,12 +576,16 @@ RELEASE 6: Advanced + AI Maturity (Sprint 21-24, 8 hafta)
 | 10.4 | Data Factory UI: Object inventory + mapping editor + cycle tracker | static/js/views/data_factory.js | Copilot | 4 saat |
 | 10.5 | Cycle comparison dashboard: N vs N-1 trend | static/js/views/data_factory.js | Copilot | 2 saat |
 | 10.6 | pytest: data factory testleri | tests/ | Copilot | 1 saat |
+| 10.7 | 🟢 **Vue 3 Phase 0:** Vite build tool kurulumu + dev/prod config | vite.config.ts, package.json | Copilot | 0.5 saat |
+| 10.8 | 🟢 **Vue 3 Phase 0:** Tekrarlanan yardımcı fonksiyonları `utils.js`'e çıkar (esc, formatDate, formatters) | static/js/utils.js | Copilot | 0.5 saat |
+| 10.9 | 🟢 **Vue 3 Phase 0:** Vue 3 + vue-router + Pinia scaffold + `VanillaAdapter` bileşeni | src/App.vue, src/router/ | Copilot | 1 saat |
+| 10.10 | 🟢 **Vue 3 Phase 0:** Vitest + Vue Test Utils frontend test altyapısı | vitest.config.ts, src/__tests__/ | Copilot | 0.5 saat |
 
-**Sprint 10 Toplam: ~16 saat**
+**Sprint 10 Toplam: ~18.5 saat** (16 Data Factory + 2.5 Vue Phase 0)
 
 ---
 
-#### Sprint 11: Reporting Engine + Export (Hafta 21-22)
+#### Sprint 11: Reporting Engine + Export + Vue 3 Phase 1 (Hafta 21-22)
 
 | # | Task | Dosya(lar) | Araç | Tahmini Süre |
 |---|------|-----------|------|-------------|
@@ -593,12 +597,17 @@ RELEASE 6: Advanced + AI Maturity (Sprint 21-24, 8 hafta)
 | 11.6 | Excel export: openpyxl ile traceability matrix, defect list | app/services/export.py | Copilot | 2 saat |
 | 11.7 | Reporting UI: executive dashboard + export buttons | static/js/views/reports.js | Copilot | 3 saat |
 | 11.8 | pytest: reporting + export testleri | tests/ | Copilot | 1 saat |
+| 11.9 | 🟢 **Vue 3 Phase 1:** `app.js` → `App.vue` shell + `AppSidebar.vue` + vue-router | src/App.vue, src/components/ | Copilot | 2 saat |
+| 11.10 | 🟢 **Vue 3 Phase 1:** Program selector → Pinia `programStore` + Toast/Modal composables | src/stores/, src/composables/ | Copilot | 1.5 saat |
+| 11.11 | 🟢 **Vue 3 Phase 1:** `notification.js` → `NotificationBell.vue` + `suggestion-badge.js` → `SuggestionBadge.vue` | src/components/ | Copilot | 1.5 saat |
+| 11.12 | 🟢 **Vue 3 Phase 2a:** `program.js` (817 LOC) → `ProgramView.vue` (~500 LOC) | src/views/ProgramView.vue | Copilot | 3 saat |
+| 11.13 | 🟢 **Vue 3 Phase 2a:** `raid.js` (447 LOC) → `RaidView.vue` (~300 LOC) | src/views/RaidView.vue | Copilot | 2 saat |
 
-**Sprint 11 Toplam: ~19 saat**
+**Sprint 11 Toplam: ~29 saat** (19 Reporting + 10 Vue Phase 1-2a)
 
 ---
 
-#### Sprint 12: AI Phase 2 — Core AI Asistanlar (Hafta 23-24)
+#### Sprint 12: AI Phase 2 — Core AI Asistanlar + Vue 3 Phase 2b (Hafta 23-24)
 
 | # | Task | Dosya(lar) | Araç | Tahmini Süre |
 |---|------|-----------|------|-------------|
@@ -612,8 +621,13 @@ RELEASE 6: Advanced + AI Maturity (Sprint 21-24, 8 hafta)
 | 12.8 | WRICEF Drafter: modül bazlı FS templates + few-shot RAG | ai_knowledge/fs_templates/ | Claude | 2 saat |
 | 12.9 | 4 asistan UI entegrasyonu (suggestion badges + review panels) | static/js/ | Copilot | 3 saat |
 | 12.10 | Prompt templates: 4 asistan için YAML prompt'lar | ai_knowledge/prompts/ | Claude | 2 saat |
+| 12.11 | 🟢 **Vue 3 Phase 2b:** `requirement.js` (931 LOC) → `RequirementView.vue` (~600 LOC) | src/views/RequirementView.vue | Copilot | 3 saat |
+| 12.12 | 🟢 **Vue 3 Phase 2b:** `backlog.js` (1058 LOC) → `BacklogView.vue` (~650 LOC) — Kanban reactivity | src/views/BacklogView.vue | Copilot | 3.5 saat |
+| 12.13 | 🟢 **Vue 3 Phase 2b:** `testing.js` (1047 LOC) → `TestingView.vue` (~650 LOC) | src/views/TestingView.vue | Copilot | 3.5 saat |
 
-**Sprint 12 Toplam: ~30 saat**
+**Sprint 12 Toplam: ~40 saat** (30 AI Phase 2 + 10 Vue Phase 2b)
+
+> ⚠️ **Not:** PLAN_REVISION.md'deki S12a/S12b bölünmesi uygulanırsa, Vue 3 Phase 2b task'ları S12b'ye taşınabilir.
 
 ### 🚩 RELEASE 3 GATE (Hafta 24 Sonu)
 
@@ -627,6 +641,8 @@ RELEASE 6: Advanced + AI Maturity (Sprint 21-24, 8 hafta)
 □ Work Breakdown Engine: scenario kırılım önerisi çalışıyor
 □ WRICEF Spec Drafter: FS taslağı üretimi çalışıyor
 □ 7 AI asistan aktif (3 + 4)
+□ 🟢 Vue 3 migration tamamlandı: tüm 11 view + shell + router + Pinia
+□ 🟢 Frontend testleri: Vitest component + Playwright E2E
 □ 150+ API endpoint
 □ pytest coverage > 70%
 ```
@@ -635,7 +651,7 @@ RELEASE 6: Advanced + AI Maturity (Sprint 21-24, 8 hafta)
 
 ### RELEASE 4: Go-Live Readiness + AI Quality (Hafta 25-32)
 
-#### Sprint 13: Cutover Hub (Hafta 25-26)
+#### Sprint 13: Cutover Hub + Vue 3 Phase 2c & 3 (Hafta 25-26)
 
 | # | Task | Araç | Tahmini Süre |
 |---|------|------|-------------|
@@ -645,8 +661,14 @@ RELEASE 6: Advanced + AI Maturity (Sprint 21-24, 8 hafta)
 | 13.4 | Cutover UI: runbook Gantt, rehearsal comparison, live view | Copilot | 5 saat |
 | 13.5 | Go/No-Go pack UI: readiness dashboard + checklist + sign-off | Copilot | 3 saat |
 | 13.6 | pytest: cutover testleri | Copilot | 1 saat |
+| 13.7 | 🟢 **Vue 3 Phase 2c:** `scenario.js` (842 LOC) → `ScenarioView.vue` + `integration.js` (764 LOC) → `IntegrationView.vue` | src/views/ | Copilot | 4 saat |
+| 13.8 | 🟢 **Vue 3 Phase 2c:** `analysis.js` + `process_hierarchy.js` + `ai_query.js` + `ai_admin.js` → Vue views | src/views/ | Copilot | 4 saat |
+| 13.9 | 🟢 **Vue 3 Phase 3:** Eski vanilla JS dosyalarını kaldır + cleanup | static/js/ → src/ | Copilot | 1 saat |
+| 13.10 | 🟢 **Vue 3 Phase 3:** Component test coverage (Vitest + Vue Test Utils) — 5 kritik view | src/__tests__/ | Copilot | 3 saat |
+| 13.11 | 🟢 **Vue 3 Phase 3:** E2E testleri (Playwright — 5 kritik akış) | e2e/ | Copilot | 3 saat |
+| 13.12 | 🟢 **Vue 3 Phase 3:** Responsive / accessibility / Lighthouse audit | src/ | Copilot | 1 saat |
 
-**Sprint 13 Toplam: ~19 saat**
+**Sprint 13 Toplam: ~35 saat** (19 Cutover Hub + 16 Vue Phase 2c-3)
 
 #### Sprint 14: Security Module + Platform Hardening (Hafta 27-28)
 
