@@ -307,11 +307,34 @@ def _trace_config_downstream(ci, chain):
 
 
 def _trace_requirement_upstream(req, chain):
-    """Requirement → Scenario (via program)."""
-    # Requirements link to scenarios via program_id — find scenarios in same program
-    scenarios = Scenario.query.filter_by(program_id=req.program_id).all()
-    for s in scenarios:
-        chain.append({"type": "scenario", "id": s.id, "title": s.name})
+    """Requirement → Process (via RequirementProcessMapping) → Scenario."""
+    from app.models.scope import RequirementProcessMapping
+    # Trace via actual requirement→process mappings
+    mappings = RequirementProcessMapping.query.filter_by(requirement_id=req.id).all()
+    seen_scenarios = set()
+    for mapping in mappings:
+        process = db.session.get(Process, mapping.process_id)
+        if process:
+            chain.append({"type": "process", "id": process.id, "title": process.name,
+                          "level": process.level})
+            # Walk up to find the scenario via the top-level process's scenario_id
+            root = process
+            while root.parent_id:
+                root = db.session.get(Process, root.parent_id)
+                if not root:
+                    break
+            if root and root.scenario_id and root.scenario_id not in seen_scenarios:
+                seen_scenarios.add(root.scenario_id)
+                scenario = db.session.get(Scenario, root.scenario_id)
+                if scenario:
+                    chain.append({"type": "scenario", "id": scenario.id, "title": scenario.name})
+    # Fallback: if no mappings found, use scenario_id from requirement if it exists
+    if not mappings:
+        scenario_id = getattr(req, 'scenario_id', None)
+        if scenario_id:
+            scenario = db.session.get(Scenario, scenario_id)
+            if scenario:
+                chain.append({"type": "scenario", "id": scenario.id, "title": scenario.name})
 
 
 def _trace_requirement_downstream(req, chain):
@@ -336,11 +359,38 @@ def _trace_requirement_downstream(req, chain):
 
 
 def _trace_scenario_downstream(scenario, chain):
-    """Scenario → Requirements → BacklogItems + ConfigItems → FS → TS → TestCases → Defects."""
-    requirements = Requirement.query.filter_by(program_id=scenario.program_id).all()
-    for req in requirements:
-        chain.append({"type": "requirement", "id": req.id, "title": req.title})
-        _trace_requirement_downstream(req, chain)
+    """Scenario → Processes → Requirements → BacklogItems + ConfigItems → FS → TS → TestCases → Defects."""
+    # Only trace requirements linked to this scenario (via workshop or process mappings)
+    from app.models.scope import Process
+    from app.models.requirement import RequirementProcessMapping
+
+    # 1. Requirements directly linked via workshop
+    seen_req_ids = set()
+    workshop_reqs = (
+        Requirement.query
+        .join(Workshop, Requirement.workshop_id == Workshop.id)
+        .filter(Workshop.scenario_id == scenario.id)
+        .all()
+    )
+    for req in workshop_reqs:
+        if req.id not in seen_req_ids:
+            seen_req_ids.add(req.id)
+            chain.append({"type": "requirement", "id": req.id, "title": req.title})
+            _trace_requirement_downstream(req, chain)
+
+    # 2. Requirements linked via process mappings to processes in this scenario
+    process_reqs = (
+        Requirement.query
+        .join(RequirementProcessMapping, Requirement.id == RequirementProcessMapping.requirement_id)
+        .join(Process, RequirementProcessMapping.process_id == Process.id)
+        .filter(Process.scenario_id == scenario.id)
+        .all()
+    )
+    for req in process_reqs:
+        if req.id not in seen_req_ids:
+            seen_req_ids.add(req.id)
+            chain.append({"type": "requirement", "id": req.id, "title": req.title})
+            _trace_requirement_downstream(req, chain)
 
 
 # ── Sprint 5 — Test Case & Defect tracing ────────────────────────────────────

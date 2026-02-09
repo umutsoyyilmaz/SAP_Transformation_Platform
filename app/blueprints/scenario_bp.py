@@ -27,11 +27,15 @@ Endpoints:
         DELETE /api/v1/workshop-documents/<id>               — Delete document
 """
 
+import logging
+
 from flask import Blueprint, jsonify, request
 
 from app.models import db
 from app.models.program import Program
 from app.models.scenario import Scenario, Workshop, WorkshopDocument
+
+logger = logging.getLogger(__name__)
 
 scenario_bp = Blueprint("scenario", __name__, url_prefix="/api/v1")
 
@@ -94,6 +98,8 @@ def create_scenario(program_id):
         description=data.get("description", ""),
         sap_module=data.get("sap_module", ""),
         process_area=data.get("process_area", "other"),
+        value_chain_category=data.get("value_chain_category", ""),
+        signavio_code=data.get("signavio_code", ""),
         status=data.get("status", "draft"),
         priority=data.get("priority", "medium"),
         owner=data.get("owner", ""),
@@ -101,7 +107,12 @@ def create_scenario(program_id):
         notes=data.get("notes", ""),
     )
     db.session.add(scenario)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(scenario.to_dict()), 201
 
 
@@ -125,6 +136,7 @@ def update_scenario(scenario_id):
 
     for field in [
         "name", "description", "sap_module", "process_area",
+        "value_chain_category", "signavio_code",
         "status", "priority", "owner", "workstream", "notes",
     ]:
         if field in data:
@@ -136,7 +148,12 @@ def update_scenario(scenario_id):
     if "total_requirements" in data:
         scenario.total_requirements = data["total_requirements"]
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(scenario.to_dict()), 200
 
 
@@ -147,7 +164,12 @@ def delete_scenario(scenario_id):
     if err:
         return err
     db.session.delete(scenario)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": f"Scenario '{scenario.name}' deleted"}), 200
 
 
@@ -321,9 +343,15 @@ def create_workshop(scenario_id):
     )
     db.session.add(workshop)
 
-    # Update cached count
-    scenario.total_workshops = Workshop.query.filter_by(scenario_id=scenario_id).count() + 1
-    db.session.commit()
+    # Update cached count via SQL count (flush first so workshop is visible)
+    db.session.flush()
+    scenario.total_workshops = Workshop.query.filter_by(scenario_id=scenario_id).count()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(workshop.to_dict()), 201
 
 
@@ -400,7 +428,12 @@ def update_workshop(workshop_id):
         else:
             workshop.session_date = None
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(workshop.to_dict()), 200
 
 
@@ -419,7 +452,12 @@ def delete_workshop(workshop_id):
     if scenario:
         scenario.total_workshops = max(0, Workshop.query.filter_by(scenario_id=scenario_id).count() - 1)
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": f"Workshop '{workshop.title}' deleted"}), 200
 
 
@@ -478,7 +516,12 @@ def create_workshop_requirement(workshop_id):
     # Update workshop counters
     workshop.requirements_identified = (workshop.requirements_identified or 0) + 1
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(req.to_dict()), 201
 
 
@@ -525,7 +568,12 @@ def create_workshop_document(workshop_id):
         notes=data.get("notes", ""),
     )
     db.session.add(doc)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(doc.to_dict()), 201
 
 
@@ -536,5 +584,10 @@ def delete_workshop_document(doc_id):
     if not doc:
         return jsonify({"error": "Document not found"}), 404
     db.session.delete(doc)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Document deleted"}), 200

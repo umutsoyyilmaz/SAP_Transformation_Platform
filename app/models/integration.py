@@ -78,13 +78,16 @@ class Interface(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False,
+        index=True,
     )
     wave_id = db.Column(
         db.Integer, db.ForeignKey("waves.id", ondelete="SET NULL"), nullable=True,
+        index=True,
     )
     backlog_item_id = db.Column(
         db.Integer, db.ForeignKey("backlog_items.id", ondelete="SET NULL"),
         nullable=True, comment="Link to WRICEF item (type=interface)",
+        index=True,
     )
 
     # ── Identification

@@ -221,6 +221,7 @@ class SuggestionQueue:
             "avg_confidence_approved": round(float(approved_conf), 3),
             "avg_confidence_rejected": round(float(rejected_conf), 3),
             "approval_rate": round(
-                status_counts.get("approved", 0) + status_counts.get("modified", 0) + status_counts.get("applied", 0),
-            ) / max(total, 1) * 100,
+                (status_counts.get("approved", 0) + status_counts.get("modified", 0) + status_counts.get("applied", 0))
+                / max(total, 1) * 100, 1,
+            ),
         }

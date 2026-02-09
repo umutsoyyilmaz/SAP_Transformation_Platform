@@ -386,15 +386,21 @@ class FunctionalSpec(db.Model):
     """
 
     __tablename__ = "functional_specs"
+    __table_args__ = (
+        db.CheckConstraint(
+            "backlog_item_id IS NOT NULL OR config_item_id IS NOT NULL",
+            name="ck_fs_has_parent",
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     backlog_item_id = db.Column(
         db.Integer, db.ForeignKey("backlog_items.id", ondelete="CASCADE"),
-        nullable=True, comment="Link to WRICEF item (mutually exclusive with config_item_id)",
+        nullable=True, index=True, comment="Link to WRICEF item (mutually exclusive with config_item_id)",
     )
     config_item_id = db.Column(
         db.Integer, db.ForeignKey("config_items.id", ondelete="CASCADE"),
-        nullable=True, comment="Link to config item (mutually exclusive with backlog_item_id)",
+        nullable=True, index=True, comment="Link to config item (mutually exclusive with backlog_item_id)",
     )
 
     title = db.Column(db.String(300), nullable=False)

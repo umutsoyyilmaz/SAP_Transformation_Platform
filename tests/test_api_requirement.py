@@ -47,11 +47,8 @@ def session(app, _setup_db):
     with app.app_context():
         yield
         _db.session.rollback()
-        for model in [RequirementProcessMapping, Process,
-                       OpenItem, RequirementTrace, Requirement,
-                       Workshop, Phase, Workstream, Scenario, Program]:
-            _db.session.query(model).delete()
-        _db.session.commit()
+        _db.drop_all()
+        _db.create_all()
 
 
 @pytest.fixture
@@ -113,7 +110,7 @@ def test_list_requirements(client):
     _create_req(client, pid, title="R2")
     res = client.get(f"/api/v1/programs/{pid}/requirements")
     assert res.status_code == 200
-    assert len(res.get_json()) == 2
+    assert len(res.get_json()["items"]) == 2
 
 
 def test_list_requirements_filter_type(client):
@@ -123,7 +120,7 @@ def test_list_requirements_filter_type(client):
     _create_req(client, pid, title="F1", req_type="functional")
     res = client.get(f"/api/v1/programs/{pid}/requirements?req_type=business")
     assert res.status_code == 200
-    data = res.get_json()
+    data = res.get_json()["items"]
     assert len(data) == 1
     assert data[0]["req_type"] == "business"
 
@@ -135,7 +132,7 @@ def test_list_requirements_filter_status(client):
     _create_req(client, pid, title="Approved", status="approved")
     res = client.get(f"/api/v1/programs/{pid}/requirements?status=approved")
     assert res.status_code == 200
-    assert all(r["status"] == "approved" for r in res.get_json())
+    assert all(r["status"] == "approved" for r in res.get_json()["items"])
 
 
 def test_list_requirements_filter_priority(client):
@@ -145,7 +142,7 @@ def test_list_requirements_filter_priority(client):
     _create_req(client, pid, title="Could", priority="could_have")
     res = client.get(f"/api/v1/programs/{pid}/requirements?priority=must_have")
     assert res.status_code == 200
-    assert len(res.get_json()) == 1
+    assert len(res.get_json()["items"]) == 1
 
 
 def test_list_requirements_parent_only(client):
@@ -155,7 +152,7 @@ def test_list_requirements_parent_only(client):
     _create_req(client, pid, title="Child", req_parent_id=parent["id"])
     res = client.get(f"/api/v1/programs/{pid}/requirements?parent_only=true")
     assert res.status_code == 200
-    data = res.get_json()
+    data = res.get_json()["items"]
     assert len(data) == 1
     assert data[0]["title"] == "Parent"
 

@@ -102,7 +102,7 @@ const SuggestionBadge = (() => {
                         <div class="sugg-item__title">${_esc(title)}</div>
                         <div class="sugg-item__meta">
                             <span class="sugg-tag" style="border-color:${m.color};color:${m.color}">${m.label}</span>
-                            <span>${s.entity_type}/${s.entity_id}</span>
+                            <span>${_esc(s.entity_type)}/${_esc(String(s.entity_id))}</span>
                             <span class="sugg-conf ${_confClass(s.confidence)}">${pct}%</span>
                         </div>
                     </div>
@@ -144,7 +144,13 @@ const SuggestionBadge = (() => {
         el.textContent = str;
         return el.innerHTML;
     }
-
+    /* ── Cleanup ────────────────────────────────────────────────────── */
+    function destroy() {
+        if (_pollInterval) {
+            clearInterval(_pollInterval);
+            _pollInterval = null;
+        }
+    }
     /* ── Close on outside click ────────────────────────────────────────── */
     document.addEventListener('click', (e) => {
         const dd = document.getElementById('suggDropdown');
@@ -153,5 +159,5 @@ const SuggestionBadge = (() => {
         }
     });
 
-    return { init, toggle, refreshBadge, approve, reject };
+    return { init, toggle, refreshBadge, approve, reject, destroy };
 })();

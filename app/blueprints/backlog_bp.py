@@ -39,6 +39,8 @@ Endpoints (Sprint 4 scope — aligned with master plan):
         DELETE /api/v1/sprints/<id>                          — Delete sprint
 """
 
+import logging
+
 from datetime import date
 
 from flask import Blueprint, jsonify, request
@@ -49,6 +51,9 @@ from app.models.backlog import (
     BACKLOG_STATUSES, WRICEF_TYPES,
 )
 from app.models.program import Program
+from app.blueprints import paginate_query
+
+logger = logging.getLogger(__name__)
 
 backlog_bp = Blueprint("backlog", __name__, url_prefix="/api/v1")
 
@@ -107,10 +112,13 @@ def list_backlog(program_id):
         if sprint_id == "0":
             query = query.filter(BacklogItem.sprint_id.is_(None))
         else:
-            query = query.filter(BacklogItem.sprint_id == int(sprint_id))
+            try:
+                query = query.filter(BacklogItem.sprint_id == int(sprint_id))
+            except (ValueError, TypeError):
+                return jsonify({"error": "sprint_id must be an integer"}), 400
 
-    items = query.order_by(BacklogItem.board_order, BacklogItem.id).all()
-    return jsonify([i.to_dict() for i in items]), 200
+    items, total = paginate_query(query.order_by(BacklogItem.board_order, BacklogItem.id))
+    return jsonify({"items": [i.to_dict() for i in items], "total": total}), 200
 
 
 @backlog_bp.route("/programs/<int:program_id>/backlog", methods=["POST"])
@@ -157,7 +165,12 @@ def create_backlog_item(program_id):
         notes=data.get("notes", ""),
     )
     db.session.add(item)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(item.to_dict()), 201
 
 
@@ -209,7 +222,12 @@ def update_backlog_item(item_id):
     if not item.title:
         return jsonify({"error": "Backlog item title cannot be empty"}), 400
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(item.to_dict()), 200
 
 
@@ -220,7 +238,12 @@ def delete_backlog_item(item_id):
     if err:
         return err
     db.session.delete(item)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": f"Backlog item '{item.title}' deleted"}), 200
 
 
@@ -253,7 +276,12 @@ def move_backlog_item(item_id):
     if "board_order" in data:
         item.board_order = data["board_order"]
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(item.to_dict()), 200
 
 
@@ -372,7 +400,12 @@ def create_sprint(program_id):
         order=data.get("order", 0),
     )
     db.session.add(sprint)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(sprint.to_dict()), 201
 
 
@@ -410,7 +443,12 @@ def update_sprint(sprint_id):
     if not sprint.name:
         return jsonify({"error": "Sprint name cannot be empty"}), 400
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(sprint.to_dict()), 200
 
 
@@ -424,7 +462,12 @@ def delete_sprint(sprint_id):
     BacklogItem.query.filter_by(sprint_id=sprint_id)\
         .update({"sprint_id": None})
     db.session.delete(sprint)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": f"Sprint '{sprint.name}' deleted"}), 200
 
 
@@ -484,7 +527,12 @@ def create_config_item(program_id):
         notes=data.get("notes", ""),
     )
     db.session.add(item)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(item.to_dict()), 201
 
 
@@ -507,6 +555,12 @@ def update_config_item(item_id):
 
     data = request.get_json(silent=True) or {}
 
+    # Validate status BEFORE applying changes
+    if "status" in data and data["status"] not in VALID_STATUSES:
+        return jsonify({
+            "error": f"status must be one of: {', '.join(sorted(VALID_STATUSES))}"
+        }), 400
+
     for field in [
         "code", "title", "description", "module", "config_key",
         "transaction_code", "transport_request", "status", "priority",
@@ -515,11 +569,6 @@ def update_config_item(item_id):
         if field in data:
             val = data[field].strip() if isinstance(data[field], str) else data[field]
             setattr(item, field, val)
-
-    if "status" in data and data["status"] not in VALID_STATUSES:
-        return jsonify({
-            "error": f"status must be one of: {', '.join(sorted(VALID_STATUSES))}"
-        }), 400
 
     for nullable in ["requirement_id"]:
         if nullable in data:
@@ -532,7 +581,11 @@ def update_config_item(item_id):
     if not item.title:
         return jsonify({"error": "Config item title cannot be empty"}), 400
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Database error while saving config item"}), 500
     return jsonify(item.to_dict()), 200
 
 
@@ -543,7 +596,12 @@ def delete_config_item(item_id):
     if err:
         return err
     db.session.delete(item)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": f"Config item '{item.title}' deleted"}), 200
 
 
@@ -576,7 +634,12 @@ def create_fs_for_backlog(item_id):
         reviewer=data.get("reviewer", ""),
     )
     db.session.add(fs)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(fs.to_dict()), 201
 
 
@@ -605,7 +668,12 @@ def create_fs_for_config(item_id):
         reviewer=data.get("reviewer", ""),
     )
     db.session.add(fs)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(fs.to_dict()), 201
 
 
@@ -635,7 +703,12 @@ def update_functional_spec(fs_id):
     if not fs.title:
         return jsonify({"error": "Functional spec title cannot be empty"}), 400
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(fs.to_dict()), 200
 
 
@@ -670,7 +743,12 @@ def create_technical_spec(fs_id):
         unit_test_evidence=data.get("unit_test_evidence", ""),
     )
     db.session.add(ts)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(ts.to_dict()), 201
 
 
@@ -701,7 +779,12 @@ def update_technical_spec(ts_id):
     if not ts.title:
         return jsonify({"error": "Technical spec title cannot be empty"}), 400
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(ts.to_dict()), 200
 
 

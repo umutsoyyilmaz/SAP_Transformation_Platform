@@ -57,9 +57,8 @@ def session(app, _setup_db):
     with app.app_context():
         yield
         _db.session.rollback()
-        for model in [AIAuditLog, AIUsageLog, AIEmbedding, AISuggestion]:
-            _db.session.query(model).delete()
-        _db.session.commit()
+        _db.drop_all()
+        _db.create_all()
 
 
 @pytest.fixture
@@ -334,11 +333,11 @@ class TestSuggestionAPI:
         assert res.status_code == 400
 
     def test_approve_nonexistent(self, client):
-        res = client.patch("/api/v1/ai/suggestions/99999/approve", json={})
+        res = client.patch("/api/v1/ai/suggestions/99999/approve", json={"reviewer": "test_user"})
         assert res.status_code == 404
 
     def test_reject_nonexistent(self, client):
-        res = client.patch("/api/v1/ai/suggestions/99999/reject", json={})
+        res = client.patch("/api/v1/ai/suggestions/99999/reject", json={"reviewer": "test_user"})
         assert res.status_code == 404
 
 

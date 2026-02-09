@@ -46,6 +46,8 @@ Endpoints (Sprint 5 scope):
         GET    /api/v1/programs/<pid>/testing/dashboard      — KPI dashboard data
 """
 
+import logging
+
 from datetime import date, datetime, timezone
 
 from flask import Blueprint, jsonify, request
@@ -58,6 +60,9 @@ from app.models.testing import (
 )
 from app.models.program import Program
 from app.models.requirement import Requirement
+from app.blueprints import paginate_query
+
+logger = logging.getLogger(__name__)
 
 testing_bp = Blueprint("testing", __name__, url_prefix="/api/v1")
 
@@ -81,9 +86,23 @@ def _parse_date(value):
 
 
 def _auto_code(model, prefix, program_id):
-    """Generate the next sequential code for a model within a program."""
-    count = model.query.filter_by(program_id=program_id).count()
-    return f"{prefix}-{count + 1:04d}"
+    """Generate the next sequential code for a model within a program (race-safe)."""
+    full_prefix = f"{prefix}-"
+    last = (
+        model.query
+        .filter(model.program_id == program_id,
+                model.code.like(f"{full_prefix}%"))
+        .order_by(model.id.desc())
+        .first()
+    )
+    if last and last.code.startswith(full_prefix):
+        try:
+            next_num = int(last.code[len(full_prefix):]) + 1
+        except (ValueError, IndexError):
+            next_num = model.query.filter_by(program_id=program_id).count() + 1
+    else:
+        next_num = model.query.filter_by(program_id=program_id).count() + 1
+    return f"{full_prefix}{next_num:04d}"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -130,7 +149,12 @@ def create_test_plan(pid):
         end_date=_parse_date(data.get("end_date")),
     )
     db.session.add(plan)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(plan.to_dict()), 201
 
 
@@ -159,7 +183,12 @@ def update_test_plan(plan_id):
         if date_field in data:
             setattr(plan, date_field, _parse_date(data[date_field]))
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(plan.to_dict())
 
 
@@ -170,7 +199,12 @@ def delete_test_plan(plan_id):
     if err:
         return err
     db.session.delete(plan)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Test plan deleted"}), 200
 
 
@@ -218,7 +252,12 @@ def create_test_cycle(plan_id):
         order=data.get("order", max_order + 1),
     )
     db.session.add(cycle)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(cycle.to_dict()), 201
 
 
@@ -246,7 +285,12 @@ def update_test_cycle(cycle_id):
         if date_field in data:
             setattr(cycle, date_field, _parse_date(data[date_field]))
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(cycle.to_dict())
 
 
@@ -257,7 +301,12 @@ def delete_test_cycle(cycle_id):
     if err:
         return err
     db.session.delete(cycle)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Test cycle deleted"}), 200
 
 
@@ -307,8 +356,8 @@ def list_test_cases(pid):
             TestCase.description.ilike(term),
         ))
 
-    cases = q.order_by(TestCase.created_at.desc()).all()
-    return jsonify([tc.to_dict() for tc in cases])
+    cases, total = paginate_query(q.order_by(TestCase.created_at.desc()))
+    return jsonify({"items": [tc.to_dict() for tc in cases], "total": total})
 
 
 @testing_bp.route("/programs/<int:pid>/testing/catalog", methods=["POST"])
@@ -346,7 +395,12 @@ def create_test_case(pid):
         config_item_id=data.get("config_item_id"),
     )
     db.session.add(tc)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(tc.to_dict()), 201
 
 
@@ -374,7 +428,12 @@ def update_test_case(case_id):
         if field in data:
             setattr(tc, field, data[field])
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(tc.to_dict())
 
 
@@ -385,7 +444,12 @@ def delete_test_case(case_id):
     if err:
         return err
     db.session.delete(tc)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Test case deleted"}), 200
 
 
@@ -437,7 +501,12 @@ def create_test_execution(cycle_id):
         evidence_url=data.get("evidence_url", ""),
     )
     db.session.add(exe)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(exe.to_dict()), 201
 
 
@@ -466,7 +535,12 @@ def update_test_execution(exec_id):
     if "result" in data and data["result"] != "not_run" and not exe.executed_at:
         exe.executed_at = datetime.now(timezone.utc)
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(exe.to_dict())
 
 
@@ -477,7 +551,12 @@ def delete_test_execution(exec_id):
     if err:
         return err
     db.session.delete(exe)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Test execution deleted"}), 200
 
 
@@ -522,8 +601,8 @@ def list_defects(pid):
             Defect.description.ilike(term),
         ))
 
-    defects = q.order_by(Defect.created_at.desc()).all()
-    return jsonify([d.to_dict() for d in defects])
+    defects, total = paginate_query(q.order_by(Defect.created_at.desc()))
+    return jsonify({"items": [d.to_dict() for d in defects], "total": total})
 
 
 @testing_bp.route("/programs/<int:pid>/testing/defects", methods=["POST"])
@@ -562,7 +641,12 @@ def create_defect(pid):
         config_item_id=data.get("config_item_id"),
     )
     db.session.add(defect)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(defect.to_dict()), 201
 
 
@@ -603,7 +687,12 @@ def update_defect(defect_id):
     if new_status in ("closed", "rejected") and old_status not in ("closed", "rejected"):
         defect.resolved_at = datetime.now(timezone.utc)
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(defect.to_dict())
 
 
@@ -614,7 +703,12 @@ def delete_defect(defect_id):
     if err:
         return err
     db.session.delete(defect)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Defect deleted"}), 200
 
 
@@ -721,82 +815,113 @@ def regression_sets(pid):
 @testing_bp.route("/programs/<int:pid>/testing/dashboard", methods=["GET"])
 def testing_dashboard(pid):
     """
-    Test Hub KPI dashboard data.
-
-    Returns:
-        - pass_rate: pass / total executed
-        - defect_velocity: defects per cycle
-        - severity_distribution: P1/P2/P3/P4 counts
-        - defect_aging: current open defects with aging
-        - reopen_rate: reopened_count / total defects
-        - test_layer_summary: stats per layer
-        - cycle_burndown: execution progress per cycle
-        - coverage: requirement test coverage
+    Test Hub KPI dashboard data — SQL aggregate version (no full-table loads).
     """
     program, err = _get_or_404(Program, pid)
     if err:
         return err
 
-    test_cases = TestCase.query.filter_by(program_id=pid).all()
-    defects = Defect.query.filter_by(program_id=pid).all()
-    requirements = Requirement.query.filter_by(program_id=pid).all()
+    from collections import defaultdict
 
-    # Get all plans and cycles for this program
-    plans = TestPlan.query.filter_by(program_id=pid).all()
-    plan_ids = [p.id for p in plans]
-    cycles = TestCycle.query.filter(TestCycle.plan_id.in_(plan_ids)).all() if plan_ids else []
-    cycle_ids = [c.id for c in cycles]
-    executions = TestExecution.query.filter(
-        TestExecution.cycle_id.in_(cycle_ids)
-    ).all() if cycle_ids else []
+    # ── Counts via SQL ────────────────────────────────────────────────────
+    total_test_cases = TestCase.query.filter_by(program_id=pid).count()
+    total_defects = Defect.query.filter_by(program_id=pid).count()
+    total_requirements = Requirement.query.filter_by(program_id=pid).count()
 
-    # ── Pass Rate
-    executed = [e for e in executions if e.result != "not_run"]
-    passed = [e for e in executed if e.result == "pass"]
-    pass_rate = round(len(passed) / len(executed) * 100, 1) if executed else 0
+    # Subquery for plan_ids → cycle_ids belonging to this program
+    plan_ids_sq = db.session.query(TestPlan.id).filter_by(program_id=pid).subquery()
+    cycle_q = TestCycle.query.filter(TestCycle.plan_id.in_(db.session.query(plan_ids_sq)))
+    cycle_ids_sq = (
+        db.session.query(TestCycle.id)
+        .filter(TestCycle.plan_id.in_(db.session.query(plan_ids_sq)))
+        .subquery()
+    )
 
-    # ── Severity Distribution
-    severity_dist = {"P1": 0, "P2": 0, "P3": 0, "P4": 0}
-    for d in defects:
-        if d.severity in severity_dist:
-            severity_dist[d.severity] += 1
+    total_executions = TestExecution.query.filter(
+        TestExecution.cycle_id.in_(db.session.query(cycle_ids_sq))
+    ).count()
 
-    # ── Defect Aging (open defects)
-    open_defects = [d for d in defects if d.status not in ("closed", "rejected")]
+    # ── Pass Rate via aggregate ───────────────────────────────────────────
+    exec_counts = dict(
+        db.session.query(TestExecution.result, db.func.count(TestExecution.id))
+        .filter(TestExecution.cycle_id.in_(db.session.query(cycle_ids_sq)))
+        .group_by(TestExecution.result)
+        .all()
+    )
+    total_executed = sum(v for k, v in exec_counts.items() if k != "not_run")
+    total_passed = exec_counts.get("pass", 0)
+    pass_rate = round(total_passed / total_executed * 100, 1) if total_executed else 0
+
+    # ── Severity Distribution via aggregate ───────────────────────────────
+    sev_rows = dict(
+        db.session.query(Defect.severity, db.func.count(Defect.id))
+        .filter_by(program_id=pid)
+        .group_by(Defect.severity)
+        .all()
+    )
+    severity_dist = {s: sev_rows.get(s, 0) for s in ("P1", "P2", "P3", "P4")}
+
+    # ── Open defects + aging (top 20 only) ────────────────────────────────
+    open_defects_q = Defect.query.filter(
+        Defect.program_id == pid,
+        Defect.status.notin_(["closed", "rejected"]),
+    )
+    open_defect_count = open_defects_q.count()
+    aging_defects = open_defects_q.order_by(Defect.created_at.asc()).limit(20).all()
     aging_list = [
         {"id": d.id, "code": d.code, "title": d.title,
          "severity": d.severity, "aging_days": d.aging_days}
-        for d in sorted(open_defects, key=lambda x: x.aging_days, reverse=True)
+        for d in aging_defects
     ]
 
-    # ── Re-open Rate
-    total_reopens = sum(d.reopen_count for d in defects)
-    reopen_rate = round(total_reopens / len(defects) * 100, 1) if defects else 0
+    # ── Reopen Rate ───────────────────────────────────────────────────────
+    total_reopens = db.session.query(
+        db.func.coalesce(db.func.sum(Defect.reopen_count), 0)
+    ).filter_by(program_id=pid).scalar()
+    reopen_rate = round(int(total_reopens) / total_defects * 100, 1) if total_defects else 0
 
-    # ── Test Layer Summary
+    # ── Test Layer Summary via aggregate ──────────────────────────────────
+    layer_total = dict(
+        db.session.query(TestCase.test_layer, db.func.count(TestCase.id))
+        .filter_by(program_id=pid)
+        .group_by(TestCase.test_layer)
+        .all()
+    )
+    # Execution results per layer
+    layer_exec = (
+        db.session.query(TestCase.test_layer, TestExecution.result, db.func.count(TestExecution.id))
+        .join(TestExecution, TestExecution.test_case_id == TestCase.id)
+        .filter(
+            TestCase.program_id == pid,
+            TestExecution.cycle_id.in_(db.session.query(cycle_ids_sq)),
+        )
+        .group_by(TestCase.test_layer, TestExecution.result)
+        .all()
+    )
     layer_summary = {}
-    for tc in test_cases:
-        layer = tc.test_layer or "unknown"
-        if layer not in layer_summary:
-            layer_summary[layer] = {"total": 0, "passed": 0, "failed": 0, "not_run": 0}
-        layer_summary[layer]["total"] += 1
+    for layer, cnt in layer_total.items():
+        lkey = layer or "unknown"
+        layer_summary[lkey] = {"total": cnt, "passed": 0, "failed": 0, "not_run": 0}
+    for layer, result, cnt in layer_exec:
+        lkey = layer or "unknown"
+        if lkey not in layer_summary:
+            layer_summary[lkey] = {"total": 0, "passed": 0, "failed": 0, "not_run": 0}
+        if result == "pass":
+            layer_summary[lkey]["passed"] += cnt
+        elif result == "fail":
+            layer_summary[lkey]["failed"] += cnt
 
-    for exe in executions:
-        tc = next((tc for tc in test_cases if tc.id == exe.test_case_id), None)
-        if tc:
-            layer = tc.test_layer or "unknown"
-            if layer in layer_summary:
-                if exe.result == "pass":
-                    layer_summary[layer]["passed"] += 1
-                elif exe.result == "fail":
-                    layer_summary[layer]["failed"] += 1
-
-    # ── Defect Velocity (defects reported per week, last 12 weeks)
-    from collections import defaultdict
-    velocity_buckets = defaultdict(int)
+    # ── Defect Velocity (last 12 weeks) ───────────────────────────────────
     now_utc = datetime.now(timezone.utc)
-    for d in defects:
-        reported = d.reported_at or d.created_at
+    velocity_buckets = defaultdict(int)
+    # Only load reported_at/created_at columns for velocity calc
+    velocity_rows = (
+        db.session.query(Defect.reported_at, Defect.created_at)
+        .filter_by(program_id=pid)
+        .all()
+    )
+    for reported_at, created_at in velocity_rows:
+        reported = reported_at or created_at
         if reported:
             if reported.tzinfo is None:
                 reported = reported.replace(tzinfo=timezone.utc)
@@ -804,75 +929,103 @@ def testing_dashboard(pid):
             week_ago = delta_days // 7
             if week_ago < 12:
                 velocity_buckets[week_ago] += 1
-    defect_velocity = []
-    for w in range(11, -1, -1):
-        label = f"W-{w}" if w > 0 else "This week"
-        defect_velocity.append({"week": label, "count": velocity_buckets.get(w, 0)})
+    defect_velocity = [
+        {"week": f"W-{w}" if w > 0 else "This week", "count": velocity_buckets.get(w, 0)}
+        for w in range(11, -1, -1)
+    ]
 
-    # ── Cycle Burndown
+    # ── Cycle Burndown ────────────────────────────────────────────────────
+    cycles = cycle_q.all()
+    cycle_ids_list = [c.id for c in cycles]
+    # Aggregate execution counts per cycle
+    burndown_rows = dict(
+        db.session.query(
+            TestExecution.cycle_id,
+            db.func.count(TestExecution.id),
+        )
+        .filter(TestExecution.cycle_id.in_(cycle_ids_list))
+        .group_by(TestExecution.cycle_id)
+        .all()
+    ) if cycle_ids_list else {}
+    done_rows = dict(
+        db.session.query(
+            TestExecution.cycle_id,
+            db.func.count(TestExecution.id),
+        )
+        .filter(
+            TestExecution.cycle_id.in_(cycle_ids_list),
+            TestExecution.result != "not_run",
+        )
+        .group_by(TestExecution.cycle_id)
+        .all()
+    ) if cycle_ids_list else {}
     cycle_burndown = []
     for c in cycles:
-        cycle_execs = [e for e in executions if e.cycle_id == c.id]
-        total = len(cycle_execs)
-        done = len([e for e in cycle_execs if e.result != "not_run"])
+        total = burndown_rows.get(c.id, 0)
+        done = done_rows.get(c.id, 0)
         cycle_burndown.append({
-            "cycle_id": c.id,
-            "cycle_name": c.name,
-            "test_layer": c.test_layer,
-            "status": c.status,
-            "total_executions": total,
-            "completed": done,
+            "cycle_id": c.id, "cycle_name": c.name,
+            "test_layer": c.test_layer, "status": c.status,
+            "total_executions": total, "completed": done,
             "remaining": total - done,
             "progress_pct": round(done / total * 100, 1) if total else 0,
         })
 
-    # ── Coverage (requirements with at least one test case)
-    req_ids_with_tests = set(tc.requirement_id for tc in test_cases if tc.requirement_id)
-    coverage_pct = round(len(req_ids_with_tests) / len(requirements) * 100, 1) if requirements else 0
+    # ── Coverage ──────────────────────────────────────────────────────────
+    covered_count = (
+        db.session.query(db.func.count(db.distinct(TestCase.requirement_id)))
+        .filter(TestCase.program_id == pid, TestCase.requirement_id.isnot(None))
+        .scalar()
+    )
+    coverage_pct = round(covered_count / total_requirements * 100, 1) if total_requirements else 0
 
-    # ── Environment Stability (defects grouped by environment)
-    env_defects = {}
-    for d in defects:
-        env = getattr(d, "environment", None) or "unknown"
+    # ── Environment Stability via aggregate ───────────────────────────────
+    env_rows = (
+        db.session.query(Defect.environment, Defect.status, Defect.severity, db.func.count(Defect.id))
+        .filter_by(program_id=pid)
+        .group_by(Defect.environment, Defect.status, Defect.severity)
+        .all()
+    )
+    env_defects: dict = {}
+    for env, status, severity, cnt in env_rows:
+        env = env or "unknown"
         if env not in env_defects:
-            env_defects[env] = {"total": 0, "open": 0, "closed": 0,
-                                "p1_p2": 0}
-        env_defects[env]["total"] += 1
-        if d.status in ("closed", "rejected"):
-            env_defects[env]["closed"] += 1
+            env_defects[env] = {"total": 0, "open": 0, "closed": 0, "p1_p2": 0}
+        env_defects[env]["total"] += cnt
+        if status in ("closed", "rejected"):
+            env_defects[env]["closed"] += cnt
         else:
-            env_defects[env]["open"] += 1
-        if d.severity in ("P1", "P2"):
-            env_defects[env]["p1_p2"] += 1
+            env_defects[env]["open"] += cnt
+        if severity in ("P1", "P2"):
+            env_defects[env]["p1_p2"] += cnt
 
     environment_stability = {}
     for env, stats in env_defects.items():
-        failure_rate = round(stats["open"] / stats["total"] * 100, 1) if stats["total"] else 0
         environment_stability[env] = {
             **stats,
-            "failure_rate": failure_rate,
+            "failure_rate": round(stats["open"] / stats["total"] * 100, 1) if stats["total"] else 0,
         }
 
     return jsonify({
         "program_id": pid,
         "pass_rate": pass_rate,
-        "total_test_cases": len(test_cases),
-        "total_executions": len(executions),
-        "total_executed": len(executed),
-        "total_passed": len(passed),
-        "total_defects": len(defects),
-        "open_defects": len(open_defects),
+        "total_test_cases": total_test_cases,
+        "total_executions": total_executions,
+        "total_executed": total_executed,
+        "total_passed": total_passed,
+        "total_defects": total_defects,
+        "open_defects": open_defect_count,
         "severity_distribution": severity_dist,
-        "defect_aging": aging_list[:20],  # Top 20 oldest
+        "defect_aging": aging_list,
         "reopen_rate": reopen_rate,
-        "total_reopens": total_reopens,
+        "total_reopens": int(total_reopens),
         "test_layer_summary": layer_summary,
         "defect_velocity": defect_velocity,
         "cycle_burndown": cycle_burndown,
         "coverage": {
-            "total_requirements": len(requirements),
-            "covered": len(req_ids_with_tests),
-            "uncovered": len(requirements) - len(req_ids_with_tests),
+            "total_requirements": total_requirements,
+            "covered": covered_count,
+            "uncovered": total_requirements - covered_count,
             "coverage_pct": coverage_pct,
         },
         "environment_stability": environment_stability,

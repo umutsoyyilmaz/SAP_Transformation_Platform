@@ -40,6 +40,8 @@ Endpoints (Sprint 9 scope — aligned with master plan):
         DELETE /api/v1/checklist/<id>                        — Delete item
 """
 
+import logging
+
 from datetime import date, datetime, timezone
 
 from flask import Blueprint, jsonify, request
@@ -52,6 +54,9 @@ from app.models.integration import (
     seed_default_checklist,
 )
 from app.models.program import Program
+from app.blueprints import paginate_query
+
+logger = logging.getLogger(__name__)
 
 integration_bp = Blueprint("integration", __name__, url_prefix="/api/v1")
 
@@ -109,8 +114,8 @@ def list_interfaces(program_id):
         else:
             query = query.filter(Interface.wave_id == wave_id)
 
-    interfaces = query.order_by(Interface.id.desc()).all()
-    return jsonify([i.to_dict() for i in interfaces])
+    interfaces, total = paginate_query(query.order_by(Interface.id.desc()))
+    return jsonify({"items": [i.to_dict() for i in interfaces], "total": total})
 
 
 @integration_bp.route("/programs/<int:program_id>/interfaces", methods=["POST"])
@@ -165,7 +170,12 @@ def create_interface(program_id):
     # Auto-create 12-item SAP standard readiness checklist
     seed_default_checklist(iface.id)
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(iface.to_dict(include_children=True)), 201
 
 
@@ -206,7 +216,12 @@ def update_interface(interface_id):
     if "go_live_date" in data:
         iface.go_live_date = _parse_date(data["go_live_date"])
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(iface.to_dict(include_children=True))
 
 
@@ -217,7 +232,12 @@ def delete_interface(interface_id):
     if err:
         return err
     db.session.delete(iface)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Interface deleted", "id": interface_id})
 
 
@@ -236,7 +256,12 @@ def update_interface_status(interface_id):
         return jsonify({"error": f"Invalid status. Use: {sorted(INTERFACE_STATUSES)}"}), 400
 
     iface.status = new_status
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(iface.to_dict())
 
 
@@ -326,7 +351,12 @@ def create_wave(program_id):
         notes=data.get("notes", ""),
     )
     db.session.add(wave)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(wave.to_dict()), 201
 
 
@@ -359,7 +389,12 @@ def update_wave(wave_id):
         if date_field in data:
             setattr(wave, date_field, _parse_date(data[date_field]))
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(wave.to_dict(include_interfaces=True))
 
 
@@ -373,7 +408,12 @@ def delete_wave(wave_id):
     # Unassign interfaces from this wave
     Interface.query.filter_by(wave_id=wave_id).update({"wave_id": None})
     db.session.delete(wave)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Wave deleted", "id": wave_id})
 
 
@@ -393,7 +433,12 @@ def assign_wave(interface_id):
             return err
 
     iface.wave_id = wave_id
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(iface.to_dict())
 
 
@@ -437,7 +482,12 @@ def create_connectivity_test(interface_id):
         notes=data.get("notes", ""),
     )
     db.session.add(test)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(test.to_dict()), 201
 
 
@@ -457,7 +507,12 @@ def delete_connectivity_test(test_id):
     if err:
         return err
     db.session.delete(test)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Connectivity test deleted", "id": test_id})
 
 
@@ -502,7 +557,12 @@ def create_switch_plan(interface_id):
         notes=data.get("notes", ""),
     )
     db.session.add(plan)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(plan.to_dict()), 201
 
 
@@ -523,7 +583,12 @@ def update_switch_plan(plan_id):
         if field in data:
             setattr(plan, field, data[field])
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(plan.to_dict())
 
 
@@ -534,7 +599,12 @@ def delete_switch_plan(plan_id):
     if err:
         return err
     db.session.delete(plan)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Switch plan entry deleted", "id": plan_id})
 
 
@@ -551,7 +621,12 @@ def execute_switch_plan(plan_id):
     if "actual_duration_min" in data:
         plan.actual_duration_min = data["actual_duration_min"]
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(plan.to_dict())
 
 
@@ -598,7 +673,12 @@ def add_checklist_item(interface_id):
         notes=data.get("notes", ""),
     )
     db.session.add(item)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(item.to_dict()), 201
 
 
@@ -625,7 +705,12 @@ def update_checklist_item(item_id):
         else:
             item.checked_at = None
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(item.to_dict())
 
 
@@ -636,5 +721,10 @@ def delete_checklist_item(item_id):
     if err:
         return err
     db.session.delete(item)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Checklist item deleted", "id": item_id})

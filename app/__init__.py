@@ -12,12 +12,20 @@ import os
 
 from flask import Flask, send_from_directory
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from flask_migrate import Migrate
 
 from app.config import config
 from app.models import db
+from app.auth import init_auth
 
 migrate = Migrate()
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=[],                     # no global limit — apply per-blueprint
+    storage_uri="memory://",               # use Redis URI in production
+)
 
 
 def create_app(config_name=None):
@@ -46,7 +54,31 @@ def create_app(config_name=None):
     # ── Extensions ───────────────────────────────────────────────────────
     db.init_app(app)
     migrate.init_app(app, db)
-    CORS(app)
+    limiter.init_app(app)
+    cors_origins = app.config.get("CORS_ORIGINS", "*")
+    if cors_origins and cors_origins != "*":
+        CORS(app, origins=[o.strip() for o in cors_origins.split(",") if o.strip()])
+    else:
+        CORS(app)
+
+    # ── Authentication & CSRF middleware ──────────────────────────────────
+    init_auth(app)
+
+    # ── Request guards (input length + Content-Type) ─────────────────────
+    app.config.setdefault("MAX_CONTENT_LENGTH", 2 * 1024 * 1024)  # 2 MB
+
+    @app.before_request
+    def _guard_request():
+        from flask import request as _req, abort
+        # Input length cap
+        max_len = app.config.get("MAX_CONTENT_LENGTH")
+        if max_len and _req.content_length and _req.content_length > max_len:
+            abort(413, description="Request body too large")
+        # Content-Type validation for mutating methods
+        if _req.method in ("POST", "PUT", "PATCH") and _req.path.startswith("/api/"):
+            ct = _req.content_type or ""
+            if _req.data and "json" not in ct and "multipart/form-data" not in ct:
+                abort(415, description="Content-Type must be application/json")
 
     # ── Import all models so Alembic can detect them ─────────────────────
     from app.models import program as _program_models       # noqa: F401

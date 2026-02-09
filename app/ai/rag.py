@@ -407,14 +407,32 @@ class RAGPipeline:
                 logger.warning("Query embedding failed: %s", e)
 
         if query_vec:
-            for emb in candidates:
-                if emb.embedding_json:
-                    try:
-                        emb_vec = json.loads(emb.embedding_json)
-                        sim = _cosine_similarity(query_vec, emb_vec)
-                        semantic_scores[emb.id] = sim
-                    except (json.JSONDecodeError, ValueError):
-                        pass
+            # Try pgvector distance operator first (database-side cosine similarity)
+            try:
+                from sqlalchemy import text as sa_text
+                vec_str = "[" + ",".join(str(v) for v in query_vec) + "]"
+                semantic_q = (
+                    db.session.query(
+                        AIEmbedding.id,
+                        (1 - db.literal_column(f"embedding_vector <=> '{vec_str}'::vector")).label("sim"),
+                    )
+                    .filter(AIEmbedding.id.in_([c.id for c in candidates]))
+                    .filter(AIEmbedding.embedding_json.isnot(None))
+                    .order_by(db.literal_column("sim").desc())
+                    .limit(top_k * 3)
+                    .all()
+                )
+                semantic_scores = {row[0]: float(row[1]) for row in semantic_q}
+            except Exception:
+                # Fallback to Python cosine similarity (SQLite / no pgvector)
+                for emb in candidates:
+                    if emb.embedding_json:
+                        try:
+                            emb_vec = json.loads(emb.embedding_json)
+                            sim = _cosine_similarity(query_vec, emb_vec)
+                            semantic_scores[emb.id] = sim
+                        except (json.JSONDecodeError, ValueError):
+                            pass
 
         # Keyword search scores (BM25-like)
         keyword_scores = _keyword_search(query, candidates)
@@ -516,6 +534,12 @@ def _keyword_search(query: str, candidates: list[AIEmbedding]) -> dict[int, floa
 
     n = len(candidates)
     scores = {}
+
+    # Hoist avg_dl outside the loop — O(N) instead of O(N²)
+    avg_dl = sum(len(doc_tokens_map[e.id]) for e in candidates) / max(n, 1)
+    k1 = 1.2
+    b = 0.75
+
     for emb in candidates:
         tokens = doc_tokens_map[emb.id]
         if not tokens:
@@ -527,9 +551,6 @@ def _keyword_search(query: str, candidates: list[AIEmbedding]) -> dict[int, floa
         for t in tokens:
             tf_map[t] += 1
 
-        avg_dl = sum(len(doc_tokens_map[e.id]) for e in candidates) / max(n, 1)
-        k1 = 1.2
-        b = 0.75
         dl = len(tokens)
 
         for qt in query_tokens:

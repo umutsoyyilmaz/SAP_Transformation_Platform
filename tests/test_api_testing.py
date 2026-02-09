@@ -50,9 +50,8 @@ def session(app, _setup_db):
     with app.app_context():
         yield
         _db.session.rollback()
-        for model in [TestExecution, Defect, TestCase, TestCycle, TestPlan, Requirement, Program]:
-            _db.session.query(model).delete()
-        _db.session.commit()
+        _db.drop_all()
+        _db.create_all()
 
 
 @pytest.fixture
@@ -264,14 +263,14 @@ class TestTestCases:
         _create_case(client, p["id"], title="Case A")
         _create_case(client, p["id"], title="Case B")
         res = client.get(f"/api/v1/programs/{p['id']}/testing/catalog")
-        assert len(res.get_json()) == 2
+        assert len(res.get_json()["items"]) == 2
 
     def test_filter_by_layer(self, client):
         p = _create_program(client)
         _create_case(client, p["id"], title="SIT case", test_layer="sit")
         _create_case(client, p["id"], title="UAT case", test_layer="uat")
         res = client.get(f"/api/v1/programs/{p['id']}/testing/catalog?test_layer=uat")
-        data = res.get_json()
+        data = res.get_json()["items"]
         assert len(data) == 1
         assert data[0]["test_layer"] == "uat"
 
@@ -280,21 +279,21 @@ class TestTestCases:
         _create_case(client, p["id"], title="Ready case", status="ready")
         _create_case(client, p["id"], title="Draft case")
         res = client.get(f"/api/v1/programs/{p['id']}/testing/catalog?status=ready")
-        assert len(res.get_json()) == 1
+        assert len(res.get_json()["items"]) == 1
 
     def test_filter_by_regression(self, client):
         p = _create_program(client)
         _create_case(client, p["id"], title="Regression", is_regression=True)
         _create_case(client, p["id"], title="Normal")
         res = client.get(f"/api/v1/programs/{p['id']}/testing/catalog?is_regression=true")
-        assert len(res.get_json()) == 1
+        assert len(res.get_json()["items"]) == 1
 
     def test_search_cases(self, client):
         p = _create_program(client)
         _create_case(client, p["id"], title="MM purchase order flow")
         _create_case(client, p["id"], title="FI journal entry")
         res = client.get(f"/api/v1/programs/{p['id']}/testing/catalog?search=purchase")
-        assert len(res.get_json()) == 1
+        assert len(res.get_json()["items"]) == 1
 
     def test_get_case_detail(self, client):
         p = _create_program(client)
@@ -436,28 +435,28 @@ class TestDefects:
         _create_defect(client, p["id"], title="Defect A")
         _create_defect(client, p["id"], title="Defect B")
         res = client.get(f"/api/v1/programs/{p['id']}/testing/defects")
-        assert len(res.get_json()) == 2
+        assert len(res.get_json()["items"]) == 2
 
     def test_filter_by_severity(self, client):
         p = _create_program(client)
         _create_defect(client, p["id"], title="P1 defect", severity="P1")
         _create_defect(client, p["id"], title="P3 defect", severity="P3")
         res = client.get(f"/api/v1/programs/{p['id']}/testing/defects?severity=P1")
-        assert len(res.get_json()) == 1
+        assert len(res.get_json()["items"]) == 1
 
     def test_filter_by_status(self, client):
         p = _create_program(client)
         _create_defect(client, p["id"], title="Open", status="open")
         _create_defect(client, p["id"], title="New")
         res = client.get(f"/api/v1/programs/{p['id']}/testing/defects?status=open")
-        assert len(res.get_json()) == 1
+        assert len(res.get_json()["items"]) == 1
 
     def test_search_defects(self, client):
         p = _create_program(client)
         _create_defect(client, p["id"], title="MM PO approval workflow fails")
         _create_defect(client, p["id"], title="FI journal entry error")
         res = client.get(f"/api/v1/programs/{p['id']}/testing/defects?search=approval")
-        assert len(res.get_json()) == 1
+        assert len(res.get_json()["items"]) == 1
 
     def test_get_defect_detail(self, client):
         p = _create_program(client)

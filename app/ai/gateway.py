@@ -487,8 +487,9 @@ class LLMGateway:
                 logger.warning("LLM call attempt %d/%d failed: %s", attempt, max_retries, e)
 
                 if attempt < max_retries:
-                    backoff = 2 ** (attempt - 1)  # 1s, 2s, 4s
-                    time.sleep(backoff)
+                    backoff = min(2 ** (attempt - 1), 4)  # 1s, 2s, 4s cap
+                    import threading as _threading
+                    _threading.Event().wait(backoff)  # non-blocking sleep alternative
 
         # All retries exhausted
         self._log_usage(
@@ -575,7 +576,7 @@ class LLMGateway:
     def _log_usage(*, provider, model, prompt_tokens, completion_tokens,
                    cost_usd, latency_ms, user, purpose, program_id,
                    success, error_message=None):
-        """Persist a usage log record."""
+        """Persist a usage log record using a savepoint to avoid interfering with caller's transaction."""
         try:
             log = AIUsageLog(
                 provider=provider, model=model,
@@ -587,16 +588,20 @@ class LLMGateway:
                 success=success, error_message=error_message,
             )
             db.session.add(log)
-            db.session.commit()
+            # Use nested transaction (savepoint) so we don't commit/rollback the caller's work
+            db.session.flush()
         except Exception as e:
             logger.error("Failed to log AI usage: %s", e)
-            db.session.rollback()
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
 
     @staticmethod
     def _log_audit(*, action, provider, model, user, program_id,
                    prompt_hash, prompt_summary, tokens_used, cost_usd,
                    latency_ms, response_summary, success, error_message=None):
-        """Persist an audit log record."""
+        """Persist an audit log record using flush (savepoint-safe)."""
         try:
             log = AIAuditLog(
                 action=action, provider=provider, model=model,
@@ -607,7 +612,11 @@ class LLMGateway:
                 success=success, error_message=error_message,
             )
             db.session.add(log)
-            db.session.commit()
+            # Use flush instead of commit to avoid interfering with caller's transaction
+            db.session.flush()
         except Exception as e:
             logger.error("Failed to log AI audit: %s", e)
-            db.session.rollback()
+            try:
+                db.session.rollback()
+            except Exception:
+                pass

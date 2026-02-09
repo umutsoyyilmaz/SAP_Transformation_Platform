@@ -39,8 +39,12 @@ PROCESS_AREAS = {
     "project_mgmt",
     "plant_maintenance",
     "quality_mgmt",
+    "lead_to_order",
+    "service_to_customer",
     "other",
 }
+
+VALUE_CHAIN_CATEGORIES = {"yonetimsel", "cekirdek", "destek", ""}
 
 
 class Scenario(db.Model):
@@ -73,6 +77,16 @@ class Scenario(db.Model):
     process_area = db.Column(
         db.String(50), default="other",
         comment="E2E process: order_to_cash, procure_to_pay, record_to_report, etc.",
+    )
+
+    # Signavio L1 Value Chain classification
+    value_chain_category = db.Column(
+        db.String(30), default="",
+        comment="yonetimsel | cekirdek | destek  (Signavio L1)",
+    )
+    signavio_code = db.Column(
+        db.String(20), default="",
+        comment="L1.1, L1.2, L1.3  (Signavio hierarchy code)",
     )
 
     # Status & priority
@@ -129,6 +143,8 @@ class Scenario(db.Model):
             "description": self.description,
             "sap_module": self.sap_module,
             "process_area": self.process_area,
+            "value_chain_category": self.value_chain_category,
+            "signavio_code": self.signavio_code,
             "status": self.status,
             "priority": self.priority,
             "owner": self.owner,

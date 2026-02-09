@@ -14,10 +14,17 @@ const API = (() => {
         if (body) opts.body = JSON.stringify(body);
 
         const res = await fetch(`${BASE}${path}`, opts);
-        const data = await res.json();
+
+        let data;
+        try {
+            data = await res.json();
+        } catch {
+            if (!res.ok) throw new Error(`Request failed (${res.status})`);
+            return null;
+        }
 
         if (!res.ok) {
-            const msg = data.error || `Request failed (${res.status})`;
+            const msg = (data && data.error) || `Request failed (${res.status})`;
             throw new Error(msg);
         }
         return data;

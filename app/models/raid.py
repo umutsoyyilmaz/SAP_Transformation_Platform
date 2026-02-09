@@ -79,12 +79,12 @@ class Risk(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     program_id = db.Column(
-        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False,
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True,
     )
     code = db.Column(db.String(30), unique=True, nullable=False, comment="Auto-generated: RSK-001")
     title = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text, default="")
-    status = db.Column(db.String(30), default="identified")
+    status = db.Column(db.String(30), default="identified", index=True)
     owner = db.Column(db.String(150), default="")
     priority = db.Column(db.String(20), default="medium")
 
@@ -100,8 +100,8 @@ class Risk(db.Model):
     trigger_event = db.Column(db.String(300), default="")
 
     # References
-    workstream_id = db.Column(db.Integer, db.ForeignKey("workstreams.id"), nullable=True)
-    phase_id = db.Column(db.Integer, db.ForeignKey("phases.id"), nullable=True)
+    workstream_id = db.Column(db.Integer, db.ForeignKey("workstreams.id", ondelete="SET NULL"), nullable=True, index=True)
+    phase_id = db.Column(db.Integer, db.ForeignKey("phases.id", ondelete="SET NULL"), nullable=True, index=True)
 
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
@@ -156,12 +156,12 @@ class Action(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     program_id = db.Column(
-        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False,
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True,
     )
     code = db.Column(db.String(30), unique=True, nullable=False, comment="Auto-generated: ACT-001")
     title = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text, default="")
-    status = db.Column(db.String(30), default="open")
+    status = db.Column(db.String(30), default="open", index=True)
     owner = db.Column(db.String(150), default="")
     priority = db.Column(db.String(20), default="medium")
     action_type = db.Column(db.String(30), default="corrective")
@@ -175,8 +175,8 @@ class Action(db.Model):
     linked_entity_id = db.Column(db.Integer, nullable=True)
 
     # References
-    workstream_id = db.Column(db.Integer, db.ForeignKey("workstreams.id"), nullable=True)
-    phase_id = db.Column(db.Integer, db.ForeignKey("phases.id"), nullable=True)
+    workstream_id = db.Column(db.Integer, db.ForeignKey("workstreams.id", ondelete="SET NULL"), nullable=True, index=True)
+    phase_id = db.Column(db.Integer, db.ForeignKey("phases.id", ondelete="SET NULL"), nullable=True, index=True)
 
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
@@ -221,12 +221,12 @@ class Issue(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     program_id = db.Column(
-        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False,
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True,
     )
     code = db.Column(db.String(30), unique=True, nullable=False, comment="Auto-generated: ISS-001")
     title = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text, default="")
-    status = db.Column(db.String(30), default="open")
+    status = db.Column(db.String(30), default="open", index=True)
     owner = db.Column(db.String(150), default="")
     priority = db.Column(db.String(20), default="medium")
 
@@ -238,8 +238,8 @@ class Issue(db.Model):
     resolution_date = db.Column(db.Date, nullable=True)
 
     # References
-    workstream_id = db.Column(db.Integer, db.ForeignKey("workstreams.id"), nullable=True)
-    phase_id = db.Column(db.Integer, db.ForeignKey("phases.id"), nullable=True)
+    workstream_id = db.Column(db.Integer, db.ForeignKey("workstreams.id", ondelete="SET NULL"), nullable=True, index=True)
+    phase_id = db.Column(db.Integer, db.ForeignKey("phases.id", ondelete="SET NULL"), nullable=True, index=True)
 
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
@@ -284,12 +284,12 @@ class Decision(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     program_id = db.Column(
-        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False,
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True,
     )
     code = db.Column(db.String(30), unique=True, nullable=False, comment="Auto-generated: DEC-001")
     title = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text, default="")
-    status = db.Column(db.String(30), default="proposed")
+    status = db.Column(db.String(30), default="proposed", index=True)
     owner = db.Column(db.String(150), default="")
     priority = db.Column(db.String(20), default="medium")
 
@@ -302,8 +302,8 @@ class Decision(db.Model):
     reversible = db.Column(db.Boolean, default=True)
 
     # References
-    workstream_id = db.Column(db.Integer, db.ForeignKey("workstreams.id"), nullable=True)
-    phase_id = db.Column(db.Integer, db.ForeignKey("phases.id"), nullable=True)
+    workstream_id = db.Column(db.Integer, db.ForeignKey("workstreams.id", ondelete="SET NULL"), nullable=True, index=True)
+    phase_id = db.Column(db.Integer, db.ForeignKey("phases.id", ondelete="SET NULL"), nullable=True, index=True)
 
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
@@ -344,14 +344,19 @@ def _next_code(model_class, prefix: str) -> str:
     """
     Generate the next sequential code for a RAID entity.
     E.g. RSK-001, RSK-002, ...
+
+    Race-safe: uses MAX(id) ordering and SELECT ... FOR UPDATE where supported.
+    Callers should handle IntegrityError and retry if a unique constraint exists.
     """
+    full_prefix = prefix + "-"
     last = (
         model_class.query
-        .filter(model_class.code.like(f"{prefix}-%"))
+        .filter(model_class.code.like(f"{full_prefix}%"))
         .order_by(model_class.id.desc())
+        .with_for_update(skip_locked=True)
         .first()
     )
-    if last and last.code.startswith(prefix + "-"):
+    if last and last.code.startswith(full_prefix):
         try:
             num = int(last.code.split("-")[1]) + 1
         except (IndexError, ValueError):

@@ -46,9 +46,8 @@ def session(app, _setup_db):
     with app.app_context():
         yield
         _db.session.rollback()
-        for model in [Notification, Decision, Issue, Action, Risk, Program]:
-            _db.session.query(model).delete()
-        _db.session.commit()
+        _db.drop_all()
+        _db.create_all()
 
 
 @pytest.fixture
@@ -107,7 +106,7 @@ class TestRiskCRUD:
         client.post(f"/api/v1/programs/{prog['id']}/risks", json={"title": "R2", "probability": 1, "impact": 1})
         res = client.get(f"/api/v1/programs/{prog['id']}/risks")
         assert res.status_code == 200
-        data = res.get_json()
+        data = res.get_json()["items"]
         assert len(data) == 2
         # Ordered by score desc
         assert data[0]["risk_score"] >= data[1]["risk_score"]
@@ -117,7 +116,7 @@ class TestRiskCRUD:
         client.post(f"/api/v1/programs/{prog['id']}/risks", json={"title": "R1", "status": "identified"})
         client.post(f"/api/v1/programs/{prog['id']}/risks", json={"title": "R2", "status": "closed"})
         res = client.get(f"/api/v1/programs/{prog['id']}/risks?status=identified")
-        assert len(res.get_json()) == 1
+        assert len(res.get_json()["items"]) == 1
 
     def test_get_risk(self, client):
         prog = _create_program(client)

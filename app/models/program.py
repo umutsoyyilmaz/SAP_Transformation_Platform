@@ -179,6 +179,11 @@ class Phase(db.Model):
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     # ── Relationships ────────────────────────────────────────────────────
     gates = db.relationship(
@@ -200,6 +205,7 @@ class Phase(db.Model):
             "actual_end": self.actual_end.isoformat() if self.actual_end else None,
             "completion_pct": self.completion_pct,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "gates": [g.to_dict() for g in self.gates],
         }
 
@@ -241,6 +247,11 @@ class Gate(db.Model):
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     def to_dict(self):
         return {
@@ -254,6 +265,7 @@ class Gate(db.Model):
             "actual_date": self.actual_date.isoformat() if self.actual_date else None,
             "criteria": self.criteria,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
     def __repr__(self):
@@ -293,6 +305,11 @@ class Workstream(db.Model):
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     def to_dict(self):
         return {
@@ -304,6 +321,7 @@ class Workstream(db.Model):
             "lead_name": self.lead_name,
             "status": self.status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
     def __repr__(self):
@@ -346,6 +364,11 @@ class TeamMember(db.Model):
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     # Relationship to workstream (optional)
     workstream = db.relationship("Workstream", backref="team_members")
@@ -362,6 +385,7 @@ class TeamMember(db.Model):
             "organization": self.organization,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
     def __repr__(self):
@@ -401,6 +425,11 @@ class Committee(db.Model):
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     def to_dict(self):
         return {
@@ -412,6 +441,7 @@ class Committee(db.Model):
             "meeting_frequency": self.meeting_frequency,
             "chair_name": self.chair_name,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
     def __repr__(self):

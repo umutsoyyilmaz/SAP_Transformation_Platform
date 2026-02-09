@@ -8,6 +8,8 @@ Refactored hierarchy:
     Requirement → OpenItem (unresolved questions/decisions).
 """
 
+import logging
+
 from flask import Blueprint, jsonify, request
 
 from app.models import db
@@ -18,6 +20,9 @@ from app.models.requirement import (
     OPEN_ITEM_TYPES, OPEN_ITEM_STATUSES, OPEN_ITEM_PRIORITIES,
 )
 from app.models.scenario import Scenario, Workshop
+from app.blueprints import paginate_query
+
+logger = logging.getLogger(__name__)
 
 requirement_bp = Blueprint("requirement", __name__, url_prefix="/api/v1")
 
@@ -71,13 +76,13 @@ def list_requirements(program_id):
     if request.args.get("parent_only", "").lower() == "true":
         query = query.filter(Requirement.req_parent_id.is_(None))
 
-    reqs = query.order_by(Requirement.code, Requirement.id).all()
+    reqs, total = paginate_query(query.order_by(Requirement.code, Requirement.id))
     results = []
     for r in reqs:
         d = r.to_dict()
         d["process_mapping_count"] = r.process_mappings.count() if r.process_mappings else 0
         results.append(d)
-    return jsonify(results), 200
+    return jsonify({"items": results, "total": total}), 200
 
 
 @requirement_bp.route("/programs/<int:program_id>/requirements", methods=["POST"])
@@ -92,12 +97,26 @@ def create_requirement(program_id):
     if not title:
         return jsonify({"error": "Requirement title is required"}), 400
 
-    # Auto-code generation
+    # Auto-code generation (race-safe: uses MAX instead of COUNT)
     code = data.get("code", "").strip()
     if not code:
         module_prefix = (data.get("module", "") or "GEN").upper()[:3]
-        existing_count = Requirement.query.filter_by(program_id=program_id).count()
-        code = f"REQ-{module_prefix}-{existing_count + 1:04d}"
+        prefix = f"REQ-{module_prefix}-"
+        last = (
+            Requirement.query
+            .filter(Requirement.program_id == program_id,
+                    Requirement.code.like(f"{prefix}%"))
+            .order_by(Requirement.id.desc())
+            .first()
+        )
+        if last and last.code.startswith(prefix):
+            try:
+                next_num = int(last.code[len(prefix):]) + 1
+            except (ValueError, IndexError):
+                next_num = Requirement.query.filter_by(program_id=program_id).count() + 1
+        else:
+            next_num = Requirement.query.filter_by(program_id=program_id).count() + 1
+        code = f"{prefix}{next_num:04d}"
 
     req = Requirement(
         program_id=program_id,
@@ -117,7 +136,12 @@ def create_requirement(program_id):
         notes=data.get("notes", ""),
     )
     db.session.add(req)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(req.to_dict(include_children=True)), 201
 
 
@@ -168,7 +192,12 @@ def update_requirement(req_id):
     if not req.title:
         return jsonify({"error": "Requirement title cannot be empty"}), 400
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(req.to_dict()), 200
 
 
@@ -179,7 +208,12 @@ def delete_requirement(req_id):
     if err:
         return err
     db.session.delete(req)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": f"Requirement '{req.title}' deleted"}), 200
 
 
@@ -223,7 +257,12 @@ def convert_requirement(req_id):
             status="open",
         )
         db.session.add(item)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            logger.exception("Database commit failed")
+            db.session.rollback()
+            return jsonify({"error": "Database error"}), 500
         return jsonify(item.to_dict()), 201
 
     else:  # config
@@ -240,7 +279,12 @@ def convert_requirement(req_id):
             status="open",
         )
         db.session.add(item)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            logger.exception("Database commit failed")
+            db.session.rollback()
+            return jsonify({"error": "Database error"}), 500
         return jsonify(item.to_dict()), 201
 
 
@@ -309,7 +353,12 @@ def create_l3_from_requirement(req_id):
         notes=data.get("mapping_notes", ""),
     )
     db.session.add(mapping)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
 
     result = process.to_dict()
     result["mapping"] = mapping.to_dict()
@@ -376,7 +425,12 @@ def create_open_item(req_id):
         blocker=bool(data.get("blocker", False)),
     )
     db.session.add(oi)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(oi.to_dict()), 201
 
 
@@ -421,7 +475,12 @@ def update_open_item(oi_id):
         except (ValueError, TypeError):
             pass
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(oi.to_dict()), 200
 
 
@@ -432,7 +491,12 @@ def delete_open_item(oi_id):
     if err:
         return err
     db.session.delete(oi)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Open item deleted"}), 200
 
 
@@ -513,7 +577,12 @@ def create_trace(req_id):
         notes=data.get("notes", ""),
     )
     db.session.add(trace)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(trace.to_dict()), 201
 
 
@@ -524,7 +593,12 @@ def delete_trace(trace_id):
     if err:
         return err
     db.session.delete(trace)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Trace removed"}), 200
 
 

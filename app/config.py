@@ -8,6 +8,7 @@ Usage:
 """
 
 import os
+import secrets
 
 basedir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 
@@ -15,11 +16,14 @@ basedir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 _SQLITE_DEV = f"sqlite:///{os.path.join(basedir, 'instance', 'sap_platform_dev.db')}"
 _SQLITE_TEST = "sqlite:///:memory:"
 
+# Generate a random key for development; production MUST use a stable env var
+_DEV_SECRET = secrets.token_hex(32)
+
 
 class Config:
     """Base configuration shared across all environments."""
 
-    SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
+    SECRET_KEY = os.getenv("SECRET_KEY", _DEV_SECRET)
     DEBUG = False
     TESTING = False
 
@@ -30,12 +34,17 @@ class Config:
     # Redis
     REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
+    # CORS
+    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
+
 
 class DevelopmentConfig(Config):
     """Development environment configuration."""
 
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", _SQLITE_DEV)
+    # Auth disabled by default in development for convenience
+    API_AUTH_ENABLED = os.getenv("API_AUTH_ENABLED", "false")
 
 
 class TestingConfig(Config):
@@ -43,6 +52,8 @@ class TestingConfig(Config):
 
     TESTING = True
     SQLALCHEMY_DATABASE_URI = os.getenv("TEST_DATABASE_URL", _SQLITE_TEST)
+    # Auth disabled in test environment
+    API_AUTH_ENABLED = "false"
 
 
 class ProductionConfig(Config):
@@ -50,6 +61,13 @@ class ProductionConfig(Config):
 
     DEBUG = False
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
+    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "")  # Must be set explicitly in production
+
+    def __init__(self):
+        if not self.SQLALCHEMY_DATABASE_URI:
+            raise RuntimeError("DATABASE_URL environment variable is required in production")
+        if not os.getenv("SECRET_KEY"):
+            raise RuntimeError("SECRET_KEY environment variable must be set in production")
 
 
 # Configuration mapping: environment name -> config class

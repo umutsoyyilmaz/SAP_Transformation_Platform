@@ -28,9 +28,9 @@ class Notification(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     program_id = db.Column(
-        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=True,
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=True, index=True,
     )
-    recipient = db.Column(db.String(150), default="all", comment="User name or 'all' for broadcast")
+    recipient = db.Column(db.String(150), default="all", index=True, comment="User name or 'all' for broadcast")
     title = db.Column(db.String(300), nullable=False)
     message = db.Column(db.Text, default="")
     category = db.Column(db.String(30), default="system")
@@ -45,6 +45,8 @@ class Notification(db.Model):
     read_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
 
     def mark_read(self):
         self.is_read = True

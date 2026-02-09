@@ -70,12 +70,12 @@ class TestPlan(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     program_id = db.Column(
-        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False,
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True,
     )
     name = db.Column(db.String(200), nullable=False, comment="e.g. SIT Master Plan, UAT Plan v2")
     description = db.Column(db.Text, default="")
     status = db.Column(
-        db.String(30), default="draft",
+        db.String(30), default="draft", index=True,
         comment="draft | active | completed | cancelled",
     )
     test_strategy = db.Column(db.Text, default="", comment="High-level test approach / strategy notes")
@@ -138,12 +138,12 @@ class TestCycle(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     plan_id = db.Column(
-        db.Integer, db.ForeignKey("test_plans.id", ondelete="CASCADE"), nullable=False,
+        db.Integer, db.ForeignKey("test_plans.id", ondelete="CASCADE"), nullable=False, index=True,
     )
     name = db.Column(db.String(200), nullable=False, comment="e.g. SIT Cycle 1")
     description = db.Column(db.Text, default="")
     status = db.Column(
-        db.String(30), default="planning",
+        db.String(30), default="planning", index=True,
         comment="planning | in_progress | completed | cancelled",
     )
     test_layer = db.Column(
@@ -207,19 +207,19 @@ class TestCase(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     program_id = db.Column(
-        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False,
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True,
     )
     requirement_id = db.Column(
         db.Integer, db.ForeignKey("requirements.id", ondelete="SET NULL"),
-        nullable=True, comment="Linked requirement for traceability",
+        nullable=True, index=True, comment="Linked requirement for traceability",
     )
     backlog_item_id = db.Column(
         db.Integer, db.ForeignKey("backlog_items.id", ondelete="SET NULL"),
-        nullable=True, comment="Linked WRICEF backlog item",
+        nullable=True, index=True, comment="Linked WRICEF backlog item",
     )
     config_item_id = db.Column(
         db.Integer, db.ForeignKey("config_items.id", ondelete="SET NULL"),
-        nullable=True, comment="Linked config item",
+        nullable=True, index=True, comment="Linked config item",
     )
 
     # ── Identification
@@ -273,7 +273,7 @@ class TestCase(db.Model):
     )
     defects = db.relationship(
         "Defect", backref="test_case", lazy="dynamic",
-        cascade="all, delete-orphan",
+        cascade="save-update, merge",
     )
 
     def to_dict(self):
@@ -320,9 +320,11 @@ class TestExecution(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     cycle_id = db.Column(
         db.Integer, db.ForeignKey("test_cycles.id", ondelete="CASCADE"), nullable=False,
+        index=True,
     )
     test_case_id = db.Column(
         db.Integer, db.ForeignKey("test_cases.id", ondelete="CASCADE"), nullable=False,
+        index=True,
     )
 
     result = db.Column(
@@ -384,10 +386,12 @@ class Defect(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False,
+        index=True,
     )
     test_case_id = db.Column(
         db.Integer, db.ForeignKey("test_cases.id", ondelete="SET NULL"),
         nullable=True, comment="Test case that found this defect",
+        index=True,
     )
     backlog_item_id = db.Column(
         db.Integer, db.ForeignKey("backlog_items.id", ondelete="SET NULL"),

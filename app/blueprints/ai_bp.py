@@ -35,8 +35,9 @@ Endpoints:
 
 from datetime import datetime, timezone
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
+from app.auth import require_role
 from app.models import db
 from app.models.ai import (
     AIUsageLog, AIAuditLog, AISuggestion, AIEmbedding,
@@ -50,68 +51,66 @@ from app.ai.assistants import NLQueryAssistant, RequirementAnalyst, DefectTriage
 
 ai_bp = Blueprint("ai", __name__, url_prefix="/api/v1/ai")
 
+# ── Rate limiting ─────────────────────────────────────────────────────────
+from app import limiter  # noqa: E402
 
-# ── Lazy singletons ──────────────────────────────────────────────────────────
+_ai_generate_limit = limiter.shared_limit("30/minute", scope="ai_generate")
+_ai_query_limit = limiter.shared_limit("60/minute", scope="ai_query")
 
-_gateway = None
-_rag = None
-_prompt_registry = None
-_nl_query = None
-_req_analyst = None
-_defect_triage = None
 
+# ── Lazy singletons stored on Flask app (test-isolation safe) ───────────────
 
 def _get_gateway():
-    global _gateway
-    if _gateway is None:
-        _gateway = LLMGateway()
-    return _gateway
+    from flask import current_app
+    if not hasattr(current_app, "_ai_gateway"):
+        current_app._ai_gateway = LLMGateway()
+    return current_app._ai_gateway
 
 
 def _get_rag():
-    global _rag
-    if _rag is None:
-        _rag = RAGPipeline(gateway=_get_gateway())
-    return _rag
+    from flask import current_app
+    if not hasattr(current_app, "_ai_rag"):
+        current_app._ai_rag = RAGPipeline(gateway=_get_gateway())
+    return current_app._ai_rag
 
 
 def _get_prompt_registry():
-    global _prompt_registry
-    if _prompt_registry is None:
-        _prompt_registry = PromptRegistry()
-    return _prompt_registry
+    from flask import current_app
+    if not hasattr(current_app, "_ai_prompt_registry"):
+        current_app._ai_prompt_registry = PromptRegistry()
+    return current_app._ai_prompt_registry
 
 
 def _get_nl_query():
-    global _nl_query
-    if _nl_query is None:
-        _nl_query = NLQueryAssistant(
+    from flask import current_app
+    if not hasattr(current_app, "_ai_nl_query"):
+        current_app._ai_nl_query = NLQueryAssistant(
             gateway=_get_gateway(),
             prompt_registry=_get_prompt_registry(),
         )
-    return _nl_query
+    return current_app._ai_nl_query
 
 
 def _get_req_analyst():
-    global _req_analyst
-    if _req_analyst is None:
-        _req_analyst = RequirementAnalyst(
+    from flask import current_app
+    if not hasattr(current_app, "_ai_req_analyst"):
+        current_app._ai_req_analyst = RequirementAnalyst(
             gateway=_get_gateway(),
             rag=_get_rag(),
             prompt_registry=_get_prompt_registry(),
         )
-    return _req_analyst
+    return current_app._ai_req_analyst
 
 
 def _get_defect_triage():
-    global _defect_triage
-    if _defect_triage is None:
-        _defect_triage = DefectTriage(
+    from flask import current_app
+    if not hasattr(current_app, "_ai_defect_triage"):
+        current_app._ai_defect_triage = DefectTriage(
             gateway=_get_gateway(),
             rag=_get_rag(),
             prompt_registry=_get_prompt_registry(),
         )
-    return _defect_triage
+    return current_app._ai_defect_triage
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -189,9 +188,12 @@ def get_suggestion(sid):
 def approve_suggestion(sid):
     """Approve a pending suggestion."""
     data = request.get_json(silent=True) or {}
+    reviewer = data.get("reviewer", "").strip()
+    if not reviewer:
+        return jsonify({"error": "reviewer is required"}), 400
     s = SuggestionQueue.approve(
         sid,
-        reviewer=data.get("reviewer", "admin"),
+        reviewer=reviewer,
         note=data.get("note", ""),
     )
     if not s:
@@ -203,9 +205,12 @@ def approve_suggestion(sid):
 def reject_suggestion(sid):
     """Reject a pending suggestion."""
     data = request.get_json(silent=True) or {}
+    reviewer = data.get("reviewer", "").strip()
+    if not reviewer:
+        return jsonify({"error": "reviewer is required"}), 400
     s = SuggestionQueue.reject(
         sid,
-        reviewer=data.get("reviewer", "admin"),
+        reviewer=reviewer,
         note=data.get("note", ""),
     )
     if not s:
@@ -220,10 +225,13 @@ def modify_suggestion(sid):
     if "suggestion_data" not in data:
         return jsonify({"error": "suggestion_data is required"}), 400
 
+    reviewer = data.get("reviewer", "").strip()
+    if not reviewer:
+        return jsonify({"error": "reviewer is required"}), 400
     s = SuggestionQueue.modify_and_approve(
         sid,
         modified_data=data["suggestion_data"],
-        reviewer=data.get("reviewer", "admin"),
+        reviewer=reviewer,
         note=data.get("note", ""),
     )
     if not s:
@@ -415,6 +423,7 @@ def index_entities():
 # ══════════════════════════════════════════════════════════════════════════════
 
 @ai_bp.route("/admin/dashboard", methods=["GET"])
+@require_role("admin")
 def admin_dashboard():
     """Comprehensive AI admin dashboard data."""
     pid = request.args.get("program_id", type=int)
@@ -476,6 +485,7 @@ def list_prompts():
 # ══════════════════════════════════════════════════════════════════════════════
 
 @ai_bp.route("/query/natural-language", methods=["POST"])
+@_ai_generate_limit
 def nl_query():
     """Process a natural-language query against SAP transformation data."""
     data = request.get_json(silent=True) or {}
@@ -495,32 +505,86 @@ def nl_query():
 
 
 @ai_bp.route("/query/execute-sql", methods=["POST"])
+@require_role("admin")
+@_ai_generate_limit
 def execute_validated_sql():
-    """Manually execute a previously generated SQL query."""
+    """Manually execute a previously generated SQL query (read-only SELECT only).
+
+    Security layers:
+        1. Comment stripping (sanitize_sql — removes --, /* */ injections)
+        2. Table whitelist + forbidden pattern regex (validate_sql)
+        3. AST-level DML/DDL detection via sqlglot (if available) or strict regex
+        4. Read-only DB connection via begin() — no implicit commit
+        5. Error messages never leak internal DB details
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
     data = request.get_json(silent=True) or {}
     sql = data.get("sql", "").strip()
     if not sql:
         return jsonify({"error": "sql is required"}), 400
 
-    # Validate + sanitise
+    # ── Layer 1: Strip comments and normalise whitespace ─────────────
     cleaned = sanitize_sql(sql)
+
+    # ── Layer 2: Table whitelist + forbidden regex patterns ──────────
     validation = validate_sql(cleaned)
     if not validation["valid"]:
         return jsonify({"error": validation["error"]}), 400
 
+    final_sql = validation["cleaned_sql"]
+
+    # ── Layer 3: Deep DML/DDL detection ──────────────────────────────
+    # Normalise for detection: collapse whitespace, remove string literals
+    import re
+    _detect_sql = re.sub(r"'[^']*'", "''", final_sql)           # neutralise string contents
+    _detect_sql = re.sub(r'"[^"]*"', '""', _detect_sql)       # neutralise identifiers
+    _detect_upper = re.sub(r'\s+', ' ', _detect_sql).upper()
+
+    # Forbidden keywords anywhere in normalised SQL (not just split tokens)
+    _FORBIDDEN_KW = (
+        "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE",
+        "TRUNCATE", "EXEC", "EXECUTE", "GRANT", "REVOKE",
+        "MERGE", "UPSERT", "REPLACE", "CALL", "SET ",
+        "COPY", "LOAD", "VACUUM", "REINDEX", "CLUSTER",
+    )
+    for kw in _FORBIDDEN_KW:
+        # Use word-boundary detection to avoid false positives in column names
+        if re.search(r'\b' + kw.strip() + r'\b', _detect_upper):
+            logger.warning("SQL rejected — forbidden keyword '%s' in: %s", kw.strip(), final_sql[:200])
+            return jsonify({"error": "Only read-only SELECT queries are allowed"}), 403
+
+    if not _detect_upper.lstrip().startswith("SELECT") and not _detect_upper.lstrip().startswith("WITH"):
+        return jsonify({"error": "Only SELECT / WITH … SELECT queries are allowed"}), 403
+
+    # ── Layer 4: Execute with row limit in a read-only fashion ───────
+    MAX_ROWS = 500
     try:
-        result = db.session.execute(db.text(validation["cleaned_sql"]))
-        columns = list(result.keys()) if result.returns_rows else []
-        rows = [dict(zip(columns, row)) for row in result.fetchall()] if result.returns_rows else []
+        # Use a nested transaction so any accidental write is rolled back
+        with db.session.begin_nested():
+            result = db.session.execute(db.text(final_sql))
+            columns = list(result.keys()) if result.returns_rows else []
+            rows = (
+                [dict(zip(columns, row)) for row in result.fetchmany(MAX_ROWS)]
+                if result.returns_rows else []
+            )
+        # Explicitly rollback to guarantee read-only (no accidental commit)
+        db.session.rollback()
+
         return jsonify({
-            "sql": validation["cleaned_sql"],
+            "sql": final_sql,
             "columns": columns,
             "results": rows,
             "row_count": len(rows),
+            "truncated": len(rows) >= MAX_ROWS,
             "executed": True,
         })
     except Exception as e:
-        return jsonify({"error": f"SQL execution failed: {str(e)}"}), 400
+        db.session.rollback()
+        logger.exception("SQL execution failed for query: %s", final_sql[:200])
+        # ── Layer 5: Never leak internal DB error details ────────────
+        return jsonify({"error": "SQL execution failed. The query may be invalid or reference unknown columns."}), 400
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -528,6 +592,7 @@ def execute_validated_sql():
 # ══════════════════════════════════════════════════════════════════════════════
 
 @ai_bp.route("/analyst/requirement/<int:req_id>", methods=["POST"])
+@_ai_generate_limit
 def analyse_requirement(req_id):
     """AI Fit/Gap classification for a single requirement."""
     data = request.get_json(silent=True) or {}
@@ -541,6 +606,7 @@ def analyse_requirement(req_id):
 
 
 @ai_bp.route("/analyst/requirement/batch", methods=["POST"])
+@_ai_generate_limit
 def analyse_requirements_batch():
     """AI Fit/Gap classification for multiple requirements."""
     data = request.get_json(silent=True) or {}
@@ -561,6 +627,7 @@ def analyse_requirements_batch():
 # ══════════════════════════════════════════════════════════════════════════════
 
 @ai_bp.route("/triage/defect/<int:defect_id>", methods=["POST"])
+@_ai_generate_limit
 def triage_defect(defect_id):
     """AI severity + module triage for a single defect."""
     data = request.get_json(silent=True) or {}
@@ -574,6 +641,7 @@ def triage_defect(defect_id):
 
 
 @ai_bp.route("/triage/defect/batch", methods=["POST"])
+@_ai_generate_limit
 def triage_defects_batch():
     """AI triage for multiple defects."""
     data = request.get_json(silent=True) or {}

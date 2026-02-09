@@ -1,11 +1,13 @@
 """
 SAP Transformation Management Platform
-Scope blueprint — Process (L2/L3) & Analysis CRUD endpoints.
+Scope blueprint -- Process (L2/L3/L4) & Analysis CRUD endpoints.
 
-Refactored hierarchy:
-    Scenario (=L1) → Process L2 → Process L3 (scope/fit-gap) → Analysis
-    ScopeItem table removed — L3 Process now carries scope attributes.
+Refactored hierarchy (Signavio L1-L4):
+    Scenario (=L1) -> Process L2 -> Process L3 -> Process L4 -> Analysis
+    L4 is where Requirement/WRICEF/TestCase are born.
 """
+
+import logging
 
 from datetime import datetime, timezone
 
@@ -18,12 +20,18 @@ from app.models.scope import (
     RequirementProcessMapping,
     PROCESS_LEVELS,
     SCOPE_DECISIONS,
+    SCOPE_CONFIRMATIONS,
     FIT_GAP_RESULTS,
+    ACTIVATE_OUTPUTS,
+    WRICEF_TYPES,
+    TEST_LEVELS,
     ANALYSIS_STATUSES,
     ANALYSIS_TYPES,
     COVERAGE_TYPES,
 )
 from app.models.scenario import Scenario
+
+logger = logging.getLogger(__name__)
 
 scope_bp = Blueprint("scope", __name__, url_prefix="/api/v1")
 
@@ -33,7 +41,7 @@ scope_bp = Blueprint("scope", __name__, url_prefix="/api/v1")
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _parse_date(val):
-    """Parse ISO date string → date or None."""
+    """Parse ISO date string --> date or None."""
     if not val:
         return None
     try:
@@ -60,7 +68,7 @@ def list_processes(sid):
     if level:
         query = query.filter_by(level=level)
     if tree:
-        # Only root-level (L2) processes — children loaded via relationship
+        # Only root-level (L2) processes -- children loaded via relationship
         query = query.filter_by(parent_id=None)
 
     processes = query.order_by(Process.order, Process.id).all()
@@ -91,17 +99,31 @@ def create_process(sid):
         process_id_code=data.get("process_id_code", ""),
         module=data.get("module", scenario.sap_module or ""),
         order=data.get("order", 0),
-        # L3-specific fields
+        # L2
+        scope_confirmation=data.get("scope_confirmation", ""),
+        # L3/L4-specific fields
         code=data.get("code", ""),
         scope_decision=data.get("scope_decision", ""),
         fit_gap=data.get("fit_gap", ""),
         sap_tcode=data.get("sap_tcode", ""),
         sap_reference=data.get("sap_reference", ""),
         priority=data.get("priority", ""),
+        # L3
+        cloud_alm_ref=data.get("cloud_alm_ref", ""),
+        test_scope=data.get("test_scope", ""),
+        # L4
+        activate_output=data.get("activate_output", ""),
+        wricef_type=data.get("wricef_type", ""),
+        test_levels=data.get("test_levels", ""),
         notes=data.get("notes", ""),
     )
     db.session.add(process)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(process.to_dict()), 201
 
 
@@ -115,8 +137,8 @@ def get_process(pid):
     include = request.args.get("include_children", "false").lower() == "true"
     result = process.to_dict(include_children=include)
 
-    # For L3, include analyses and requirement mappings
-    if process.level == "L3":
+    # For L3/L4, include analyses and requirement mappings
+    if process.level in ("L3", "L4"):
         result["analyses"] = [a.to_dict() for a in process.analyses]
         result["requirement_mappings"] = [
             {**m.to_dict(), "requirement_code": m.requirement.code if m.requirement else "",
@@ -136,7 +158,9 @@ def update_process(pid):
 
     data = request.get_json(silent=True) or {}
     for field in ("name", "description", "process_id_code", "module",
-                  "code", "sap_tcode", "sap_reference", "priority", "notes"):
+                  "code", "sap_tcode", "sap_reference", "priority", "notes",
+                  "scope_confirmation", "cloud_alm_ref", "test_scope",
+                  "activate_output", "wricef_type", "test_levels"):
         if field in data:
             setattr(process, field, data[field])
     if "level" in data:
@@ -156,7 +180,12 @@ def update_process(pid):
             return jsonify({"error": f"Invalid fit_gap. Must be one of {sorted(FIT_GAP_RESULTS)}"}), 400
         process.fit_gap = data["fit_gap"]
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(process.to_dict())
 
 
@@ -167,7 +196,12 @@ def delete_process(pid):
     if not process:
         return jsonify({"error": "Process not found"}), 404
     db.session.delete(process)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Process deleted"}), 200
 
 
@@ -186,7 +220,7 @@ def process_stats(sid):
     for p in procs:
         by_level.setdefault(p.level, 0)
         by_level[p.level] += 1
-        if p.level == "L3":
+        if p.level in ("L3", "L4"):
             if p.scope_decision:
                 by_scope[p.scope_decision] = by_scope.get(p.scope_decision, 0) + 1
             if p.fit_gap:
@@ -247,7 +281,12 @@ def create_analysis(pid):
         workshop_id=data.get("workshop_id"),
     )
     db.session.add(analysis)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(analysis.to_dict()), 201
 
 
@@ -284,7 +323,12 @@ def update_analysis(aid):
     if "workshop_id" in data:
         analysis.workshop_id = data["workshop_id"] if data["workshop_id"] else None
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(analysis.to_dict())
 
 
@@ -295,7 +339,12 @@ def delete_analysis(aid):
     if not analysis:
         return jsonify({"error": "Analysis not found"}), 404
     db.session.delete(analysis)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Analysis deleted"}), 200
 
 
@@ -386,7 +435,12 @@ def create_requirement_mapping(pid):
         notes=data.get("notes", ""),
     )
     db.session.add(mapping)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(mapping.to_dict()), 201
 
 
@@ -405,7 +459,12 @@ def update_requirement_mapping(mid):
     if "notes" in data:
         mapping.notes = data["notes"]
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(mapping.to_dict())
 
 
@@ -416,12 +475,17 @@ def delete_requirement_mapping(mid):
     if not mapping:
         return jsonify({"error": "Mapping not found"}), 404
     db.session.delete(mapping)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Mapping deleted"}), 200
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  PROGRAM-LEVEL — Scope Matrix & Analysis Dashboard
+#  PROGRAM-LEVEL -- Scope Matrix & Analysis Dashboard
 # ═══════════════════════════════════════════════════════════════════════════
 
 @scope_bp.route("/programs/<int:pid>/scope-matrix", methods=["GET"])
@@ -429,7 +493,7 @@ def scope_matrix(pid):
     """Flat L3 process-step matrix across all scenarios in a program.
 
     Returns every L3 process step with its parent L2, scenario name,
-    and latest analysis result — used by the Analysis Hub Scope Matrix tab.
+    and latest analysis result -- used by the Analysis Hub Scope Matrix tab.
     """
     from app.models.program import Program
     program = db.session.get(Program, pid)
@@ -572,4 +636,144 @@ def analysis_dashboard(pid):
         "pending_decisions": pending_decisions,
         "total_open_items": total_open_items,
         "blocker_open_items": blocker_count,
+    }), 200
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  PROCESS HIERARCHY  /api/v1/programs/<pid>/process-hierarchy
+#  Full L1(Scenario)->L2->L3->L4 tree for the Process Hierarchy view
+# ═══════════════════════════════════════════════════════════════════════════
+
+@scope_bp.route("/programs/<int:pid>/process-hierarchy", methods=["GET"])
+def process_hierarchy(pid):
+    """Full Signavio L1-L4 hierarchy tree — single-query eager load version.
+
+    Returns:
+        [{scenario (L1), processes: [{L2, children: [{L3, children: [{L4}]}]}]}]
+    """
+    from app.models.program import Program
+    program = db.session.get(Program, pid)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+
+    scenarios = (
+        Scenario.query
+        .filter_by(program_id=pid)
+        .order_by(Scenario.id)
+        .all()
+    )
+    scenario_ids = [s.id for s in scenarios]
+
+    # Single query: load ALL processes for this program at once
+    all_procs = (
+        Process.query
+        .filter(Process.scenario_id.in_(scenario_ids))
+        .order_by(Process.order, Process.id)
+        .all()
+    ) if scenario_ids else []
+
+    # Single query: analysis counts per L3 process
+    analysis_counts = {}
+    if all_procs:
+        l3_ids = [p.id for p in all_procs if p.level == "L3"]
+        if l3_ids:
+            rows = (
+                db.session.query(Analysis.process_id, db.func.count(Analysis.id))
+                .filter(Analysis.process_id.in_(l3_ids))
+                .group_by(Analysis.process_id)
+                .all()
+            )
+            analysis_counts = dict(rows)
+
+    # Build lookup maps
+    from collections import defaultdict
+    by_scenario: dict[int, list] = defaultdict(list)  # scenario_id → L2 procs
+    by_parent: dict[int, list] = defaultdict(list)    # parent_id → children
+
+    for p in all_procs:
+        if p.parent_id is None and p.level == "L2":
+            by_scenario[p.scenario_id].append(p)
+        elif p.parent_id is not None:
+            by_parent[p.parent_id].append(p)
+
+    # Aggregate stats per scenario from already-loaded procs
+    scen_procs: dict[int, list] = defaultdict(list)
+    for p in all_procs:
+        scen_procs[p.scenario_id].append(p)
+
+    result = []
+    for scen in scenarios:
+        l2_list = []
+        for l2 in by_scenario.get(scen.id, []):
+            l3_list = []
+            for l3 in by_parent.get(l2.id, []):
+                if l3.level != "L3":
+                    continue
+                l3_dict = l3.to_dict()
+                l3_dict["children"] = [l4.to_dict() for l4 in by_parent.get(l3.id, []) if l4.level == "L4"]
+                l3_dict["analysis_count"] = analysis_counts.get(l3.id, 0)
+                l3_list.append(l3_dict)
+            l2_dict = l2.to_dict()
+            l2_dict["children"] = l3_list
+            l2_list.append(l2_dict)
+
+        s_procs = scen_procs.get(scen.id, [])
+        scen_dict = scen.to_dict()
+        scen_dict["processes"] = l2_list
+        scen_dict["stats"] = {
+            "total_l2": sum(1 for p in s_procs if p.level == "L2"),
+            "total_l3": sum(1 for p in s_procs if p.level == "L3"),
+            "total_l4": sum(1 for p in s_procs if p.level == "L4"),
+            "fit_count": sum(1 for p in s_procs if p.fit_gap == "fit"),
+            "gap_count": sum(1 for p in s_procs if p.fit_gap == "gap"),
+            "partial_count": sum(1 for p in s_procs if p.fit_gap == "partial_fit"),
+        }
+        result.append(scen_dict)
+
+    return jsonify(result), 200
+
+
+@scope_bp.route("/programs/<int:pid>/process-hierarchy/stats", methods=["GET"])
+def process_hierarchy_stats(pid):
+    """Aggregated L2/L3/L4 stats across all scenarios for hierarchy dashboard."""
+    from app.models.program import Program
+    program = db.session.get(Program, pid)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+
+    all_procs = (
+        Process.query
+        .join(Scenario)
+        .filter(Scenario.program_id == pid)
+        .all()
+    )
+
+    by_level = {}
+    by_fit_gap = {}
+    by_activate_output = {}
+    by_scope_decision = {}
+    by_module = {}
+    by_scope_confirmation = {}
+
+    for p in all_procs:
+        by_level[p.level] = by_level.get(p.level, 0) + 1
+        mod = p.module or "Unassigned"
+        by_module[mod] = by_module.get(mod, 0) + 1
+        if p.fit_gap:
+            by_fit_gap[p.fit_gap] = by_fit_gap.get(p.fit_gap, 0) + 1
+        if p.scope_decision:
+            by_scope_decision[p.scope_decision] = by_scope_decision.get(p.scope_decision, 0) + 1
+        if p.activate_output:
+            by_activate_output[p.activate_output] = by_activate_output.get(p.activate_output, 0) + 1
+        if p.scope_confirmation:
+            by_scope_confirmation[p.scope_confirmation] = by_scope_confirmation.get(p.scope_confirmation, 0) + 1
+
+    return jsonify({
+        "total_processes": len(all_procs),
+        "by_level": by_level,
+        "by_fit_gap": by_fit_gap,
+        "by_scope_decision": by_scope_decision,
+        "by_activate_output": by_activate_output,
+        "by_module": by_module,
+        "by_scope_confirmation": by_scope_confirmation,
     }), 200

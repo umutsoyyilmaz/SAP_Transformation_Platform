@@ -50,9 +50,8 @@ def session(app, _setup_db):
     with app.app_context():
         yield
         _db.session.rollback()
-        for model in [InterfaceChecklist, SwitchPlan, ConnectivityTest, Interface, Wave, Program]:
-            _db.session.query(model).delete()
-        _db.session.commit()
+        _db.drop_all()
+        _db.create_all()
 
 
 @pytest.fixture()
@@ -104,31 +103,31 @@ class TestInterfaceList:
     def test_list_empty(self, client, program):
         rv = client.get(f"/api/v1/programs/{program.id}/interfaces")
         assert rv.status_code == 200
-        assert rv.get_json() == []
+        assert rv.get_json()["items"] == []
 
     def test_list_with_interfaces(self, client, program, interface):
         rv = client.get(f"/api/v1/programs/{program.id}/interfaces")
-        data = rv.get_json()
+        data = rv.get_json()["items"]
         assert len(data) == 1
         assert data[0]["code"] == "IF-FI-001"
 
     def test_list_filter_by_direction(self, client, program, interface):
         rv = client.get(f"/api/v1/programs/{program.id}/interfaces?direction=inbound")
-        assert len(rv.get_json()) == 1
+        assert len(rv.get_json()["items"]) == 1
         rv = client.get(f"/api/v1/programs/{program.id}/interfaces?direction=outbound")
-        assert len(rv.get_json()) == 0
+        assert len(rv.get_json()["items"]) == 0
 
     def test_list_filter_by_protocol(self, client, program, interface):
         rv = client.get(f"/api/v1/programs/{program.id}/interfaces?protocol=idoc")
-        assert len(rv.get_json()) == 1
+        assert len(rv.get_json()["items"]) == 1
 
     def test_list_filter_by_module(self, client, program, interface):
         rv = client.get(f"/api/v1/programs/{program.id}/interfaces?module=FI")
-        assert len(rv.get_json()) == 1
+        assert len(rv.get_json()["items"]) == 1
 
     def test_list_filter_by_wave(self, client, program, interface, wave):
         rv = client.get(f"/api/v1/programs/{program.id}/interfaces?wave_id={wave.id}")
-        assert len(rv.get_json()) == 1
+        assert len(rv.get_json()["items"]) == 1
 
     def test_list_filter_unassigned_wave(self, client, program):
         # create interface without wave
@@ -136,7 +135,7 @@ class TestInterfaceList:
         _db.session.add(iface)
         _db.session.commit()
         rv = client.get(f"/api/v1/programs/{program.id}/interfaces?wave_id=0")
-        assert len(rv.get_json()) == 1
+        assert len(rv.get_json()["items"]) == 1
 
     def test_list_program_not_found(self, client):
         rv = client.get("/api/v1/programs/9999/interfaces")

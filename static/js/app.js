@@ -11,6 +11,14 @@ const App = (() => {
         return d.innerHTML;
     }
 
+    // ── Chart references for cleanup ─────────────────────────────────
+    let _charts = [];
+
+    function _destroyCharts() {
+        _charts.forEach(c => { try { c.destroy(); } catch {} });
+        _charts = [];
+    }
+
     // ── View registry ────────────────────────────────────────────────────
     const views = {
         dashboard:    () => renderDashboard(),
@@ -22,6 +30,7 @@ const App = (() => {
         backlog:      () => BacklogView.render(),
         testing:      () => TestingView.render(),
         integration:  () => IntegrationView.render(),
+        'process-hierarchy': () => ProcessHierarchyView.render(),
         'data-factory': () => placeholder('Data Factory', 'Sprint 10'),
         cutover:      () => placeholder('Cutover Hub', 'Sprint 13'),
         raid:         () => RaidView.render(),
@@ -36,7 +45,7 @@ const App = (() => {
     // Views that require a program to be selected
     const programRequiredViews = new Set([
         'scenarios', 'analysis', 'requirements', 'backlog', 'testing',
-        'integration', 'data-factory', 'cutover', 'raid',
+        'integration', 'process-hierarchy', 'data-factory', 'cutover', 'raid',
         'reports', 'ai-query',
     ]);
 
@@ -105,6 +114,9 @@ const App = (() => {
             navigate('programs');
             return;
         }
+
+        // Cleanup previous charts
+        _destroyCharts();
 
         currentView = viewName;
 
@@ -205,7 +217,7 @@ const App = (() => {
                 document.getElementById('kpiRequirements').textContent = rs.total ?? 0;
                 // Fit/Gap chart
                 if (typeof Chart !== 'undefined' && rs.by_fit_gap) {
-                    new Chart(document.getElementById('fitGapChart'), {
+                    const fitGapChart = new Chart(document.getElementById('fitGapChart'), {
                         type: 'doughnut',
                         data: {
                             labels: Object.keys(rs.by_fit_gap),
@@ -213,6 +225,7 @@ const App = (() => {
                         },
                         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
                     });
+                    _charts.push(fitGapChart);
                 }
             }
 
@@ -221,7 +234,7 @@ const App = (() => {
                 document.getElementById('kpiBacklog').textContent = bs.total ?? 0;
                 // Backlog by status chart
                 if (typeof Chart !== 'undefined' && bs.by_status) {
-                    new Chart(document.getElementById('backlogChart'), {
+                    const backlogChart = new Chart(document.getElementById('backlogChart'), {
                         type: 'bar',
                         data: {
                             labels: Object.keys(bs.by_status),
@@ -229,6 +242,7 @@ const App = (() => {
                         },
                         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
                     });
+                    _charts.push(backlogChart);
                 }
             }
 
@@ -247,8 +261,8 @@ const App = (() => {
         main.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state__icon">🚧</div>
-                <div class="empty-state__title">${title}</div>
-                <p>This module will be implemented in <strong>${sprint}</strong>.</p>
+                <div class="empty-state__title">${esc(title)}</div>
+                <p>This module will be implemented in <strong>${esc(sprint)}</strong>.</p>
             </div>
         `;
     }

@@ -46,9 +46,8 @@ def session(app, _setup_db):
     with app.app_context():
         yield
         _db.session.rollback()
-        for model in [TechnicalSpec, FunctionalSpec, ConfigItem, BacklogItem, Sprint, Program]:
-            _db.session.query(model).delete()
-        _db.session.commit()
+        _db.drop_all()
+        _db.create_all()
 
 
 @pytest.fixture
@@ -149,7 +148,7 @@ def test_list_backlog(client):
     res = client.get(f"/api/v1/programs/{prog['id']}/backlog")
     assert res.status_code == 200
     data = res.get_json()
-    assert len(data) == 2
+    assert len(data["items"]) == 2
 
 
 def test_list_backlog_filter_type(client):
@@ -159,7 +158,7 @@ def test_list_backlog_filter_type(client):
     _create_item(client, prog["id"], wricef_type="report", title="Another report")
     res = client.get(f"/api/v1/programs/{prog['id']}/backlog?wricef_type=report")
     assert res.status_code == 200
-    assert len(res.get_json()) == 2
+    assert len(res.get_json()["items"]) == 2
 
 
 def test_list_backlog_filter_status(client):
@@ -169,7 +168,7 @@ def test_list_backlog_filter_status(client):
     client.put(f"/api/v1/backlog/{item2['id']}", json={"status": "closed"})
     res = client.get(f"/api/v1/programs/{prog['id']}/backlog?status=closed")
     assert res.status_code == 200
-    assert len(res.get_json()) == 1
+    assert len(res.get_json()["items"]) == 1
 
 
 def test_list_backlog_filter_unassigned_sprint(client):
@@ -179,7 +178,7 @@ def test_list_backlog_filter_unassigned_sprint(client):
     _create_item(client, prog["id"], title="Unassigned")
     res = client.get(f"/api/v1/programs/{prog['id']}/backlog?sprint_id=0")
     assert res.status_code == 200
-    data = res.get_json()
+    data = res.get_json()["items"]
     assert len(data) == 1
     assert data[0]["title"] == "Unassigned"
 

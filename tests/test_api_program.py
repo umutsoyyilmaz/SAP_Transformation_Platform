@@ -55,10 +55,8 @@ def session(app, _setup_db):
     with app.app_context():
         yield
         _db.session.rollback()
-        # Clean all tables between tests
-        for model in [Gate, Phase, TeamMember, Committee, Workstream, Program]:
-            _db.session.query(model).delete()
-        _db.session.commit()
+        _db.drop_all()
+        _db.create_all()
 
 
 @pytest.fixture

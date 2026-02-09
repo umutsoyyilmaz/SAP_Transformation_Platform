@@ -37,7 +37,7 @@ class NotificationService:
             entity_id=entity_id,
         )
         db.session.add(notif)
-        db.session.commit()
+        db.session.flush()  # Assign ID without committing — caller controls transaction
         return notif
 
     @staticmethod
@@ -68,7 +68,7 @@ class NotificationService:
             )
             db.session.add(notif)
             notifications.append(notif)
-        db.session.commit()
+        db.session.flush()  # Assign IDs without committing — caller controls transaction
         return notifications
 
     # ── Query ─────────────────────────────────────────────────────────────
@@ -108,7 +108,7 @@ class NotificationService:
         notif = db.session.get(Notification, notification_id)
         if notif:
             notif.mark_read()
-            db.session.commit()
+            db.session.flush()  # Caller controls transaction
         return notif
 
     @staticmethod
@@ -121,7 +121,7 @@ class NotificationService:
             q = q.filter_by(program_id=program_id)
         now = datetime.now(timezone.utc)
         count = q.update({"is_read": True, "read_at": now}, synchronize_session="fetch")
-        db.session.commit()
+        db.session.flush()  # Caller controls transaction
         return count
 
     # ── RAID Integration Helpers ──────────────────────────────────────────

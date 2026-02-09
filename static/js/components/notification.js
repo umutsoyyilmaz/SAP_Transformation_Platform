@@ -73,6 +73,13 @@ const NotificationPanel = (() => {
         }
     }
 
+    // ── HTML Escape helper ───────────────────────────────────────────────
+    function _esc(str) {
+        const el = document.createElement('span');
+        el.textContent = str ?? '';
+        return el.innerHTML;
+    }
+
     // ── Load Notifications ───────────────────────────────────────────────
     async function loadNotifications() {
         const list = document.getElementById('notifList');
@@ -85,17 +92,17 @@ const NotificationPanel = (() => {
             }
             list.innerHTML = res.items.map(n => `
                 <div class="notif-item ${n.is_read ? 'notif-item--read' : ''}"
-                     onclick="NotificationPanel.onClickItem(${n.id}, '${n.entity_type}', ${n.entity_id || 'null'})">
+                     onclick="NotificationPanel.onClickItem(${parseInt(n.id) || 0}, '${_esc(n.entity_type)}', ${parseInt(n.entity_id) || 'null'})">
                     <div class="notif-item__icon">${_severityIcon(n.severity)}</div>
                     <div class="notif-item__content">
-                        <div class="notif-item__title">${n.title}</div>
-                        <div class="notif-item__message">${n.message || ''}</div>
+                        <div class="notif-item__title">${_esc(n.title)}</div>
+                        <div class="notif-item__message">${_esc(n.message || '')}</div>
                         <div class="notif-item__time">${_timeAgo(n.created_at)}</div>
                     </div>
                 </div>
             `).join('');
         } catch (e) {
-            list.innerHTML = `<p class="text-muted" style="padding:1rem">⚠️ ${e.message}</p>`;
+            list.innerHTML = `<p class="text-muted" style="padding:1rem">⚠️ ${_esc(e.message)}</p>`;
         }
     }
 

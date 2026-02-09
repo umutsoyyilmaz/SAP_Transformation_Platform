@@ -30,6 +30,8 @@ Endpoints summary:
              /api/v1/notifications/mark-all-read       POST
 """
 
+import logging
+
 from datetime import date, datetime, timezone
 
 from flask import Blueprint, jsonify, request
@@ -45,6 +47,9 @@ from app.models.raid import (
 )
 from app.models.notification import Notification
 from app.services.notification import NotificationService
+from app.blueprints import paginate_query
+
+logger = logging.getLogger(__name__)
 
 raid_bp = Blueprint("raid", __name__, url_prefix="/api/v1")
 
@@ -93,8 +98,8 @@ def list_risks(pid):
     if rag:
         q = q.filter_by(rag_status=rag)
 
-    risks = q.order_by(Risk.risk_score.desc(), Risk.id).all()
-    return jsonify([r.to_dict() for r in risks])
+    risks, total = paginate_query(q.order_by(Risk.risk_score.desc(), Risk.id))
+    return jsonify({"items": [r.to_dict() for r in risks], "total": total})
 
 
 @raid_bp.route("/programs/<int:pid>/risks", methods=["POST"])
@@ -133,7 +138,12 @@ def create_risk(pid):
         phase_id=data.get("phase_id"),
     )
     db.session.add(risk)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
 
     # Notify if high/critical
     if score >= 10:
@@ -143,6 +153,7 @@ def create_risk(pid):
             category="risk", severity="warning",
             program_id=pid, entity_type="risk", entity_id=risk.id,
         )
+        db.session.commit()
 
     return jsonify(risk.to_dict()), 201
 
@@ -180,11 +191,17 @@ def update_risk(rid):
     if "phase_id" in data:
         risk.phase_id = data["phase_id"]
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
 
     # Notification on score change
     if risk.risk_score != old_score:
         NotificationService.notify_risk_score_change(risk, old_score, risk.risk_score)
+        db.session.commit()
 
     return jsonify(risk.to_dict())
 
@@ -195,7 +212,12 @@ def delete_risk(rid):
     if not risk:
         return jsonify({"error": "Risk not found"}), 404
     db.session.delete(risk)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Risk deleted"}), 200
 
 
@@ -207,9 +229,15 @@ def recalculate_risk_score(rid):
         return jsonify({"error": "Risk not found"}), 404
     old_score = risk.risk_score
     risk.recalculate_score()
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     if risk.risk_score != old_score:
         NotificationService.notify_risk_score_change(risk, old_score, risk.risk_score)
+        db.session.commit()
     return jsonify(risk.to_dict())
 
 
@@ -265,7 +293,12 @@ def create_action(pid):
         phase_id=data.get("phase_id"),
     )
     db.session.add(action)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(action.to_dict()), 201
 
 
@@ -302,7 +335,12 @@ def update_action(aid):
     if data.get("status") == "completed" and not action.completed_date:
         action.completed_date = date.today()
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(action.to_dict())
 
 
@@ -312,7 +350,12 @@ def delete_action(aid):
     if not action:
         return jsonify({"error": "Action not found"}), 404
     db.session.delete(action)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Action deleted"}), 200
 
 
@@ -328,7 +371,12 @@ def patch_action_status(aid):
     action.status = new_status
     if new_status == "completed" and not action.completed_date:
         action.completed_date = date.today()
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(action.to_dict())
 
 
@@ -384,11 +432,17 @@ def create_issue(pid):
         phase_id=data.get("phase_id"),
     )
     db.session.add(issue)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
 
     # Auto-notify on critical issue
     if issue.severity == "critical":
         NotificationService.notify_critical_issue(issue)
+        db.session.commit()
 
     return jsonify(issue.to_dict()), 201
 
@@ -424,7 +478,12 @@ def update_issue(iid):
     if data.get("status") in ("resolved", "closed") and not issue.resolution_date:
         issue.resolution_date = date.today()
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(issue.to_dict())
 
 
@@ -434,7 +493,12 @@ def delete_issue(iid):
     if not issue:
         return jsonify({"error": "Issue not found"}), 404
     db.session.delete(issue)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Issue deleted"}), 200
 
 
@@ -450,7 +514,12 @@ def patch_issue_status(iid):
     issue.status = new_status
     if new_status in ("resolved", "closed") and not issue.resolution_date:
         issue.resolution_date = date.today()
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(issue.to_dict())
 
 
@@ -504,7 +573,12 @@ def create_decision(pid):
         phase_id=data.get("phase_id"),
     )
     db.session.add(decision)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(decision.to_dict()), 201
 
 
@@ -540,11 +614,17 @@ def update_decision(did):
     if "phase_id" in data:
         decision.phase_id = data["phase_id"]
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
 
     # Notify on approval
     if data.get("status") == "approved" and old_status != "approved":
         NotificationService.notify_decision_approved(decision)
+        db.session.commit()
 
     return jsonify(decision.to_dict())
 
@@ -555,7 +635,12 @@ def delete_decision(did):
     if not decision:
         return jsonify({"error": "Decision not found"}), 404
     db.session.delete(decision)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Decision deleted"}), 200
 
 
@@ -572,9 +657,15 @@ def patch_decision_status(did):
     decision.status = new_status
     if new_status == "approved":
         decision.decision_date = decision.decision_date or date.today()
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     if new_status == "approved" and old_status != "approved":
         NotificationService.notify_decision_approved(decision)
+        db.session.commit()
     return jsonify(decision.to_dict())
 
 
@@ -690,6 +781,12 @@ def mark_notification_read(nid):
     notif = NotificationService.mark_read(nid)
     if not notif:
         return jsonify({"error": "Notification not found"}), 404
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(notif.to_dict())
 
 
@@ -699,4 +796,10 @@ def mark_all_notifications_read():
     recipient = data.get("recipient", "all")
     program_id = data.get("program_id")
     count = NotificationService.mark_all_read(recipient=recipient, program_id=program_id)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"marked_read": count})

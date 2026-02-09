@@ -52,12 +52,8 @@ def session(app, _setup_db):
     with app.app_context():
         yield
         _db.session.rollback()
-        for model in [AISuggestion, AIAuditLog, AIUsageLog, Defect, Requirement, Program]:
-            try:
-                _db.session.query(model).delete()
-            except Exception:
-                _db.session.rollback()
-        _db.session.commit()
+        _db.drop_all()
+        _db.create_all()
 
 
 @pytest.fixture
@@ -387,13 +383,15 @@ class TestRequirementAnalyst:
         analyst = RequirementAnalyst(gateway=gw)
         result = analyst.classify(req["id"], create_suggestion=True)
 
-        if result["classification"]:
-            assert result["suggestion_id"] is not None
-            # Verify suggestion in DB
-            s = _db.session.get(AISuggestion, result["suggestion_id"])
-            assert s is not None
-            assert s.entity_type == "requirement"
-            assert s.status == "pending"
+        # Local stub may not return classification — mark as expected failure
+        if result["classification"] is None:
+            pytest.xfail("Local stub did not return classification — cannot verify suggestion creation")
+        assert result["suggestion_id"] is not None
+        # Verify suggestion in DB
+        s = _db.session.get(AISuggestion, result["suggestion_id"])
+        assert s is not None
+        assert s.entity_type == "requirement"
+        assert s.status == "pending"
 
     def test_batch_classify(self, client, app):
         from app.ai.gateway import LLMGateway
@@ -471,8 +469,10 @@ class TestRequirementAnalystAPI:
             "create_suggestion": True,
         })
         data = res.get_json()
-        if data.get("classification"):
-            assert data.get("suggestion_id") is not None
+        # Ensure the API actually classified — don't silently skip assertions
+        if not data.get("classification"):
+            pytest.xfail("AI stub did not return classification — cannot verify suggestion")
+        assert data.get("suggestion_id") is not None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -518,11 +518,14 @@ class TestDefectTriage:
         triage = DefectTriage(gateway=gw)
         result = triage.triage(defect["id"], create_suggestion=True)
 
-        if result["severity"]:
-            assert result["suggestion_id"] is not None
-            s = _db.session.get(AISuggestion, result["suggestion_id"])
-            assert s is not None
-            assert s.entity_type == "defect"
+        # Ensure triage actually ran — if stub returns no severity, fail explicitly
+        assert result["severity"] is not None, (
+            "triage() returned no severity — test cannot verify suggestion creation"
+        )
+        assert result["suggestion_id"] is not None
+        s = _db.session.get(AISuggestion, result["suggestion_id"])
+        assert s is not None
+        assert s.entity_type == "defect"
 
     def test_batch_triage(self, client, app):
         from app.ai.gateway import LLMGateway
@@ -606,8 +609,10 @@ class TestDefectTriageAPI:
             "create_suggestion": True,
         })
         data = res.get_json()
-        if data.get("severity"):
-            assert data.get("suggestion_id") is not None
+        # Ensure the API actually triaged — don't silently skip assertions
+        if not data.get("severity"):
+            pytest.xfail("AI stub did not return severity — cannot verify suggestion")
+        assert data.get("suggestion_id") is not None
 
 
 # ═════════════════════════════════════════════════════════════════════════════

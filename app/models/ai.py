@@ -254,7 +254,7 @@ class AIAuditLog(db.Model):
 
     # Request info
     user = db.Column(db.String(150), default="system")
-    program_id = db.Column(db.Integer, nullable=True)
+    program_id = db.Column(db.Integer, db.ForeignKey("programs.id", ondelete="SET NULL"), nullable=True, index=True)
     prompt_hash = db.Column(db.String(64), default="", comment="SHA-256 of prompt for dedup")
     prompt_summary = db.Column(db.String(500), default="", comment="First 500 chars of prompt")
 

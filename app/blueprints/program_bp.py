@@ -41,6 +41,8 @@ Endpoints (Sprint 2 scope):
         DELETE /api/v1/committees/<id>                         — Delete
 """
 
+import logging
+
 from datetime import date
 
 from flask import Blueprint, jsonify, request
@@ -54,6 +56,8 @@ from app.models.program import (
     TeamMember,
     Workstream,
 )
+
+logger = logging.getLogger(__name__)
 
 program_bp = Blueprint("program", __name__, url_prefix="/api/v1")
 
@@ -125,7 +129,12 @@ def create_program():
     if program.methodology == "sap_activate":
         _create_sap_activate_phases(program)
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
 
     return jsonify(program.to_dict(include_children=True)), 201
 
@@ -163,7 +172,12 @@ def update_program(program_id):
     if not program.name:
         return jsonify({"error": "Program name cannot be empty"}), 400
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(program.to_dict()), 200
 
 
@@ -175,7 +189,12 @@ def delete_program(program_id):
         return err
 
     db.session.delete(program)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": f"Program '{program.name}' deleted"}), 200
 
 
@@ -218,7 +237,12 @@ def create_phase(program_id):
         completion_pct=data.get("completion_pct", 0),
     )
     db.session.add(phase)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(phase.to_dict()), 201
 
 
@@ -244,7 +268,12 @@ def update_phase(phase_id):
         if date_field in data:
             setattr(phase, date_field, _parse_date(data[date_field]))
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(phase.to_dict()), 200
 
 
@@ -255,7 +284,12 @@ def delete_phase(phase_id):
     if err:
         return err
     db.session.delete(phase)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": f"Phase '{phase.name}' deleted"}), 200
 
 
@@ -296,7 +330,12 @@ def create_gate(phase_id):
         criteria=data.get("criteria", ""),
     )
     db.session.add(gate)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(gate.to_dict()), 201
 
 
@@ -317,7 +356,12 @@ def update_gate(gate_id):
         if date_field in data:
             setattr(gate, date_field, _parse_date(data[date_field]))
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(gate.to_dict()), 200
 
 
@@ -328,7 +372,12 @@ def delete_gate(gate_id):
     if err:
         return err
     db.session.delete(gate)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": f"Gate '{gate.name}' deleted"}), 200
 
 
@@ -367,7 +416,12 @@ def create_workstream(program_id):
         status=data.get("status", "active"),
     )
     db.session.add(ws)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(ws.to_dict()), 201
 
 
@@ -383,7 +437,12 @@ def update_workstream(ws_id):
         if field in data:
             setattr(ws, field, data[field].strip() if isinstance(data[field], str) else data[field])
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(ws.to_dict()), 200
 
 
@@ -394,7 +453,12 @@ def delete_workstream(ws_id):
     if err:
         return err
     db.session.delete(ws)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": f"Workstream '{ws.name}' deleted"}), 200
 
 
@@ -435,7 +499,12 @@ def create_team_member(program_id):
         is_active=data.get("is_active", True),
     )
     db.session.add(member)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(member.to_dict()), 201
 
 
@@ -456,7 +525,12 @@ def update_team_member(member_id):
     if "is_active" in data:
         member.is_active = bool(data["is_active"])
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(member.to_dict()), 200
 
 
@@ -467,7 +541,12 @@ def delete_team_member(member_id):
     if err:
         return err
     db.session.delete(member)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": f"Team member '{member.name}' removed"}), 200
 
 
@@ -506,7 +585,12 @@ def create_committee(program_id):
         chair_name=data.get("chair_name", ""),
     )
     db.session.add(comm)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(comm.to_dict()), 201
 
 
@@ -522,7 +606,12 @@ def update_committee(comm_id):
         if field in data:
             setattr(comm, field, data[field].strip() if isinstance(data[field], str) else data[field])
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify(comm.to_dict()), 200
 
 
@@ -533,7 +622,12 @@ def delete_committee(comm_id):
     if err:
         return err
     db.session.delete(comm)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
     return jsonify({"message": f"Committee '{comm.name}' deleted"}), 200
 
 
