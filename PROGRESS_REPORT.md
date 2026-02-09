@@ -1,6 +1,6 @@
 # SAP Transformation Platform — Progress Report
 **Tarih:** 9 Şubat 2026  
-**Sprint:** 1-7 Tamamlandı + 2 Revizyon + Analysis Hub (Release 1 ✅ + Release 2 devam)  
+**Sprint:** 1-7 Tamamlandı + 2 Revizyon + Analysis Hub + Hierarchy Refactoring + Workshop Enhancements (Release 1 ✅ + Release 2 devam)  
 **Repo:** [umutsoyyilmaz/SAP_Transformation_Platform](https://github.com/umutsoyyilmaz/SAP_Transformation_Platform)
 
 ---
@@ -10,15 +10,15 @@
 | Metrik | Değer |
 |--------|-------|
 | Tamamlanan Sprint | 7 / 24 |
-| Toplam Commit | 14 |
+| Toplam Commit | 17 |
 | Toplam Dosya | 106 |
-| Python LOC | 35,400+ |
-| JavaScript LOC | 20,800+ |
-| CSS LOC | 2,196 |
-| API Endpoint | ~177 |
-| Pytest Test | 425 (tümü geçiyor) |
-| Veritabanı Modeli | 32 tablo |
-| Alembic Migration | 10 |
+| Python LOC | 19,700+ |
+| JavaScript LOC | 6,900+ |
+| CSS LOC | 2,285 |
+| API Endpoint | ~186 |
+| Pytest Test | 436 (tümü geçiyor) |
+| Veritabanı Modeli | 35 tablo |
+| Alembic Migration | 2 (consolidated) |
 
 ---
 
@@ -75,6 +75,9 @@
 | 12 | **Docs**: Progress report güncelleme | `529bea0` | 2026-02-09 | Mimari doküman v1.1 |
 | 13 | **Analysis Hub**: 4-tab view + Process Tree + Dashboard | `65de96b` | 2026-02-09 | +1,908 satır — Analysis Hub, 5 yeni API, migration |
 | 14 | **Fix**: ESC ile modal kapatma | `8128928` | 2026-02-09 | Modal ESC key close |
+| 15 | **Refactor**: Yeni hiyerarşi — ScopeItem→L3 absorb, RequirementProcessMapping N:M | `5428088` | 2026-02-09 | Scenario=L1, Process L2/L3 (scope/fit-gap alanları L3'e taşındı), ScopeItem kaldırıldı, OpenItem eklendi, RequirementProcessMapping junction table, 424 test geçiyor |
+| 16 | **Fix**: UI hataları + ScopeItem referansları temizliği | `5534dc2` | 2026-02-09 | analysis.js parent_name düzeltmesi, mapping enrichment, rag.py + embed_knowledge_base.py ScopeItem temizliği |
+| 17 | **Feat**: Workshop belgeleri, workshop'tan requirement ekleme, requirement'tan L3 oluşturma | `b2fd202` | 2026-02-09 | WorkshopDocument modeli, POST /workshops/:id/requirements, POST /workshops/:id/documents, POST /requirements/:id/create-l3, 12 yeni test (436 toplam) |
 
 ---
 
@@ -134,6 +137,7 @@
 | 3.12 | pytest: scope API testleri | 38 test | ✅ |
 
 > **[REVISED]** Sprint 3 Scenario modeli R2'de tamamen yeniden yazıldı → İş Senaryosu + Workshop modeli.
+> **[REVISED v1.2]** Hiyerarşi Refactoring (`5428088`): ScopeItem ayrı tablo olarak kaldırıldı → scope/fit-gap alanları doğrudan L3 Process Step'e taşındı. Requirement ↔ L3 arası N:M ilişki RequirementProcessMapping junction table ile kuruldu. OpenItem modeli eklendi. Scenario = L1 seviyesine eşlendi. 4-katmanlı yeni yapı: Scenario(=L1) → Process L2 → Process L3 (scope alanları dahil).
 
 ---
 
@@ -159,11 +163,13 @@
 ```
 ✅ PostgreSQL + pgvector hazır (SQLite dev, PostgreSQL prod)
 ✅ Program Setup: proje, faz, gate, workstream, team CRUD çalışıyor
-✅ Scope & Requirements: tam hiyerarşi (Scenario→Process→ScopeItem→Analysis→Requirement)
+✅ Scope & Requirements: yeni hiyerarşi (Scenario=L1 → Process L2 → Process L3 scope alanlarıyla)
+✅ Requirement ↔ L3 N:M mapping (RequirementProcessMapping junction table)
+✅ Workshop Documents: belge yükleme/silme altyapısı
 ✅ Backlog Workbench: WRICEF + Config + FS/TS lifecycle çalışıyor
 ✅ Traceability engine: Req ↔ WRICEF/Config link çalışıyor
-✅ 50+ API endpoint aktif (gerçek: 177)
-✅ pytest > 60% (gerçek: 425 test)
+✅ 50+ API endpoint aktif (gerçek: 186)
+✅ pytest > 60% (gerçek: 436 test)
 ✅ Docker Compose ile tek komutla ayağa kalkıyor
 ```
 
@@ -255,21 +261,47 @@
 ### Analysis Hub — 4-Tab Analiz Merkezi ✅
 **Commit:** `65de96b` — Yeni sayfa: Workshop Planner, Process Tree, Scope Matrix, Dashboard. 5 yeni API endpoint. Requirement ekleme akışı (scope item + otomatik Fit/Gap analizi). ESC modal close (`8128928`).
 
+### Hiyerarşi Refactoring — ScopeItem→L3, RequirementProcessMapping N:M ✅
+**Commit:** `5428088` — Tüm veri modeli yeniden tasarlandı:
+- **ScopeItem ayrı tablo kaldırıldı** → scope, fit_status, gap_description, sap_bp_id gibi alanlar doğrudan Process L3'e taşındı.
+- **Scenario = L1** seviyesine eşlendi. Artık 4 katman: Scenario(=L1) → Process L2 → Process L3.
+- **RequirementProcessMapping**: Requirement ↔ L3 arasında N:M ilişki (junction table).
+- **OpenItem**: Workshop'larda çözülmemiş sorular/aksiyonlar içim yeni model.
+- 424 test başarıyla geçiyor. Eski migration'lar consolidate edildi → `25890e807851_new_hierarchy_v1.py`.
+
+**Commit:** `5534dc2` — UI hata düzeltmeleri:
+- `analysis.js`: `r.parent_name` → `r.parent_l2_name` (scope matrix düzeltmesi)
+- `requirement_bp.py`: Mapping enrichment'a `process_sap_tcode` eklendi
+- `rag.py` + `embed_knowledge_base.py`: ScopeItem referansları kaldırıldı
+
+### Workshop Enhancements — Belgeler, Requirement Ekleme, L3 Oluşturma ✅
+**Commit:** `b2fd202` — 4 yeni özellik:
+1. **Workshop Documents**: WorkshopDocument modeli, belge yükleme/silme (POST/DELETE). Gelecekte AI belge analizi için altyapı.
+2. **Workshop Detail Enrichment**: GET /workshops/:id → `l3_process_steps`, `documents`, `document_count` alanları eklendi.
+3. **Add Requirement from Workshop**: POST /workshops/:id/requirements → workshop_id, source='workshop', program_id ve L2 otomatik bağlanır.
+4. **Create L3 from Requirement**: POST /requirements/:id/create-l3 → Requirement'ın L2'si altında yeni L3 oluşturur + RequirementProcessMapping otomatik set eder.
+- Migration: `c75811018b4d_workshop_documents_table.py`
+- 12 yeni test (436 toplam).
+
 ---
 
-## Veritabanı Şeması (32 tablo)
+## Veritabanı Şeması (35 tablo)
 
 ```
 programs
 ├── phases → gates
 ├── workstreams → team_members
 ├── committees
-├── scenarios (iş senaryosu)
+├── scenarios (İş Senaryosu = L1)
 │   ├── workshops (8 session type)
-│   │     └── requirements (workshop_id FK)
-│   └── processes (L1/L2/L3)
-│       └── scope_items → analyses (fit/gap, workshop_id FK)
-├── requirements → requirement_traces
+│   │     ├── requirements (workshop_id FK)
+│   │     └── workshop_documents (belge ekleri)
+│   └── processes (L2/L3 — L3'te scope/fit-gap alanları dahil)
+│       └── analyses (fit/gap, workshop_id FK — L3'e bağlı)
+├── requirements
+│   ├── requirement_traces
+│   ├── requirement_process_mappings (N:M → L3)
+│   └── open_items
 ├── sprints → backlog_items (WRICEF)
 ├── backlog_items → functional_specs → technical_specs
 ├── config_items → functional_specs → technical_specs
@@ -282,20 +314,20 @@ programs
 
 ---
 
-## Test Kapsama (425 test)
+## Test Kapsama (436 test)
 
 | Test Dosyası | Test | Kapsam |
 |-------------|------|--------|
 | test_api_program.py | 36 | Programs, Phases, Gates, Workstreams, Team, Committees |
-| test_api_scenario.py | 21 | Scenarios, Workshops |
-| test_api_requirement.py | 20 | Requirements, Traces, Matrix |
-| test_api_scope.py | 38 | Processes, ScopeItems, Analyses |
+| test_api_scenario.py | 24 | Scenarios, Workshops, Workshop Documents, Add Requirement from Workshop |
+| test_api_requirement.py | 36 | Requirements, Traces, Matrix, Create L3 from Requirement, RequirementProcessMapping |
+| test_api_scope.py | 30 | Processes (L2/L3), Analyses |
 | test_api_backlog.py | 59 | Backlog, WRICEF, Sprints, Config, FS/TS |
-| test_api_testing.py | 63 | TestPlans, Cycles, Cases, Executions, Defects |
+| test_api_testing.py | 64 | TestPlans, Cycles, Cases, Executions, Defects |
 | test_api_raid.py | 46 | RAID, Heatmap, Notifications |
-| test_ai.py | 62 | AI Gateway, RAG, Suggestion Queue |
-| test_ai_assistants.py | 69 | NL Query, Requirement Analyst, Defect Triage, Gemini |
-| **Toplam** | **425** | **Tümü geçiyor** |
+| test_ai.py | 69 | AI Gateway, RAG, Suggestion Queue |
+| test_ai_assistants.py | 72 | NL Query, Requirement Analyst, Defect Triage, Gemini |
+| **Toplam** | **436** | **Tümü geçiyor** |
 
 ---
 
@@ -320,9 +352,11 @@ programs
 ✅ Traceability Matrix: Req ↔ TC ↔ Defect
 ✅ RAID Module: CRUD + scoring
 ✅ AI altyapı: Gateway + RAG + Suggestion Queue
+✅ Hierarchy Refactoring: Scenario=L1 → L2 → L3 (ScopeItem absorbed)
+✅ Workshop Enhancements: belge, requirement ekleme, L3 oluşturma
 ⬜ NL Query Assistant: doğal dille sorgulama
 ⬜ Requirement Analyst: Fit/PFit/Gap önerisi
 ⬜ Defect Triage: severity + duplicate detect
-✅ 100+ API endpoint (gerçek: 177)
-✅ pytest > 65% (gerçek: 425 test)
+✅ 100+ API endpoint (gerçek: 186)
+✅ pytest > 65% (gerçek: 436 test)
 ```

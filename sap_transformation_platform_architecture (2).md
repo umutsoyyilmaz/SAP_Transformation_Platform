@@ -1,6 +1,6 @@
 # SAP Transformation Management Platform — Uygulama Mimarisi
 
-**Versiyon:** 1.1  
+**Versiyon:** 1.2  
 **Tarih:** 2026-02-09  
 **Hazırlayan:** Umut Soyyılmaz  
 **Kaynak:** SAP Transformation PM Playbook (S/4HANA + Public Cloud)
@@ -11,6 +11,7 @@
 |----------|-------|------------|
 | 1.0 | 2026-02-07 | İlk yayın |
 | 1.1 | 2026-02-09 | **[REVISED]** Program Selector → Context-Based Program Selection (card grid + sidebar disable). **[REVISED]** Scenario modülü what-if karşılaştırmadan → İş Senaryosu + Workshop/Analiz Oturumu modeline geçirildi. Workshop CRUD, requirement bağlantısı eklendi. |
+| 1.2 | 2026-02-09 | **[REVISED]** Hiyerarşi refactoring: ScopeItem ayrı tablo kaldırıldı → scope/fit-gap alanları Process L3'e absorbe edildi. Scenario=L1 olarak eşlendi. RequirementProcessMapping N:M junction table eklendi. OpenItem modeli eklendi. **[NEW]** WorkshopDocument modeli (belge ekleri). **[NEW]** Workshop'tan requirement ekleme + Requirement'tan L3 oluşturma API'leri. 35 tablo, 436 test. |
 
 ---
 
@@ -21,9 +22,12 @@
 SAP dönüşüm programlarının (Greenfield, Brownfield, Selective, Public Cloud) uçtan uca yönetimi, takibi ve raporlanması için tek bir platform. Playbook'taki şu akışı dijitalleştirir:
 
 ```
-Project → Scenario → Analysis → Requirement (Fit/Partial Fit/Gap)
+Project → Scenario (=L1) → Workshop → Requirement (Fit/Partial Fit/Gap)
     → WRICEF Item / Configuration Item → FS/TS → Unit Evidence
     → SIT/UAT Test Cases → Defects → Cutover Tasks → Hypercare Incidents/RFC
+    
+Scenario → Process L2 → Process L3 (scope/fit-gap alanları dahil) → Analysis
+Requirement ↔ Process L3 (N:M via RequirementProcessMapping)
 ```
 
 ### 1.2 Tasarım İlkeleri
@@ -109,28 +113,38 @@ Project → Scenario → Analysis → Requirement (Fit/Partial Fit/Gap)
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                      SCOPE & REQUIREMENTS DOMAIN                        │
-│                                [REVISED v1.1]                           │
+│                          [REVISED v1.2]                                 │
 │                                                                         │
-│  Program ──1:N──▶ Scenario (İş Senaryosu: Sevkiyat, Satın Alma, vb.)  │
+│  Program ──1:N──▶ Scenario (İş Senaryosu = L1 seviye)                 │
 │                     │                                                   │
 │                     ├──1:N──▶ Workshop / Analiz Oturumu                │
 │                     │           (fit_gap_workshop, requirement_gathering,│
 │                     │            process_mapping, review, design_workshop│
 │                     │            demo, sign_off, training)              │
 │                     │           │                                       │
-│                     │           └──0:N──▶ Requirement                  │
-│                     │               (workshop_id nullable — doğrudan    │
-│                     │                da eklenebilir)                    │
-│                     │               (Fit | Partial Fit | Gap)           │
+│                     │           ├──0:N──▶ Requirement                  │
+│                     │           │   (workshop_id nullable — doğrudan    │
+│                     │           │    da eklenebilir)                    │
+│                     │           │   (Fit | Partial Fit | Gap)           │
+│                     │           │                                       │
+│                     │           ├──0:N──▶ WorkshopDocument (belge eki) │
+│                     │           │                                       │
+│                     │           └──0:N──▶ OpenItem (çözülmemiş sorular)│
 │                     │                                                   │
-│                     └──1:N──▶ Process (L1/L2/L3)                       │
+│                     └──1:N──▶ Process L2 (Süreç)                       │
 │                                 │                                       │
-│                                 └──1:N──▶ Scope Item (SAP Best Practice)│
+│                                 └──1:N──▶ Process L3 (Süreç Adımı)    │
+│                                             scope/fit-gap alanları:     │
+│                                             sap_bp_id, fit_status,      │
+│                                             gap_description, priority,  │
+│                                             sap_tcode, in_scope         │
 │                                             │                           │
-│                                             └──1:N──▶ Analysis         │
+│                                             └──0:N──▶ Analysis         │
 │                                                                         │
-│  Requirement ──▶ WRICEF Item (type: W/R/I/C/E/F)                       │
+│  Requirement ──N:M──▶ Process L3 (RequirementProcessMapping)          │
+│              ──▶ WRICEF Item (type: W/R/I/C/E/F)                       │
 │              ──▶ Configuration Item (config_key, module)                │
+│              ──▶ OpenItem (çözülmemiş soru/aksiyon)                    │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                         │                            │
                         ▼                            ▼
@@ -285,25 +299,30 @@ Project → Scenario → Analysis → Requirement (Fit/Partial Fit/Gap)
 ### 3.2 Uçtan Uca İzlenebilirlik Zinciri (Traceability Chain)
 
 ```
-> **[REVISED v1.1]** Scenario artık "İş Senaryosu" olarak tanımlanır.
-> Workshop/Analiz Oturumu katmanı eklendi. Requirement'lar workshop'tan da doğrudan da çıkabilir.
+> **[REVISED v1.2]** ScopeItem kaldırıldı, scope alanları L3'e taşındı.
+> Requirement ↔ L3 arası N:M ilişki RequirementProcessMapping ile kuruldu.
+> WorkshopDocument ve OpenItem eklendi.
 
 ```
-Scenario (İş Senaryosu)
+Scenario (İş Senaryosu = L1)
   ├─▶ Workshop / Analiz Oturumu
+  │     ├─▶ WorkshopDocument (belge ekleri — gelecek AI analiz altyapısı)
+  │     ├─▶ OpenItem (çözülmemiş sorular / aksiyonlar)
   │     └─▶ Requirement [Fit | Partial Fit | Gap]
   │           ├─▶ WRICEF Item ──▶ FS ──▶ TS ──▶ Unit Evidence
   │           │                                      │
   │           ├─▶ Config Item ──▶ Config Log ────────┤
   │           │                                      │
+  │           ├─▶ Process L3 (N:M via RequirementProcessMapping)
+  │           │
   │           └─▶ Test Case(s) ◀─────────────────────┘
   │                 │
   │                 └─▶ Defect(s)
   │                      └─▶ Cutover Task(s)
   │                           └─▶ Hypercare Incident(s) ──▶ RFC
   │
-  └─▶ Process (L1/L2/L3)
-        └─▶ Scope Item
+  └─▶ Process L2 (Süreç)
+        └─▶ Process L3 (Süreç Adımı — scope/fit-gap alanları dahil)
              └─▶ Analysis
 ```
 ```
@@ -356,17 +375,15 @@ Public Cloud seçildi →
 
 | Katman | Açıklama | Örnek |
 |--------|----------|-------|
-> **[REVISED v1.1]** Scenario artık what-if karşılaştırma değil, iş senaryosu (business process scenario).
-> Her senaryo altında Workshop/Analiz Oturumları planlanır ve requirement'lar bu oturumlardan çıkar.
+> **[REVISED v1.2]** ScopeItem ayrı katman olarak kaldırıldı. Scope/fit-gap alanları doğrudan L3 Process Step'e taşındı.
+> Scenario = L1 seviyesine eşlendi. Artık 4 katmanlı yapı:
 
 | Katman | Açıklama | Örnek |
 |--------|----------|-------|
-| Scenario (İş Senaryosu) | Uçtan uca iş süreci | Sevkiyat Süreci, Satın Alma, Pricing |
+| Scenario (= L1 İş Senaryosu) | Uçtan uca iş süreci | Sevkiyat Süreci, Satın Alma, Pricing |
 | Workshop | Analiz oturumu | Fit-Gap Workshop, Design Workshop, Demo, Sign-Off |
-| L1 — Process Group | Süreç grubu | Sales Order Processing |
 | L2 — Process | Bireysel süreç | Standard Sales Order |
-| L3 — Process Step | Adım/aktivite | Credit Check |
-| Scope Item | SAP Best Practice referansı | 1YG - Domestic Sales |
+| L3 — Process Step | Adım/aktivite (scope/fit-gap alanları dahil: sap_bp_id, fit_status, gap_description, priority, sap_tcode, in_scope) | Credit Check |
 
 **Requirement kayıt yapısı:**
 
@@ -374,8 +391,7 @@ Public Cloud seçildi →
 {
   "id": "REQ-O2C-0042",
   "scenario": "O2C",
-  "process": "Standard Sales Order",
-  "scope_item": "1YG",
+  "process_l2": "Standard Sales Order",
   "title": "Kredi limit kontrolü satış siparişinde otomatik çalışmalı",
   "description": "...",
   "fit_status": "Partial Fit",
@@ -385,11 +401,27 @@ Public Cloud seçildi →
   "decision_owner": "Process Owner - Finance",
   "priority": "High",
   "workstream": "O2C",
+  "workshop_id": 5,
+  "source": "workshop",
+  "linked_l3_steps": ["Credit Check", "Order Confirmation"],
   "linked_items": ["CFG-FI-0018"],
   "phase": "Explore",
   "status": "Approved"
 }
 ```
+
+**N:M Mapping (RequirementProcessMapping):**
+- Bir requirement birden fazla L3 process step'e bağlanabilir
+- Bir L3 process step birden fazla requirement'a bağlanabilir
+- POST /requirements/:id/create-l3 ile L3 oluşturulup otomatik mapping kurulur
+
+**Workshop Documents:**
+- Her workshop'a belge eklenebilir (file_name, file_type, file_size, description)
+- Gelecekte AI Document Analysis asistanı bu belgeler üzerinden çalışacak
+
+**OpenItem:**
+- Workshop sırasında çözülmemiş sorular/aksiyonlar kayıt altına alınır
+- Her OpenItem: question, answer, status (open/resolved/deferred), owner, due_date
 
 **Dashboard KPI'ları:**
 - Fit / Partial Fit / Gap dağılımı (workstream, scenario, phase bazlı)
@@ -652,21 +684,24 @@ Operational Layer
 │   ├── GET    /:projectId/raci
 │   └── GET    /:projectId/dashboard      # Aggregated KPIs
 │
-├── /scenarios                              # [REVISED v1.1]
+├── /scenarios                              # [REVISED v1.2]
 │   ├── GET    /?programId=&status=&module= # List business scenarios (filterable)
-│   ├── POST   /                           # Create business scenario
+│   ├── POST   /                           # Create business scenario (= L1 level)
 │   ├── GET    /:scenarioId                # Detail + workshops
 │   ├── PUT    /:scenarioId                # Update scenario
 │   ├── DELETE /:scenarioId                # Delete scenario + cascade
 │   ├── GET    /:scenarioId/workshops      # List workshops/sessions
 │   ├── POST   /:scenarioId/workshops      # Create workshop
-│   ├── GET    /:scenarioId/processes      # Process hierarchy
-│   └── GET    /:scenarioId/scope-items
+│   ├── GET    /:scenarioId/processes      # Process hierarchy (L2/L3)
+│   └── GET    /:scenarioId/dashboard      # Scenario dashboard
 │
-├── /workshops                              # [NEW v1.1]
-│   ├── GET    /:workshopId                # Detail + linked requirements
+├── /workshops                              # [REVISED v1.2]
+│   ├── GET    /:workshopId                # Detail + requirements + l3_process_steps + documents
 │   ├── PUT    /:workshopId                # Update (notes, decisions, counts)
-│   └── DELETE /:workshopId                # Delete workshop
+│   ├── DELETE /:workshopId                # Delete workshop
+│   ├── POST   /:workshopId/requirements   # [NEW v1.2] Add requirement linked to workshop + L2
+│   ├── POST   /:workshopId/documents      # [NEW v1.2] Upload workshop document
+│   └── DELETE /workshop-documents/:docId  # [NEW v1.2] Delete workshop document
 │
 ├── /requirements
 │   ├── GET    /?filters...               # Search/filter
@@ -674,6 +709,8 @@ Operational Layer
 │   ├── PUT    /:reqId
 │   ├── GET    /:reqId/traceability       # Full chain up & down
 │   ├── POST   /:reqId/convert            # Convert to WRICEF/Config
+│   ├── POST   /:reqId/create-l3          # [NEW v1.2] Create L3 under req's L2 + auto mapping
+│   ├── GET    /:reqId/mappings           # [NEW v1.2] Get N:M RequirementProcessMappings
 │   └── GET    /analytics                 # Fit/PFit/Gap stats
 │
 ├── /backlog
