@@ -169,8 +169,13 @@ const RequirementView = (() => {
                     <h1 style="display:inline;margin-left:12px">${escHtml(r.code || '')} ${escHtml(r.title)}</h1>
                     <span class="badge badge-${_statusClass(r.status)}" style="margin-left:8px">${r.status}</span>
                 </div>
-                <button class="btn btn-primary" onclick="RequirementView.showEditModal()">Edit</button>
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn-ai btn-sm" id="btnAIAnalyze" onclick="RequirementView.runAIAnalysis(${r.id})">🤖 AI Analyze</button>
+                    <button class="btn btn-primary" onclick="RequirementView.showEditModal()">Edit</button>
+                </div>
             </div>
+
+            <div id="aiAnalysisPanel" class="ai-assistant-panel" style="margin-bottom:16px"></div>
 
             <div class="detail-grid">
                 <div class="detail-section">
@@ -831,6 +836,84 @@ const RequirementView = (() => {
         } catch (err) { App.toast(err.message, 'error'); }
     }
 
+    // ── AI Requirement Analyst (Task 8.7) ─────────────────────────────────
+    async function runAIAnalysis(reqId) {
+        const btn = document.getElementById('btnAIAnalyze');
+        const panel = document.getElementById('aiAnalysisPanel');
+        if (!btn || !panel) return;
+
+        btn.disabled = true;
+        btn.textContent = '⏳ Analyzing...';
+        panel.innerHTML = '<div class="card"><div style="text-align:center;padding:16px"><div class="spinner"></div><p>AI is analyzing this requirement...</p></div></div>';
+
+        try {
+            const data = await API.post(`/ai/analyst/requirement/${reqId}`, {
+                create_suggestion: true,
+            });
+
+            const confPct = Math.round((data.confidence || 0) * 100);
+            const confClass = confPct >= 80 ? 'high' : confPct >= 50 ? 'medium' : 'low';
+            const similar = data.similar_requirements || [];
+            const actions = data.recommended_actions || [];
+            const txns = data.sap_transactions || [];
+
+            const classColor = {
+                fit: '#30914c', partial_fit: '#e5a000', gap: '#cc1919'
+            }[data.classification] || '#666';
+
+            panel.innerHTML = `
+                <div class="card ai-assistant-section">
+                    <div class="ai-assistant-header" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #e5e5e5">
+                        <span style="font-weight:600">🤖 AI Fit/Gap Analysis</span>
+                        <div style="display:flex;gap:8px;align-items:center">
+                            <span class="badge badge-confidence-${confClass}">${confPct}% confidence</span>
+                            ${data.suggestion_id ? '<span class="badge" style="background:#e8f4fd;color:#0070f2">📋 Suggestion created</span>' : ''}
+                        </div>
+                    </div>
+                    <div style="padding:16px">
+                        <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:12px">
+                            <div>
+                                <strong>Classification:</strong>
+                                <span class="badge" style="background:${classColor};color:#fff;margin-left:4px">${escHtml(data.classification || '—')}</span>
+                            </div>
+                            ${data.effort_estimate ? `<div><strong>Effort:</strong> <span class="badge">${escHtml(data.effort_estimate)}</span></div>` : ''}
+                            ${data.clean_core_compliant !== null && data.clean_core_compliant !== undefined ? `<div><strong>Clean Core:</strong> ${data.clean_core_compliant ? '✅ Compliant' : '⚠️ Non-compliant'}</div>` : ''}
+                        </div>
+                        ${data.reasoning ? `<div style="margin-bottom:12px"><strong>Reasoning:</strong><p style="margin:4px 0;color:var(--sap-text-secondary)">${escHtml(data.reasoning)}</p></div>` : ''}
+                        ${data.sap_solution ? `<div style="margin-bottom:12px"><strong>SAP Solution:</strong><p style="margin:4px 0;color:var(--sap-text-secondary)">${escHtml(data.sap_solution)}</p></div>` : ''}
+                        ${txns.length ? `<div style="margin-bottom:12px"><strong>SAP Transactions:</strong> ${txns.map(t => `<span class="badge" style="margin:2px">${escHtml(t)}</span>`).join('')}</div>` : ''}
+                        ${actions.length ? `<div style="margin-bottom:12px"><strong>Recommended Actions:</strong><ul style="margin:4px 0;padding-left:20px">${actions.map(a => `<li>${escHtml(a)}</li>`).join('')}</ul></div>` : ''}
+                        ${similar.length ? `
+                        <div style="border-top:1px solid #e5e5e5;padding-top:12px;margin-top:8px">
+                            <strong>🔗 Similar Requirements (${similar.length})</strong>
+                            <ul style="margin:4px 0;padding-left:20px">${similar.map(s => `<li>${escHtml(s.content || s.entity_type + '/' + s.entity_id)} <span class="badge">${Math.round((s.score || 0) * 100)}%</span></li>`).join('')}</ul>
+                        </div>` : ''}
+                        <div style="border-top:1px solid #e5e5e5;padding-top:12px;margin-top:8px;display:flex;gap:8px">
+                            <button class="btn btn-sm btn-success" onclick="RequirementView.applyAnalysisSuggestion('${escAttr(data.classification || '')}', '${escAttr(data.effort_estimate || '')}')">✅ Apply Classification</button>
+                        </div>
+                    </div>
+                </div>`;
+        } catch (e) {
+            panel.innerHTML = `<div class="card" style="padding:12px;color:#cc1919">⚠️ AI Analysis failed: ${escHtml(e.message)}</div>`;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '🤖 AI Analyze';
+        }
+    }
+
+    async function applyAnalysisSuggestion(classification, effort) {
+        if (!currentReq) return;
+        const body = {};
+        if (classification) body.status = classification === 'fit' ? 'approved' : classification === 'gap' ? 'draft' : 'in_progress';
+        if (effort) body.effort_estimate = effort;
+
+        try {
+            await API.put(`/requirements/${currentReq.id}`, body);
+            App.toast('AI classification applied', 'success');
+            await openDetail(currentReq.id);
+        } catch (err) { App.toast(err.message, 'error'); }
+    }
+
     // ── Utility ──────────────────────────────────────────────────────────
     function escHtml(s) {
         const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
@@ -843,5 +926,6 @@ const RequirementView = (() => {
         showAddTraceModal, doAddTrace, deleteTrace,
         showAddOpenItemModal, doAddOpenItem, showEditOpenItemModal, doEditOpenItem, deleteOpenItem,
         showAddL3Modal, doAddL3,
+        runAIAnalysis, applyAnalysisSuggestion,
     };
 })();
