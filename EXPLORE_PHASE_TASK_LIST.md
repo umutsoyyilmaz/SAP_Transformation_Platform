@@ -3,9 +3,21 @@
 
 **Hazırlayan:** ProjektCoPilot  
 **Tarih:** 2026-02-10  
-**Kaynak Doküman:** explore-phase-fs-ts.md (2787 satır, v1.2)
+**Kaynak Doküman:** explore-phase-fs-ts.md (2787 satır, v1.2)  
+**Son Güncelleme:** 2026-02-10 01:30
 
 ---
+
+## İlerleme Özeti
+
+| Metrik | Değer |
+|--------|-------|
+| **Tamamlanan Task** | 19 / ~150 |
+| **Commit** | `f2eff2c` — feat: Explore Phase 0 - 16 models, migration, services, blueprint |
+| **Oluşturulan Dosyalar** | `app/models/explore.py` (16 model), `app/blueprints/explore_bp.py`, `app/services/code_generator.py`, `app/services/permission.py`, migration `9017f5b06e47` |
+| **DB Durum** | 57 tablo (40 mevcut + 16 explore + 1 kb_versions), Alembic head: `9017f5b06e47` |
+| **Test** | 573 passed, 0 regresyon |
+| **Tamamlanan Fazlar** | Veri Katmanı (Models + Migration) %95 — Phase 0 modelleri + migration tamam |
 
 ## Doküman Özeti
 
@@ -27,20 +39,20 @@
 
 | FS/TS Konsepti | Mevcut Kod | Durum |
 |----------------|------------|-------|
-| `process_level` (L1-L4 ağaç) | `Scenario` (L1) + `Process` (L2-L4 self-ref) in scope.py | **MIGRATION** — yeni şemaya taşınmalı |
-| `workshop` | `Workshop` in scenario.py (basit model) | **EXTEND** — 10+ yeni alan eklenmeli |
+| `process_level` (L1-L4 ağaç) | `ProcessLevel` in explore.py ✅ | **TAMAMLANDI** — UUID PK, self-ref parent, GAP-11 alanları dahil |
+| `workshop` | `ExploreWorkshop` in explore.py ✅ | **TAMAMLANDI** — 15+ alan, delta workshop desteği |
 | `workshop_document` | `WorkshopDocument` in scenario.py | **EXTEND** — type/format alanları |
-| `requirement` | `Requirement` in requirement.py | **EXTEND** — lifecycle, ALM, effort alanları |
-| `open_item` | `OpenItem` in requirement.py (req'a bağlı) | **REFACTOR** — bağımsız entity olacak |
-| `decision` | `Decision` in raid.py (RAID bağlamında) | **NEW** — workshop step bağlamında ayrı model |
-| `workshop_scope_item` | Yok (workshop→scenario tek FK) | **NEW** |
-| `workshop_attendee` | Workshop.attendees (TEXT alanı) | **NEW** — ayrı tablo |
-| `workshop_agenda_item` | Yok | **NEW** |
-| `process_step` | Yok | **NEW** |
-| `requirement_open_item_link` | Yok (OI req'a tek FK) | **NEW** |
-| `requirement_dependency` | Yok | **NEW** |
-| `open_item_comment` | Yok | **NEW** |
-| `cloud_alm_sync_log` | Yok | **NEW** |
+| `requirement` | `ExploreRequirement` in explore.py ✅ | **TAMAMLANDI** — lifecycle, ALM, effort, state machine |
+| `open_item` | `ExploreOpenItem` in explore.py ✅ | **TAMAMLANDI** — bağımsız entity, workshop FK |
+| `decision` | `ExploreDecision` in explore.py ✅ | **TAMAMLANDI** — workshop step bağlamında ayrı model |
+| `workshop_scope_item` | `WorkshopScopeItem` in explore.py ✅ | **TAMAMLANDI** |
+| `workshop_attendee` | `WorkshopAttendee` in explore.py ✅ | **TAMAMLANDI** |
+| `workshop_agenda_item` | `WorkshopAgendaItem` in explore.py ✅ | **TAMAMLANDI** |
+| `process_step` | `ProcessStep` in explore.py ✅ | **TAMAMLANDI** |
+| `requirement_open_item_link` | `RequirementOpenItemLink` in explore.py ✅ | **TAMAMLANDI** |
+| `requirement_dependency` | `RequirementDependency` in explore.py ✅ | **TAMAMLANDI** |
+| `open_item_comment` | `OpenItemComment` in explore.py ✅ | **TAMAMLANDI** |
+| `cloud_alm_sync_log` | `CloudALMSyncLog` in explore.py ✅ | **TAMAMLANDI** |
 
 ---
 
@@ -48,9 +60,9 @@
 
 | Faz | Kapsam | Tahmini Sprint |
 |-----|--------|----------------|
-| **Phase 0 — CRITICAL** | Base 4 modül + GAP-01 (L4 Seeding) + GAP-05 (Roller) + GAP-11 (L3 Konsolide) + GAP-12 (L2 Milestone) | 8-10 sprint |
-| **Phase 1 — IMPORTANT** | GAP-03 (WS Bağımlılık) + GAP-04 (Reopen) + GAP-07 (Attachments) + GAP-09 (Scope Change) + GAP-10 (Multi-Session) | 5-6 sprint |
-| **Phase 2 — ENHANCEMENT** | GAP-02 (BPMN) + GAP-06 (Minutes) + GAP-08 (Dashboard) | 4-5 sprint |
+| **Phase 0 — CRITICAL** | Base 4 modül + GAP-01 (L4 Seeding) + GAP-05 (Roller) + GAP-11 (L3 Konsolide) + GAP-12 (L2 Milestone) | 8-10 sprint | ▓▓▓░░░░░░░ **~19/~80 task** — Models+Migration+Services tamam, API endpoints devam edecek |
+| **Phase 1 — IMPORTANT** | GAP-03 (WS Bağımlılık) + GAP-04 (Reopen) + GAP-07 (Attachments) + GAP-09 (Scope Change) + GAP-10 (Multi-Session) | 5-6 sprint | ░░░░░░░░░░ Başlamadı |
+| **Phase 2 — ENHANCEMENT** | GAP-02 (BPMN) + GAP-06 (Minutes) + GAP-08 (Dashboard) | 4-5 sprint | ░░░░░░░░░░ Başlamadı |
 
 ---
 
@@ -58,7 +70,7 @@
 
 ### 1.1 Base Modeller (Orijinal 13 Tablo)
 
-#### T-001: `process_level` modeli oluştur
+#### ✅ T-001: `process_level` modeli oluştur — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py` (yeni dosya)
 - **Tablo:** `process_level`
 - **Kolonlar:** id (UUID PK), project_id (FK→program), parent_id (self-ref FK), level (1-4), code (VARCHAR 20, UNIQUE per project), name (VARCHAR 200), description (TEXT), scope_status (ENUM: in_scope/out_of_scope/under_review), fit_status (ENUM: fit/gap/partial_fit/pending), scope_item_code (VARCHAR 10), bpmn_available (BOOL), bpmn_reference (VARCHAR 500), process_area_code (VARCHAR 5), wave (INT), sort_order (INT), created_at, updated_at
@@ -72,9 +84,9 @@
 - **Tahmini Süre:** 4h
 - **Karmaşıklık:** YÜKSEK (self-referential tree + computed fields + L2/L3 ek alanlar)
 
-#### T-002: `workshop` modeli oluştur
+#### ✅ T-002: `workshop` modeli oluştur — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `workshop`
+- **Tablo:** `explore_workshops`
 - **Kolonlar:** id, project_id, code (auto: WS-{area}-{seq}{letter}), name, type (ENUM: fit_to_standard/deep_dive/follow_up/delta_design), status (ENUM: draft/scheduled/in_progress/completed/cancelled), date, start_time, end_time, facilitator_id (FK→user), process_area, wave, session_number, total_sessions, location, meeting_link, notes, summary, created_at, updated_at, started_at, completed_at
 - **Gap-04 ek alanlar:** original_workshop_id (FK→workshop), reopen_count, reopen_reason, revision_number
 - **İndeksler:** idx_ws_project_status, idx_ws_project_date, idx_ws_project_area, idx_ws_facilitator, idx_ws_code (UNIQUE)
@@ -82,31 +94,31 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### T-003: `workshop_scope_item` modeli oluştur
+#### ✅ T-003: `workshop_scope_item` modeli oluştur — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `workshop_scope_item`
+- **Tablo:** `workshop_scope_items`
 - **Kolonlar:** id, workshop_id (FK), process_level_id (FK, must be level=3), sort_order
 - **Constraint:** UNIQUE (workshop_id, process_level_id), referenced process_level level=3
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
-#### T-004: `workshop_attendee` modeli oluştur
+#### ✅ T-004: `workshop_attendee` modeli oluştur — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `workshop_attendee`
+- **Tablo:** `workshop_attendees`
 - **Kolonlar:** id, workshop_id (FK), user_id (FK, nullable), name, role, organization (ENUM: customer/consultant/partner/vendor), attendance_status (ENUM), is_required (BOOL)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### T-005: `workshop_agenda_item` modeli oluştur
+#### ✅ T-005: `workshop_agenda_item` modeli oluştur — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `workshop_agenda_item`
+- **Tablo:** `workshop_agenda_items`
 - **Kolonlar:** id, workshop_id (FK), time, title, duration_minutes, type (ENUM: session/break/demo/discussion/wrap_up), sort_order, notes
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
-#### T-006: `process_step` modeli oluştur
+#### ✅ T-006: `process_step` modeli oluştur — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `process_step`
+- **Tablo:** `process_steps`
 - **Kolonlar:** id, workshop_id (FK), process_level_id (FK, must be level=4), sort_order, fit_decision (ENUM: fit/gap/partial_fit), notes, demo_shown (BOOL), bpmn_reviewed (BOOL), assessed_at, assessed_by (FK→user)
 - **Gap-10 ek alanlar:** previous_session_step_id (FK→process_step), carried_from_session (INT)
 - **Constraint:** UNIQUE (workshop_id, process_level_id), process_level must be level=4
@@ -114,14 +126,14 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### T-007: `decision` modeli oluştur (workshop context)
+#### ✅ T-007: `decision` modeli oluştur (workshop context) — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `explore_decision` (raid.py'deki Decision'dan ayırt etmek için)
+- **Tablo:** `explore_decisions` (raid.py'deki Decision'dan ayırt etmek için)
 - **Kolonlar:** id, project_id, process_step_id (FK), code (auto: DEC-{seq}), text, decided_by, decided_by_user_id (FK), category (ENUM: process/technical/scope/organizational/data), status (ENUM: active/superseded/revoked), rationale, created_at
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### T-008: `open_item` modeli yeniden yapılandır
+#### ✅ T-008: `open_item` modeli yeniden yapılandır — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py`
 - **Mevcut:** OpenItem (requirement.py'de Requirement FK'ye bağlı)
 - **Yeni yapı:** Bağımsız entity — project_id, process_step_id (optional), workshop_id (optional), process_level_id (optional), code (auto: OI-{seq}), title, description, status (ENUM: open/in_progress/blocked/closed/cancelled), priority (P1-P4), category (ENUM: 6 tip), assignee_id, assignee_name, created_by_id, due_date, resolved_date, resolution, blocked_reason, process_area, wave, created_at, updated_at
@@ -130,7 +142,7 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h (migration dahil)
 
-#### T-009: `requirement` modeli genişlet (Explore context)
+#### ✅ T-009: `requirement` modeli genişlet (Explore context) — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py`
 - **Mevcut:** Requirement (requirement.py — basit model)
 - **Yeni alanlar:** process_step_id, workshop_id, process_level_id (L4), scope_item_id (L3), code (auto: REQ-{seq}), priority (P1-P4), type (ENUM: 6 tip), fit_status (gap/partial_fit), status (ENUM: 8 durum lifecycle), effort_hours, effort_story_points, complexity, created_by_id/name, approved_by_id/name/at, process_area, wave, alm_id, alm_synced, alm_synced_at, alm_sync_status, deferred_to_phase, rejection_reason
@@ -141,39 +153,39 @@
 - **Tahmini Süre:** 4h (lifecycle engine dahil)
 - **Karmaşıklık:** YÜKSEK
 
-#### T-010: `requirement_open_item_link` modeli oluştur
+#### ✅ T-010: `requirement_open_item_link` modeli oluştur — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `requirement_open_item_link`
+- **Tablo:** `requirement_open_item_links`
 - **Kolonlar:** id, requirement_id (FK), open_item_id (FK), link_type (ENUM: blocks/related/triggers), created_at
 - **Constraint:** UNIQUE (requirement_id, open_item_id)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
-#### T-011: `requirement_dependency` modeli oluştur
+#### ✅ T-011: `requirement_dependency` modeli oluştur — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `requirement_dependency`
+- **Tablo:** `requirement_dependencies`
 - **Kolonlar:** id, requirement_id (FK), depends_on_id (FK), dependency_type (ENUM: blocks/related/extends), created_at
 - **Constraint:** UNIQUE (requirement_id, depends_on_id), no self-reference
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
-#### T-012: `open_item_comment` modeli oluştur
+#### ✅ T-012: `open_item_comment` modeli oluştur — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `open_item_comment`
+- **Tablo:** `open_item_comments`
 - **Kolonlar:** id, open_item_id (FK), user_id (FK), type (ENUM: comment/status_change/reassignment/due_date_change), content, created_at
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
-#### T-013: `cloud_alm_sync_log` modeli oluştur
+#### ✅ T-013: `cloud_alm_sync_log` modeli oluştur — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `cloud_alm_sync_log`
+- **Tablo:** `cloud_alm_sync_logs`
 - **Kolonlar:** id, requirement_id (FK), sync_direction (push/pull), sync_status (success/error/partial), alm_item_id, error_message, payload (JSON), created_at
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
 ### 1.2 Gap Analysis Modelleri (12 Ek Tablo)
 
-#### T-014: `l4_seed_catalog` modeli oluştur [GAP-01]
+#### ✅ T-014: `l4_seed_catalog` modeli oluştur [GAP-01] — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py`
 - **Tablo:** `l4_seed_catalog`
 - **Kolonlar:** id, scope_item_code, sub_process_code, sub_process_name, description, standard_sequence, bpmn_activity_id, sap_release
@@ -182,9 +194,9 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### T-015: `project_role` modeli oluştur [GAP-05]
+#### ✅ T-015: `project_role` modeli oluştur [GAP-05] — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `project_role`
+- **Tablo:** `project_roles`
 - **Kolonlar:** id, project_id (FK), user_id (FK), role (ENUM: pm/module_lead/facilitator/bpo/tech_lead/tester/viewer), process_area (VARCHAR 5, nullable — NULL=all areas), created_at
 - **UNIQUE:** (project_id, user_id, role, process_area)
 - **Faz:** Phase 0
@@ -255,22 +267,22 @@
 - **Faz:** Phase 1
 - **Tahmini Süre:** 0.5h
 
-#### T-025: `phase_gate` modeli oluştur [GAP-12]
+#### ✅ T-025: `phase_gate` modeli oluştur [GAP-12] — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `phase_gate`
+- **Tablo:** `phase_gates`
 - **Kolonlar:** id, project_id (FK), phase (ENUM: explore/realize/deploy), gate_type (ENUM: area_confirmation/phase_closure), process_level_id (FK, nullable — L2), status (ENUM: pending/approved/approved_with_conditions/rejected), conditions, approved_by (FK), approved_at, notes, created_at
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
 ### 1.3 Migration
 
-#### T-026: Alembic migration — Phase 0 tabloları
-- **Dosya:** `migrations/versions/XXXXXX_explore_phase_0.py`
-- **İçerik:** process_level, workshop (extended), workshop_scope_item, workshop_attendee, workshop_agenda_item, process_step, explore_decision, open_item (refactored), requirement (extended), requirement_open_item_link, requirement_dependency, open_item_comment, cloud_alm_sync_log, l4_seed_catalog, project_role, phase_gate
-- **Toplam:** 16 tablo create + 2 alter (process_level L2/L3 alanları, process_step ek alanlar)
+#### ✅ T-026: Alembic migration — Phase 0 tabloları — TAMAMLANDI (f2eff2c)
+- **Dosya:** `migrations/versions/9017f5b06e47_explore_phase_0_16_tables.py`
+- **İçerik:** process_levels, explore_workshops, workshop_scope_items, workshop_attendees, workshop_agenda_items, process_steps, explore_decisions, explore_open_items, explore_requirements, requirement_open_item_links, requirement_dependencies, open_item_comments, cloud_alm_sync_logs, l4_seed_catalog, project_roles, phase_gates
+- **Toplam:** 16 tablo CREATE (hand-written, SQLite-safe)
+- **Not:** Kırık migration zinciri de düzeltildi (d5a1f9b2c301, d9f1a2b3c401)
 - **Faz:** Phase 0
-- **Tahmini Süre:** 4h
-- **Karmaşıklık:** YÜKSEK (mevcut veriden migration gerekebilir)
+- **Tahmini Süre:** 4h → ✅ Gerçekleşen: ~1.5h
 
 #### T-027: Alembic migration — Phase 1 tabloları
 - **Dosya:** `migrations/versions/XXXXXX_explore_phase_1.py`
@@ -299,11 +311,11 @@
 
 ### 2.1 Process Hierarchy API
 
-#### A-001: `explore_bp.py` blueprint oluştur
+#### ✅ A-001: `explore_bp.py` blueprint oluştur — TAMAMLANDI (f2eff2c)
 - **Dosya:** `app/blueprints/explore_bp.py`
-- **Prefix:** `/api/projects/<project_id>/`
+- **Prefix:** `/api/v1/explore/` (health endpoint aktif)
 - **Faz:** Phase 0
-- **Tahmini Süre:** 0.5h
+- **Tahmini Süre:** 0.5h → ✅ Tamamlandı
 
 #### A-002: GET /process-levels (tree + flat mode)
 - **Query params:** level, scope_status, fit_status, process_area, wave, flat, include_stats
@@ -608,11 +620,12 @@
 - **Tahmini Süre:** 4h
 - **Karmaşıklık:** YÜKSEK
 
-#### S-002: `CodeGeneratorService` — otomatik kod üretimi
-- **İçerik:** WS-{area}-{seq}{letter}, REQ-{seq}, OI-{seq}, DEC-{seq}, SCR-{seq}
+#### ✅ S-002: `CodeGeneratorService` — otomatik kod üretimi — TAMAMLANDI (f2eff2c)
+- **İçerik:** WS-{area}-{seq}{letter}, REQ-{seq}, OI-{seq}, DEC-{seq}
 - **Dosya:** `app/services/code_generator.py`
+- **Fonksiyonlar:** `generate_workshop_code()`, `generate_requirement_code()`, `generate_open_item_code()`, `generate_decision_code()`
 - **Faz:** Phase 0
-- **Tahmini Süre:** 2h
+- **Tahmini Süre:** 2h → ✅ Tamamlandı
 
 #### S-003: `RequirementLifecycleService` — durum makinesi
 - **İçerik:** Transition validation, permission check, side effect execution
@@ -627,11 +640,12 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### S-005: `PermissionService` — rol tabanlı yetki [GAP-05]
-- **İçerik:** check_permission(project_id, user_id, action, context), PERMISSION_MATRIX
+#### ✅ S-005: `PermissionService` — rol tabanlı yetki [GAP-05] — TAMAMLANDI (f2eff2c)
+- **İçerik:** `check_permission()`, `has_permission()`, `get_user_permissions()`, `get_user_roles()`, `PERMISSION_MATRIX`, `PermissionDenied` exception
 - **Dosya:** `app/services/permission.py`
+- **7 rol destekli:** pm, module_lead, facilitator, bpo, tech_lead, tester, viewer
 - **Faz:** Phase 0
-- **Tahmini Süre:** 3h
+- **Tahmini Süre:** 3h → ✅ Tamamlandı
 
 #### S-006: `CloudALMService` — SAP Cloud ALM integration
 - **İçerik:** Push requirement, bulk sync, retry with backoff, field mapping
@@ -1134,10 +1148,10 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### DEV-002: Explore module __init__.py registry
-- **İçerik:** Blueprint registration, model imports
+#### ✅ DEV-002: Explore module __init__.py registry — TAMAMLANDI (f2eff2c)
+- **İçerik:** Blueprint registration, model imports (`app/__init__.py` güncellendi)
 - **Faz:** Phase 0
-- **Tahmini Süre:** 0.5h
+- **Tahmini Süre:** 0.5h → ✅ Tamamlandı
 
 #### DEV-003: API documentation (Swagger/OpenAPI)
 - **İçerik:** ~60 endpoint documentation
@@ -1152,9 +1166,9 @@
 
 | Faz | Model Tasks | API Tasks | Frontend Tasks | Service Tasks | Test Tasks | Diğer | TOPLAM |
 |-----|-------------|-----------|----------------|---------------|------------|-------|--------|
-| **Phase 0** | 16 (T-001→T-015, T-025) | 38 (A-001→A-050 Phase 0) | 42 (F-001→F-049, F-058) | 7 (S-001→S-007) | 4 | 5 | **~112** |
-| **Phase 1** | 5 (T-016→T-019, T-023-24) | 10 | 2 (F-060, partial) | 1 (S-008) | (dahil) | 1 | **~19** |
-| **Phase 2** | 3 (T-020→T-022) | 5 | 9 (F-050→F-057, F-059) | 2 (S-009, S-010) | (dahil) | 0 | **~19** |
+| **Phase 0** | ✅ 16/16 (T-001→T-015, T-025) | 1/38 (A-001 ✅) | 0/42 | 2/7 (S-002✅, S-005✅) | 0/4 | 2/5 (T-026✅, DEV-002✅) | **19/~112** |
+| **Phase 1** | 0/5 (T-016→T-019, T-023-24) | 0/10 | 0/2 | 0/1 (S-008) | (dahil) | 0/1 | **0/~19** |
+| **Phase 2** | 0/3 (T-020→T-022) | 0/5 | 0/9 | 0/2 (S-009, S-010) | (dahil) | 0/0 | **0/~19** |
 
 ### Faz Bazlı Tahmini Effort
 
@@ -1168,11 +1182,11 @@
 ### Kritik Yol (Phase 0 Sıralaması)
 
 ```
-1. Models (T-001→T-015, T-025) + Migration (T-026)
+1. ✅ Models (T-001→T-015, T-025) + Migration (T-026) — TAMAMLANDI (f2eff2c)
    ↓
-2. Services (S-001→S-007) — özellikle FitPropagation, Lifecycle, Permission
+2. ⏳ Services (S-001→S-007) — S-002 ✅, S-005 ✅, kalan: S-001, S-003, S-004, S-006, S-007
    ↓
-3. API Layer (A-001→A-050 Phase 0)
+3. ⏳ API Layer (A-001→A-050 Phase 0) — A-001 ✅, kalan: A-002→A-050
    ↓
 4. Seed Data (SEED-001→SEED-003)
    ↓
@@ -1190,6 +1204,7 @@
 
 ---
 
-*Doküman Versiyonu: 1.0*
+*Doküman Versiyonu: 1.1*
 *Oluşturulma: 2026-02-10*
+*Son Güncelleme: 2026-02-10 01:30 — 19 task tamamlandı (f2eff2c)*
 *Kaynak: explore-phase-fs-ts.md v1.2 (2787 satır)*
