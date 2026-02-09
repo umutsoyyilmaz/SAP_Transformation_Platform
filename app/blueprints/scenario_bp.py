@@ -174,6 +174,95 @@ def scenario_stats(program_id):
 # WORKSHOPS
 # ═════════════════════════════════════════════════════════════════════════════
 
+@scenario_bp.route("/programs/<int:program_id>/workshops", methods=["GET"])
+def list_all_workshops(program_id):
+    """List ALL workshops across all scenarios for a program."""
+    program, err = _get_or_404(Program, program_id)
+    if err:
+        return err
+
+    query = (
+        Workshop.query
+        .join(Scenario)
+        .filter(Scenario.program_id == program_id)
+    )
+
+    status = request.args.get("status")
+    if status:
+        query = query.filter(Workshop.status == status)
+    session_type = request.args.get("session_type")
+    if session_type:
+        query = query.filter(Workshop.session_type == session_type)
+
+    workshops = query.order_by(
+        Workshop.session_date.asc().nullslast(), Workshop.created_at.desc()
+    ).all()
+
+    result = []
+    for w in workshops:
+        d = w.to_dict()
+        d["scenario_name"] = w.scenario.name if w.scenario else ""
+        d["scenario_status"] = w.scenario.status if w.scenario else ""
+        d["sap_module"] = w.scenario.sap_module if w.scenario else ""
+        d["process_area"] = w.scenario.process_area if w.scenario else ""
+        result.append(d)
+
+    return jsonify(result), 200
+
+
+@scenario_bp.route("/programs/<int:program_id>/workshops/stats", methods=["GET"])
+def workshop_stats(program_id):
+    """Aggregated workshop statistics across all scenarios."""
+    program, err = _get_or_404(Program, program_id)
+    if err:
+        return err
+
+    workshops = (
+        Workshop.query
+        .join(Scenario)
+        .filter(Scenario.program_id == program_id)
+        .all()
+    )
+
+    total = len(workshops)
+    by_status = {}
+    by_type = {}
+    total_fit = 0
+    total_gap = 0
+    total_partial = 0
+    upcoming = []
+
+    from datetime import datetime, timezone as tz
+    now = datetime.now(tz.utc)
+
+    for w in workshops:
+        by_status[w.status] = by_status.get(w.status, 0) + 1
+        by_type[w.session_type] = by_type.get(w.session_type, 0) + 1
+        total_fit += w.fit_count or 0
+        total_gap += w.gap_count or 0
+        total_partial += w.partial_fit_count or 0
+        if w.session_date and w.session_date > now and w.status == "planned":
+            upcoming.append({
+                "id": w.id,
+                "title": w.title,
+                "session_date": w.session_date.isoformat(),
+                "session_type": w.session_type,
+                "scenario_name": w.scenario.name if w.scenario else "",
+            })
+
+    upcoming.sort(key=lambda x: x["session_date"])
+
+    return jsonify({
+        "total": total,
+        "by_status": by_status,
+        "by_type": by_type,
+        "total_fit": total_fit,
+        "total_gap": total_gap,
+        "total_partial": total_partial,
+        "upcoming": upcoming[:10],
+    }), 200
+
+
 @scenario_bp.route("/scenarios/<int:scenario_id>/workshops", methods=["GET"])
 def list_workshops(scenario_id):
     """List workshops for a scenario."""

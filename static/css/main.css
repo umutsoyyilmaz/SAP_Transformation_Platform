@@ -1853,3 +1853,344 @@ a:hover { text-decoration: underline; }
     flex-wrap: wrap;
     gap: 10px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Analysis Hub — Sprint 8
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Tab bar */
+.ah-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--sap-border);
+    margin-bottom: 20px;
+}
+.ah-tab {
+    padding: 10px 20px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--sap-text-secondary);
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s;
+    margin-bottom: -2px;
+}
+.ah-tab:hover {
+    color: var(--sap-text);
+    background: var(--sap-hover);
+}
+.ah-tab--active {
+    color: var(--sap-brand);
+    border-bottom-color: var(--sap-brand);
+    font-weight: 600;
+}
+.ah-tab-content {
+    min-height: 400px;
+}
+
+/* Toolbar */
+.ah-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.ah-toolbar__left,
+.ah-toolbar__right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.form-input--sm {
+    padding: 4px 8px;
+    font-size: 12px;
+    height: 30px;
+}
+
+/* Workshop summary badges */
+.ah-ws-summary {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+/* ── Kanban ────────────────────────────────────────────────────────────── */
+.ah-kanban {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    min-height: 300px;
+}
+.ah-kanban__col {
+    background: var(--sap-bg);
+    border: 1px solid var(--sap-border);
+    border-radius: 12px;
+    padding: 12px;
+    min-height: 250px;
+}
+.ah-kanban__col-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--sap-border);
+    font-weight: 600;
+    font-size: 13px;
+}
+.ah-kanban__cards {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.ah-kanban__card {
+    background: var(--sap-card-bg, #fff);
+    border: 1px solid var(--sap-border);
+    border-radius: 8px;
+    padding: 10px;
+    cursor: pointer;
+    transition: box-shadow 0.2s;
+}
+.ah-kanban__card:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,.1);
+}
+.ah-kanban__card-type strong {
+    font-size: 13px;
+}
+.ah-kanban__card-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 6px;
+}
+.ah-kanban__empty {
+    text-align: center;
+    color: var(--sap-text-secondary);
+    padding: 20px;
+    font-size: 12px;
+}
+
+/* ── Calendar ──────────────────────────────────────────────────────────── */
+.ah-cal {
+    background: var(--sap-card-bg, #fff);
+    border: 1px solid var(--sap-border);
+    border-radius: 12px;
+    padding: 16px;
+}
+.ah-cal__header {
+    text-align: center;
+    margin-bottom: 12px;
+}
+.ah-cal__header h3 {
+    margin: 0;
+    text-transform: capitalize;
+}
+.ah-cal__grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px;
+}
+.ah-cal__dow {
+    text-align: center;
+    font-weight: 600;
+    font-size: 12px;
+    padding: 6px;
+    color: var(--sap-text-secondary);
+    border-bottom: 1px solid var(--sap-border);
+}
+.ah-cal__cell {
+    min-height: 80px;
+    padding: 4px;
+    border: 1px solid var(--sap-border);
+    border-radius: 4px;
+    font-size: 11px;
+    overflow: hidden;
+}
+.ah-cal__cell--empty {
+    border-color: transparent;
+    background: transparent;
+}
+.ah-cal__cell--today {
+    background: var(--sap-brand-light, #e8f0fe);
+    border-color: var(--sap-brand);
+}
+.ah-cal__day {
+    font-weight: 600;
+    font-size: 12px;
+    display: block;
+    margin-bottom: 2px;
+}
+.ah-cal__event {
+    padding: 2px 4px;
+    border-radius: 4px;
+    margin-top: 2px;
+    font-size: 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ah-cal__event:hover {
+    opacity: 0.85;
+}
+
+/* ── Process Tree ──────────────────────────────────────────────────────── */
+.ah-tree-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    min-height: 400px;
+}
+.ah-tree {
+    background: var(--sap-card-bg, #fff);
+    border: 1px solid var(--sap-border);
+    border-radius: 12px;
+    padding: 16px;
+    overflow-y: auto;
+    max-height: 600px;
+}
+.ah-tree-detail {
+    background: var(--sap-card-bg, #fff);
+    border: 1px solid var(--sap-border);
+    border-radius: 12px;
+    padding: 16px;
+    overflow-y: auto;
+    max-height: 600px;
+}
+.ah-tree-node {
+    margin-bottom: 2px;
+}
+.ah-tree-node__row {
+    display: flex;
+    align-items: center;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    gap: 4px;
+}
+.ah-tree-node__row:hover {
+    background: var(--sap-hover);
+}
+.ah-tree-node__toggle {
+    width: 18px;
+    text-align: center;
+    font-size: 10px;
+    cursor: pointer;
+    color: var(--sap-text-secondary);
+    flex-shrink: 0;
+}
+.ah-tree-node__toggle--leaf {
+    color: #ccc;
+    cursor: default;
+}
+.ah-tree-node__name {
+    font-size: 13px;
+    font-weight: 500;
+    flex: 1;
+}
+.ah-tree-node__actions {
+    display: none;
+    gap: 4px;
+}
+.ah-tree-node__row:hover .ah-tree-node__actions {
+    display: flex;
+}
+.ah-tree-node__children {
+    /* open by default */
+}
+
+/* Scope panel in tree detail */
+.ah-scope-panel {}
+.ah-scope-panel__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.ah-scope-panel__header h3 {
+    margin: 0;
+}
+.ah-scope-panel__actions {
+    margin-bottom: 12px;
+}
+
+/* ── Clickable table rows ──────────────────────────────────────────────── */
+.ah-clickable-row {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+.ah-clickable-row:hover {
+    background-color: var(--sap-bg-highlight, #e8f0fe) !important;
+}
+
+/* ── Scope Matrix Progress Bar ─────────────────────────────────────────── */
+.ah-progress-bar {
+    margin-bottom: 20px;
+}
+.ah-progress-bar__track {
+    display: flex;
+    height: 24px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #e8e8e8;
+    margin-bottom: 8px;
+}
+.ah-progress-bar__fill {
+    transition: width 0.5s ease;
+    min-width: 0;
+}
+.ah-progress-bar__fill--fit    { background: #30914c; }
+.ah-progress-bar__fill--partial { background: #e76500; }
+.ah-progress-bar__fill--gap    { background: #bb0000; }
+
+.ah-progress-bar__labels {
+    display: flex;
+    gap: 16px;
+    font-size: 13px;
+    flex-wrap: wrap;
+}
+
+/* ── Dashboard Alerts ──────────────────────────────────────────────────── */
+.ah-alerts {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+.ah-alert {
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+}
+.ah-alert--warning {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    color: #856404;
+}
+.ah-alert--danger {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+}
+.ah-alert--info {
+    background: #d1ecf1;
+    border: 1px solid #bee5eb;
+    color: #0c5460;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 960px) {
+    .ah-kanban { grid-template-columns: 1fr 1fr; }
+    .ah-tree-container { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+    .ah-kanban { grid-template-columns: 1fr; }
+    .ah-tabs { flex-wrap: wrap; }
+    .ah-tab { font-size: 12px; padding: 8px 12px; }
+}

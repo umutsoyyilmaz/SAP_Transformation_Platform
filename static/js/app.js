@@ -17,6 +17,7 @@ const App = (() => {
         programs:     () => ProgramView.render(),
         // Future Sprint views — placeholder
         scenarios:    () => ScenarioView.render(),
+        analysis:     () => AnalysisView.render(),
         requirements: () => RequirementView.render(),
         backlog:      () => BacklogView.render(),
         testing:      () => TestingView.render(),
@@ -34,7 +35,7 @@ const App = (() => {
     // ── Program Context ─────────────────────────────────────────────────
     // Views that require a program to be selected
     const programRequiredViews = new Set([
-        'scenarios', 'requirements', 'backlog', 'testing',
+        'scenarios', 'analysis', 'requirements', 'backlog', 'testing',
         'integration', 'data-factory', 'cutover', 'raid',
         'reports', 'ai-query',
     ]);
@@ -176,6 +177,7 @@ const App = (() => {
                 </div>
                 <div class="dashboard-quick-nav">
                     <button class="btn btn-secondary" onclick="App.navigate('scenarios')">🎯 Scenarios</button>
+                    <button class="btn btn-secondary" onclick="App.navigate('analysis')">🔬 Analysis Hub</button>
                     <button class="btn btn-secondary" onclick="App.navigate('requirements')">📝 Requirements</button>
                     <button class="btn btn-secondary" onclick="App.navigate('backlog')">⚙️ Backlog</button>
                     <button class="btn btn-secondary" onclick="App.navigate('testing')">🧪 Test Hub</button>

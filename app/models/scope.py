@@ -188,6 +188,11 @@ class Analysis(db.Model):
     scope_item_id = db.Column(
         db.Integer, db.ForeignKey("scope_items.id", ondelete="CASCADE"), nullable=False
     )
+    workshop_id = db.Column(
+        db.Integer, db.ForeignKey("workshops.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Workshop session where this analysis was performed",
+    )
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, default="")
     analysis_type = db.Column(
@@ -221,6 +226,7 @@ class Analysis(db.Model):
         return {
             "id": self.id,
             "scope_item_id": self.scope_item_id,
+            "workshop_id": self.workshop_id,
             "name": self.name,
             "description": self.description,
             "analysis_type": self.analysis_type,

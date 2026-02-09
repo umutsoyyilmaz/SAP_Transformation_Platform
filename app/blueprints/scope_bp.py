@@ -166,16 +166,31 @@ def process_stats(sid):
 
 @scope_bp.route("/processes/<int:pid>/scope-items", methods=["GET"])
 def list_scope_items(pid):
-    """List scope items under a process."""
+    """List scope items under a process, optionally enriched with latest analysis."""
     process = db.session.get(Process, pid)
     if not process:
         return jsonify({"error": "Process not found"}), 404
     status = request.args.get("status")
+    include_analysis = request.args.get("include_analysis", "false").lower() == "true"
     query = ScopeItem.query.filter_by(process_id=pid)
     if status:
         query = query.filter_by(status=status)
     items = query.order_by(ScopeItem.id).all()
-    return jsonify([si.to_dict() for si in items])
+
+    results = []
+    for si in items:
+        d = si.to_dict()
+        if include_analysis:
+            latest = (
+                Analysis.query.filter_by(scope_item_id=si.id)
+                .order_by(Analysis.updated_at.desc())
+                .first()
+            )
+            d["latest_fit_gap"] = latest.fit_gap_result if latest else None
+            d["latest_analysis_status"] = latest.status if latest else None
+            d["analysis_count"] = si.analyses.count()
+        results.append(d)
+    return jsonify(results)
 
 
 @scope_bp.route("/processes/<int:pid>/scope-items", methods=["POST"])
@@ -321,6 +336,7 @@ def create_analysis(siid):
         attendees=data.get("attendees", ""),
         date=_parse_date(data.get("date")),
         notes=data.get("notes", ""),
+        workshop_id=data.get("workshop_id"),
     )
     db.session.add(analysis)
     db.session.commit()
@@ -357,6 +373,8 @@ def update_analysis(aid):
         analysis.status = data["status"]
     if "date" in data:
         analysis.date = _parse_date(data["date"])
+    if "workshop_id" in data:
+        analysis.workshop_id = data["workshop_id"] if data["workshop_id"] else None
 
     db.session.commit()
     return jsonify(analysis.to_dict())
@@ -403,3 +421,152 @@ def analysis_summary(sid):
         "by_type": by_type,
         "by_fit_gap_result": by_result,
     })
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  PROGRAM-LEVEL — Scope Matrix & Analysis Dashboard
+# ═══════════════════════════════════════════════════════════════════════════
+
+@scope_bp.route("/programs/<int:pid>/scope-matrix", methods=["GET"])
+def scope_matrix(pid):
+    """Flat scope-item matrix across all scenarios in a program.
+
+    Returns every scope item with its parent process, scenario name,
+    and latest analysis result — used by the Analysis Hub Scope Matrix tab.
+    """
+    from app.models.program import Program
+    program = db.session.get(Program, pid)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+
+    # All processes under this program's scenarios
+    rows = (
+        db.session.query(ScopeItem, Process, Scenario)
+        .join(Process, ScopeItem.process_id == Process.id)
+        .join(Scenario, Process.scenario_id == Scenario.id)
+        .filter(Scenario.program_id == pid)
+        .order_by(Scenario.name, Process.level, Process.order, ScopeItem.id)
+        .all()
+    )
+
+    result = []
+    for si, proc, scen in rows:
+        # Get analyses for this scope item
+        analyses = Analysis.query.filter_by(scope_item_id=si.id)\
+            .order_by(Analysis.id.desc()).all()
+        latest = analyses[0] if analyses else None
+        result.append({
+            **si.to_dict(),
+            "process_name": proc.name,
+            "process_level": proc.level,
+            "process_id_code": proc.process_id_code,
+            "scenario_id": scen.id,
+            "scenario_name": scen.name,
+            "sap_module": scen.sap_module or si.module,
+            "analysis_count": len(analyses),
+            "latest_fit_gap": latest.fit_gap_result if latest else None,
+            "latest_analysis_status": latest.status if latest else None,
+            "analyses": [a.to_dict() for a in analyses],
+        })
+
+    return jsonify(result), 200
+
+
+@scope_bp.route("/programs/<int:pid>/analysis-dashboard", methods=["GET"])
+def analysis_dashboard(pid):
+    """Aggregated KPIs for the Analysis Hub dashboard tab."""
+    from app.models.program import Program
+    from app.models.scenario import Workshop
+    program = db.session.get(Program, pid)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
+
+    # All scope items
+    all_items = (
+        db.session.query(ScopeItem, Process, Scenario)
+        .join(Process, ScopeItem.process_id == Process.id)
+        .join(Scenario, Process.scenario_id == Scenario.id)
+        .filter(Scenario.program_id == pid)
+        .all()
+    )
+
+    total_items = len(all_items)
+    analyzed = 0
+    by_module = {}
+    by_module_analyzed = {}
+    by_status = {}
+
+    for si, proc, scen in all_items:
+        mod = scen.sap_module or si.module or "Unassigned"
+        by_module[mod] = by_module.get(mod, 0) + 1
+        by_status[si.status] = by_status.get(si.status, 0) + 1
+
+        has_analysis = Analysis.query.filter_by(scope_item_id=si.id)\
+            .filter(Analysis.status == "completed").first()
+        if has_analysis:
+            analyzed += 1
+            by_module_analyzed[mod] = by_module_analyzed.get(mod, 0) + 1
+
+    # All analyses
+    all_analyses = (
+        Analysis.query
+        .join(ScopeItem)
+        .join(Process)
+        .join(Scenario)
+        .filter(Scenario.program_id == pid)
+        .all()
+    )
+
+    by_fit_gap = {}
+    by_analysis_type = {}
+    by_analysis_status = {}
+    pending_decisions = 0
+
+    for a in all_analyses:
+        if a.fit_gap_result:
+            by_fit_gap[a.fit_gap_result] = by_fit_gap.get(a.fit_gap_result, 0) + 1
+        by_analysis_type[a.analysis_type] = by_analysis_type.get(a.analysis_type, 0) + 1
+        by_analysis_status[a.status] = by_analysis_status.get(a.status, 0) + 1
+        if a.status == "completed" and not a.decision:
+            pending_decisions += 1
+
+    # All workshops
+    all_workshops = (
+        Workshop.query
+        .join(Scenario)
+        .filter(Scenario.program_id == pid)
+        .all()
+    )
+    ws_by_status = {}
+    for w in all_workshops:
+        ws_by_status[w.status] = ws_by_status.get(w.status, 0) + 1
+
+    # Gap items without requirements
+    gap_analyses = [a for a in all_analyses if a.fit_gap_result == "gap"]
+    # Count requirements linked to workshops
+    from app.models.requirement import Requirement
+    gap_no_req = 0
+    for ga in gap_analyses:
+        scope_item = db.session.get(ScopeItem, ga.scope_item_id)
+        if scope_item:
+            # Check if any requirement references this scope item through workshop
+            req_count = Requirement.query.filter_by(workshop_id=ga.workshop_id).count() if ga.workshop_id else 0
+            if req_count == 0:
+                gap_no_req += 1
+
+    return jsonify({
+        "total_scope_items": total_items,
+        "analyzed_scope_items": analyzed,
+        "coverage_pct": round((analyzed / total_items * 100), 1) if total_items > 0 else 0,
+        "total_analyses": len(all_analyses),
+        "total_workshops": len(all_workshops),
+        "by_fit_gap": by_fit_gap,
+        "by_module": by_module,
+        "by_module_analyzed": by_module_analyzed,
+        "by_scope_status": by_status,
+        "by_analysis_type": by_analysis_type,
+        "by_analysis_status": by_analysis_status,
+        "by_workshop_status": ws_by_status,
+        "pending_decisions": pending_decisions,
+        "gap_without_requirement": gap_no_req,
+    }), 200
