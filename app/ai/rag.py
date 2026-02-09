@@ -408,13 +408,17 @@ class RAGPipeline:
 
         if query_vec:
             # Try pgvector distance operator first (database-side cosine similarity)
+            # Requires: pgvector extension + embedding_json column with valid JSON vectors
             try:
-                from sqlalchemy import text as sa_text
+                from flask import current_app
+                db_uri = current_app.config.get("SQLALCHEMY_DATABASE_URI", "")
+                if not db_uri.startswith("postgresql"):
+                    raise RuntimeError("pgvector only available on PostgreSQL")
                 vec_str = "[" + ",".join(str(v) for v in query_vec) + "]"
                 semantic_q = (
                     db.session.query(
                         AIEmbedding.id,
-                        (1 - db.literal_column(f"embedding_vector <=> '{vec_str}'::vector")).label("sim"),
+                        (1 - db.literal_column(f"embedding_json::vector <=> '{vec_str}'::vector")).label("sim"),
                     )
                     .filter(AIEmbedding.id.in_([c.id for c in candidates]))
                     .filter(AIEmbedding.embedding_json.isnot(None))

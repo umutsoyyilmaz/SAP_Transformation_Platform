@@ -81,7 +81,7 @@ SAP_GLOSSARY = {
 # ── DB Schema context for the LLM ────────────────────────────────────────────
 
 DB_SCHEMA_CONTEXT = """
-Available tables and key columns (SQLite):
+Available tables and key columns:
 
 -- Program Management
 programs (id, name, description, project_type, methodology, status, priority, start_date, end_date, go_live_date, sap_product, deployment_option, created_at, updated_at)
@@ -514,6 +514,14 @@ class NLQueryAssistant:
                 for m in glossary_matches
             )
 
+        # Detect DB engine for SQL dialect
+        from flask import current_app
+        db_uri = current_app.config.get("SQLALCHEMY_DATABASE_URI", "")
+        if db_uri.startswith("postgresql"):
+            sql_dialect = "PostgreSQL-compatible syntax"
+        else:
+            sql_dialect = "SQLite-compatible syntax"
+
         system = (
             "You are a text-to-SQL converter for the SAP Transformation Platform.\n\n"
             f"{DB_SCHEMA_CONTEXT}\n\n"
@@ -521,7 +529,7 @@ class NLQueryAssistant:
             "1. SELECT queries ONLY (no INSERT/UPDATE/DELETE/DROP)\n"
             "2. Always filter by program_id when provided\n"
             "3. Use COUNT, SUM, AVG, GROUP BY for aggregate queries\n"
-            "4. SQLite-compatible syntax\n"
+            f"4. {sql_dialect}\n"
             "5. LIMIT 100 maximum\n"
             "6. ALL enum values are lowercase (e.g. 'medium' not 'Medium'). Exception: defects.severity uses 'P1','P2','P3','P4'.\n"
             "7. Return valid JSON: {\"sql\": \"...\", \"explanation\": \"...\", \"confidence\": 0.0-1.0}\n"

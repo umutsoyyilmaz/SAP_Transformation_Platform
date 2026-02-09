@@ -23,6 +23,18 @@ from app.middleware.logging_config import configure_logging
 from app.middleware.timing import init_request_timing
 from app.middleware.diagnostics import run_startup_diagnostics
 
+# ── SQLite FK enforcement (global engine event) ─────────────────────────
+from sqlalchemy import event as _sa_event, engine as _sa_engine
+
+
+@_sa_event.listens_for(_sa_engine.Engine, "connect")
+def _enable_sqlite_fk(dbapi_conn, connection_record):
+    """Enable foreign key enforcement for SQLite connections."""
+    if "sqlite" in type(dbapi_conn).__module__:
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
 migrate = Migrate()
 limiter = Limiter(
     key_func=get_remote_address,
