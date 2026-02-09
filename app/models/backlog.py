@@ -126,6 +126,10 @@ class BacklogItem(db.Model):
         db.Integer, db.ForeignKey("requirements.id", ondelete="SET NULL"),
         nullable=True, comment="Link to source requirement",
     )
+    process_id = db.Column(
+        db.Integer, db.ForeignKey("processes.id", ondelete="SET NULL"),
+        nullable=True, comment="L3 process step that generated this WRICEF (gap)",
+    )
 
     # ── Identification
     code = db.Column(
@@ -220,6 +224,7 @@ class BacklogItem(db.Model):
             "program_id": self.program_id,
             "sprint_id": self.sprint_id,
             "requirement_id": self.requirement_id,
+            "process_id": self.process_id,
             "code": self.code,
             "title": self.title,
             "description": self.description,

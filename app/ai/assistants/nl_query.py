@@ -94,15 +94,16 @@ committees (id, program_id, name, description, committee_type, meeting_frequency
 -- Scope & Requirements
 scenarios (id, program_id, name, description, sap_module, process_area, status, priority, owner, workstream, total_workshops, total_requirements, notes, created_at, updated_at)
 workshops (id, scenario_id, title, description, session_type, status, session_date, duration_minutes, location, facilitator, attendees, agenda, notes, decisions, action_items, fit_count, gap_count, partial_fit_count, created_at, updated_at)
-processes (id, scenario_id, parent_id, name, description, level, process_id_code, module, "order", created_at, updated_at)
-scope_items (id, process_id, code, name, description, sap_reference, status, priority, module, notes, created_at, updated_at)
-analyses (id, scope_item_id, name, description, analysis_type, status, fit_gap_result, decision, attendees, date, notes, created_at, updated_at)
-requirements (id, program_id, workshop_id, req_parent_id, code, title, description, req_type, priority, status, source, module, fit_gap, effort_estimate, acceptance_criteria, notes, created_at, updated_at)
+processes (id, scenario_id, parent_id, name, description, level, process_id_code, code, module, scope_decision, fit_gap, sap_tcode, sap_reference, priority, notes, "order", created_at, updated_at)
+analyses (id, process_id, name, description, analysis_type, status, fit_gap_result, decision, attendees, date, notes, created_at, updated_at)
+requirements (id, program_id, process_id, workshop_id, req_parent_id, code, title, description, req_type, priority, status, source, module, effort_estimate, acceptance_criteria, notes, created_at, updated_at)
 requirement_traces (id, requirement_id, target_type, target_id, trace_type, notes, created_at)
+open_items (id, requirement_id, title, description, item_type, owner, due_date, status, resolution, priority, blocker, created_at, updated_at)
+requirement_process_mappings (id, requirement_id, process_id, coverage_type, notes, created_at)
 
 -- Backlog & Development
 sprints (id, program_id, name, goal, status, start_date, end_date, capacity_points, velocity, "order", created_at, updated_at)
-backlog_items (id, program_id, sprint_id, requirement_id, code, title, description, wricef_type, sub_type, module, transaction_code, package, transport_request, status, priority, assigned_to, story_points, estimated_hours, actual_hours, complexity, board_order, acceptance_criteria, technical_notes, notes, created_at, updated_at)
+backlog_items (id, program_id, sprint_id, requirement_id, process_id, code, title, description, wricef_type, sub_type, module, transaction_code, package, transport_request, status, priority, assigned_to, story_points, estimated_hours, actual_hours, complexity, board_order, acceptance_criteria, technical_notes, notes, created_at, updated_at)
 config_items (id, program_id, requirement_id, code, title, description, module, config_key, transaction_code, transport_request, status, priority, assigned_to, complexity, estimated_hours, actual_hours, acceptance_criteria, notes, created_at, updated_at)
 functional_specs (id, backlog_item_id, config_item_id, title, description, content, version, status, author, reviewer, approved_by, approved_at, created_at, updated_at)
 technical_specs (id, functional_spec_id, title, description, content, version, status, author, reviewer, approved_by, approved_at, objects_list, unit_test_evidence, created_at, updated_at)
@@ -132,8 +133,12 @@ Key relationships:
 - workshops.scenario_id → scenarios.id
 - requirements.workshop_id → workshops.id
 - processes.scenario_id → scenarios.id
-- scope_items.process_id → processes.id
-- analyses.scope_item_id → scope_items.id
+- backlog_items.process_id → processes.id
+- analyses.process_id → processes.id
+- requirements.process_id → processes.id
+- requirement_process_mappings.requirement_id → requirements.id
+- requirement_process_mappings.process_id → processes.id
+- open_items.requirement_id → requirements.id
 - requirements.program_id → programs.id
 - requirement_traces.requirement_id → requirements.id
 - backlog_items.program_id → programs.id
@@ -183,7 +188,8 @@ _FORBIDDEN_RE = re.compile('|'.join(_FORBIDDEN_PATTERNS), re.IGNORECASE)
 _ALLOWED_TABLES = {
     "programs", "phases", "gates", "workstreams", "team_members", "committees",
     "scenarios", "workshops",
-    "processes", "scope_items", "analyses",
+    "processes", "analyses",
+    "open_items", "requirement_process_mappings",
     "requirements", "requirement_traces",
     "sprints", "backlog_items", "config_items",
     "functional_specs", "technical_specs",
@@ -218,7 +224,7 @@ _ENUM_DEFINITIONS: dict[str, list[str]] = {
     "requirements.req_type": ["business", "functional", "technical", "non_functional", "integration"],
     "requirements.priority": ["must_have", "should_have", "could_have", "wont_have"],
     "requirements.status": ["draft", "approved", "in_progress", "implemented", "verified", "deferred", "rejected"],
-    "requirements.fit_gap": ["fit", "gap", "partial_fit"],
+    "requirements.fit_gap": [],
     "requirements.effort_estimate": ["xs", "s", "m", "l", "xl"],
     # Scenarios
     "scenarios.status": ["draft", "in_analysis", "analyzed", "approved", "on_hold"],
@@ -229,8 +235,9 @@ _ENUM_DEFINITIONS: dict[str, list[str]] = {
     "workshops.session_type": ["requirement_gathering", "process_mapping", "fit_gap_workshop", "design_workshop", "review", "demo", "sign_off", "training"],
     "workshops.status": ["planned", "in_progress", "completed", "cancelled"],
     # Scope
-    "scope_items.status": ["active", "deferred", "out_of_scope", "in_scope"],
-    "scope_items.priority": ["low", "medium", "high", "critical"],
+    "processes.scope_decision": ["in_scope", "out_of_scope", "deferred"],
+    "processes.fit_gap": ["fit", "gap", "partial_fit", "standard"],
+    "processes.priority": ["low", "medium", "high", "critical"],
     "analyses.analysis_type": ["workshop", "fit_gap", "demo", "prototype", "review"],
     "analyses.status": ["planned", "in_progress", "completed", "cancelled"],
     "analyses.fit_gap_result": ["fit", "partial_fit", "gap"],

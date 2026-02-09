@@ -121,7 +121,6 @@ class RequirementAnalyst:
                         "clean_core_compliant": result["clean_core_compliant"],
                     },
                     current_data={
-                        "fit_gap": req.fit_gap or "",
                         "effort_estimate": req.effort_estimate or "",
                     },
                     confidence=result["confidence"],

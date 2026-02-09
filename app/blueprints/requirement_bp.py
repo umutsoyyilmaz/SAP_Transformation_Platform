@@ -1,25 +1,11 @@
 """
 SAP Transformation Management Platform
-Requirement Blueprint — CRUD API for requirements and traceability matrix.
+Requirement Blueprint — CRUD for Requirements, OpenItems, Traces, and Stats.
 
-Endpoints (Sprint 3 scope):
-    Requirements:
-        GET    /api/v1/programs/<pid>/requirements          — List (filterable)
-        POST   /api/v1/programs/<pid>/requirements          — Create
-        GET    /api/v1/requirements/<id>                     — Detail (+ children + traces)
-        PUT    /api/v1/requirements/<id>                     — Update
-        DELETE /api/v1/requirements/<id>                     — Delete
-
-    Requirement Traces (traceability):
-        GET    /api/v1/requirements/<rid>/traces             — List traces
-        POST   /api/v1/requirements/<rid>/traces             — Add trace
-        DELETE /api/v1/requirement-traces/<id>               — Remove trace
-
-    Traceability Matrix:
-        GET    /api/v1/programs/<pid>/traceability-matrix    — Full matrix view
-
-    Statistics:
-        GET    /api/v1/programs/<pid>/requirements/stats     — Aggregated stats
+Refactored hierarchy:
+    Requirement → born from workshop, attached to L2 process.
+    Requirement ↔ L3 process (N:M via RequirementProcessMapping).
+    Requirement → OpenItem (unresolved questions/decisions).
 """
 
 from flask import Blueprint, jsonify, request
@@ -27,13 +13,16 @@ from flask import Blueprint, jsonify, request
 from app.models import db
 from app.models.backlog import BacklogItem, ConfigItem
 from app.models.program import Phase, Program, Workstream
-from app.models.requirement import Requirement, RequirementTrace
+from app.models.requirement import (
+    Requirement, RequirementTrace, OpenItem,
+    OPEN_ITEM_TYPES, OPEN_ITEM_STATUSES, OPEN_ITEM_PRIORITIES,
+)
 from app.models.scenario import Scenario, Workshop
 
 requirement_bp = Blueprint("requirement", __name__, url_prefix="/api/v1")
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────────
+# ── helpers ──────────────────────────────────────────────────────────────
 
 def _get_or_404(model, pk):
     obj = db.session.get(model, pk)
@@ -53,21 +42,16 @@ TARGET_MODELS = {
 }
 
 
-# ═════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════
 # REQUIREMENTS
-# ═════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════
 
 @requirement_bp.route("/programs/<int:program_id>/requirements", methods=["GET"])
 def list_requirements(program_id):
     """List requirements for a program.
 
     Query params:
-        req_type   — filter by type (business, functional, technical, …)
-        status     — filter by status
-        module     — filter by SAP module
-        fit_gap    — filter by fit/gap
-        priority   — filter by priority (must_have, should_have, …)
-        parent_only — if "true", only return top-level requirements (no parent)
+        req_type, status, module, priority, process_id, parent_only
     """
     program, err = _get_or_404(Program, program_id)
     if err:
@@ -75,10 +59,14 @@ def list_requirements(program_id):
 
     query = Requirement.query.filter_by(program_id=program_id)
 
-    for param in ["req_type", "status", "module", "fit_gap", "priority"]:
+    for param in ["req_type", "status", "module", "priority"]:
         val = request.args.get(param)
         if val:
             query = query.filter(getattr(Requirement, param) == val)
+
+    process_id = request.args.get("process_id")
+    if process_id:
+        query = query.filter(Requirement.process_id == int(process_id))
 
     if request.args.get("parent_only", "").lower() == "true":
         query = query.filter(Requirement.req_parent_id.is_(None))
@@ -87,7 +75,7 @@ def list_requirements(program_id):
     results = []
     for r in reqs:
         d = r.to_dict()
-        d["scope_item_count"] = r.scope_items.count() if r.scope_items else 0
+        d["process_mapping_count"] = r.process_mappings.count() if r.process_mappings else 0
         results.append(d)
     return jsonify(results), 200
 
@@ -104,17 +92,17 @@ def create_requirement(program_id):
     if not title:
         return jsonify({"error": "Requirement title is required"}), 400
 
-    # ── Auto-code generation ──────────────────────────────────────────
+    # Auto-code generation
     code = data.get("code", "").strip()
     if not code:
         module_prefix = (data.get("module", "") or "GEN").upper()[:3]
-        existing_count = Requirement.query.filter_by(
-            program_id=program_id
-        ).count()
+        existing_count = Requirement.query.filter_by(program_id=program_id).count()
         code = f"REQ-{module_prefix}-{existing_count + 1:04d}"
 
     req = Requirement(
         program_id=program_id,
+        process_id=data.get("process_id"),
+        workshop_id=data.get("workshop_id"),
         req_parent_id=data.get("req_parent_id"),
         code=code,
         title=title,
@@ -124,7 +112,6 @@ def create_requirement(program_id):
         status=data.get("status", "draft"),
         source=data.get("source", ""),
         module=data.get("module", ""),
-        fit_gap=data.get("fit_gap", ""),
         effort_estimate=data.get("effort_estimate", ""),
         acceptance_criteria=data.get("acceptance_criteria", ""),
         notes=data.get("notes", ""),
@@ -136,13 +123,20 @@ def create_requirement(program_id):
 
 @requirement_bp.route("/requirements/<int:req_id>", methods=["GET"])
 def get_requirement(req_id):
-    """Get a single requirement with children, traces and linked scope items."""
+    """Get a single requirement with children, traces, open items, and process mappings."""
     req, err = _get_or_404(Requirement, req_id)
     if err:
         return err
     result = req.to_dict(include_children=True)
-    # Include linked scope items for cross-page traceability
-    result["scope_items"] = [si.to_dict() for si in req.scope_items]
+    # Process mappings (N:M to L3)
+    result["process_mappings"] = []
+    for m in req.process_mappings:
+        md = m.to_dict()
+        if m.process:
+            md["process_name"] = m.process.name
+            md["process_level"] = m.process.level
+            md["process_fit_gap"] = m.process.fit_gap
+        result["process_mappings"].append(md)
     return jsonify(result), 200
 
 
@@ -157,8 +151,7 @@ def update_requirement(req_id):
 
     for field in [
         "code", "title", "description", "req_type", "priority", "status",
-        "source", "module", "fit_gap", "effort_estimate",
-        "acceptance_criteria", "notes",
+        "source", "module", "effort_estimate", "acceptance_criteria", "notes",
     ]:
         if field in data:
             val = data[field].strip() if isinstance(data[field], str) else data[field]
@@ -166,6 +159,10 @@ def update_requirement(req_id):
 
     if "req_parent_id" in data:
         req.req_parent_id = data["req_parent_id"]
+    if "process_id" in data:
+        req.process_id = data["process_id"]
+    if "workshop_id" in data:
+        req.workshop_id = data["workshop_id"]
 
     if not req.title:
         return jsonify({"error": "Requirement title cannot be empty"}), 400
@@ -176,7 +173,7 @@ def update_requirement(req_id):
 
 @requirement_bp.route("/requirements/<int:req_id>", methods=["DELETE"])
 def delete_requirement(req_id):
-    """Delete a requirement and its traces/children."""
+    """Delete a requirement and its traces/children/open items."""
     req, err = _get_or_404(Requirement, req_id)
     if err:
         return err
@@ -185,20 +182,13 @@ def delete_requirement(req_id):
     return jsonify({"message": f"Requirement '{req.title}' deleted"}), 200
 
 
-# ═════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════
 # CONVERT REQUIREMENT → WRICEF / CONFIG
-# ═════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════
 
 @requirement_bp.route("/requirements/<int:req_id>/convert", methods=["POST"])
 def convert_requirement(req_id):
-    """Convert a requirement into a BacklogItem (WRICEF) or ConfigItem.
-
-    Body:
-        target_type: "backlog" or "config" (required)
-        wricef_type:  required when target_type=backlog
-                      (workflow, report, interface, conversion, enhancement, form)
-        module:       SAP module override (default: req.module)
-    """
+    """Convert a requirement into a BacklogItem (WRICEF) or ConfigItem."""
     req, err = _get_or_404(Requirement, req_id)
     if err:
         return err
@@ -217,7 +207,6 @@ def convert_requirement(req_id):
         if wricef_type not in valid_wricef:
             return jsonify({"error": f"wricef_type must be one of: {', '.join(sorted(valid_wricef))}"}), 400
 
-        # Auto-generate backlog code
         prefix = wricef_type[0].upper()
         count = BacklogItem.query.filter_by(program_id=req.program_id).count()
         code = f"{prefix}-{count + 1:04d}"
@@ -254,9 +243,160 @@ def convert_requirement(req_id):
         return jsonify(item.to_dict()), 201
 
 
-# ═════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════
+# OPEN ITEMS
+# ═════════════════════════════════════════════════════════════════════════
+
+@requirement_bp.route("/requirements/<int:req_id>/open-items", methods=["GET"])
+def list_open_items(req_id):
+    """List open items for a requirement."""
+    req, err = _get_or_404(Requirement, req_id)
+    if err:
+        return err
+    items = OpenItem.query.filter_by(requirement_id=req_id)\
+        .order_by(OpenItem.id).all()
+    return jsonify([oi.to_dict() for oi in items]), 200
+
+
+@requirement_bp.route("/requirements/<int:req_id>/open-items", methods=["POST"])
+def create_open_item(req_id):
+    """Create an open item under a requirement."""
+    req, err = _get_or_404(Requirement, req_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    title = data.get("title", "").strip()
+    if not title:
+        return jsonify({"error": "title is required"}), 400
+
+    item_type = data.get("item_type", "question")
+    if item_type not in OPEN_ITEM_TYPES:
+        return jsonify({"error": f"Invalid item_type. Must be one of {sorted(OPEN_ITEM_TYPES)}"}), 400
+
+    status = data.get("status", "open")
+    if status not in OPEN_ITEM_STATUSES:
+        return jsonify({"error": f"Invalid status. Must be one of {sorted(OPEN_ITEM_STATUSES)}"}), 400
+
+    priority = data.get("priority", "medium")
+    if priority not in OPEN_ITEM_PRIORITIES:
+        return jsonify({"error": f"Invalid priority. Must be one of {sorted(OPEN_ITEM_PRIORITIES)}"}), 400
+
+    due_date = None
+    if data.get("due_date"):
+        try:
+            from datetime import datetime
+            due_date = datetime.fromisoformat(str(data["due_date"])).date()
+        except (ValueError, TypeError):
+            pass
+
+    oi = OpenItem(
+        requirement_id=req_id,
+        title=title,
+        description=data.get("description", ""),
+        item_type=item_type,
+        owner=data.get("owner", ""),
+        due_date=due_date,
+        status=status,
+        resolution=data.get("resolution", ""),
+        priority=priority,
+        blocker=bool(data.get("blocker", False)),
+    )
+    db.session.add(oi)
+    db.session.commit()
+    return jsonify(oi.to_dict()), 201
+
+
+@requirement_bp.route("/open-items/<int:oi_id>", methods=["GET"])
+def get_open_item(oi_id):
+    """Get a single open item."""
+    oi, err = _get_or_404(OpenItem, oi_id)
+    if err:
+        return err
+    return jsonify(oi.to_dict()), 200
+
+
+@requirement_bp.route("/open-items/<int:oi_id>", methods=["PUT"])
+def update_open_item(oi_id):
+    """Update an open item."""
+    oi, err = _get_or_404(OpenItem, oi_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    for field in ("title", "description", "owner", "resolution"):
+        if field in data:
+            setattr(oi, field, data[field])
+    if "item_type" in data:
+        if data["item_type"] not in OPEN_ITEM_TYPES:
+            return jsonify({"error": f"Invalid item_type. Must be one of {sorted(OPEN_ITEM_TYPES)}"}), 400
+        oi.item_type = data["item_type"]
+    if "status" in data:
+        if data["status"] not in OPEN_ITEM_STATUSES:
+            return jsonify({"error": f"Invalid status. Must be one of {sorted(OPEN_ITEM_STATUSES)}"}), 400
+        oi.status = data["status"]
+    if "priority" in data:
+        if data["priority"] not in OPEN_ITEM_PRIORITIES:
+            return jsonify({"error": f"Invalid priority. Must be one of {sorted(OPEN_ITEM_PRIORITIES)}"}), 400
+        oi.priority = data["priority"]
+    if "blocker" in data:
+        oi.blocker = bool(data["blocker"])
+    if "due_date" in data:
+        try:
+            from datetime import datetime
+            oi.due_date = datetime.fromisoformat(str(data["due_date"])).date() if data["due_date"] else None
+        except (ValueError, TypeError):
+            pass
+
+    db.session.commit()
+    return jsonify(oi.to_dict()), 200
+
+
+@requirement_bp.route("/open-items/<int:oi_id>", methods=["DELETE"])
+def delete_open_item(oi_id):
+    """Delete an open item."""
+    oi, err = _get_or_404(OpenItem, oi_id)
+    if err:
+        return err
+    db.session.delete(oi)
+    db.session.commit()
+    return jsonify({"message": "Open item deleted"}), 200
+
+
+# ── Program-level open items summary
+@requirement_bp.route("/programs/<int:program_id>/open-items", methods=["GET"])
+def list_program_open_items(program_id):
+    """List all open items across a program."""
+    program, err = _get_or_404(Program, program_id)
+    if err:
+        return err
+
+    status_filter = request.args.get("status")
+    blocker_only = request.args.get("blocker_only", "").lower() == "true"
+
+    query = (
+        OpenItem.query
+        .join(Requirement)
+        .filter(Requirement.program_id == program_id)
+    )
+    if status_filter:
+        query = query.filter(OpenItem.status == status_filter)
+    if blocker_only:
+        query = query.filter(OpenItem.blocker == True)
+
+    items = query.order_by(OpenItem.priority.desc(), OpenItem.due_date).all()
+    results = []
+    for oi in items:
+        d = oi.to_dict()
+        d["requirement_code"] = oi.requirement.code if oi.requirement else ""
+        d["requirement_title"] = oi.requirement.title if oi.requirement else ""
+        results.append(d)
+    return jsonify(results), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════
 # REQUIREMENT TRACES (traceability)
-# ═════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════
 
 @requirement_bp.route("/requirements/<int:req_id>/traces", methods=["GET"])
 def list_traces(req_id):
@@ -287,7 +427,6 @@ def create_trace(req_id):
     if not target_id:
         return jsonify({"error": "target_id is required"}), 400
 
-    # Validate target exists (skip gate — Gate model is in program module)
     if target_type in TARGET_MODELS:
         target, err = _get_or_404(TARGET_MODELS[target_type], target_id)
         if err:
@@ -316,29 +455,13 @@ def delete_trace(trace_id):
     return jsonify({"message": "Trace removed"}), 200
 
 
-# ═════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════
 # TRACEABILITY MATRIX
-# ═════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════
 
 @requirement_bp.route("/programs/<int:program_id>/traceability-matrix", methods=["GET"])
 def traceability_matrix(program_id):
-    """Return a traceability matrix linking requirements to phases/workstreams.
-
-    Returns:
-        {
-          "requirements": [ { ...req, traces: [...] } ],
-          "phases": [ { id, name } ],
-          "workstreams": [ { id, name } ],
-          "matrix": {
-             "<req_id>": {
-                "phase_ids": [1, 3],
-                "workstream_ids": [2],
-                "scenario_ids": [],
-                ...
-             }
-          }
-        }
-    """
+    """Return a traceability matrix linking requirements to phases/workstreams."""
     program, err = _get_or_404(Program, program_id)
     if err:
         return err
@@ -352,7 +475,6 @@ def traceability_matrix(program_id):
     workstreams = Workstream.query.filter_by(program_id=program_id)\
         .order_by(Workstream.name).all()
 
-    # Build matrix from traces
     matrix = {}
     for req in reqs:
         traces = RequirementTrace.query.filter_by(requirement_id=req.id).all()
@@ -377,9 +499,9 @@ def traceability_matrix(program_id):
     }), 200
 
 
-# ═════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════
 # STATISTICS
-# ═════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════
 
 @requirement_bp.route("/programs/<int:program_id>/requirements/stats", methods=["GET"])
 def requirement_stats(program_id):
@@ -395,7 +517,6 @@ def requirement_stats(program_id):
     by_status = {}
     by_priority = {}
     by_module = {}
-    by_fit_gap = {}
 
     for r in reqs:
         by_type[r.req_type] = by_type.get(r.req_type, 0) + 1
@@ -403,8 +524,19 @@ def requirement_stats(program_id):
         by_priority[r.priority] = by_priority.get(r.priority, 0) + 1
         if r.module:
             by_module[r.module] = by_module.get(r.module, 0) + 1
-        if r.fit_gap:
-            by_fit_gap[r.fit_gap] = by_fit_gap.get(r.fit_gap, 0) + 1
+
+    # Open items summary
+    total_open_items = (
+        OpenItem.query.join(Requirement)
+        .filter(Requirement.program_id == program_id)
+        .count()
+    )
+    blocker_count = (
+        OpenItem.query.join(Requirement)
+        .filter(Requirement.program_id == program_id,
+                OpenItem.blocker == True, OpenItem.status == "open")
+        .count()
+    )
 
     return jsonify({
         "total": total,
@@ -412,5 +544,6 @@ def requirement_stats(program_id):
         "by_status": by_status,
         "by_priority": by_priority,
         "by_module": by_module,
-        "by_fit_gap": by_fit_gap,
+        "total_open_items": total_open_items,
+        "blocker_open_items": blocker_count,
     }), 200

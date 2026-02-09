@@ -39,14 +39,14 @@ from app.models.program import (
     Committee, Gate, Phase, Program, TeamMember, Workstream,
 )
 from app.models.scenario import Scenario, Workshop
-from app.models.requirement import Requirement, RequirementTrace
+from app.models.requirement import Requirement, RequirementTrace, OpenItem
 from app.models.backlog import (
     BacklogItem, ConfigItem, FunctionalSpec, Sprint, TechnicalSpec,
 )
 from app.models.testing import (
     TestPlan, TestCycle, TestCase, TestExecution, Defect,
 )
-from app.models.scope import Process, ScopeItem, Analysis
+from app.models.scope import Process, RequirementProcessMapping, Analysis
 from app.models.raid import (
     Risk, Action, Issue, Decision,
     next_risk_code, next_action_code, next_issue_code, next_decision_code,
@@ -251,30 +251,30 @@ SCENARIOS = [
 
 REQUIREMENTS = [
     # Business requirements (must_have)
-    {"code": "REQ-BIZ-001", "title": "Konsolide finansal raporlama (IFRS + TFRS)", "req_type": "business", "priority": "must_have", "status": "approved", "module": "FI", "fit_gap": "partial_fit", "description": "Tüm şirketler için konsolide mali tablolar. IFRS ve TFRS paralel muhasebe desteği.", "source": "CFO ofisi"},
-    {"code": "REQ-BIZ-002", "title": "Gerçek zamanlı stok görünürlüğü (15 lokasyon)", "req_type": "business", "priority": "must_have", "status": "approved", "module": "MM", "fit_gap": "fit", "description": "Tüm depolarda gerçek zamanlı stok seviyesi takibi. Minimum stok uyarıları.", "source": "Lojistik müdürü"},
-    {"code": "REQ-BIZ-003", "title": "Sipariş-to-nakit sürecinin otomasyonu", "req_type": "business", "priority": "must_have", "status": "approved", "module": "SD", "fit_gap": "fit", "description": "Sipariş girişinden tahsilata kadar uçtan uca otomatik süreç.", "source": "Satış direktörü"},
-    {"code": "REQ-BIZ-004", "title": "Üretim planlama ve MRP optimizasyonu", "req_type": "business", "priority": "must_have", "status": "in_progress", "module": "PP", "fit_gap": "partial_fit", "description": "MRP çalıştırma süresi < 2 saat. Kapasite planlama entegrasyonu.", "source": "Üretim müdürü"},
+    {"code": "REQ-BIZ-001", "title": "Konsolide finansal raporlama (IFRS + TFRS)", "req_type": "business", "priority": "must_have", "status": "approved", "module": "FI", "description": "Tüm şirketler için konsolide mali tablolar. IFRS ve TFRS paralel muhasebe desteği.", "source": "CFO ofisi"},
+    {"code": "REQ-BIZ-002", "title": "Gerçek zamanlı stok görünürlüğü (15 lokasyon)", "req_type": "business", "priority": "must_have", "status": "approved", "module": "MM", "description": "Tüm depolarda gerçek zamanlı stok seviyesi takibi. Minimum stok uyarıları.", "source": "Lojistik müdürü"},
+    {"code": "REQ-BIZ-003", "title": "Sipariş-to-nakit sürecinin otomasyonu", "req_type": "business", "priority": "must_have", "status": "approved", "module": "SD", "description": "Sipariş girişinden tahsilata kadar uçtan uca otomatik süreç.", "source": "Satış direktörü"},
+    {"code": "REQ-BIZ-004", "title": "Üretim planlama ve MRP optimizasyonu", "req_type": "business", "priority": "must_have", "status": "in_progress", "module": "PP", "description": "MRP çalıştırma süresi < 2 saat. Kapasite planlama entegrasyonu.", "source": "Üretim müdürü"},
     # Functional requirements
-    {"code": "REQ-FI-001", "title": "Vergi kodu yapılandırması (KDV %1, %10, %20)", "req_type": "functional", "priority": "must_have", "status": "approved", "module": "FI", "fit_gap": "fit", "description": "Türkiye KDV oranları ve muafiyet kodları tanımlanacak."},
-    {"code": "REQ-FI-002", "title": "Banka entegrasyonu (XML ISO 20022)", "req_type": "functional", "priority": "should_have", "status": "approved", "module": "FI", "fit_gap": "gap", "description": "6 bankayla otomatik ödeme ve hesap dövizi mutabakatı."},
-    {"code": "REQ-MM-001", "title": "Satınalma onay iş akışı (4 seviye)", "req_type": "functional", "priority": "must_have", "status": "approved", "module": "MM", "fit_gap": "partial_fit", "description": "Tutar bazlı 4 kademeli onay: <₺10K, <₺100K, <₺500K, ≥₺500K."},
-    {"code": "REQ-MM-002", "title": "Otomatik sipariş oluşturma (MRP → PO)", "req_type": "functional", "priority": "should_have", "status": "in_progress", "module": "MM", "fit_gap": "fit", "description": "MRP önerilerinden otomatik satınalma siparişi oluşturma."},
-    {"code": "REQ-SD-001", "title": "Fiyat belirleme şeması (10+ koşul)", "req_type": "functional", "priority": "must_have", "status": "approved", "module": "SD", "fit_gap": "partial_fit", "description": "İskonto, prim, nakliye, vergi koşullarını içeren fiyat şeması."},
-    {"code": "REQ-SD-002", "title": "Kredi yönetimi ve risk kontrolü", "req_type": "functional", "priority": "should_have", "status": "draft", "module": "SD", "fit_gap": "gap", "description": "Müşteri bazlı kredi limiti, otomatik blokaj, ülke riski değerlendirmesi."},
-    {"code": "REQ-PP-001", "title": "Seri üretim planlama (Repetitive MFG)", "req_type": "functional", "priority": "must_have", "status": "in_progress", "module": "PP", "fit_gap": "fit", "description": "Otomotiv parça üretimi için seri üretim planlama senaryosu."},
+    {"code": "REQ-FI-001", "title": "Vergi kodu yapılandırması (KDV %1, %10, %20)", "req_type": "functional", "priority": "must_have", "status": "approved", "module": "FI", "description": "Türkiye KDV oranları ve muafiyet kodları tanımlanacak."},
+    {"code": "REQ-FI-002", "title": "Banka entegrasyonu (XML ISO 20022)", "req_type": "functional", "priority": "should_have", "status": "approved", "module": "FI", "description": "6 bankayla otomatik ödeme ve hesap dövizi mutabakatı."},
+    {"code": "REQ-MM-001", "title": "Satınalma onay iş akışı (4 seviye)", "req_type": "functional", "priority": "must_have", "status": "approved", "module": "MM", "description": "Tutar bazlı 4 kademeli onay: <₺10K, <₺100K, <₺500K, ≥₺500K."},
+    {"code": "REQ-MM-002", "title": "Otomatik sipariş oluşturma (MRP → PO)", "req_type": "functional", "priority": "should_have", "status": "in_progress", "module": "MM", "description": "MRP önerilerinden otomatik satınalma siparişi oluşturma."},
+    {"code": "REQ-SD-001", "title": "Fiyat belirleme şeması (10+ koşul)", "req_type": "functional", "priority": "must_have", "status": "approved", "module": "SD", "description": "İskonto, prim, nakliye, vergi koşullarını içeren fiyat şeması."},
+    {"code": "REQ-SD-002", "title": "Kredi yönetimi ve risk kontrolü", "req_type": "functional", "priority": "should_have", "status": "draft", "module": "SD", "description": "Müşteri bazlı kredi limiti, otomatik blokaj, ülke riski değerlendirmesi."},
+    {"code": "REQ-PP-001", "title": "Seri üretim planlama (Repetitive MFG)", "req_type": "functional", "priority": "must_have", "status": "in_progress", "module": "PP", "description": "Otomotiv parça üretimi için seri üretim planlama senaryosu."},
     # Technical requirements
-    {"code": "REQ-TEC-001", "title": "SAP BTP Integration Suite — 15 arayüz", "req_type": "technical", "priority": "must_have", "status": "approved", "module": "BTP", "fit_gap": "gap", "description": "ERP ↔ MES, WMS, TMS, CRM, e-Fatura 15 arayüz bağlantısı."},
-    {"code": "REQ-TEC-002", "title": "Veri göçü — 8 ana nesne (müşteri, malzeme, BOM, …)", "req_type": "technical", "priority": "must_have", "status": "in_progress", "module": "Migration", "fit_gap": "gap", "description": "8 ana veri nesnesi + 5 hareket nesnesi göçü. Toplam ~12M kayıt."},
-    {"code": "REQ-TEC-003", "title": "Yetkilendirme matrisi (60 rol)", "req_type": "technical", "priority": "must_have", "status": "draft", "module": "Basis", "fit_gap": "gap", "description": "60 SAP rolü, SOD (Görev Ayrımı) kontrolleri ile. Fiori app bazlı yetkilendirme."},
+    {"code": "REQ-TEC-001", "title": "SAP BTP Integration Suite — 15 arayüz", "req_type": "technical", "priority": "must_have", "status": "approved", "module": "BTP", "description": "ERP ↔ MES, WMS, TMS, CRM, e-Fatura 15 arayüz bağlantısı."},
+    {"code": "REQ-TEC-002", "title": "Veri göçü — 8 ana nesne (müşteri, malzeme, BOM, …)", "req_type": "technical", "priority": "must_have", "status": "in_progress", "module": "Migration", "description": "8 ana veri nesnesi + 5 hareket nesnesi göçü. Toplam ~12M kayıt."},
+    {"code": "REQ-TEC-003", "title": "Yetkilendirme matrisi (60 rol)", "req_type": "technical", "priority": "must_have", "status": "draft", "module": "Basis", "description": "60 SAP rolü, SOD (Görev Ayrımı) kontrolleri ile. Fiori app bazlı yetkilendirme."},
     # Non-functional
-    {"code": "REQ-NFR-001", "title": "Sistem yanıt süresi < 2 saniye (P95)", "req_type": "non_functional", "priority": "must_have", "status": "approved", "module": "Basis", "fit_gap": "fit", "description": "Tüm online işlemler için P95 yanıt süresi < 2 saniye."},
-    {"code": "REQ-NFR-002", "title": "Sistem kullanılabilirliği >= %99.5", "req_type": "non_functional", "priority": "must_have", "status": "approved", "module": "Basis", "fit_gap": "fit", "description": "Yıllık planlı bakım hariç %99.5 uptime SLA."},
+    {"code": "REQ-NFR-001", "title": "Sistem yanıt süresi < 2 saniye (P95)", "req_type": "non_functional", "priority": "must_have", "status": "approved", "module": "Basis", "description": "Tüm online işlemler için P95 yanıt süresi < 2 saniye."},
+    {"code": "REQ-NFR-002", "title": "Sistem kullanılabilirliği >= %99.5", "req_type": "non_functional", "priority": "must_have", "status": "approved", "module": "Basis", "description": "Yıllık planlı bakım hariç %99.5 uptime SLA."},
     # Integration
-    {"code": "REQ-INT-001", "title": "e-Fatura / e-İrsaliye GIB entegrasyonu", "req_type": "integration", "priority": "must_have", "status": "approved", "module": "SD", "fit_gap": "gap", "description": "GİB e-Fatura, e-İrsaliye, e-Arşiv entegrasyonu. UBL-TR formatı."},
-    {"code": "REQ-INT-002", "title": "MES entegrasyonu (üretim verileri)", "req_type": "integration", "priority": "should_have", "status": "in_progress", "module": "PP", "fit_gap": "gap", "description": "MES ↔ SAP PP entegrasyonu. Üretim onayları, hurda bildirimi, OEE verileri."},
-    {"code": "REQ-INT-003", "title": "WMS entegrasyonu (depo yönetimi)", "req_type": "integration", "priority": "should_have", "status": "draft", "module": "MM", "fit_gap": "gap", "description": "WMS ↔ SAP EWM entegrasyonu. Mal giriş/çıkış, stok transferi."},
-    {"code": "REQ-INT-004", "title": "Banka SWIFT/MT940 otomatik mutabakat", "req_type": "integration", "priority": "could_have", "status": "draft", "module": "FI", "fit_gap": "gap", "description": "Banka hesap özeti otomatik yükleme ve mutabakat. MT940/camt.053 formatı."},
+    {"code": "REQ-INT-001", "title": "e-Fatura / e-İrsaliye GIB entegrasyonu", "req_type": "integration", "priority": "must_have", "status": "approved", "module": "SD", "description": "GİB e-Fatura, e-İrsaliye, e-Arşiv entegrasyonu. UBL-TR formatı."},
+    {"code": "REQ-INT-002", "title": "MES entegrasyonu (üretim verileri)", "req_type": "integration", "priority": "should_have", "status": "in_progress", "module": "PP", "description": "MES ↔ SAP PP entegrasyonu. Üretim onayları, hurda bildirimi, OEE verileri."},
+    {"code": "REQ-INT-003", "title": "WMS entegrasyonu (depo yönetimi)", "req_type": "integration", "priority": "should_have", "status": "draft", "module": "MM", "description": "WMS ↔ SAP EWM entegrasyonu. Mal giriş/çıkış, stok transferi."},
+    {"code": "REQ-INT-004", "title": "Banka SWIFT/MT940 otomatik mutabakat", "req_type": "integration", "priority": "could_have", "status": "draft", "module": "FI", "description": "Banka hesap özeti otomatik yükleme ve mutabakat. MT940/camt.053 formatı."},
 ]
 
 SPRINTS = [
@@ -456,8 +456,8 @@ def seed_all(app, append=False, verbose=False):
             for model in [Notification, Decision, Issue, Action, Risk,
                           TestExecution, Defect, TestCase, TestCycle, TestPlan,
                           TechnicalSpec, FunctionalSpec, ConfigItem, BacklogItem,
-                          Sprint, RequirementTrace, Requirement,
-                          Analysis, ScopeItem, Process,
+                          Sprint, RequirementTrace, OpenItem, RequirementProcessMapping, Requirement,
+                          Analysis, Process,
                           Workshop,
                           Scenario, Committee, TeamMember, Workstream, Gate, Phase, Program]:
                 db.session.query(model).delete()
@@ -546,121 +546,111 @@ def seed_all(app, append=False, verbose=False):
             s_data["workshops"] = ws_list
         print(f"   ✅ {len(SCENARIOS)} scenarios, {total_workshops} workshops")
 
-        # ── 6b. Processes, Scope Items, Analyses ─────────────────────────
-        print("\n🔍 Creating processes, scope items & analyses...")
-        # Pick the first scenario for the process tree
+        # ── 6b. Processes (L2→L3) & Analyses ────────────────────────────
+        print("\n🔍 Creating L2/L3 processes & analyses...")
+        # Scenario = L1, so we create L2 + L3 children directly under first scenario
         first_sid = list(scenario_ids.values())[0]
 
         PROCESS_SEED = [
-            {"name": "Order to Cash (O2C)", "level": "L1", "module": "SD",
-             "process_id_code": "O2C", "order": 1, "children": [
-                 {"name": "Sales Order Processing", "level": "L2", "module": "SD", "order": 1,
-                  "scope_items": [
-                      {"code": "1OC", "name": "Standard Sales Order", "status": "in_scope",
-                       "sap_reference": "BP-1OC", "priority": "high", "module": "SD",
-                       "analyses": [
-                           {"name": "Sales Order Fit-Gap Workshop", "analysis_type": "fit_gap",
-                            "status": "completed", "fit_gap_result": "fit",
-                            "decision": "Standard SAP config yeterli.",
-                            "attendees": "A. Yılmaz, M. Kaya", "date": date(2025, 2, 10)},
-                       ]},
-                      {"code": "2OC", "name": "Third-Party Order", "status": "deferred",
-                       "sap_reference": "BP-2OC", "priority": "low", "module": "SD"},
+            {"name": "Sales Order Processing", "level": "L2", "module": "SD",
+             "process_id_code": "O2C-01", "order": 1, "children": [
+                 {"name": "Standard Sales Order", "level": "L3", "module": "SD", "order": 1,
+                  "code": "1OC", "scope_decision": "in_scope", "fit_gap": "fit",
+                  "sap_reference": "BP-1OC", "sap_tcode": "VA01", "priority": "high",
+                  "analyses": [
+                      {"name": "Sales Order Fit-Gap Workshop", "analysis_type": "fit_gap",
+                       "status": "completed", "fit_gap_result": "fit",
+                       "decision": "Standard SAP config yeterli.",
+                       "attendees": "A. Yılmaz, M. Kaya", "date": date(2025, 2, 10)},
                   ]},
-                 {"name": "Billing & Invoicing", "level": "L2", "module": "SD", "order": 2,
-                  "scope_items": [
-                      {"code": "3OC", "name": "Invoice Processing", "status": "in_scope",
-                       "sap_reference": "BP-3OC", "priority": "high", "module": "SD",
-                       "analyses": [
-                           {"name": "Billing Fit-Gap", "analysis_type": "workshop",
-                            "status": "completed", "fit_gap_result": "partial_fit",
-                            "decision": "Fatura şablonları özelleştirilecek.",
-                            "attendees": "A. Yılmaz, B. Demir", "date": date(2025, 2, 15)},
-                       ]},
+                 {"name": "Third-Party Order", "level": "L3", "module": "SD", "order": 2,
+                  "code": "2OC", "scope_decision": "deferred", "priority": "low",
+                  "sap_reference": "BP-2OC"},
+             ]},
+            {"name": "Billing & Invoicing", "level": "L2", "module": "SD",
+             "process_id_code": "O2C-02", "order": 2, "children": [
+                 {"name": "Invoice Processing", "level": "L3", "module": "SD", "order": 1,
+                  "code": "3OC", "scope_decision": "in_scope", "fit_gap": "partial_fit",
+                  "sap_reference": "BP-3OC", "sap_tcode": "VF01", "priority": "high",
+                  "analyses": [
+                      {"name": "Billing Fit-Gap", "analysis_type": "workshop",
+                       "status": "completed", "fit_gap_result": "partial_fit",
+                       "decision": "Fatura şablonları özelleştirilecek.",
+                       "attendees": "A. Yılmaz, B. Demir", "date": date(2025, 2, 15)},
                   ]},
              ]},
-            {"name": "Procure to Pay (P2P)", "level": "L1", "module": "MM",
-             "process_id_code": "P2P", "order": 2, "children": [
-                 {"name": "Purchase Order Processing", "level": "L2", "module": "MM", "order": 1,
-                  "scope_items": [
-                      {"code": "1PP", "name": "Standard Purchase Order", "status": "in_scope",
-                       "sap_reference": "BP-1PP", "priority": "high", "module": "MM",
-                       "analyses": [
-                           {"name": "PO Workshop", "analysis_type": "workshop",
-                            "status": "completed", "fit_gap_result": "fit",
-                            "decision": "Standart SAP süreçleri kullanılacak.",
-                            "attendees": "C. Öz, D. Ak", "date": date(2025, 2, 20)},
-                       ]},
-                  ]},
-                 {"name": "Invoice Verification", "level": "L2", "module": "MM", "order": 2,
-                  "scope_items": [
-                      {"code": "2PP", "name": "Logistics Invoice Verification", "status": "in_scope",
-                       "sap_reference": "BP-2PP", "priority": "medium", "module": "MM"},
+            {"name": "Purchase Order Processing", "level": "L2", "module": "MM",
+             "process_id_code": "P2P-01", "order": 3, "children": [
+                 {"name": "Standard Purchase Order", "level": "L3", "module": "MM", "order": 1,
+                  "code": "1PP", "scope_decision": "in_scope", "fit_gap": "fit",
+                  "sap_reference": "BP-1PP", "sap_tcode": "ME21N", "priority": "high",
+                  "analyses": [
+                      {"name": "PO Workshop", "analysis_type": "workshop",
+                       "status": "completed", "fit_gap_result": "fit",
+                       "decision": "Standart SAP süreçleri kullanılacak.",
+                       "attendees": "C. Öz, D. Ak", "date": date(2025, 2, 20)},
                   ]},
              ]},
-            {"name": "Record to Report (R2R)", "level": "L1", "module": "FI",
-             "process_id_code": "R2R", "order": 3, "children": [
-                 {"name": "General Ledger Accounting", "level": "L2", "module": "FI", "order": 1,
-                  "scope_items": [
-                      {"code": "1RR", "name": "GL Posting & Period Close", "status": "in_scope",
-                       "sap_reference": "BP-1RR", "priority": "critical", "module": "FI",
-                       "analyses": [
-                           {"name": "FI Fit-Gap Workshop", "analysis_type": "fit_gap",
-                            "status": "completed", "fit_gap_result": "gap",
-                            "decision": "Türk VUK uyumu için ek geliştirme gerekli.",
-                            "attendees": "E. Şahin, F. Güneş", "date": date(2025, 3, 1)},
-                       ]},
-                  ]},
-                 {"name": "Asset Accounting", "level": "L2", "module": "FI", "order": 2,
-                  "scope_items": [
-                      {"code": "2RR", "name": "Fixed Asset Management", "status": "in_scope",
-                       "sap_reference": "BP-2RR", "priority": "high", "module": "FI"},
+            {"name": "Invoice Verification", "level": "L2", "module": "MM",
+             "process_id_code": "P2P-02", "order": 4, "children": [
+                 {"name": "Logistics Invoice Verification", "level": "L3", "module": "MM", "order": 1,
+                  "code": "2PP", "scope_decision": "in_scope", "fit_gap": "fit",
+                  "sap_reference": "BP-2PP", "sap_tcode": "MIRO", "priority": "medium"},
+             ]},
+            {"name": "General Ledger Accounting", "level": "L2", "module": "FI",
+             "process_id_code": "R2R-01", "order": 5, "children": [
+                 {"name": "GL Posting & Period Close", "level": "L3", "module": "FI", "order": 1,
+                  "code": "1RR", "scope_decision": "in_scope", "fit_gap": "gap",
+                  "sap_reference": "BP-1RR", "sap_tcode": "FB50", "priority": "critical",
+                  "analyses": [
+                      {"name": "FI Fit-Gap Workshop", "analysis_type": "fit_gap",
+                       "status": "completed", "fit_gap_result": "gap",
+                       "decision": "Türk VUK uyumu için ek geliştirme gerekli.",
+                       "attendees": "E. Şahin, F. Güneş", "date": date(2025, 3, 1)},
                   ]},
              ]},
-            {"name": "Plan to Produce (P2P-MFG)", "level": "L1", "module": "PP",
-             "process_id_code": "P2P-MFG", "order": 4, "children": [
-                 {"name": "Production Planning", "level": "L2", "module": "PP", "order": 1,
-                  "scope_items": [
-                      {"code": "1PM", "name": "MRP & Demand Planning", "status": "in_scope",
-                       "sap_reference": "BP-1PM", "priority": "high", "module": "PP"},
-                  ]},
+            {"name": "Asset Accounting", "level": "L2", "module": "FI",
+             "process_id_code": "R2R-02", "order": 6, "children": [
+                 {"name": "Fixed Asset Management", "level": "L3", "module": "FI", "order": 1,
+                  "code": "2RR", "scope_decision": "in_scope", "fit_gap": "fit",
+                  "sap_reference": "BP-2RR", "sap_tcode": "AS01", "priority": "high"},
+             ]},
+            {"name": "Production Planning", "level": "L2", "module": "PP",
+             "process_id_code": "P2P-MFG-01", "order": 7, "children": [
+                 {"name": "MRP & Demand Planning", "level": "L3", "module": "PP", "order": 1,
+                  "code": "1PM", "scope_decision": "in_scope", "fit_gap": "partial_fit",
+                  "sap_reference": "BP-1PM", "sap_tcode": "MD01", "priority": "high"},
              ]},
         ]
 
         proc_count = 0
-        si_count = 0
         an_count = 0
+        l3_ids = {}  # code → id for mapping
 
         def _seed_process(parent_id, proc_data, sid):
-            nonlocal proc_count, si_count, an_count
+            nonlocal proc_count, an_count
             children = proc_data.pop("children", [])
-            scope_items = proc_data.pop("scope_items", [])
+            analyses = proc_data.pop("analyses", [])
             p = Process(scenario_id=sid, parent_id=parent_id, **proc_data)
             db.session.add(p)
             db.session.flush()
             proc_count += 1
+            if p.level == "L3" and p.code:
+                l3_ids[p.code] = p.id
             _p(f"   🔍 Process [{p.level}]: {p.name}", verbose)
-            for si_data in scope_items:
-                analyses = si_data.pop("analyses", [])
-                si = ScopeItem(process_id=p.id, **si_data)
-                db.session.add(si)
-                db.session.flush()
-                si_count += 1
-                for a_data in analyses:
-                    a = Analysis(scope_item_id=si.id, **a_data)
-                    db.session.add(a)
-                    an_count += 1
-                si_data["analyses"] = analyses  # restore
-            # Recurse children
+            for a_data in analyses:
+                a = Analysis(process_id=p.id, **a_data)
+                db.session.add(a)
+                an_count += 1
             for child in children:
                 _seed_process(p.id, child, sid)
             proc_data["children"] = children
-            proc_data["scope_items"] = scope_items
+            proc_data["analyses"] = analyses
 
         for proc_data in PROCESS_SEED:
             _seed_process(None, proc_data, first_sid)
         db.session.flush()
-        print(f"   ✅ {proc_count} processes, {si_count} scope items, {an_count} analyses")
+        print(f"   ✅ {proc_count} processes, {an_count} analyses")
 
         # ── 7. Requirements ──────────────────────────────────────────────
         print("\n📋 Creating requirements...")
@@ -717,6 +707,62 @@ def seed_all(app, append=False, verbose=False):
                 trace_count += 1
                 _p(f"   🔗 {t['req_code']} → {t['target_type']}:{t['target_name']}", verbose)
         print(f"   ✅ {trace_count} traces")
+
+        # ── 8b. Requirement ↔ L3 Process Mappings ────────────────────────
+        print("\n🔗 Creating requirement–process mappings...")
+        rpm_data = [
+            {"req_code": "REQ-SD-001", "l3_code": "1OC", "coverage_type": "full", "notes": "Standard pricing in VA01"},
+            {"req_code": "REQ-SD-001", "l3_code": "3OC", "coverage_type": "partial", "notes": "Invoice pricing"},
+            {"req_code": "REQ-FI-001", "l3_code": "1RR", "coverage_type": "full", "notes": "Tax codes in GL posting"},
+            {"req_code": "REQ-FI-002", "l3_code": "1RR", "coverage_type": "partial", "notes": "Bank recon during period close"},
+            {"req_code": "REQ-MM-001", "l3_code": "1PP", "coverage_type": "full", "notes": "Approval workflow in ME21N"},
+            {"req_code": "REQ-MM-002", "l3_code": "1PP", "coverage_type": "full", "notes": "Auto PO from MRP"},
+            {"req_code": "REQ-PP-001", "l3_code": "1PM", "coverage_type": "partial", "notes": "Repetitive MFG planning"},
+        ]
+        rpm_count = 0
+        for m in rpm_data:
+            r_id = req_ids.get(m["req_code"])
+            p_id = l3_ids.get(m["l3_code"])
+            if r_id and p_id:
+                rpm = RequirementProcessMapping(requirement_id=r_id, process_id=p_id,
+                                                 coverage_type=m["coverage_type"], notes=m.get("notes", ""))
+                db.session.add(rpm)
+                rpm_count += 1
+        db.session.flush()
+        print(f"   ✅ {rpm_count} requirement–process mappings")
+
+        # ── 8c. Open Items ───────────────────────────────────────────────
+        print("\n📌 Creating open items...")
+        oi_data = [
+            {"req_code": "REQ-FI-002", "title": "Banka formatı belirlenmedi", "item_type": "question",
+             "description": "6 bankadan hangileri MT940, hangileri camt.053 kullanacak?",
+             "owner": "Finans Ekibi", "priority": "high", "blocker": True, "status": "open"},
+            {"req_code": "REQ-FI-002", "title": "EFT ödeme limitleri", "item_type": "decision",
+             "description": "Otomatik EFT ödeme limiti ne olmalı?",
+             "owner": "CFO", "priority": "medium", "blocker": False, "status": "in_progress"},
+            {"req_code": "REQ-SD-002", "title": "Kredi limiti onay akışı", "item_type": "decision",
+             "description": "Kredi limiti aşıldığında hangi onay seviyesi gerekli?",
+             "owner": "Satış Direktörü", "priority": "high", "blocker": True, "status": "open"},
+            {"req_code": "REQ-TEC-002", "title": "Veri temizlik kuralları", "item_type": "dependency",
+             "description": "Master data cleansing kuralları ECC ekibinden bekleniyor.",
+             "owner": "Veri Göçü Ekibi", "priority": "critical", "blocker": True, "status": "open"},
+            {"req_code": "REQ-INT-001", "title": "GİB test ortamı erişimi", "item_type": "dependency",
+             "description": "GİB e-fatura test ortamı için sertifika bekleniyor.",
+             "owner": "Basis Ekibi", "priority": "high", "blocker": False, "status": "in_progress"},
+            {"req_code": "REQ-BIZ-001", "title": "TFRS 16 kiralama muhasebesi", "item_type": "question",
+             "description": "TFRS 16 (Kiralamalar) modülü kapsama alınacak mı?",
+             "owner": "CFO ofisi", "priority": "medium", "blocker": False, "status": "resolved",
+             "resolution": "Hayır, Phase 2'ye bırakıldı."},
+        ]
+        oi_count = 0
+        for oi in oi_data:
+            r_id = req_ids.get(oi.pop("req_code"))
+            if r_id:
+                open_item = OpenItem(requirement_id=r_id, **oi)
+                db.session.add(open_item)
+                oi_count += 1
+        db.session.flush()
+        print(f"   ✅ {oi_count} open items")
 
         # ── 9. Sprints ───────────────────────────────────────────────────
         print("\n🏃 Creating sprints...")

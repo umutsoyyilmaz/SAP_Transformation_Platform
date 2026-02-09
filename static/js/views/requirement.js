@@ -62,12 +62,7 @@ const RequirementView = (() => {
                         <option value="could_have">Could Have</option>
                         <option value="wont_have">Won't Have</option>
                     </select>
-                    <select id="filterFitGap" class="form-input form-input--sm" onchange="RequirementView.applyFilters()">
-                        <option value="">All Fit/Gap</option>
-                        <option value="fit">Fit</option>
-                        <option value="gap">Gap</option>
-                        <option value="partial_fit">Partial Fit</option>
-                    </select>
+
                 </div>
             </div>
             <div class="card">
@@ -97,13 +92,10 @@ const RequirementView = (() => {
         const type = document.getElementById('filterType').value;
         const status = document.getElementById('filterStatus').value;
         const priority = document.getElementById('filterPriority').value;
-        const fitGap = document.getElementById('filterFitGap').value;
-
         let filtered = requirements;
         if (type) filtered = filtered.filter(r => r.req_type === type);
         if (status) filtered = filtered.filter(r => r.status === status);
         if (priority) filtered = filtered.filter(r => r.priority === priority);
-        if (fitGap) filtered = filtered.filter(r => r.fit_gap === fitGap);
         renderList(filtered);
     }
 
@@ -124,7 +116,7 @@ const RequirementView = (() => {
             <table class="data-table">
                 <thead><tr>
                     <th>Code</th><th>Title</th><th>Type</th><th>Module</th>
-                    <th>Priority</th><th>Fit/Gap</th><th>Status</th><th>Effort</th><th>🔗</th><th>Actions</th>
+                    <th>Priority</th><th>Status</th><th>Effort</th><th>Open Items</th><th>🔗</th><th>Actions</th>
                 </tr></thead>
                 <tbody>
                     ${reqs.map(r => `
@@ -134,10 +126,10 @@ const RequirementView = (() => {
                             <td>${r.req_type}</td>
                             <td>${r.module || '—'}</td>
                             <td><span class="badge badge-${_priorityClass(r.priority)}">${r.priority}</span></td>
-                            <td>${r.fit_gap ? `<span class="badge badge-${_fitGapClass(r.fit_gap)}">${r.fit_gap}</span>` : '—'}</td>
                             <td><span class="badge badge-${_statusClass(r.status)}">${r.status}</span></td>
                             <td>${r.effort_estimate || '—'}</td>
-                            <td>${r.scope_item_count ? `<span class="badge badge-info" title="${r.scope_item_count} linked scope item(s)">🔗 ${r.scope_item_count}</span>` : ''}</td>
+                            <td>${r.open_item_count ? `<span class="badge badge-warning">${r.open_item_count}</span>` : '—'} ${r.blocker_count ? `<span class="badge badge-danger">${r.blocker_count}B</span>` : ''}</td>
+                            <td>${r.process_mapping_count ? `<span class="badge badge-info" title="${r.process_mapping_count} mapped L3 step(s)">🔗 ${r.process_mapping_count}</span>` : ''}</td>
                             <td>
                                 <button class="btn btn-secondary btn-sm" onclick="RequirementView.openDetail(${r.id})">View</button>
                                 <button class="btn btn-danger btn-sm" onclick="RequirementView.deleteReq(${r.id})">Delete</button>
@@ -187,7 +179,6 @@ const RequirementView = (() => {
                         <dt>Type</dt><dd>${r.req_type}</dd>
                         <dt>Priority</dt><dd><span class="badge badge-${_priorityClass(r.priority)}">${r.priority}</span></dd>
                         <dt>Module</dt><dd>${r.module || '—'}</dd>
-                        <dt>Fit/Gap</dt><dd>${r.fit_gap ? `<span class="badge badge-${_fitGapClass(r.fit_gap)}">${r.fit_gap}</span>` : '—'}</dd>
                         <dt>Effort</dt><dd>${r.effort_estimate || '—'}</dd>
                         <dt>Source</dt><dd>${r.source || '—'}</dd>
                     </dl>
@@ -208,27 +199,34 @@ const RequirementView = (() => {
                 <div id="traceList"></div>
             </div>
 
-            ${(r.scope_items && r.scope_items.length) ? `
+            ${(r.process_mappings && r.process_mappings.length) ? `
             <div class="card" style="margin-top:20px">
                 <div class="card-header">
-                    <h3>🔗 Linked Scope Items</h3>
+                    <h3>🔗 Mapped L3 Process Steps</h3>
                 </div>
                 <table class="data-table">
-                    <thead><tr><th>Code</th><th>Name</th><th>SAP Ref</th><th>Status</th><th>Priority</th><th>Module</th></tr></thead>
+                    <thead><tr><th>L3 Step</th><th>Coverage</th><th>Fit/Gap</th><th>SAP TCode</th><th>Notes</th></tr></thead>
                     <tbody>
-                        ${r.scope_items.map(si => `
+                        ${r.process_mappings.map(m => `
                             <tr>
-                                <td><strong>${escHtml(si.code || '—')}</strong></td>
-                                <td>${escHtml(si.name)}</td>
-                                <td>${escHtml(si.sap_reference || '—')}</td>
-                                <td><span class="badge badge-${_statusClass(si.status)}">${si.status}</span></td>
-                                <td><span class="badge badge-${_priorityClass(si.priority)}">${si.priority}</span></td>
-                                <td>${si.module || '—'}</td>
+                                <td><strong>${escHtml(m.process_name || '—')}</strong></td>
+                                <td><span class="badge badge-${m.coverage_type}">${m.coverage_type}</span></td>
+                                <td>${m.process_fit_gap ? `<span class="badge badge-${m.process_fit_gap}">${m.process_fit_gap}</span>` : '—'}</td>
+                                <td>${escHtml(m.process_sap_tcode || '—')}</td>
+                                <td>${escHtml(m.notes || '—')}</td>
                             </tr>
                         `).join('')}
                     </tbody>
                 </table>
             </div>` : ''}
+
+            <div class="card" style="margin-top:20px">
+                <div class="card-header">
+                    <h3>📌 Open Items</h3>
+                    <button class="btn btn-primary btn-sm" onclick="RequirementView.showAddOpenItemModal()">+ Open Item</button>
+                </div>
+                <div id="openItemsList"></div>
+            </div>
 
             ${(r.children && r.children.length) ? `
             <div class="card" style="margin-top:20px">
@@ -249,6 +247,7 @@ const RequirementView = (() => {
             </div>` : ''}
         `;
         renderTraces();
+        renderOpenItems();
     }
 
     function renderTraces() {
@@ -380,12 +379,12 @@ const RequirementView = (() => {
                     <div class="kpi-card__label">Total Requirements</div>
                 </div>
                 <div class="kpi-card">
-                    <div class="kpi-card__value">${stats.by_fit_gap?.gap || 0}</div>
-                    <div class="kpi-card__label">Gaps</div>
+                    <div class="kpi-card__value">${stats.total_open_items || 0}</div>
+                    <div class="kpi-card__label">Open Items</div>
                 </div>
                 <div class="kpi-card">
-                    <div class="kpi-card__value">${stats.by_fit_gap?.fit || 0}</div>
-                    <div class="kpi-card__label">Fits</div>
+                    <div class="kpi-card__value" style="color:${(stats.blocker_open_items||0)>0?'#bb0000':'#30914c'}">${stats.blocker_open_items || 0}</div>
+                    <div class="kpi-card__label">Blockers</div>
                 </div>
                 <div class="kpi-card">
                     <div class="kpi-card__value">${stats.by_priority?.must_have || 0}</div>
@@ -472,14 +471,6 @@ const RequirementView = (() => {
                     <div class="form-group"><label>Module</label>
                         <input id="rModule" class="form-input" placeholder="FI, CO, MM, SD...">
                     </div>
-                    <div class="form-group"><label>Fit/Gap</label>
-                        <select id="rFitGap" class="form-input">
-                            <option value="">—</option>
-                            <option value="fit">Fit</option>
-                            <option value="gap">Gap</option>
-                            <option value="partial_fit">Partial Fit</option>
-                        </select>
-                    </div>
                     <div class="form-group"><label>Effort</label>
                         <select id="rEffort" class="form-input">
                             <option value="">—</option>
@@ -509,7 +500,6 @@ const RequirementView = (() => {
             req_type: document.getElementById('rType').value,
             priority: document.getElementById('rPriority').value,
             module: document.getElementById('rModule').value,
-            fit_gap: document.getElementById('rFitGap').value,
             effort_estimate: document.getElementById('rEffort').value,
             source: document.getElementById('rSource').value,
             acceptance_criteria: document.getElementById('rAC').value,
@@ -551,11 +541,6 @@ const RequirementView = (() => {
                 </div>
                 <div class="form-row">
                     <div class="form-group"><label>Module</label><input id="rModule" class="form-input" value="${escAttr(r.module)}"></div>
-                    <div class="form-group"><label>Fit/Gap</label>
-                        <select id="rFitGap" class="form-input">
-                            ${['','fit','gap','partial_fit'].map(f => `<option value="${f}" ${r.fit_gap===f?'selected':''}>${f||'—'}</option>`).join('')}
-                        </select>
-                    </div>
                     <div class="form-group"><label>Effort</label>
                         <select id="rEffort" class="form-input">
                             ${['','xs','s','m','l','xl'].map(e => `<option value="${e}" ${r.effort_estimate===e?'selected':''}>${e||'—'}</option>`).join('')}
@@ -582,7 +567,6 @@ const RequirementView = (() => {
             priority: document.getElementById('rPriority').value,
             status: document.getElementById('rStatus').value,
             module: document.getElementById('rModule').value,
-            fit_gap: document.getElementById('rFitGap').value,
             effort_estimate: document.getElementById('rEffort').value,
             source: document.getElementById('rSource').value,
             acceptance_criteria: document.getElementById('rAC').value,
@@ -666,6 +650,97 @@ const RequirementView = (() => {
         } catch (err) { App.toast(err.message, 'error'); }
     }
 
+    // ── Open Items ────────────────────────────────────────────────────────
+    async function renderOpenItems() {
+        const c = document.getElementById('openItemsList');
+        if (!c) return;
+        try {
+            const items = await API.get(`/requirements/${currentReq.id}/open-items`);
+            if (!items.length) { c.innerHTML = '<p style="color:var(--sap-text-secondary);padding:8px">No open items.</p>'; return; }
+            c.innerHTML = `<table class="data-table"><thead><tr><th>Title</th><th>Type</th><th>Status</th><th>Priority</th><th>Owner</th><th>Blocker</th><th>Actions</th></tr></thead><tbody>${items.map(i => `<tr><td><strong>${escHtml(i.title)}</strong>${i.description?`<br><small style="color:var(--sap-text-secondary)">${escHtml(i.description.substring(0,80))}</small>`:''}</td><td><span class="badge">${i.item_type}</span></td><td><span class="badge badge-${i.status==='resolved'||i.status==='closed'?'passed':i.status==='in_progress'?'in_progress':'pending'}">${i.status}</span></td><td><span class="badge badge-priority-${i.priority}">${i.priority}</span></td><td>${escHtml(i.owner||'—')}</td><td>${i.blocker?'<span class="badge badge-danger">BLOCKER</span>':'—'}</td><td><button class="btn btn-secondary btn-sm" onclick="RequirementView.showEditOpenItemModal(${i.id})">Edit</button> <button class="btn btn-danger btn-sm" onclick="RequirementView.deleteOpenItem(${i.id})">Del</button></td></tr>`).join('')}</tbody></table>`;
+        } catch(e) { c.innerHTML = `<p>⚠️ ${e.message}</p>`; }
+    }
+
+    function showAddOpenItemModal() {
+        App.openModal(`
+            <div class="modal-header"><h2>Add Open Item</h2></div>
+            <div class="modal-body">
+                <div class="form-group"><label>Title *</label><input id="oiTitle" class="form-input"></div>
+                <div class="form-group"><label>Description</label><textarea id="oiDesc" class="form-input" rows="2"></textarea></div>
+                <div class="form-row">
+                    <div class="form-group"><label>Type</label><select id="oiType" class="form-input"><option value="question">Question</option><option value="decision">Decision</option><option value="dependency">Dependency</option><option value="escalation">Escalation</option></select></div>
+                    <div class="form-group"><label>Priority</label><select id="oiPrio" class="form-input"><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option><option value="low">Low</option></select></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Owner</label><input id="oiOwner" class="form-input"></div>
+                    <div class="form-group"><label>Due Date</label><input id="oiDue" type="date" class="form-input"></div>
+                </div>
+                <div class="form-group"><label><input type="checkbox" id="oiBlocker"> Blocker</label></div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" onclick="RequirementView.doAddOpenItem()">Create</button></div>`);
+    }
+
+    async function doAddOpenItem() {
+        try {
+            await API.post(`/requirements/${currentReq.id}/open-items`, {
+                title: document.getElementById('oiTitle').value,
+                description: document.getElementById('oiDesc').value,
+                item_type: document.getElementById('oiType').value,
+                priority: document.getElementById('oiPrio').value,
+                owner: document.getElementById('oiOwner').value,
+                due_date: document.getElementById('oiDue').value || null,
+                blocker: document.getElementById('oiBlocker').checked,
+            });
+            App.closeModal(); App.toast('Open item created','success'); await renderOpenItems();
+        } catch(e) { App.toast(e.message,'error'); }
+    }
+
+    function showEditOpenItemModal(id) {
+        API.get(`/open-items/${id}`).then(i => {
+            App.openModal(`
+                <div class="modal-header"><h2>Edit Open Item</h2></div>
+                <div class="modal-body">
+                    <div class="form-group"><label>Title *</label><input id="oiTitle" class="form-input" value="${escAttr(i.title)}"></div>
+                    <div class="form-group"><label>Description</label><textarea id="oiDesc" class="form-input" rows="2">${escHtml(i.description||'')}</textarea></div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Type</label><select id="oiType" class="form-input">${['question','decision','dependency','escalation'].map(t=>`<option value="${t}" ${i.item_type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+                        <div class="form-group"><label>Status</label><select id="oiStatus" class="form-input">${['open','in_progress','resolved','closed'].map(s=>`<option value="${s}" ${i.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Priority</label><select id="oiPrio" class="form-input">${['low','medium','high','critical'].map(p=>`<option value="${p}" ${i.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
+                        <div class="form-group"><label>Owner</label><input id="oiOwner" class="form-input" value="${escAttr(i.owner)}"></div>
+                    </div>
+                    <div class="form-group"><label>Due Date</label><input id="oiDue" type="date" class="form-input" value="${i.due_date||''}"></div>
+                    <div class="form-group"><label>Resolution</label><textarea id="oiRes" class="form-input" rows="2">${escHtml(i.resolution||'')}</textarea></div>
+                    <div class="form-group"><label><input type="checkbox" id="oiBlocker" ${i.blocker?'checked':''}> Blocker</label></div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" onclick="RequirementView.doEditOpenItem(${id})">Save</button></div>`);
+        }).catch(e => App.toast(e.message,'error'));
+    }
+
+    async function doEditOpenItem(id) {
+        try {
+            await API.put(`/open-items/${id}`, {
+                title: document.getElementById('oiTitle').value,
+                description: document.getElementById('oiDesc').value,
+                item_type: document.getElementById('oiType').value,
+                status: document.getElementById('oiStatus').value,
+                priority: document.getElementById('oiPrio').value,
+                owner: document.getElementById('oiOwner').value,
+                due_date: document.getElementById('oiDue').value || null,
+                resolution: document.getElementById('oiRes').value,
+                blocker: document.getElementById('oiBlocker').checked,
+            });
+            App.closeModal(); App.toast('Updated','success'); await renderOpenItems();
+        } catch(e) { App.toast(e.message,'error'); }
+    }
+
+    async function deleteOpenItem(id) {
+        if (!confirm('Delete this open item?')) return;
+        try { await API.delete(`/open-items/${id}`); App.toast('Deleted','success'); await renderOpenItems(); }
+        catch(e) { App.toast(e.message,'error'); }
+    }
+
     // ── Utility ──────────────────────────────────────────────────────────
     function escHtml(s) {
         const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
@@ -676,5 +751,6 @@ const RequirementView = (() => {
         render, openDetail, showCreateModal, doCreate, showEditModal, doEdit,
         deleteReq, showMatrix, showStats, applyFilters,
         showAddTraceModal, doAddTrace, deleteTrace,
+        showAddOpenItemModal, doAddOpenItem, showEditOpenItemModal, doEditOpenItem, deleteOpenItem,
     };
 })();

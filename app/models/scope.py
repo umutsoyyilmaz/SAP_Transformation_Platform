@@ -1,13 +1,16 @@
 """
 SAP Transformation Management Platform
-Scope domain models — Gate Check fix for Sprint 3 gap.
+Process domain models — refactored hierarchy.
+
+Hierarchy:
+    Program → Scenario (=L1) → Process L2 → Process L3
+    Scenario replaces the old "L1 Process" wrapper.
+    ScopeItem is removed — scope/fit-gap fields now live on L3 Process.
 
 Models:
-    - Process: L1-L3 SAP process hierarchy under a Scenario
-    - ScopeItem: SAP Best Practice scope item linked to a Process
-    - Analysis: Fit-Gap workshop / analysis record linked to a ScopeItem
-
-Architecture chain: Scenario → Process → ScopeItem → Analysis → Requirement
+    - Process:  L2 (Business Process) or L3 (Process Step) under a Scenario
+    - RequirementProcessMapping:  N:M junction between Requirement ↔ L3 Process
+    - Analysis: Fit-Gap assessment linked to an L3 Process
 """
 
 from datetime import datetime, timezone
@@ -17,37 +20,48 @@ from app.models import db
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-PROCESS_LEVELS = {"L1", "L2", "L3"}
-SCOPE_ITEM_STATUSES = {"active", "deferred", "out_of_scope", "in_scope"}
+PROCESS_LEVELS = {"L2", "L3"}
+
+# L3-specific enums
+SCOPE_DECISIONS = {"in_scope", "out_of_scope", "deferred"}
+FIT_GAP_RESULTS = {"fit", "gap", "partial_fit", "standard", ""}
+L3_PRIORITIES = {"low", "medium", "high", "critical"}
+
+# Analysis
 ANALYSIS_STATUSES = {"planned", "in_progress", "completed", "cancelled"}
-ANALYSIS_TYPES = {"workshop", "fit_gap", "demo", "prototype", "review"}
+ANALYSIS_TYPES = {"workshop", "fit_gap", "demo", "prototype", "review", "workshop_note"}
+
+# Coverage types for Requirement ↔ L3 mapping
+COVERAGE_TYPES = {"full", "partial", "none"}
 
 
 class Process(db.Model):
     """
-    SAP process hierarchy node (L1/L2/L3).
+    SAP process hierarchy node — L2 (Business Process) or L3 (Process Step).
 
-    Examples:
-        L1: Order to Cash (O2C)
-        L2: Sales Order Processing
-        L3: Sales Order Creation
+    L1 = Scenario (separate table).
+
+    L2 examples: Sales Order Processing, Purchase Requisition, GL Accounting
+    L3 examples: Standard Sales Order (VA01), Third-Party Order, MRP Run
+
+    L3 carries scope & fit-gap attributes (absorbed from old ScopeItem concept).
     """
 
     __tablename__ = "processes"
 
     id = db.Column(db.Integer, primary_key=True)
     scenario_id = db.Column(
-        db.Integer, db.ForeignKey("scenarios.id", ondelete="CASCADE"), nullable=False
+        db.Integer, db.ForeignKey("scenarios.id", ondelete="CASCADE"), nullable=False,
     )
     parent_id = db.Column(
         db.Integer, db.ForeignKey("processes.id", ondelete="CASCADE"),
-        nullable=True, comment="Parent process for hierarchy",
+        nullable=True, comment="L3 → parent L2.  L2 → NULL",
     )
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, default="")
     level = db.Column(
-        db.String(5), default="L1",
-        comment="L1 | L2 | L3",
+        db.String(5), default="L2",
+        comment="L2 (Business Process) | L3 (Process Step)",
     )
     process_id_code = db.Column(
         db.String(50), default="",
@@ -59,6 +73,33 @@ class Process(db.Model):
     )
     order = db.Column(db.Integer, default=0)
 
+    # ── L3-only fields (scope & fit-gap) ─────────────────────────────────
+    code = db.Column(
+        db.String(50), default="",
+        comment="L3 short code, e.g. 1OC, 3XX, BD9",
+    )
+    scope_decision = db.Column(
+        db.String(30), default="",
+        comment="in_scope | out_of_scope | deferred  (L3 only)",
+    )
+    fit_gap = db.Column(
+        db.String(20), default="",
+        comment="fit | gap | partial_fit | standard  (L3 only)",
+    )
+    sap_tcode = db.Column(
+        db.String(50), default="",
+        comment="SAP transaction code: VA01, ME21N, FB01  (L3 only)",
+    )
+    sap_reference = db.Column(
+        db.String(100), default="",
+        comment="SAP Best Practice reference ID  (L3 only)",
+    )
+    priority = db.Column(
+        db.String(20), default="",
+        comment="low | medium | high | critical  (L3 only)",
+    )
+    notes = db.Column(db.Text, default="")
+
     created_at = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -69,14 +110,21 @@ class Process(db.Model):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    # ── Relationships
+    # ── Relationships ────────────────────────────────────────────────────
     children = db.relationship(
         "Process", backref=db.backref("parent", remote_side="Process.id"),
         lazy="dynamic", cascade="all, delete-orphan",
     )
-    scope_items = db.relationship(
-        "ScopeItem", backref="process", lazy="dynamic",
+    analyses = db.relationship(
+        "Analysis", backref="process", lazy="dynamic",
         cascade="all, delete-orphan",
+    )
+    requirement_mappings = db.relationship(
+        "RequirementProcessMapping", backref="process", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    backlog_items = db.relationship(
+        "BacklogItem", backref="process", lazy="dynamic",
     )
 
     def to_dict(self, include_children=False):
@@ -90,113 +138,84 @@ class Process(db.Model):
             "process_id_code": self.process_id_code,
             "module": self.module,
             "order": self.order,
+            "code": self.code,
+            "scope_decision": self.scope_decision,
+            "fit_gap": self.fit_gap,
+            "sap_tcode": self.sap_tcode,
+            "sap_reference": self.sap_reference,
+            "priority": self.priority,
+            "notes": self.notes,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
         if include_children:
-            result["children"] = [c.to_dict(include_children=True)
-                                  for c in self.children.order_by(Process.order)]
-            result["scope_items"] = [si.to_dict() for si in self.scope_items]
+            result["children"] = [
+                c.to_dict(include_children=True)
+                for c in self.children.order_by(Process.order)
+            ]
         return result
 
     def __repr__(self):
         return f"<Process {self.id}: [{self.level}] {self.name}>"
 
 
-class ScopeItem(db.Model):
+class RequirementProcessMapping(db.Model):
     """
-    SAP Best Practice scope item attached to a process node.
+    N:M junction — which Requirements are addressed by which L3 Process Steps.
 
-    Represents a specific SAP functionality area that may be in-scope or
-    deferred for the transformation project.
+    One requirement can be addressed by multiple L3s.
+    One L3 can address multiple requirements.
     """
 
-    __tablename__ = "scope_items"
+    __tablename__ = "requirement_process_mappings"
 
     id = db.Column(db.Integer, primary_key=True)
-    process_id = db.Column(
-        db.Integer, db.ForeignKey("processes.id", ondelete="CASCADE"), nullable=False
-    )
     requirement_id = db.Column(
-        db.Integer, db.ForeignKey("requirements.id", ondelete="SET NULL"),
-        nullable=True,
-        comment="Linked requirement for single-source-of-truth traceability",
+        db.Integer, db.ForeignKey("requirements.id", ondelete="CASCADE"),
+        nullable=False,
     )
-    code = db.Column(
-        db.String(50), default="",
-        comment="SAP scope item code, e.g. 1NS, 2OC, BD9",
+    process_id = db.Column(
+        db.Integer, db.ForeignKey("processes.id", ondelete="CASCADE"),
+        nullable=False, comment="L3 process step",
     )
-    name = db.Column(db.String(300), nullable=False)
-    description = db.Column(db.Text, default="")
-    sap_reference = db.Column(
-        db.String(100), default="",
-        comment="SAP Best Practice reference ID",
+    coverage_type = db.Column(
+        db.String(20), default="full",
+        comment="full | partial | none",
     )
-    status = db.Column(
-        db.String(30), default="in_scope",
-        comment="active | deferred | out_of_scope | in_scope",
-    )
-    priority = db.Column(
-        db.String(20), default="medium",
-        comment="low | medium | high | critical",
-    )
-    module = db.Column(db.String(50), default="")
     notes = db.Column(db.Text, default="")
-
     created_at = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
-    )
-    updated_at = db.Column(
-        db.DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
-
-    # ── Relationships
-    requirement = db.relationship(
-        "Requirement", backref=db.backref("scope_items", lazy="dynamic"),
-        foreign_keys=[requirement_id],
-    )
-    analyses = db.relationship(
-        "Analysis", backref="scope_item", lazy="dynamic",
-        cascade="all, delete-orphan",
     )
 
     def to_dict(self):
         return {
             "id": self.id,
-            "process_id": self.process_id,
             "requirement_id": self.requirement_id,
-            "code": self.code,
-            "name": self.name,
-            "description": self.description,
-            "sap_reference": self.sap_reference,
-            "status": self.status,
-            "priority": self.priority,
-            "module": self.module,
+            "process_id": self.process_id,
+            "coverage_type": self.coverage_type,
             "notes": self.notes,
             "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
     def __repr__(self):
-        return f"<ScopeItem {self.id}: {self.code or ''} {self.name[:40]}>"
+        return f"<ReqProcMap {self.id}: REQ#{self.requirement_id} ↔ PROC#{self.process_id}>"
 
 
 class Analysis(db.Model):
     """
-    Fit-Gap workshop / analysis session attached to a scope item.
+    Fit-Gap assessment / workshop note linked to an L3 Process Step.
 
-    Records the outcome of a Fit-Gap analysis workshop including
-    decision, attendees, and generated requirements.
+    Records the outcome of a Fit-Gap analysis including decision,
+    attendees, and justification.
     """
 
     __tablename__ = "analyses"
 
     id = db.Column(db.Integer, primary_key=True)
-    scope_item_id = db.Column(
-        db.Integer, db.ForeignKey("scope_items.id", ondelete="CASCADE"), nullable=False
+    process_id = db.Column(
+        db.Integer, db.ForeignKey("processes.id", ondelete="CASCADE"),
+        nullable=False, comment="L3 process step being analyzed",
     )
     workshop_id = db.Column(
         db.Integer, db.ForeignKey("workshops.id", ondelete="SET NULL"),
@@ -206,8 +225,8 @@ class Analysis(db.Model):
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, default="")
     analysis_type = db.Column(
-        db.String(30), default="workshop",
-        comment="workshop | fit_gap | demo | prototype | review",
+        db.String(30), default="fit_gap",
+        comment="workshop | fit_gap | demo | prototype | review | workshop_note",
     )
     status = db.Column(
         db.String(30), default="planned",
@@ -235,7 +254,7 @@ class Analysis(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
-            "scope_item_id": self.scope_item_id,
+            "process_id": self.process_id,
             "workshop_id": self.workshop_id,
             "name": self.name,
             "description": self.description,

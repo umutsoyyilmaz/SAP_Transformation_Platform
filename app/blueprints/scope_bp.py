@@ -1,9 +1,10 @@
 """
 SAP Transformation Management Platform
-Scope blueprint — Process, ScopeItem, Analysis CRUD endpoints.
+Scope blueprint — Process (L2/L3) & Analysis CRUD endpoints.
 
-Architecture blueprint for Sprint 3's Explore phase:
-    Scenario → Process (L1/L2/L3) → ScopeItem → Analysis
+Refactored hierarchy:
+    Scenario (=L1) → Process L2 → Process L3 (scope/fit-gap) → Analysis
+    ScopeItem table removed — L3 Process now carries scope attributes.
 """
 
 from datetime import datetime, timezone
@@ -14,11 +15,13 @@ from app.models import db
 from app.models.scope import (
     Analysis,
     Process,
-    ScopeItem,
+    RequirementProcessMapping,
     PROCESS_LEVELS,
-    SCOPE_ITEM_STATUSES,
+    SCOPE_DECISIONS,
+    FIT_GAP_RESULTS,
     ANALYSIS_STATUSES,
     ANALYSIS_TYPES,
+    COVERAGE_TYPES,
 )
 from app.models.scenario import Scenario
 
@@ -57,6 +60,7 @@ def list_processes(sid):
     if level:
         query = query.filter_by(level=level)
     if tree:
+        # Only root-level (L2) processes — children loaded via relationship
         query = query.filter_by(parent_id=None)
 
     processes = query.order_by(Process.order, Process.id).all()
@@ -65,7 +69,7 @@ def list_processes(sid):
 
 @scope_bp.route("/scenarios/<int:sid>/processes", methods=["POST"])
 def create_process(sid):
-    """Create a process under a scenario."""
+    """Create a process (L2 or L3) under a scenario."""
     scenario = db.session.get(Scenario, sid)
     if not scenario:
         return jsonify({"error": "Scenario not found"}), 404
@@ -74,7 +78,7 @@ def create_process(sid):
     if not data.get("name"):
         return jsonify({"error": "name is required"}), 400
 
-    level = data.get("level", "L1")
+    level = data.get("level", "L2")
     if level not in PROCESS_LEVELS:
         return jsonify({"error": f"Invalid level. Must be one of {sorted(PROCESS_LEVELS)}"}), 400
 
@@ -85,8 +89,16 @@ def create_process(sid):
         description=data.get("description", ""),
         level=level,
         process_id_code=data.get("process_id_code", ""),
-        module=data.get("module", ""),
+        module=data.get("module", scenario.sap_module or ""),
         order=data.get("order", 0),
+        # L3-specific fields
+        code=data.get("code", ""),
+        scope_decision=data.get("scope_decision", ""),
+        fit_gap=data.get("fit_gap", ""),
+        sap_tcode=data.get("sap_tcode", ""),
+        sap_reference=data.get("sap_reference", ""),
+        priority=data.get("priority", ""),
+        notes=data.get("notes", ""),
     )
     db.session.add(process)
     db.session.commit()
@@ -99,8 +111,20 @@ def get_process(pid):
     process = db.session.get(Process, pid)
     if not process:
         return jsonify({"error": "Process not found"}), 404
+
     include = request.args.get("include_children", "false").lower() == "true"
-    return jsonify(process.to_dict(include_children=include))
+    result = process.to_dict(include_children=include)
+
+    # For L3, include analyses and requirement mappings
+    if process.level == "L3":
+        result["analyses"] = [a.to_dict() for a in process.analyses]
+        result["requirement_mappings"] = [
+            {**m.to_dict(), "requirement_code": m.requirement.code if m.requirement else "",
+             "requirement_title": m.requirement.title if m.requirement else ""}
+            for m in process.requirement_mappings
+        ]
+
+    return jsonify(result)
 
 
 @scope_bp.route("/processes/<int:pid>", methods=["PUT"])
@@ -111,7 +135,8 @@ def update_process(pid):
         return jsonify({"error": "Process not found"}), 404
 
     data = request.get_json(silent=True) or {}
-    for field in ("name", "description", "process_id_code", "module"):
+    for field in ("name", "description", "process_id_code", "module",
+                  "code", "sap_tcode", "sap_reference", "priority", "notes"):
         if field in data:
             setattr(process, field, data[field])
     if "level" in data:
@@ -122,6 +147,14 @@ def update_process(pid):
         process.parent_id = data["parent_id"]
     if "order" in data:
         process.order = data["order"]
+    if "scope_decision" in data:
+        if data["scope_decision"] and data["scope_decision"] not in SCOPE_DECISIONS:
+            return jsonify({"error": f"Invalid scope_decision. Must be one of {sorted(SCOPE_DECISIONS)}"}), 400
+        process.scope_decision = data["scope_decision"]
+    if "fit_gap" in data:
+        if data["fit_gap"] and data["fit_gap"] not in FIT_GAP_RESULTS:
+            return jsonify({"error": f"Invalid fit_gap. Must be one of {sorted(FIT_GAP_RESULTS)}"}), 400
+        process.fit_gap = data["fit_gap"]
 
     db.session.commit()
     return jsonify(process.to_dict())
@@ -148,181 +181,51 @@ def process_stats(sid):
 
     procs = Process.query.filter_by(scenario_id=sid).all()
     by_level = {}
+    by_scope = {}
+    by_fit_gap = {}
     for p in procs:
         by_level.setdefault(p.level, 0)
         by_level[p.level] += 1
+        if p.level == "L3":
+            if p.scope_decision:
+                by_scope[p.scope_decision] = by_scope.get(p.scope_decision, 0) + 1
+            if p.fit_gap:
+                by_fit_gap[p.fit_gap] = by_fit_gap.get(p.fit_gap, 0) + 1
 
-    total_scope = ScopeItem.query.join(Process).filter(Process.scenario_id == sid).count()
     return jsonify({
         "total_processes": len(procs),
         "by_level": by_level,
-        "total_scope_items": total_scope,
+        "by_scope_decision": by_scope,
+        "by_fit_gap": by_fit_gap,
     })
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  SCOPE ITEMS  /api/v1/processes/<pid>/scope-items
+#  ANALYSIS  /api/v1/processes/<pid>/analyses  (L3 process steps)
 # ═══════════════════════════════════════════════════════════════════════════
 
-@scope_bp.route("/processes/<int:pid>/scope-items", methods=["GET"])
-def list_scope_items(pid):
-    """List scope items under a process, optionally enriched with latest analysis."""
+@scope_bp.route("/processes/<int:pid>/analyses", methods=["GET"])
+def list_analyses(pid):
+    """List analyses for a process (L3)."""
     process = db.session.get(Process, pid)
     if not process:
         return jsonify({"error": "Process not found"}), 404
-    status = request.args.get("status")
-    include_analysis = request.args.get("include_analysis", "false").lower() == "true"
-    query = ScopeItem.query.filter_by(process_id=pid)
-    if status:
-        query = query.filter_by(status=status)
-    items = query.order_by(ScopeItem.id).all()
-
-    results = []
-    for si in items:
-        d = si.to_dict()
-        if include_analysis:
-            latest = (
-                Analysis.query.filter_by(scope_item_id=si.id)
-                .order_by(Analysis.updated_at.desc())
-                .first()
-            )
-            d["latest_fit_gap"] = latest.fit_gap_result if latest else None
-            d["latest_analysis_status"] = latest.status if latest else None
-            d["analysis_count"] = si.analyses.count()
-        results.append(d)
-    return jsonify(results)
-
-
-@scope_bp.route("/processes/<int:pid>/scope-items", methods=["POST"])
-def create_scope_item(pid):
-    """Create a scope item under a process."""
-    process = db.session.get(Process, pid)
-    if not process:
-        return jsonify({"error": "Process not found"}), 404
-
-    data = request.get_json(silent=True) or {}
-    if not data.get("name"):
-        return jsonify({"error": "name is required"}), 400
-
-    status = data.get("status", "in_scope")
-    if status not in SCOPE_ITEM_STATUSES:
-        return jsonify({"error": f"Invalid status. Must be one of {sorted(SCOPE_ITEM_STATUSES)}"}), 400
-
-    item = ScopeItem(
-        process_id=pid,
-        code=data.get("code", ""),
-        name=data["name"],
-        description=data.get("description", ""),
-        sap_reference=data.get("sap_reference", ""),
-        status=status,
-        priority=data.get("priority", "medium"),
-        module=data.get("module", ""),
-        notes=data.get("notes", ""),
-        requirement_id=data.get("requirement_id"),
-    )
-    db.session.add(item)
-    db.session.commit()
-    return jsonify(item.to_dict()), 201
-
-
-@scope_bp.route("/scope-items/<int:siid>", methods=["GET"])
-def get_scope_item(siid):
-    """Get a single scope item with its analyses and linked requirement."""
-    item = db.session.get(ScopeItem, siid)
-    if not item:
-        return jsonify({"error": "Scope item not found"}), 404
-    result = item.to_dict()
-    result["analyses"] = [a.to_dict() for a in item.analyses]
-    if item.requirement:
-        result["requirement"] = item.requirement.to_dict()
-    return jsonify(result)
-
-
-@scope_bp.route("/scope-items/<int:siid>", methods=["PUT"])
-def update_scope_item(siid):
-    """Update a scope item."""
-    item = db.session.get(ScopeItem, siid)
-    if not item:
-        return jsonify({"error": "Scope item not found"}), 404
-
-    data = request.get_json(silent=True) or {}
-    for field in ("code", "name", "description", "sap_reference", "priority", "module", "notes"):
-        if field in data:
-            setattr(item, field, data[field])
-    if "status" in data:
-        if data["status"] not in SCOPE_ITEM_STATUSES:
-            return jsonify({"error": f"Invalid status. Must be one of {sorted(SCOPE_ITEM_STATUSES)}"}), 400
-        item.status = data["status"]
-    if "requirement_id" in data:
-        item.requirement_id = data["requirement_id"]
-
-    db.session.commit()
-    return jsonify(item.to_dict())
-
-
-@scope_bp.route("/scope-items/<int:siid>", methods=["DELETE"])
-def delete_scope_item(siid):
-    """Delete a scope item and its analyses (cascading)."""
-    item = db.session.get(ScopeItem, siid)
-    if not item:
-        return jsonify({"error": "Scope item not found"}), 404
-    db.session.delete(item)
-    db.session.commit()
-    return jsonify({"message": "Scope item deleted"}), 200
-
-
-# ── Scope-item stats across a scenario
-@scope_bp.route("/scenarios/<int:sid>/scope-items/summary", methods=["GET"])
-def scope_item_summary(sid):
-    """Summary of scope items across all processes in a scenario."""
-    scenario = db.session.get(Scenario, sid)
-    if not scenario:
-        return jsonify({"error": "Scenario not found"}), 404
-
-    items = (ScopeItem.query.join(Process).filter(Process.scenario_id == sid).all())
-    by_status = {}
-    by_module = {}
-    by_priority = {}
-    for i in items:
-        by_status[i.status] = by_status.get(i.status, 0) + 1
-        if i.module:
-            by_module[i.module] = by_module.get(i.module, 0) + 1
-        by_priority[i.priority] = by_priority.get(i.priority, 0) + 1
-
-    return jsonify({
-        "total": len(items),
-        "by_status": by_status,
-        "by_module": by_module,
-        "by_priority": by_priority,
-    })
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  ANALYSIS  /api/v1/scope-items/<siid>/analyses
-# ═══════════════════════════════════════════════════════════════════════════
-
-@scope_bp.route("/scope-items/<int:siid>/analyses", methods=["GET"])
-def list_analyses(siid):
-    """List analyses for a scope item."""
-    item = db.session.get(ScopeItem, siid)
-    if not item:
-        return jsonify({"error": "Scope item not found"}), 404
-    analyses = Analysis.query.filter_by(scope_item_id=siid).order_by(Analysis.id).all()
+    analyses = Analysis.query.filter_by(process_id=pid).order_by(Analysis.id).all()
     return jsonify([a.to_dict() for a in analyses])
 
 
-@scope_bp.route("/scope-items/<int:siid>/analyses", methods=["POST"])
-def create_analysis(siid):
-    """Create an analysis / workshop under a scope item."""
-    item = db.session.get(ScopeItem, siid)
-    if not item:
-        return jsonify({"error": "Scope item not found"}), 404
+@scope_bp.route("/processes/<int:pid>/analyses", methods=["POST"])
+def create_analysis(pid):
+    """Create an analysis under a process (L3)."""
+    process = db.session.get(Process, pid)
+    if not process:
+        return jsonify({"error": "Process not found"}), 404
 
     data = request.get_json(silent=True) or {}
     if not data.get("name"):
         return jsonify({"error": "name is required"}), 400
 
-    analysis_type = data.get("analysis_type", "workshop")
+    analysis_type = data.get("analysis_type", "fit_gap")
     if analysis_type not in ANALYSIS_TYPES:
         return jsonify({"error": f"Invalid analysis_type. Must be one of {sorted(ANALYSIS_TYPES)}"}), 400
 
@@ -331,7 +234,7 @@ def create_analysis(siid):
         return jsonify({"error": f"Invalid status. Must be one of {sorted(ANALYSIS_STATUSES)}"}), 400
 
     analysis = Analysis(
-        scope_item_id=siid,
+        process_id=pid,
         name=data["name"],
         description=data.get("description", ""),
         analysis_type=analysis_type,
@@ -399,14 +302,13 @@ def delete_analysis(aid):
 # ── Analysis stats
 @scope_bp.route("/scenarios/<int:sid>/analyses/summary", methods=["GET"])
 def analysis_summary(sid):
-    """Summary of analyses across all scope items in a scenario."""
+    """Summary of analyses across all L3 processes in a scenario."""
     scenario = db.session.get(Scenario, sid)
     if not scenario:
         return jsonify({"error": "Scenario not found"}), 404
 
     analyses = (
         Analysis.query
-        .join(ScopeItem)
         .join(Process)
         .filter(Process.scenario_id == sid)
         .all()
@@ -429,14 +331,104 @@ def analysis_summary(sid):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  REQUIREMENT ↔ PROCESS MAPPING  (N:M junction)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@scope_bp.route("/processes/<int:pid>/requirement-mappings", methods=["GET"])
+def list_requirement_mappings(pid):
+    """List requirement mappings for an L3 process step."""
+    process = db.session.get(Process, pid)
+    if not process:
+        return jsonify({"error": "Process not found"}), 404
+    mappings = RequirementProcessMapping.query.filter_by(process_id=pid).all()
+    result = []
+    for m in mappings:
+        d = m.to_dict()
+        if m.requirement:
+            d["requirement_code"] = m.requirement.code
+            d["requirement_title"] = m.requirement.title
+        result.append(d)
+    return jsonify(result)
+
+
+@scope_bp.route("/processes/<int:pid>/requirement-mappings", methods=["POST"])
+def create_requirement_mapping(pid):
+    """Map a requirement to an L3 process step."""
+    process = db.session.get(Process, pid)
+    if not process:
+        return jsonify({"error": "Process not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    req_id = data.get("requirement_id")
+    if not req_id:
+        return jsonify({"error": "requirement_id is required"}), 400
+
+    from app.models.requirement import Requirement
+    req = db.session.get(Requirement, req_id)
+    if not req:
+        return jsonify({"error": "Requirement not found"}), 404
+
+    coverage = data.get("coverage_type", "full")
+    if coverage not in COVERAGE_TYPES:
+        return jsonify({"error": f"Invalid coverage_type. Must be one of {sorted(COVERAGE_TYPES)}"}), 400
+
+    # Check for duplicate
+    existing = RequirementProcessMapping.query.filter_by(
+        requirement_id=req_id, process_id=pid
+    ).first()
+    if existing:
+        return jsonify({"error": "Mapping already exists"}), 409
+
+    mapping = RequirementProcessMapping(
+        requirement_id=req_id,
+        process_id=pid,
+        coverage_type=coverage,
+        notes=data.get("notes", ""),
+    )
+    db.session.add(mapping)
+    db.session.commit()
+    return jsonify(mapping.to_dict()), 201
+
+
+@scope_bp.route("/requirement-mappings/<int:mid>", methods=["PUT"])
+def update_requirement_mapping(mid):
+    """Update a requirement-process mapping."""
+    mapping = db.session.get(RequirementProcessMapping, mid)
+    if not mapping:
+        return jsonify({"error": "Mapping not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    if "coverage_type" in data:
+        if data["coverage_type"] not in COVERAGE_TYPES:
+            return jsonify({"error": f"Invalid coverage_type. Must be one of {sorted(COVERAGE_TYPES)}"}), 400
+        mapping.coverage_type = data["coverage_type"]
+    if "notes" in data:
+        mapping.notes = data["notes"]
+
+    db.session.commit()
+    return jsonify(mapping.to_dict())
+
+
+@scope_bp.route("/requirement-mappings/<int:mid>", methods=["DELETE"])
+def delete_requirement_mapping(mid):
+    """Remove a requirement-process mapping."""
+    mapping = db.session.get(RequirementProcessMapping, mid)
+    if not mapping:
+        return jsonify({"error": "Mapping not found"}), 404
+    db.session.delete(mapping)
+    db.session.commit()
+    return jsonify({"message": "Mapping deleted"}), 200
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  PROGRAM-LEVEL — Scope Matrix & Analysis Dashboard
 # ═══════════════════════════════════════════════════════════════════════════
 
 @scope_bp.route("/programs/<int:pid>/scope-matrix", methods=["GET"])
 def scope_matrix(pid):
-    """Flat scope-item matrix across all scenarios in a program.
+    """Flat L3 process-step matrix across all scenarios in a program.
 
-    Returns every scope item with its parent process, scenario name,
+    Returns every L3 process step with its parent L2, scenario name,
     and latest analysis result — used by the Analysis Hub Scope Matrix tab.
     """
     from app.models.program import Program
@@ -444,30 +436,30 @@ def scope_matrix(pid):
     if not program:
         return jsonify({"error": "Program not found"}), 404
 
-    # All processes under this program's scenarios
+    # All L3 processes under this program's scenarios
     rows = (
-        db.session.query(ScopeItem, Process, Scenario)
-        .join(Process, ScopeItem.process_id == Process.id)
+        db.session.query(Process, Scenario)
         .join(Scenario, Process.scenario_id == Scenario.id)
-        .filter(Scenario.program_id == pid)
-        .order_by(Scenario.name, Process.level, Process.order, ScopeItem.id)
+        .filter(Scenario.program_id == pid, Process.level == "L3")
+        .order_by(Scenario.name, Process.order, Process.id)
         .all()
     )
 
     result = []
-    for si, proc, scen in rows:
-        # Get analyses for this scope item
-        analyses = Analysis.query.filter_by(scope_item_id=si.id)\
+    for proc, scen in rows:
+        # Get parent L2 name
+        parent_l2 = db.session.get(Process, proc.parent_id) if proc.parent_id else None
+        # Analyses for this L3
+        analyses = Analysis.query.filter_by(process_id=proc.id)\
             .order_by(Analysis.id.desc()).all()
         latest = analyses[0] if analyses else None
         result.append({
-            **si.to_dict(),
-            "process_name": proc.name,
-            "process_level": proc.level,
-            "process_id_code": proc.process_id_code,
+            **proc.to_dict(),
+            "parent_l2_name": parent_l2.name if parent_l2 else "",
+            "parent_l2_id": parent_l2.id if parent_l2 else None,
             "scenario_id": scen.id,
             "scenario_name": scen.name,
-            "sap_module": scen.sap_module or si.module,
+            "sap_module": scen.sap_module or proc.module,
             "analysis_count": len(analyses),
             "latest_fit_gap": latest.fit_gap_result if latest else None,
             "latest_analysis_status": latest.status if latest else None,
@@ -486,27 +478,30 @@ def analysis_dashboard(pid):
     if not program:
         return jsonify({"error": "Program not found"}), 404
 
-    # All scope items
-    all_items = (
-        db.session.query(ScopeItem, Process, Scenario)
-        .join(Process, ScopeItem.process_id == Process.id)
+    # All L3 process steps
+    l3_procs = (
+        Process.query
         .join(Scenario, Process.scenario_id == Scenario.id)
-        .filter(Scenario.program_id == pid)
+        .filter(Scenario.program_id == pid, Process.level == "L3")
         .all()
     )
 
-    total_items = len(all_items)
+    total_l3 = len(l3_procs)
     analyzed = 0
     by_module = {}
     by_module_analyzed = {}
-    by_status = {}
+    by_scope = {}
+    by_fit_gap_l3 = {}
 
-    for si, proc, scen in all_items:
-        mod = scen.sap_module or si.module or "Unassigned"
+    for p in l3_procs:
+        mod = p.module or "Unassigned"
         by_module[mod] = by_module.get(mod, 0) + 1
-        by_status[si.status] = by_status.get(si.status, 0) + 1
+        if p.scope_decision:
+            by_scope[p.scope_decision] = by_scope.get(p.scope_decision, 0) + 1
+        if p.fit_gap:
+            by_fit_gap_l3[p.fit_gap] = by_fit_gap_l3.get(p.fit_gap, 0) + 1
 
-        has_analysis = Analysis.query.filter_by(scope_item_id=si.id)\
+        has_analysis = Analysis.query.filter_by(process_id=p.id)\
             .filter(Analysis.status == "completed").first()
         if has_analysis:
             analyzed += 1
@@ -515,7 +510,6 @@ def analysis_dashboard(pid):
     # All analyses
     all_analyses = (
         Analysis.query
-        .join(ScopeItem)
         .join(Process)
         .join(Scenario)
         .filter(Scenario.program_id == pid)
@@ -546,32 +540,36 @@ def analysis_dashboard(pid):
     for w in all_workshops:
         ws_by_status[w.status] = ws_by_status.get(w.status, 0) + 1
 
-    # Gap items without requirements
-    gap_analyses = [a for a in all_analyses if a.fit_gap_result == "gap"]
-    # Count requirements linked to workshops
-    from app.models.requirement import Requirement
-    gap_no_req = 0
-    for ga in gap_analyses:
-        scope_item = db.session.get(ScopeItem, ga.scope_item_id)
-        if scope_item:
-            # Check if any requirement references this scope item through workshop
-            req_count = Requirement.query.filter_by(workshop_id=ga.workshop_id).count() if ga.workshop_id else 0
-            if req_count == 0:
-                gap_no_req += 1
+    # Open items count
+    from app.models.requirement import Requirement, OpenItem
+    total_open_items = (
+        OpenItem.query
+        .join(Requirement)
+        .filter(Requirement.program_id == pid, OpenItem.status.in_(["open", "in_progress"]))
+        .count()
+    )
+    blocker_count = (
+        OpenItem.query
+        .join(Requirement)
+        .filter(Requirement.program_id == pid, OpenItem.blocker == True, OpenItem.status == "open")
+        .count()
+    )
 
     return jsonify({
-        "total_scope_items": total_items,
-        "analyzed_scope_items": analyzed,
-        "coverage_pct": round((analyzed / total_items * 100), 1) if total_items > 0 else 0,
+        "total_l3_steps": total_l3,
+        "analyzed_l3_steps": analyzed,
+        "coverage_pct": round((analyzed / total_l3 * 100), 1) if total_l3 > 0 else 0,
         "total_analyses": len(all_analyses),
         "total_workshops": len(all_workshops),
         "by_fit_gap": by_fit_gap,
+        "by_scope_decision": by_scope,
+        "by_fit_gap_l3": by_fit_gap_l3,
         "by_module": by_module,
         "by_module_analyzed": by_module_analyzed,
-        "by_scope_status": by_status,
         "by_analysis_type": by_analysis_type,
         "by_analysis_status": by_analysis_status,
         "by_workshop_status": ws_by_status,
         "pending_decisions": pending_decisions,
-        "gap_without_requirement": gap_no_req,
+        "total_open_items": total_open_items,
+        "blocker_open_items": blocker_count,
     }), 200

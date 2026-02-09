@@ -1,10 +1,11 @@
 """
 SAP Transformation Management Platform
-Tests — Requirement API (Sprint 3).
+Tests — Requirement API (updated for new hierarchy).
 
 Covers:
-    - Requirement CRUD
+    - Requirement CRUD (no fit_gap)
     - Requirement filtering
+    - OpenItem CRUD
     - Traceability links CRUD
     - Traceability matrix
     - Requirement statistics
@@ -15,7 +16,7 @@ import pytest
 from app import create_app
 from app.models import db as _db
 from app.models.program import Phase, Program, Workstream
-from app.models.requirement import Requirement, RequirementTrace
+from app.models.requirement import OpenItem, Requirement, RequirementTrace
 from app.models.scenario import Scenario
 
 
@@ -45,7 +46,8 @@ def session(app, _setup_db):
     with app.app_context():
         yield
         _db.session.rollback()
-        for model in [RequirementTrace, Requirement, Phase, Workstream, Scenario, Program]:
+        for model in [OpenItem, RequirementTrace, Requirement,
+                       Phase, Workstream, Scenario, Program]:
             _db.session.query(model).delete()
         _db.session.commit()
 
@@ -83,14 +85,12 @@ def test_create_requirement(client):
         "req_type": "functional",
         "priority": "must_have",
         "module": "FI",
-        "fit_gap": "fit",
     })
     assert res.status_code == 201
     data = res.get_json()
     assert data["code"] == "REQ-FI-001"
     assert data["title"] == "Vendor Invoice Posting"
     assert data["module"] == "FI"
-    assert data["fit_gap"] == "fit"
 
 
 def test_create_requirement_missing_title(client):
@@ -180,13 +180,11 @@ def test_update_requirement(client):
     req = _create_req(client, prog["id"])
     res = client.put(f"/api/v1/requirements/{req['id']}", json={
         "status": "approved",
-        "fit_gap": "gap",
         "effort_estimate": "l",
     })
     assert res.status_code == 200
     data = res.get_json()
     assert data["status"] == "approved"
-    assert data["fit_gap"] == "gap"
     assert data["effort_estimate"] == "l"
 
 
@@ -206,13 +204,100 @@ def test_delete_requirement(client):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# OPEN ITEMS
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_create_open_item(client):
+    prog = _create_program(client)
+    req = _create_req(client, prog["id"])
+    res = client.post(f"/api/v1/requirements/{req['id']}/open-items", json={
+        "title": "Clarify tax logic",
+        "item_type": "question",
+        "priority": "high",
+        "blocker": True,
+    })
+    assert res.status_code == 201
+    data = res.get_json()
+    assert data["title"] == "Clarify tax logic"
+    assert data["item_type"] == "question"
+    assert data["blocker"] is True
+    assert data["status"] == "open"
+
+
+def test_create_open_item_missing_title(client):
+    prog = _create_program(client)
+    req = _create_req(client, prog["id"])
+    res = client.post(f"/api/v1/requirements/{req['id']}/open-items", json={
+        "item_type": "question",
+    })
+    assert res.status_code == 400
+
+
+def test_list_open_items(client):
+    prog = _create_program(client)
+    req = _create_req(client, prog["id"])
+    client.post(f"/api/v1/requirements/{req['id']}/open-items", json={
+        "title": "OI-1", "item_type": "question",
+    })
+    client.post(f"/api/v1/requirements/{req['id']}/open-items", json={
+        "title": "OI-2", "item_type": "decision",
+    })
+    res = client.get(f"/api/v1/requirements/{req['id']}/open-items")
+    assert res.status_code == 200
+    assert len(res.get_json()) == 2
+
+
+def test_update_open_item(client):
+    prog = _create_program(client)
+    req = _create_req(client, prog["id"])
+    oi = client.post(f"/api/v1/requirements/{req['id']}/open-items", json={
+        "title": "OI-1", "item_type": "question", "blocker": True,
+    }).get_json()
+    res = client.put(f"/api/v1/open-items/{oi['id']}", json={
+        "status": "resolved",
+        "resolution": "Tax logic confirmed with FI team",
+        "blocker": False,
+    })
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["status"] == "resolved"
+    assert data["resolution"] == "Tax logic confirmed with FI team"
+    assert data["blocker"] is False
+
+
+def test_delete_open_item(client):
+    prog = _create_program(client)
+    req = _create_req(client, prog["id"])
+    oi = client.post(f"/api/v1/requirements/{req['id']}/open-items", json={
+        "title": "OI-1", "item_type": "question",
+    }).get_json()
+    res = client.delete(f"/api/v1/open-items/{oi['id']}")
+    assert res.status_code == 200
+
+
+def test_program_open_items_list(client):
+    prog = _create_program(client)
+    pid = prog["id"]
+    r1 = _create_req(client, pid, title="R1")
+    r2 = _create_req(client, pid, title="R2")
+    client.post(f"/api/v1/requirements/{r1['id']}/open-items", json={
+        "title": "OI-A", "item_type": "question", "blocker": True,
+    })
+    client.post(f"/api/v1/requirements/{r2['id']}/open-items", json={
+        "title": "OI-B", "item_type": "decision",
+    })
+    res = client.get(f"/api/v1/programs/{pid}/open-items")
+    assert res.status_code == 200
+    assert len(res.get_json()) == 2
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # TRACEABILITY LINKS
 # ═════════════════════════════════════════════════════════════════════════════
 
 def test_create_trace_to_phase(client):
     prog = _create_program(client)
     pid = prog["id"]
-    # Create a phase
     phase_res = client.post(f"/api/v1/programs/{pid}/phases", json={
         "name": "Realize", "order": 4
     })
@@ -382,9 +467,9 @@ def test_traceability_matrix_empty(client):
 def test_requirement_stats(client):
     prog = _create_program(client)
     pid = prog["id"]
-    _create_req(client, pid, title="R1", req_type="functional", priority="must_have", module="FI", fit_gap="fit")
-    _create_req(client, pid, title="R2", req_type="business", priority="should_have", module="CO", fit_gap="gap")
-    _create_req(client, pid, title="R3", req_type="functional", priority="must_have", module="FI", fit_gap="fit")
+    _create_req(client, pid, title="R1", req_type="functional", priority="must_have", module="FI")
+    _create_req(client, pid, title="R2", req_type="business", priority="should_have", module="CO")
+    _create_req(client, pid, title="R3", req_type="functional", priority="must_have", module="FI")
 
     res = client.get(f"/api/v1/programs/{pid}/requirements/stats")
     assert res.status_code == 200
@@ -394,8 +479,26 @@ def test_requirement_stats(client):
     assert data["by_type"]["business"] == 1
     assert data["by_priority"]["must_have"] == 2
     assert data["by_module"]["FI"] == 2
-    assert data["by_fit_gap"]["fit"] == 2
-    assert data["by_fit_gap"]["gap"] == 1
+    assert data["total_open_items"] == 0
+    assert data["blocker_open_items"] == 0
+
+
+def test_requirement_stats_with_open_items(client):
+    prog = _create_program(client)
+    pid = prog["id"]
+    req = _create_req(client, pid, title="R1")
+    client.post(f"/api/v1/requirements/{req['id']}/open-items", json={
+        "title": "Blocker", "item_type": "question", "blocker": True,
+    })
+    client.post(f"/api/v1/requirements/{req['id']}/open-items", json={
+        "title": "Non-blocker", "item_type": "decision",
+    })
+
+    res = client.get(f"/api/v1/programs/{pid}/requirements/stats")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["total_open_items"] == 2
+    assert data["blocker_open_items"] == 1
 
 
 def test_requirement_stats_empty(client):

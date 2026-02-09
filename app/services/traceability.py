@@ -13,7 +13,7 @@ from app.models import db
 from app.models.backlog import BacklogItem, ConfigItem, FunctionalSpec, TechnicalSpec
 from app.models.requirement import Requirement
 from app.models.scenario import Scenario, Workshop
-from app.models.scope import Process, ScopeItem, Analysis
+from app.models.scope import Process, Analysis
 from app.models.testing import TestCase, Defect
 
 
@@ -22,7 +22,6 @@ ENTITY_TYPES = {
     "scenario": Scenario,
     "workshop": Workshop,
     "process": Process,
-    "scope_item": ScopeItem,
     "analysis": Analysis,
     "requirement": Requirement,
     "backlog_item": BacklogItem,
@@ -81,9 +80,6 @@ def get_chain(entity_type: str, entity_id: int) -> dict:
     elif entity_type == "process":
         _trace_process_upstream(entity, upstream)
         _trace_process_downstream(entity, downstream)
-    elif entity_type == "scope_item":
-        _trace_scope_item_upstream(entity, upstream)
-        _trace_scope_item_downstream(entity, downstream)
     elif entity_type == "analysis":
         _trace_analysis_upstream(entity, upstream)
     elif entity_type == "test_case":
@@ -370,7 +366,7 @@ def _trace_defect_upstream(defect, chain):
             chain.append({"type": "config_item", "id": ci.id, "title": ci.title})
 
 
-# ── Scope chain tracing (Process / ScopeItem / Analysis) ─────────────────
+# ── Scope chain tracing (Process L2/L3 / Analysis) ───────────────────────
 
 def _trace_process_upstream(process, chain):
     """Process → Scenario."""
@@ -386,12 +382,12 @@ def _trace_process_upstream(process, chain):
 
 
 def _trace_process_downstream(process, chain):
-    """Process → ScopeItems → Analyses."""
-    scope_items = ScopeItem.query.filter_by(process_id=process.id).all()
-    for si in scope_items:
-        chain.append({"type": "scope_item", "id": si.id, "title": si.name,
-                       "code": si.code, "status": si.status})
-        _trace_scope_item_downstream(si, chain)
+    """Process → child processes / Analyses (L3 → Analyses)."""
+    # L3 processes have analyses directly
+    analyses = Analysis.query.filter_by(process_id=process.id).all()
+    for a in analyses:
+        chain.append({"type": "analysis", "id": a.id, "title": a.name,
+                       "status": a.status, "fit_gap_result": a.fit_gap_result})
     children = Process.query.filter_by(parent_id=process.id).all()
     for child in children:
         chain.append({"type": "process", "id": child.id, "title": child.name,
@@ -399,27 +395,10 @@ def _trace_process_downstream(process, chain):
         _trace_process_downstream(child, chain)
 
 
-def _trace_scope_item_upstream(scope_item, chain):
-    """ScopeItem → Process → Scenario."""
-    process = db.session.get(Process, scope_item.process_id)
+def _trace_analysis_upstream(analysis, chain):
+    """Analysis → Process (L3) → Process (L2) → Scenario."""
+    process = db.session.get(Process, analysis.process_id)
     if process:
         chain.append({"type": "process", "id": process.id, "title": process.name,
                        "level": process.level})
         _trace_process_upstream(process, chain)
-
-
-def _trace_scope_item_downstream(scope_item, chain):
-    """ScopeItem → Analyses."""
-    analyses = Analysis.query.filter_by(scope_item_id=scope_item.id).all()
-    for a in analyses:
-        chain.append({"type": "analysis", "id": a.id, "title": a.name,
-                       "status": a.status, "fit_gap_result": a.fit_gap_result})
-
-
-def _trace_analysis_upstream(analysis, chain):
-    """Analysis → ScopeItem → Process → Scenario."""
-    si = db.session.get(ScopeItem, analysis.scope_item_id)
-    if si:
-        chain.append({"type": "scope_item", "id": si.id, "title": si.name,
-                       "code": si.code})
-        _trace_scope_item_upstream(si, chain)
