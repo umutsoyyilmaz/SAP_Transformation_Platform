@@ -136,6 +136,7 @@ def get_requirement(req_id):
             md["process_name"] = m.process.name
             md["process_level"] = m.process.level
             md["process_fit_gap"] = m.process.fit_gap
+            md["process_sap_tcode"] = m.process.sap_tcode
         result["process_mappings"].append(md)
     return jsonify(result), 200
 

@@ -8,7 +8,7 @@ Uses the RAGPipeline.index_entity() method to chunk, embed, and store vectors.
 Supports:
   - Requirements, Scenarios, BacklogItems, ConfigItems
   - TestCases, Defects, Risks, Decisions, Issues, Actions
-  - Phases, Gates, Processes, ScopeItems, Analyses
+  - Phases, Gates, Processes, Analyses
 
 Usage:
     python scripts/embed_knowledge_base.py                  # Index all entities
@@ -186,18 +186,17 @@ def _build_gate_text(g):
 
 
 def _build_process_text(p):
-    parts = [f"Process: {p.name or ''}"]
+    parts = [f"Process ({p.level}): {p.name or ''}"]
     if p.description:
         parts.append(f"Description: {p.description}")
-    return "\n".join(parts)
-
-
-def _build_scope_item_text(s):
-    parts = [f"Scope Item: {s.name or ''}"]
-    if s.description:
-        parts.append(f"Description: {s.description}")
-    if hasattr(s, 'notes') and s.notes:
-        parts.append(f"Notes: {s.notes}")
+    if hasattr(p, 'scope_decision') and p.scope_decision:
+        parts.append(f"Scope: {p.scope_decision}")
+    if hasattr(p, 'fit_gap') and p.fit_gap:
+        parts.append(f"Fit/Gap: {p.fit_gap}")
+    if hasattr(p, 'sap_tcode') and p.sap_tcode:
+        parts.append(f"SAP TCode: {p.sap_tcode}")
+    if hasattr(p, 'notes') and p.notes:
+        parts.append(f"Notes: {p.notes}")
     return "\n".join(parts)
 
 
@@ -221,7 +220,7 @@ def _get_entity_registry():
     from app.models.testing import TestCase, Defect
     from app.models.raid import Risk, Decision, Issue, Action
     from app.models.program import Phase, Gate
-    from app.models.scope import Process, ScopeItem, Analysis
+    from app.models.scope import Process, Analysis
 
     return {
         "requirement":  (Requirement, _build_requirement_text, "program_id"),
@@ -236,8 +235,7 @@ def _get_entity_registry():
         "action":       (Action, _build_action_text, "program_id"),
         "phase":        (Phase, _build_phase_text, "program_id"),
         "gate":         (Gate, _build_gate_text, None),
-        "process":      (Process, _build_process_text, "program_id"),
-        "scope_item":   (ScopeItem, _build_scope_item_text, None),
+        "process":      (Process, _build_process_text, None),
         "analysis":     (Analysis, _build_analysis_text, None),
     }
 

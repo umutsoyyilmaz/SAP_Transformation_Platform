@@ -52,7 +52,7 @@ class ChunkingEngine:
 
         Args:
             entity_type: One of requirement, backlog_item, risk, config_item,
-                         test_case, defect, scenario, scope_item, process.
+                         test_case, defect, scenario, process.
             entity_data: Dict of entity fields.
 
         Returns:
@@ -202,13 +202,15 @@ def _extract_scenario(data: dict) -> str:
     return "\n".join(p for p in parts if not p.endswith(": "))
 
 
-def _extract_scope_item(data: dict) -> str:
+def _extract_process(data: dict) -> str:
     parts = [
-        f"Scope Item: {data.get('name', '')}",
+        f"Process: {data.get('name', '')}",
         f"Code: {data.get('code', '')}",
+        f"Level: {data.get('level', '')}",
         f"Module: {data.get('module', '')}",
-        f"Type: {data.get('item_type', '')}",
-        f"Fit/Gap: {data.get('fit_gap', data.get('fit_gap_status', ''))}",
+        f"Scope Decision: {data.get('scope_decision', '')}",
+        f"Fit/Gap: {data.get('fit_gap', '')}",
+        f"SAP TCode: {data.get('sap_tcode', '')}",
         f"Description: {data.get('description', '')}",
     ]
     return "\n".join(p for p in parts if not p.endswith(": "))
@@ -233,7 +235,7 @@ ENTITY_EXTRACTORS = {
     "defect": _extract_defect,
     "config_item": _extract_config_item,
     "scenario": _extract_scenario,
-    "scope_item": _extract_scope_item,
+    "process": _extract_process,
 }
 
 
