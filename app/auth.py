@@ -194,6 +194,9 @@ def init_auth(app):
             return None
         if request.path == "/api/v1/health":
             return None
+        # Health sub-routes and metrics — no auth required
+        if request.path.startswith("/api/v1/health/") or request.path.startswith("/api/v1/metrics/"):
+            return None
         # OPTIONS pre-flight requests don't need auth
         if request.method == "OPTIONS":
             return None

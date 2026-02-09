@@ -19,6 +19,9 @@ from flask_migrate import Migrate
 from app.config import config
 from app.models import db
 from app.auth import init_auth
+from app.middleware.logging_config import configure_logging
+from app.middleware.timing import init_request_timing
+from app.middleware.diagnostics import run_startup_diagnostics
 
 migrate = Migrate()
 limiter = Limiter(
@@ -51,6 +54,9 @@ def create_app(config_name=None):
     )
     app.config.from_object(config[config_name])
 
+    # ── Structured logging (must be first) ───────────────────────────────
+    configure_logging(app)
+
     # ── Extensions ───────────────────────────────────────────────────────
     db.init_app(app)
     migrate.init_app(app, db)
@@ -63,6 +69,9 @@ def create_app(config_name=None):
 
     # ── Authentication & CSRF middleware ──────────────────────────────────
     init_auth(app)
+
+    # ── Request timing middleware ────────────────────────────────────────
+    init_request_timing(app)
 
     # ── Request guards (input length + Content-Type) ─────────────────────
     app.config.setdefault("MAX_CONTENT_LENGTH", 2 * 1024 * 1024)  # 2 MB
@@ -102,6 +111,8 @@ def create_app(config_name=None):
     from app.blueprints.raid_bp import raid_bp
     from app.blueprints.ai_bp import ai_bp
     from app.blueprints.integration_bp import integration_bp
+    from app.blueprints.health_bp import health_bp
+    from app.blueprints.metrics_bp import metrics_bp
 
     app.register_blueprint(program_bp)
     app.register_blueprint(scenario_bp)
@@ -112,15 +123,20 @@ def create_app(config_name=None):
     app.register_blueprint(raid_bp)
     app.register_blueprint(ai_bp)
     app.register_blueprint(integration_bp)
+    app.register_blueprint(health_bp)
+    app.register_blueprint(metrics_bp)
 
     # ── SPA catch-all ────────────────────────────────────────────────────
     @app.route("/")
     def index():
         return send_from_directory(app.template_folder, "index.html")
 
-    # ── Health check ─────────────────────────────────────────────────────
+    # ── Health check (kept for backward compat — detailed version at /health/live) ──
     @app.route("/api/v1/health")
     def health():
         return {"status": "ok", "app": "SAP Transformation Platform"}
+
+    # ── Startup diagnostics ──────────────────────────────────────────────
+    run_startup_diagnostics(app)
 
     return app
