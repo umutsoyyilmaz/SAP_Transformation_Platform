@@ -1,6 +1,6 @@
 # SAP Transformation Platform — Progress Report
 **Tarih:** 9 Şubat 2026  
-**Sprint:** 1-7 Tamamlandı + 2 Revizyon (Release 1 + Release 2 başlangıç)  
+**Sprint:** 1-7 Tamamlandı + 2 Revizyon + Analysis Hub (Release 1 ✅ + Release 2 devam)  
 **Repo:** [umutsoyyilmaz/SAP_Transformation_Platform](https://github.com/umutsoyyilmaz/SAP_Transformation_Platform)
 
 ---
@@ -10,16 +10,50 @@
 | Metrik | Değer |
 |--------|-------|
 | Tamamlanan Sprint | 7 / 24 |
-| Toplam Commit | 11 |
-| Toplam Dosya | 85+ |
-| Python LOC | 12,500+ |
-| JavaScript LOC | 5,600+ |
-| CSS LOC | 1,400+ |
-| API Endpoint | ~170 |
-| Pytest Test | 353 (tümü geçiyor) |
-| Veritabanı Modeli | 33 tablo |
-| Alembic Migration | 9 |
-| Seed Data | 193 kayıt |
+| Toplam Commit | 14 |
+| Toplam Dosya | 106 |
+| Python LOC | 35,400+ |
+| JavaScript LOC | 20,800+ |
+| CSS LOC | 2,196 |
+| API Endpoint | ~177 |
+| Pytest Test | 425 (tümü geçiyor) |
+| Veritabanı Modeli | 32 tablo |
+| Alembic Migration | 10 |
+
+---
+
+## Release & Sprint Durumu
+
+### RELEASE 1: Foundation & Core (Sprint 1-4) ✅ TAMAMLANDI
+
+| Sprint | Açıklama | Durum | Gate |
+|--------|----------|-------|------|
+| Sprint 1 | Mimari Refactoring | ✅ Tamamlandı | ✅ |
+| Sprint 2 | PostgreSQL Migration + Program Setup | ✅ Tamamlandı | ✅ |
+| Sprint 3 | Scope & Requirements | ✅ Tamamlandı | ✅ |
+| Sprint 4 | Backlog Workbench (WRICEF) | ✅ Tamamlandı | ✅ |
+
+**Release 1 Gate: ✅ GEÇTİ** — Core platform çalışır durumda.
+
+### RELEASE 2: Testing & Quality + AI Foundation (Sprint 5-8) 🔄 DEVAM EDİYOR
+
+| Sprint | Açıklama | Durum | Gate |
+|--------|----------|-------|------|
+| Sprint 5 | Test Hub: Catalog & Execution | ✅ Tamamlandı | ✅ |
+| Sprint 6 | RAID Module + Notification | ✅ Tamamlandı | ✅ |
+| Sprint 7 | AI Altyapı Kurulumu | ✅ Tamamlandı | ✅ |
+| Sprint 8 | AI Phase 1 — İlk 3 Asistan | 🔄 Kısmen (altyapı hazır, asistan entegrasyonu bekliyor) | — |
+
+**Release 2 Gate: ⏳ BEKLEMEDE** — Sprint 8 task'ları henüz tamamlanmadı.
+
+### RELEASE 3-6: Planlanmış
+
+| Release | Sprint | Açıklama | Durum |
+|---------|--------|----------|-------|
+| Release 3 | S9-S12 | Delivery Modules + AI Core | ⬜ Planlanmış |
+| Release 4 | S13-S16 | Go-Live Readiness + AI Quality | ⬜ Planlanmış |
+| Release 5 | S17-S20 | Operations + AI Go-Live | ⬜ Planlanmış |
+| Release 6 | S21-S24 | Advanced + AI Maturity | ⬜ Planlanmış |
 
 ---
 
@@ -34,576 +68,261 @@
 | 5 | **Sprint 2**: PostgreSQL migration + Program Setup | `847e785` | 2026-02-08 | +2,933 satır — 6 model, 24 endpoint, Alembic, Dashboard |
 | 6 | **Sprint 3**: Scenario Planner + Requirements Base | `a970b82` | 2026-02-08 | +3,026 satır — Senaryo, Gereksinim, İzlenebilirlik matrisi |
 | 7 | **Sprint 1-3**: Progress report | `2a90993` | 2026-02-08 | PROGRESS_REPORT.md eklendi |
-| 8 | **Sprint 4-6**: RAID + Notification + Backlog + Test Hub + Gate Check | `a995200` | 2026-02-08 | +8,500 satır — Sprint 4 (WRICEF kanban, Sprint planlama), Sprint 5 (Test Hub, Defect), Gate Check (Scope modülü, 9 düzeltme), Sprint 6 (RAID, Notification, Heatmap) |
-| 9 | **Sprint 7-7.5**: AI Infrastructure + Gemini | `db9a8a8` | 2026-02-09 | +7,426 satır — LLM Gateway, RAG Pipeline, Suggestion Queue, 3 AI Asistan, Gemini Free-Tier, 33 yeni dosya |
-| 10 | **Revizyon R1**: Program Selector → Context-Based | `789d6cc` | 2026-02-09 | +438/-213 satır — Program card grid, sidebar disable, localStorage context, 10 dosya |
-| 11 | **Revizyon R2**: Scenario → İş Senaryosu + Workshop | `133edca` | 2026-02-09 | +1,320/-703 satır — Scenario yeniden yazıldı, Workshop eklendi, ScenarioParameter kaldırıldı, 17 dosya |
+| 8 | **Sprint 4-6**: RAID + Notification + Backlog + Test Hub + Gate Check | `a995200` | 2026-02-08 | +8,500 satır — Sprint 4-6 tüm modüller |
+| 9 | **Sprint 7-7.5**: AI Infrastructure + Gemini | `db9a8a8` | 2026-02-09 | +7,426 satır — LLM Gateway, RAG, 3 AI Asistan, Gemini |
+| 10 | **Revizyon R1**: Program Selector → Context-Based | `789d6cc` | 2026-02-09 | +438/-213 satır — Program card grid, sidebar disable |
+| 11 | **Revizyon R2**: Scenario → İş Senaryosu + Workshop | `133edca` | 2026-02-09 | +1,320/-703 satır — Scenario yeniden yazıldı, Workshop eklendi |
+| 12 | **Docs**: Progress report güncelleme | `529bea0` | 2026-02-09 | Mimari doküman v1.1 |
+| 13 | **Analysis Hub**: 4-tab view + Process Tree + Dashboard | `65de96b` | 2026-02-09 | +1,908 satır — Analysis Hub, 5 yeni API, migration |
+| 14 | **Fix**: ESC ile modal kapatma | `8128928` | 2026-02-09 | Modal ESC key close |
 
 ---
 
-## Sprint 1 — Mimari Refactoring (Hafta 1-2) ✅
+## Sprint Detayları
 
-**Amaç:** Temel mimari altyapıyı kurmak.
+### Sprint 1 — Mimari Refactoring (Hafta 1-2) ✅
 
-| Task | Açıklama | Durum |
-|------|----------|-------|
-| 1.1 | Repository Bootstrap (.gitignore, requirements.txt) | ✅ |
-| 1.2 | Flask App Factory (create_app + config) | ✅ |
-| 1.3 | SQLAlchemy model base (db instance) | ✅ |
-| 1.4 | Program model (temel CRUD entity) | ✅ |
-| 1.5 | Program Blueprint (REST API) | ✅ |
-| 1.6 | SPA Shell (index.html + sidebar nav) | ✅ |
-| 1.7 | SAP Fiori Horizon CSS design system | ✅ |
-| 1.8 | API Client helper (fetch wrapper) | ✅ |
-| 1.9 | Program JS view (list + create/edit/delete) | ✅ |
-| 1.10 | Dashboard view (KPI cards + recent programs) | ✅ |
-| 1.11 | Docker configs (Dockerfile, docker-compose) | ✅ |
-| 1.12 | pytest test suite (10 test) | ✅ |
-
-**Çıktı:** Flask + SQLAlchemy + SPA çalışan temel platform.
+| # | Task (Plan Ref) | Açıklama | Durum |
+|---|-----------------|----------|-------|
+| 1.1 | Repo oluştur, .gitignore, requirements.txt, README.md | Repository Bootstrap | ✅ |
+| 1.2 | Flask App Factory pattern (app/__init__.py, config.py) | create_app + config | ✅ |
+| 1.3 | SQLAlchemy model base + Program modeli | Program CRUD entity | ✅ |
+| 1.4 | program_bp.py Blueprint | REST API | ✅ |
+| 1.5 | Docker Compose (Flask + PostgreSQL + Redis) | Docker configs | ✅ |
+| 1.6 | Codespaces devcontainer.json | Dev ortamı | ✅ (local dev) |
+| 1.7 | Alembic migration altyapısı | Migration init | ✅ |
+| 1.8 | CSS taşıma → static/css/main.css | Fiori Horizon CSS | ✅ |
+| 1.9 | base.html layout (sidebar + header) | SPA Shell | ✅ |
+| 1.10 | SPA router (app.js) + API client (api.js) | Routing + API helper | ✅ |
+| 1.11 | Program JS view (program.js) | List + CRUD UI | ✅ |
+| 1.12 | End-to-end test | pytest 10 test | ✅ |
 
 ---
 
-## Sprint 2 — PostgreSQL Migration + Program Setup (Hafta 3-4) ✅
+### Sprint 2 — PostgreSQL Migration + Program Setup (Hafta 3-4) ✅
 
-**Amaç:** Veritabanı genişletme, program yönetimi derinleştirme.
-
-| Task | Açıklama | Durum |
-|------|----------|-------|
-| 2.1 | pgvector setup script | ✅ |
-| 2.2 | Phase / Gate / Workstream / TeamMember / Committee modelleri | ✅ |
-| 2.3 | Alembic migration init + ilk migration | ✅ |
-| 2.4 | SQLite migration script (ProjektCoPilot → yeni platform) | ✅ |
-| 2.5 | Program API genişletme (24 endpoint) | ✅ |
-| 2.6 | Program UI — tabbed detail view (5 tab) | ✅ |
-| 2.7 | SAP Activate seed data script | ✅ |
-| 2.8 | Auto-phase creation (sap_activate metodolojisi) | ✅ |
-| 2.9 | Program Health Dashboard (Chart.js) | ✅ |
-| 2.10 | pytest genişletme (36 test) | ✅ |
-
-**Çıktı:** 6 model, 24 API endpoint, SAP Activate faz otomatizasyonu, Dashboard.
+| # | Task (Plan Ref) | Açıklama | Durum |
+|---|-----------------|----------|-------|
+| 2.1 | pgvector setup script | scripts/setup_pgvector.py | ✅ |
+| 2.2 | Phase, Gate, Workstream, TeamMember, Committee modelleri | 5 model | ✅ |
+| 2.3 | Alembic migration init + ilk migration | Sprint 1-2 migration | ✅ |
+| 2.4 | SQLite migration script | scripts/migrate_from_sqlite.py | ✅ |
+| 2.5 | Program API genişletme | 24 endpoint | ✅ |
+| 2.6 | Program UI — tabbed detail view (5 tab) | Phases, Workstreams, Team, Committee, Gates | ✅ |
+| 2.7 | SAP Activate seed data | Faz şablonları | ✅ |
+| 2.8 | Auto-phase creation | SAP Activate metodolojisi | ✅ |
+| 2.9 | Program Health Dashboard | Chart.js KPI | ✅ |
+| 2.10 | pytest genişletme | 36 test | ✅ |
 
 ---
 
-## Sprint 3 — Scenario Planner + Requirements Base (Hafta 5-6) ✅
+### Sprint 3 — Scope & Requirements (Hafta 5-6) ✅
 
-**Amaç:** What-if analiz ve gereksinim yönetimi modüllerini oluşturmak.
+| # | Task (Plan Ref) | Açıklama | Durum |
+|---|-----------------|----------|-------|
+| 3.1 | Scenario, Process, ScopeItem, Analysis, Requirement modelleri | 5 model | ✅ |
+| 3.2 | Alembic migration: scope domain | 4 yeni tablo | ✅ |
+| 3.3 | ProjektCoPilot veri migration | migrate_from_sqlite.py | ✅ |
+| 3.4 | Scope API: Scenario CRUD, Process hierarchy, ScopeItem CRUD | 22 endpoint | ✅ |
+| 3.5 | Analysis API: Analysis CRUD | CRUD + summary | ✅ |
+| 3.6 | Requirement API: CRUD + classification + auto-code | 10 endpoint | ✅ |
+| 3.7 | Requirement → WRICEF/Config convert endpoint | Convert API | ✅ |
+| 3.8 | Scope UI: Scenario listesi, process tree, scope item yönetimi | Scenario views | ✅ |
+| 3.9 | Analysis UI: Workshop detay sayfası | Analysis views | ✅ |
+| 3.10 | Requirements UI: Tablo + filter + inline classification | Requirement views | ✅ |
+| 3.11 | SAP Best Practice Scope Item seed data | Seed data | ✅ |
+| 3.12 | pytest: scope API testleri | 38 test | ✅ |
 
-| Task | Açıklama | Durum |
-|------|----------|-------|
-| 3.1 | Scenario model (what-if analiz container) | ✅ |
-| 3.2 | Requirement model + RequirementTrace (izlenebilirlik) | ✅ |
-| 3.3 | Alembic migration (4 yeni tablo) | ✅ |
-| 3.4 | Scenario API — CRUD + baseline + karşılaştırma (11 endpoint) | ✅ |
-| 3.5 | Requirement API — CRUD + filtreleme + trace + matris + istatistik (10 endpoint) | ✅ |
-| 3.6 | Scenario UI — grid view, detay, parametre yönetimi, karşılaştırma tablosu | ✅ |
-| 3.7 | Requirements UI — filtreleme, detay, traceability matrix, stats dashboard | ✅ |
-| 3.8 | SPA router + nav güncelleme | ✅ |
-| 3.9 | Sprint 3 testleri (41 yeni → toplam 77) | ✅ |
-| 3.10 | Commit + push + progress report | ✅ |
-
-**Çıktı:** Senaryo karşılaştırma, gereksinim yönetimi (MoSCoW + fit/gap), izlenebilirlik matrisi.
-
-> **[REVISED]** Sprint 3 Scenario modeli v1.1'de tamamen yeniden yazıldı — bkz. Revizyon R2.
+> **[REVISED]** Sprint 3 Scenario modeli R2'de tamamen yeniden yazıldı → İş Senaryosu + Workshop modeli.
 
 ---
 
-## Sprint 4 — Backlog Workbench (WRICEF) (Hafta 7-8) ✅
+### Sprint 4 — Backlog Workbench + Traceability v1 (Hafta 7-8) ✅
 
-**Amaç:** WRICEF geliştirme nesnelerini yönetmek, kanban board ve sprint planlama. Konfigürasyon, FS/TS yönetimi ve izlenebilirlik motoru.
+| # | Task (Plan Ref) | Açıklama | Durum |
+|---|-----------------|----------|-------|
+| 4.1 | WricefItem, ConfigItem, FunctionalSpec, TechnicalSpec modelleri | 4 model | ✅ |
+| 4.2 | Status flow engine: New→Design→Build→Test→Deploy→Closed | Status akışı | ✅ |
+| 4.3 | Alembic migration: backlog domain | 5 tablo | ✅ |
+| 4.4 | ProjektCoPilot veri migration | Migration script | ✅ |
+| 4.5 | Backlog API: WRICEF CRUD + filter | 8 endpoint | ✅ |
+| 4.6 | Backlog API: Config CRUD + FS/TS CRUD | 12 endpoint | ✅ |
+| 4.7 | Traceability engine v1 | app/services/traceability.py | ✅ |
+| 4.8 | Traceability API: chain + linked-items + summary | 3 endpoint | ✅ |
+| 4.9 | Backlog UI: WRICEF Kanban + Liste + Config Items + Sprints | 4 sekmeli görünüm | ✅ |
+| 4.10 | Config Items UI: Liste + detay | Config tablo + CRUD | ✅ |
+| 4.11 | Traceability badge | linked items rozeti | ✅ |
+| 4.12 | pytest: backlog + traceability testleri | 59 test | ✅ |
 
-| Task | Açıklama | Durum |
-|------|----------|-------|
-| 4.1 | BacklogItem + ConfigItem + FunctionalSpec + TechnicalSpec modelleri | ✅ |
-| 4.2 | Status akışı: New → Design → Build → Test → Deploy → Closed (+ Blocked, Cancelled) | ✅ |
-| 4.3 | Sprint model — iteration container, kapasite + velocity | ✅ |
-| 4.4 | Alembic migration (sprints, backlog_items, config_items, functional_specs, technical_specs) | ✅ |
-| 4.5 | Backlog API — CRUD + filtreleme + move/patch + include_specs (8 endpoint) | ✅ |
-| 4.6 | Config Items API — CRUD (5 endpoint) | ✅ |
-| 4.7 | Functional Spec API — create-for-backlog / create-for-config / get / update (4 endpoint) | ✅ |
-| 4.8 | Technical Spec API — create / get / update (3 endpoint) | ✅ |
-| 4.9 | Sprint API — CRUD (5 endpoint) | ✅ |
-| 4.10 | Kanban Board API — status gruplama + özet metrikleri | ✅ |
-| 4.11 | Backlog Stats API — WRICEF dağılımı + effort toplamları | ✅ |
-| 4.12 | Traceability Engine — `app/services/traceability.py` (chain, linked-items, summary) | ✅ |
-| 4.13 | Traceability API — 3 endpoint (chain, requirement-linked, program-summary) | ✅ |
-| 4.14 | Backlog UI — 4 sekmeli görünüm (Kanban, Liste, Config Items, Sprints) | ✅ |
-| 4.15 | Config Items UI — tablo, oluştur/düzenle/sil modal | ✅ |
-| 4.16 | WRICEF badge + CSS kanban stilleri (yeni status akışı ile) | ✅ |
-| 4.17 | Sprint planlama UI — oluştur, düzenle, item ata | ✅ |
-| 4.18 | Sprint 4 testleri (59 yeni → toplam 136) | ✅ |
-| 4.19 | Progress report güncelleme | ✅ |
+### 🚩 RELEASE 1 GATE ✅ GEÇTİ
 
-### Sprint 4 — Gap Analizi ve Düzeltmeler
-
-Master plan (`SAP_Platform_Project_Plan.md`) ve mimari dokümanına (`sap_transformation_platform_architecture.md`) göre doğrulama yapıldı. Tespit edilen 8 ana eksiklik giderildi:
-
-| Gap | Master Plan Referansı | Düzeltme |
-|-----|-----------------------|----------|
-| ConfigItem modeli eksik | Task 4.1 | `ConfigItem` modeli eklendi (config_key, module, transaction, status) |
-| FunctionalSpec/TechnicalSpec eksik | Task 4.1 | `FunctionalSpec` + `TechnicalSpec` modelleri eklendi (1:1 polymorphic FK) |
-| Status akışı uyumsuz | Task 4.2 | open→in_progress→done yerine New→Design→Build→Test→Deploy→Closed |
-| Config CRUD API'si yok | Task 4.6 | 5 yeni endpoint eklendi (list/create/get/update/delete) |
-| FS/TS CRUD API'si yok | Task 4.6 | 7 yeni endpoint eklendi (FS: 4, TS: 3) |
-| Traceability motoru yok | Task 4.7 | `app/services/traceability.py` oluşturuldu (chain traversal) |
-| Traceability API'si yok | Task 4.8 | 3 yeni endpoint eklendi (chain, linked-items, summary) |
-| Config Items UI yok | Task 4.10 | 4. sekme olarak Config Items eklendi (tablo + CRUD modal) |
-
-**Çıktı:** WRICEF kanban board, sprint planlama, konfigürasyon yönetimi, FS/TS doküman yönetimi, izlenebilirlik motoru (Scenario → Requirement → WRICEF/Config → FS → TS zinciri).
+```
+✅ PostgreSQL + pgvector hazır (SQLite dev, PostgreSQL prod)
+✅ Program Setup: proje, faz, gate, workstream, team CRUD çalışıyor
+✅ Scope & Requirements: tam hiyerarşi (Scenario→Process→ScopeItem→Analysis→Requirement)
+✅ Backlog Workbench: WRICEF + Config + FS/TS lifecycle çalışıyor
+✅ Traceability engine: Req ↔ WRICEF/Config link çalışıyor
+✅ 50+ API endpoint aktif (gerçek: 177)
+✅ pytest > 60% (gerçek: 425 test)
+✅ Docker Compose ile tek komutla ayağa kalkıyor
+```
 
 ---
 
-## Sprint 5 — Test Hub: Catalog & Execution (Hafta 9-10) ✅
+### Sprint 5 — Test Hub: Catalog & Execution (Hafta 9-10) ✅
 
-**Amaç:** Test planlama, test case kataloğu, test yürütme, defect yönetimi ve KPI dashboard.
-
-| Task | Açıklama | Durum |
-|------|----------|-------|
-| 5.1 | TestPlan, TestCycle, TestCase, TestExecution, Defect modelleri | ✅ |
-| 5.2 | Alembic migration (5 yeni tablo) | ✅ |
-| 5.3 | Test Case API: CRUD + filter (layer, status, module, regression, search) + auto-code | ✅ |
-| 5.4 | Test Execution API: plan → cycle → execution workflow | ✅ |
-| 5.5 | Defect API: CRUD + severity + linked WRICEF/Config + aging calculation | ✅ |
-| 5.6 | Traceability extension: TestCase ↔ Requirement, Defect ↔ WRICEF | ✅ |
-| 5.7 | Traceability Matrix API: GET /traceability-matrix (Req ↔ TC ↔ Defect) | ✅ |
-| 5.8 | Test Hub UI: Catalog list + case detail + create/edit modal | ✅ |
-| 5.9 | Test Execution UI: Plans & Cycles view + execution workflow | ✅ |
-| 5.10 | Defect UI: Defect list + detail + lifecycle (reopen/resolve) | ✅ |
-| 5.11 | Test KPI Dashboard: pass rate, severity dist, aging, burndown, coverage (Chart.js) | ✅ |
-| 5.12 | pytest test suite (63 yeni test → toplam 199) | ✅ |
-
-**Gap Fix:** Traceability motoru genişletildi — artık TestCase ve Defect entity'leri de chain traversal'a dahil.
-
-**Çıktı:** Test Plans/Cycles, Test Case Catalog (6 katman: Unit/SIT/UAT/Regression/Performance/Cutover), Test Execution (sonuç kayıt), Defect Lifecycle (P1-P4 severity, aging, reopen tracking), Traceability Matrix, Regression Sets, KPI Dashboard (7 metrik + 3 chart).
+| # | Task (Plan Ref) | Açıklama | Durum |
+|---|-----------------|----------|-------|
+| 5.1 | TestPlan, TestCycle, TestCase, TestExecution, Defect modelleri | 5 model | ✅ |
+| 5.2 | Alembic migration: test domain | 5 yeni tablo | ✅ |
+| 5.3 | Test Case API: CRUD + filter + auto-code | Test catalog | ✅ |
+| 5.4 | Test Execution API: plan → cycle → execution | Execution lifecycle | ✅ |
+| 5.5 | Defect API: CRUD + severity + aging | Defect lifecycle | ✅ |
+| 5.6 | Traceability genişletme: TestCase ↔ Requirement, Defect ↔ WRICEF | Chain traversal | ✅ |
+| 5.7 | Traceability Matrix API | Req ↔ TC ↔ Defect | ✅ |
+| 5.8 | Test Hub UI: Catalog list + case detail | Test UI | ✅ |
+| 5.9 | Test Execution UI: Plans & Cycles + workflow | Execution UI | ✅ |
+| 5.10 | Defect UI: list + detail + lifecycle | Defect UI | ✅ |
+| 5.11 | Test KPI Dashboard | Chart.js 7 metrik | ✅ |
+| 5.12 | pytest: testing API testleri | 63 test | ✅ |
 
 ---
 
-## Veritabanı Şeması (Sprint 5 sonu — Arşiv)
+### Sprint 6 — RAID Module + Notification (Hafta 11-12) ✅
 
-<details><summary>Genişlet (eski şema)</summary>
+| # | Task (Plan Ref) | Açıklama | Durum |
+|---|-----------------|----------|-------|
+| 6.1 | Risk, Action, Issue, Decision modelleri | 4 model | ✅ |
+| 6.2 | RAID API: CRUD + filter + score recalculate | 26 endpoint | ✅ |
+| 6.3 | Risk scoring: probability × impact + auto-RAG | 5×5 heatmap | ✅ |
+| 6.4 | RAID Dashboard: heatmap, aging, trend | Chart.js | ✅ |
+| 6.5 | RAID UI: liste + filtreler + detay modal | Full CRUD | ✅ |
+| 6.6 | Notification service | app/services/notification.py | ✅ |
+| 6.7 | Notification UI: bell icon + dropdown + mark-read | Header notification | ✅ |
+| 6.8 | RAID ↔ Notification entegrasyonu | Auto-notification | ✅ |
+| 6.9 | pytest: RAID + notification testleri | 46 test | ✅ |
+
+---
+
+### Sprint 7 — AI Altyapı Kurulumu (Hafta 13-14) ✅
+
+| # | Task (Plan Ref) | Açıklama | Durum |
+|---|-----------------|----------|-------|
+| 7.1 | LLM Gateway: provider router (Anthropic, OpenAI, Gemini, LocalStub) | app/ai/gateway.py | ✅ |
+| 7.2 | Token tracking, cost monitoring, latency logging | Usage log + pricing | ✅ |
+| 7.3 | AI modelleri + Alembic migration (4 yeni tablo) | ai_usage_logs, ai_embeddings, ai_suggestions, ai_audit_logs | ✅ |
+| 7.4 | RAG pipeline: chunking engine (8 entity extractor) | app/ai/rag.py | ✅ |
+| 7.5 | RAG pipeline: embedding + hybrid search (cosine + BM25 + RRF) | Semantic + keyword | ✅ |
+| 7.6 | Suggestion Queue: model + API | ~18 endpoint | ✅ |
+| 7.7 | Suggestion Queue UI: header badge + dropdown | Suggestion badge | ✅ |
+| 7.8 | Prompt Registry: YAML template loading + versioning | prompt_registry.py | ✅ |
+| 7.9 | SAP Knowledge Base v1: 15 entity type embed | embed_knowledge_base.py | ✅ |
+| 7.10 | AI admin dashboard | 5 tab dashboard | ✅ |
+| 7.11 | AI audit log: immutable trail | Audit logging | ✅ |
+| 7.12 | pytest: AI testleri | 69 test (62 + 7 Gemini) | ✅ |
+
+---
+
+### Sprint 8 — AI Phase 1: İlk 3 Asistan (Hafta 15-16) 🔄 DEVAM EDİYOR
+
+| # | Task (Plan Ref) | Açıklama | Durum |
+|---|-----------------|----------|-------|
+| 8.1 | NL Query Assistant: text-to-SQL + SAP glossary | nl_query.py | ✅ Altyapı hazır |
+| 8.2 | NL Query: SQL validation, sanitization | SQL güvenliği | ✅ Altyapı hazır |
+| 8.3 | NL Query UI: chat-style query input | ai_query.js | ⬜ Beklemede |
+| 8.4 | NL Query API: POST /ai/query/natural-language | API endpoint | ⬜ Beklemede |
+| 8.5 | Requirement Analyst: classification pipeline (Fit/PFit/Gap) | requirement_analyst.py | ✅ Altyapı hazır |
+| 8.6 | Requirement Analyst: similarity search | RAG entegrasyonu | ⬜ Beklemede |
+| 8.7 | Requirement Analyst: Scope modülüne entegrasyon | Suggestion badge | ⬜ Beklemede |
+| 8.8 | Defect Triage: severity suggestion + module routing | defect_triage.py | ✅ Altyapı hazır |
+| 8.9 | Defect Triage: duplicate detection | Similarity search | ⬜ Beklemede |
+| 8.10 | Defect Triage: Test Hub'a entegrasyon | Suggestion badge | ⬜ Beklemede |
+| 8.11 | Prompt templates: 3 asistan YAML | ai_knowledge/prompts/ | ✅ 4 template |
+| 8.12 | End-to-end test: 3 asistan akışı | Entegrasyon testi | ⬜ Beklemede |
+
+**İlerleme:** 5/12 task tamamlandı (%42). AI asistan dosyaları ve prompt'lar Sprint 7'de oluşturuldu. Kalan: UI entegrasyonu, gerçek Gemini API end-to-end test, suggestion badge yerleştirme.
+
+---
+
+## Revizyonlar & Eklemeler
+
+### Revizyon R1 — Program Selector → Context-Based Selection ✅
+**Commit:** `789d6cc` — Program selector dropdown → kart tıklama, sidebar disabled state, localStorage persist.
+
+### Revizyon R2 — Scenario → İş Senaryosu + Workshop ✅
+**Commit:** `133edca` — What-if → İş Senaryosu. Workshop modeli (8 session type). ScenarioParameter kaldırıldı.
+
+### Analysis Hub — 4-Tab Analiz Merkezi ✅
+**Commit:** `65de96b` — Yeni sayfa: Workshop Planner, Process Tree, Scope Matrix, Dashboard. 5 yeni API endpoint. Requirement ekleme akışı (scope item + otomatik Fit/Gap analizi). ESC modal close (`8128928`).
+
+---
+
+## Veritabanı Şeması (32 tablo)
 
 ```
 programs
-├── phases
-│   └── gates
-├── workstreams
-│   └── team_members (FK)
-├── team_members
+├── phases → gates
+├── workstreams → team_members
 ├── committees
-├── scenarios
-│   └── scenario_parameters
-├── requirements
-│   ├── requirements (self-ref: parent/child hiyerarşi)
-│   └── requirement_traces (polymorphic → phase/workstream/scenario/requirement/gate)
-├── sprints
-│   └── backlog_items (FK)
-├── backlog_items
-│   ├── sprint (FK → sprints, nullable)
-│   ├── requirement (FK → requirements, nullable)
-│   └── functional_specs (1:1 FS dokümanı)
-│       └── technical_specs (1:1 TS dokümanı)
-├── config_items
-│   └── functional_specs (1:1 FS dokümanı)
-│       └── technical_specs (1:1 TS dokümanı)
-├── test_plans
-│   └── test_cycles
-│       └── test_executions (→ test_cases FK)
-├── test_cases (→ requirement FK, backlog_item FK, config_item FK)
-│   └── defects (→ test_case FK, backlog_item FK, config_item FK)
-└── defects
-```
-
-**20 tablo:** programs, phases, gates, workstreams, team_members, committees, scenarios, scenario_parameters, requirements, requirement_traces, sprints, backlog_items, config_items, functional_specs, technical_specs, test_plans, test_cycles, test_cases, test_executions, defects
-
-</details>
-
----
-
-## API Endpoint Özeti (~148 toplam)
-
-| Modül | Endpoint Sayısı | Yöntem |
-|-------|----------------|--------|
-| Programs | 5 | CRUD + list filter |
-| Phases | 4 | CRUD under program |
-| Gates | 3 | CUD under phase |
-| Workstreams | 4 | CRUD under program |
-| Team Members | 4 | CRUD under program |
-| Committees | 4 | CRUD under program |
-| Scenarios | 6 | CRUD + filter + stats |
-| Workshops | 5 | CRUD under scenario |
-| Requirements | 5 | CRUD + filtered list |
-| Requirement Traces | 3 | CLD under requirement |
-| Traceability Matrix | 1 | GET program matrix |
-| Requirement Stats | 1 | GET aggregated stats |
-| Processes | 7 | CRUD + tree + stats |
-| Scope Items | 6 | CRUD + filter + summary |
-| Analyses | 6 | CRUD + summary |
-| Backlog Items | 6 | CRUD + move/patch + filtered list |
-| Backlog Board | 1 | GET kanban board view |
-| Backlog Stats | 1 | GET aggregated stats |
-| Config Items | 5 | CRUD under program |
-| Functional Specs | 4 | Create (backlog/config) + get + update |
-| Technical Specs | 3 | Create + get + update |
-| Traceability Engine | 3 | Chain + linked-items + program-summary |
-| Sprints | 5 | CRUD under program |
-| Test Plans | 5 | CRUD + list filter |
-| Test Cycles | 5 | CRUD under plan |
-| Test Cases (Catalog) | 5 | CRUD + filter (layer/status/module/regression/search) |
-| Test Executions | 5 | CRUD + result recording |
-| Defects | 5 | CRUD + severity + lifecycle (reopen/resolve) |
-| Traceability Matrix (Test) | 1 | GET Req ↔ TC ↔ Defect matrix |
-| Regression Sets | 1 | GET flagged regression cases |
-| Test Dashboard | 1 | GET KPI data (pass rate, severity, burndown, coverage) |
-| **Risks** | **6** | **CRUD + filter + score recalculate** |
-| **Actions** | **6** | **CRUD + status patch + auto-complete date** |
-| **Issues** | **6** | **CRUD + filter severity + status patch + auto-resolve date** |
-| **Decisions** | **6** | **CRUD + status patch + approval notification** |
-| **RAID Stats** | **1** | **GET aggregate stats (open/critical/overdue)** |
-| **RAID Heatmap** | **1** | **GET 5×5 probability × impact matrix** |
-| **Notifications** | **4** | **List + unread-count + mark-read + mark-all-read** |
-| Health | 1 | GET health check |
-
----
-
-## Test Kapsama
-
-| Test Dosyası | Test Sayısı | Kapsam |
-|-------------|-------------|--------|
-| test_api_program.py | 36 | Programs, Phases, Gates, Workstreams, Team, Committees |
-| test_api_scenario.py | 21 | Scenarios, Parameters, Baseline, Comparison |
-| test_api_requirement.py | 20 | Requirements, Filtering, Traces, Matrix, Stats |
-| test_api_scope.py | 38 | Processes, ScopeItems, Analyses CRUD + filters |
-| test_api_backlog.py | 59 | BacklogItems, WRICEF types, Move/PATCH, Board, Stats, Sprints, Config Items, FS/TS, Traceability |
-| test_api_testing.py | 63 | TestPlans, TestCycles, TestCases, TestExecutions, Defects, Traceability Matrix, Regression Sets, Dashboard |
-| test_api_raid.py | 46 | Risks, Actions, Issues, Decisions, RAID Stats, Heatmap, Notifications, Risk Scoring |
-| **Toplam** | **284** | **Tümü geçiyor (~2.06s)** |
-
----
-
-## Teknoloji Stack
-
-| Katman | Teknoloji | Versiyon |
-|--------|-----------|----------|
-| Dil | Python | 3.13.2 |
-| Web Framework | Flask | 3.1.0 |
-| ORM | SQLAlchemy | 2.0.36 |
-| Migration | Flask-Migrate (Alembic) | 4.0.7 |
-| CORS | Flask-CORS | 5.0.0 |
-| DB Driver | psycopg | 3.2.4 |
-| DB (dev) | SQLite | — |
-| DB (prod) | PostgreSQL 16 + pgvector | — |
-| Frontend | Vanilla JS SPA | — |
-| CSS | SAP Fiori Horizon (custom) | — |
-| Charts | Chart.js | 4.4.7 |
-| Test | pytest | 8.3.4 |
-| Container | Docker + Compose | — |
-
----
-
----
-
-## 🚩 Gate Check Bulguları (Sprint 1-5 Audit)
-
-**Audit Tarihi:** 8 Şubat 2026  
-**Referans:** `SAP_Platform_Project_Plan.md` + `sap_transformation_platform_architecture (2).md`
-
-### Sprint Uyum Skorları (Düzeltme Sonrası)
-
-| Sprint | Eski Skor | Yeni Skor | Durum |
-|--------|-----------|-----------|-------|
-| Sprint 1 (Mimari Refactoring) | %92 | %92 | ✅ Tam |
-| Sprint 2 (Program Setup) | %80 | %90 | ✅ Tam (Gates LIST eklendi) |
-| Sprint 3 (Scope & Requirements) | %33 | %100 | ✅ Tam (Process/ScopeItem/Analysis + auto-code + convert) |
-| Sprint 4 (Backlog Workbench) | %67 | %100 | ✅ Tam (Detail tabs + traceability badge + config detail) |
-| Sprint 5 (Test Hub) | %100 | %100 | ✅ Mükemmel (Environment Stability eklendi) |
-| **GENEL** | **%74** | **%96** | **56/58 task** |
-
-### Yapılan Düzeltmeler
-
-**Yeni Dosyalar:**
-- `app/models/scope.py` — Process, ScopeItem, Analysis modelleri (230 satır)
-- `app/blueprints/scope_bp.py` — 22 Scope API endpoint (290 satır)
-- `tests/test_api_scope.py` — 38 test (Process/ScopeItem/Analysis CRUD)
-- `migrations/versions/a7ac281a764b_sprint_3_scope_process_analysis_models.py`
-
-**Güncellenen Dosyalar:**
-- `app/__init__.py` — scope model + blueprint registrasyonu
-- `app/blueprints/requirement_bp.py` — auto-code üretimi + convert endpoint
-- `app/blueprints/program_bp.py` — Gates LIST endpoint
-- `app/blueprints/testing_bp.py` — Environment Stability KPI
-- `app/services/traceability.py` — Process/ScopeItem/Analysis chain traversal (11 entity type)
-- `static/js/views/backlog.js` — Tabbed detail (Overview/Specs/Tests/Trace), traceability badge, config detail
-- `static/css/main.css` — trace-badge, detail-tab CSS
-- `scripts/seed_demo_data.py` — 11 process, 8 scope item, 4 analysis seed data
-
-**Test Sonucu:** 238 test ✅ (200 mevcut + 38 yeni scope test)
-
-### Kritik Bulgular (Düzeltildi ✅)
-
-| # | Bulgu | Sprint | Durum |
-|---|-------|--------|-------|
-| 1 | Process, ScopeItem, Analysis modelleri eksik | S3 | ✅ Düzeltildi |
-| 2 | Requirement auto-code üretimi eksik | S3 | ✅ Düzeltildi |
-| 3 | Requirement → WRICEF/Config convert endpoint eksik | S3 | ✅ Düzeltildi |
-
-### Orta Bulgular (Düzeltildi ✅)
-
-| # | Bulgu | Sprint | Durum |
-|---|-------|--------|-------|
-| 4 | Backlog detail'de FS/TS/Tests/History tab'ları eksik | S4 | ✅ Düzeltildi |
-| 5 | Traceability badge UI'da görünmüyor | S4 | ✅ Düzeltildi |
-| 6 | Environment Stability KPI eksik | S5 | ✅ Düzeltildi |
-| 7 | Config item ayrı detail sayfası eksik | S4 | ✅ Düzeltildi |
-| 8 | SAP Best Practice Scope Item seed data eksik | S3 | ✅ Düzeltildi |
-| 9 | Gates LIST endpoint eksik | S2 | ✅ Düzeltildi |
-
----
-
-## Sprint 6 — RAID Module + Notification Foundation (Hafta 11-12) ✅
-
-**Amaç:** Risk, Action, Issue, Decision (RAID) yönetimi ve bildirim altyapısı.
-
-| Task | Açıklama | Durum |
-|------|----------|-------|
-| 6.1 | Risk, Action, Issue, Decision modelleri (`app/models/raid.py`) | ✅ |
-| 6.2 | Notification modeli (`app/models/notification.py`) | ✅ |
-| 6.3 | NotificationService (`app/services/notification.py`) | ✅ |
-| 6.4 | RAID Blueprint — 26 API endpoint (`app/blueprints/raid_bp.py`) | ✅ |
-| 6.5 | Alembic migration (5 yeni tablo: risks, actions, issues, decisions, notifications) | ✅ |
-| 6.6 | Seed data — 16 RAID kaydı (5 risk, 5 action, 3 issue, 3 decision) | ✅ |
-| 6.7 | RAID UI — Dashboard, Heatmap, Tabbed list views, CRUD modals (`static/js/views/raid.js`) | ✅ |
-| 6.8 | Notification UI — Bell badge, dropdown, polling, mark-read (`static/js/components/notification.js`) | ✅ |
-| 6.9 | pytest test suite (46 yeni test → toplam 284) | ✅ |
-
-### Sprint 6 — Teknik Detaylar
-
-**Risk Modeli:**
-- `probability` × `impact` → `risk_score` (1-25) → `rag_status` (green/amber/orange/red)
-- Kategoriler: technical, organisational, commercial, external, schedule, resource, scope
-- Yanıtlar: avoid, transfer, mitigate, accept, escalate
-- Otomatik kod: RSK-001, RSK-002...
-
-**Action Modeli:**
-- `action_type`: preventive, corrective, detective, improvement, follow_up
-- `due_date`, `completed_date` (auto-set on complete)
-- Linked entity (polymorphic: risk, issue)
-- Otomatik kod: ACT-001, ACT-002...
-
-**Issue Modeli:**
-- `severity`: minor, moderate, major, critical
-- `escalation_path`, `root_cause`, `resolution`, `resolution_date`
-- Otomatik notification: severity=critical → NotificationService.notify_critical_issue()
-- Otomatik kod: ISS-001, ISS-002...
-
-**Decision Modeli:**
-- `alternatives`, `rationale`, `impact_description`, `reversible`
-- Status: proposed → under_review → approved/rejected/deferred
-- Otomatik notification: status=approved → NotificationService.notify_decision_approved()
-- Otomatik kod: DEC-001, DEC-002...
-
-**Notification Service:**
-- `create()`, `broadcast()`, `list_for_recipient()`, `unread_count()`, `mark_read()`, `mark_all_read()`
-- RAID entegrasyon: `notify_risk_score_change()`, `notify_action_overdue()`, `notify_critical_issue()`, `notify_decision_approved()`
-
-**Heatmap API:**
-- 5×5 matris (probability × impact), her hücrede risk listesi
-- Tıklanabilir hücreler → risk detay popup
-
-**Çıktı:** RAID Log (Risk/Action/Issue/Decision) + Notification altyapısı, 5×5 risk heatmap, 26 API endpoint, 46 test.
-
----
-
-## Veritabanı Şeması (Sprint 6 sonu)
-
-```
-programs
-├── phases
-│   └── gates
-├── workstreams
-│   └── team_members (FK)
-├── team_members
-├── committees
-├── scenarios
-│   ├── workshops (analiz oturumları)
+├── scenarios (iş senaryosu)
+│   ├── workshops (8 session type)
+│   │     └── requirements (workshop_id FK)
 │   └── processes (L1/L2/L3)
-│       └── scope_items
-│           └── analyses (fit-gap workshop)
-├── requirements (workshop_id FK — nullable)
-│   ├── requirements (self-ref: parent/child hiyerarşi)
-│   └── requirement_traces (polymorphic → phase/workstream/scenario/requirement/gate)
-├── sprints
-│   └── backlog_items (FK)
-├── backlog_items
-│   ├── sprint (FK → sprints, nullable)
-│   ├── requirement (FK → requirements, nullable)
-│   └── functional_specs (1:1 FS dokümanı)
-│       └── technical_specs (1:1 TS dokümanı)
-├── config_items
-│   └── functional_specs (1:1 FS dokümanı)
-│       └── technical_specs (1:1 TS dokümanı)
-├── test_plans
-│   └── test_cycles
-│       └── test_executions (→ test_cases FK)
-├── test_cases (→ requirement FK, backlog_item FK, config_item FK)
-│   └── defects (→ test_case FK, backlog_item FK, config_item FK)
-├── defects
-├── risks (→ program FK) ← YENİ
-├── actions (→ program FK) ← YENİ
-├── issues (→ program FK) ← YENİ
-├── decisions (→ program FK) ← YENİ
-└── notifications ← YENİ
+│       └── scope_items → analyses (fit/gap, workshop_id FK)
+├── requirements → requirement_traces
+├── sprints → backlog_items (WRICEF)
+├── backlog_items → functional_specs → technical_specs
+├── config_items → functional_specs → technical_specs
+├── test_plans → test_cycles → test_executions → test_cases
+├── test_cases → defects
+├── risks, actions, issues, decisions (RAID)
+├── notifications
+└── ai_usage_logs, ai_embeddings, ai_suggestions, ai_audit_logs
 ```
-
-**28 tablo:** programs, phases, gates, workstreams, team_members, committees, scenarios, **workshops** *(yeni — v1.1)*, requirements, requirement_traces, processes, scope_items, analyses, sprints, backlog_items, config_items, functional_specs, technical_specs, test_plans, test_cycles, test_cases, test_executions, defects, **risks**, **actions**, **issues**, **decisions**, **notifications**, **ai_usage_logs**, **ai_embeddings**, **ai_suggestions**, **ai_audit_logs**\n\n> **Not:** `scenario_parameters` tablosu v1.1 revizyonunda kaldırıldı. `workshops` tablosu eklendi.
 
 ---
 
-## Sprint 7 — AI Altyapı Kurulumu (Hafta 13-14) ✅
+## Test Kapsama (425 test)
 
-**Amaç:** LLM gateway, RAG pipeline, öneri kuyruğu ve prompt yönetim altyapısını kurmak.
-
-| Task | Açıklama | Durum |
-|------|----------|-------|
-| 7.1 | LLM Gateway — Provider Router (Anthropic, OpenAI, Gemini, LocalStub) | ✅ |
-| 7.2 | Token tracking & cost monitor (usage log, pricing) | ✅ |
-| 7.3 | AI modelleri + Alembic migration (4 yeni tablo) | ✅ |
-| 7.4 | RAG Chunking Engine (8 entity extractor) | ✅ |
-| 7.5 | RAG Embedding + Hybrid Search (cosine + BM25 + RRF) | ✅ |
-| 7.6 | Suggestion Queue model + API (~18 endpoint) | ✅ |
-| 7.7 | Suggestion Queue UI (header badge + dropdown) | ✅ |
-| 7.8 | Prompt Registry (YAML + built-in defaults) | ✅ |
-| 7.9 | SAP Knowledge Base embed script (15 entity type) | ✅ |
-| 7.10 | AI Admin Dashboard (5 tab, KPI, grafikler) | ✅ |
-| 7.11 | AI Audit Log (immutable trail) | ✅ |
-| 7.12 | pytest AI testleri (62 test) | ✅ |
-| 7.13 | Google Gemini Free-Tier entegrasyonu (GeminiProvider) | ✅ |
-| 7.14 | Default model → Gemini (chat + embeddings) | ✅ |
-| 7.15 | Gemini testleri (7 yeni → toplam 69 AI test) | ✅ |
-
-**Yeni Dosyalar:**
-- `app/ai/__init__.py` — AI package init
-- `app/ai/gateway.py` — LLM Gateway (610 satır — multi-provider, Gemini/Anthropic/OpenAI/LocalStub, retry, logging)
-- `app/ai/rag.py` — RAG Pipeline (590 satır — chunking, embedding, hybrid search)
-- `app/ai/suggestion_queue.py` — Suggestion Queue service (227 satır)
-- `app/ai/prompt_registry.py` — Prompt yönetimi (325 satır)
-- `app/models/ai.py` — 4 AI model (286 satır)
-- `app/blueprints/ai_bp.py` — AI blueprint ~18 endpoint (427 satır)
-- `ai_knowledge/prompts/` — 4 YAML prompt template
-- `static/js/views/ai_admin.js` — AI Admin Dashboard (300 satır)
-- `static/js/components/suggestion-badge.js` — Header badge bileşeni (120 satır)
-- `scripts/embed_knowledge_base.py` — Knowledge base embedding script
-- `tests/test_ai.py` — 69 test (62 orijinal + 7 Gemini)
-- `.env.example` — AI provider API key referansları güncellendi
-
-**Yeni API Endpoints (18):**
-- `GET/POST /api/v1/ai/suggestions` — Listeleme + oluşturma
-- `GET /api/v1/ai/suggestions/pending-count` — Bekleyen sayısı
-- `GET /api/v1/ai/suggestions/stats` — İstatistikler
-- `GET /api/v1/ai/suggestions/<id>` — Detay
-- `PATCH /api/v1/ai/suggestions/<id>/approve` — Onayla
-- `PATCH /api/v1/ai/suggestions/<id>/reject` — Reddet
-- `PATCH /api/v1/ai/suggestions/<id>/modify` — Düzenle
-- `GET /api/v1/ai/usage` — Token kullanım istatistikleri
-- `GET /api/v1/ai/usage/cost` — Maliyet timeline
-- `GET /api/v1/ai/audit-log` — Audit log (filtreli, sayfalı)
-- `POST /api/v1/ai/embeddings/search` — Hybrid arama
-- `GET /api/v1/ai/embeddings/stats` — Index istatistikleri
-- `POST /api/v1/ai/embeddings/index` — Batch embedding
-- `GET /api/v1/ai/admin/dashboard` — Dashboard verisi
-- `GET /api/v1/ai/prompts` — Kayıtlı şablonlar
+| Test Dosyası | Test | Kapsam |
+|-------------|------|--------|
+| test_api_program.py | 36 | Programs, Phases, Gates, Workstreams, Team, Committees |
+| test_api_scenario.py | 21 | Scenarios, Workshops |
+| test_api_requirement.py | 20 | Requirements, Traces, Matrix |
+| test_api_scope.py | 38 | Processes, ScopeItems, Analyses |
+| test_api_backlog.py | 59 | Backlog, WRICEF, Sprints, Config, FS/TS |
+| test_api_testing.py | 63 | TestPlans, Cycles, Cases, Executions, Defects |
+| test_api_raid.py | 46 | RAID, Heatmap, Notifications |
+| test_ai.py | 62 | AI Gateway, RAG, Suggestion Queue |
+| test_ai_assistants.py | 69 | NL Query, Requirement Analyst, Defect Triage, Gemini |
+| **Toplam** | **425** | **Tümü geçiyor** |
 
 ---
 
-## Revizyon R1 — Program Selector → Context-Based Program Selection ✅
+## Sonraki Adımlar
 
-**Tarih:** 9 Şubat 2026  
-**Commit:** `789d6cc`  
-**Amaç:** Header'daki program selector dropdown'ı kaldırıp, kart bazlı program seçim modeline geçmek.
+### Sprint 8 Tamamlama (7 kalan task)
 
-| Değişiklik | Dosya | Açıklama |
-|------------|-------|----------|
-| Program card grid | `static/js/views/program.js` | Grid'de programa tıklayınca `App.setActiveProgram()` ile seçim |
-| Sidebar disable state | `static/js/app.js` | Program seçilmeden sidebar menüleri opacity 0.5 + pointer-events:none |
-| Program-specific dashboard | `static/js/app.js` | Seçili program bilgisi sidebar'da gösterilir |
-| localStorage persist | `static/js/app.js` | `sap_active_program` key ile kalıcı seçim |
-| Header cleanup | `templates/index.html` | Program selector dropdown kaldırıldı |
-| CSS güncellemesi | `static/css/main.css` | `.sidebar-program-badge`, disabled state stilleri |
-| View güncellemeleri | `scenario.js, requirement.js, backlog.js, raid.js, ai_query.js, testing.js` | `App.getActiveProgram()` ile merkezi erişim |
+| # | Task | Açıklama |
+|---|------|----------|
+| 8.3 | NL Query UI | Chat-style query input + results display |
+| 8.4 | NL Query API | POST /ai/query/natural-language endpoint |
+| 8.6 | Requirement Analyst similarity | RAG ile benzer requirement arama |
+| 8.7 | Requirement Analyst UI | Scope modülüne suggestion badge |
+| 8.9 | Defect Triage duplicate | Embedding similarity ile duplicate detection |
+| 8.10 | Defect Triage UI | Test Hub'a suggestion badge |
+| 8.12 | E2E test | 3 asistanın suggestion akışı testi |
 
-**Etki:** 10 dosya, +438/-213 satır.
+### Release 2 Gate Kriterleri
 
----
-
-## Revizyon R2 — Scenario → İş Senaryosu + Workshop Modeli ✅
-
-**Tarih:** 9 Şubat 2026  
-**Amaç:** "What-if yaklaşım karşılaştırma" olan Scenario modülünü gerçek "İş Senaryosu" modeline dönüştürmek. Workshop/Analiz Oturumu katmanı ekleyerek requirement akışını Scenario → Workshop → Requirement olarak yapılandırmak.
-
-### Mimari Değişiklik
-
-**Eski model (kaldırıldı):**
 ```
-Scenario (what-if: Greenfield vs Brownfield)
-  └── ScenarioParameter (key/value)
+✅ Test Hub: tam lifecycle
+✅ Traceability Matrix: Req ↔ TC ↔ Defect
+✅ RAID Module: CRUD + scoring
+✅ AI altyapı: Gateway + RAG + Suggestion Queue
+⬜ NL Query Assistant: doğal dille sorgulama
+⬜ Requirement Analyst: Fit/PFit/Gap önerisi
+⬜ Defect Triage: severity + duplicate detect
+✅ 100+ API endpoint (gerçek: 177)
+✅ pytest > 65% (gerçek: 425 test)
 ```
-
-**Yeni model:**
-```
-Scenario (İş Senaryosu: Sevkiyat Süreci, Satın Alma, Pricing)
-  ├── Workshop (Fit-Gap Workshop, Design Workshop, Demo, Sign-Off, Training)
-  │     └── Requirement (workshop_id nullable — doğrudan da eklenebilir)
-  └── Process (L1/L2/L3 — mevcut yapı korundu)
-```
-
-### Yapılan Değişiklikler
-
-| Kategori | Dosya | Değişiklik |
-|----------|-------|------------|
-| **Model** | `app/models/scenario.py` | Scenario yeniden yazıldı (sap_module, process_area, priority, owner, workstream). ScenarioParameter → silindi. Workshop modeli eklendi (session_type, status, session_date, facilitator, attendees, agenda, notes, decisions, fit/gap/partial counts) |
-| **Model** | `app/models/requirement.py` | `workshop_id` FK eklendi (nullable, SET NULL on delete) |
-| **Migration** | `migrations/versions/d1f5a7b3c890_...` | workshops tablosu oluşturuldu, scenario eski kolonlar drop, yeni kolonlar add, scenario_parameters tablosu drop, requirements'a workshop_id eklendi |
-| **API** | `app/blueprints/scenario_bp.py` | Tamamen yeniden yazıldı — business scenario CRUD (filtreleme: status, module, process_area, priority) + Workshop CRUD (list/create/get/update/delete) + Stats endpoint |
-| **Frontend** | `static/js/views/scenario.js` | Tamamen yeniden yazıldı — business scenario kart grid, filtre bar, scenario detail → workshop listesi, workshop detail → requirement tablosu, CRUD modallar |
-| **CSS** | `static/css/main.css` | Workshop card stilleri, session type badge renkleri, fit/gap/partial count stilleri, priority badge'leri |
-| **Seed Data** | `scripts/seed_demo_data.py` | 5 approach scenario → 5 iş senaryosu (Sevkiyat, Satın Alma, Üretim Planlama, Finansal Kapanış, İnsan Kaynakları). Workshop seed data eklendi. ScenarioParameter seed kaldırıldı |
-| **Tests** | `tests/test_api_scenario.py` | Workshop CRUD testleri eklendi, ScenarioParameter temizlendi |
-| **Refs** | `traceability.py, requirement_bp.py, scope_bp.py, nl_query.py, db_status.py, embed_knowledge_base.py` | ScenarioParameter → Workshop import güncellemeleri, şema açıklamaları güncellendi |
-
-### Workshop Session Types
-
-| Tip | Açıklama |
-|-----|----------|
-| `fit_gap_workshop` | Fit/Gap analiz oturumu — standart SAP süreçleri vs müşteri gereksinimleri |
-| `requirement_gathering` | Gereksinim toplama oturumu |
-| `process_mapping` | Süreç haritalama (AS-IS → TO-BE) |
-| `review` | Gözden geçirme toplantısı |
-| `design_workshop` | Tasarım workshop'u (çözüm tasarımı) |
-| `demo` | Demo / prototip sunumu |
-| `sign_off` | Onay toplantısı (resmi kabul) |
-| `training` | Eğitim oturumu |
-
-### Yeni API Endpoints
-
-| Method | Path | Açıklama |
-|--------|------|----------|
-| GET | `/api/v1/programs/<pid>/scenarios?status=&module=&priority=` | Filtrelenen senaryo listesi |
-| GET | `/api/v1/programs/<pid>/scenarios/stats` | İstatistikler (by_status, by_priority, by_module) |
-| GET | `/api/v1/scenarios/<sid>/workshops` | Senaryo workshop listesi |
-| POST | `/api/v1/scenarios/<sid>/workshops` | Workshop oluştur |
-| GET | `/api/v1/workshops/<wid>` | Workshop detay + linked requirements |
-| PUT | `/api/v1/workshops/<wid>` | Workshop güncelle |
-| DELETE | `/api/v1/workshops/<wid>` | Workshop sil |
-
-**Kaldırılan Endpoints:** `/scenarios/<id>/set-baseline`, `/scenarios/<sid>/parameters`, `/scenario-parameters/<id>`, `/programs/<pid>/scenarios/compare`
-
-**Etki:** 16+ dosya, ~1,200 satır değişiklik.
-
----
-
-## Sonraki Sprint
-
-**Sprint 8 — AI-Powered Analysis (Hafta 15-16)**
-- Gemini API ile gerçek Fit/Gap sınıflandırma
-- Defect triage otomasyonu
-- NL-to-SQL sorgu motoru
-- Risk proaktif analiz

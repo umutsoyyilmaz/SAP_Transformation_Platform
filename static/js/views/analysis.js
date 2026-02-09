@@ -511,13 +511,106 @@ const AnalysisView = (() => {
                             </tr>`).join('')}
                         </tbody>
                     </table>`}
+                    <div id="aiAnalystPanel" class="ai-assistant-panel" style="margin-top:12px"></div>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-danger btn-sm" onclick="AnalysisView.deleteScopeItem(${item.id}, ${item.process_id})">Delete</button>
                     <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
                 </div>
             `);
+
+            // Load linked requirements for AI analysis button
+            _loadAIAnalystPanel(item);
         } catch(e) { App.toast(e.message, 'error'); }
+    }
+
+    /**
+     * Task 8.7 — Requirement Analyst → Scope integration.
+     * Shows AI Classify button for linked requirements and displays results.
+     */
+    async function _loadAIAnalystPanel(scopeItem) {
+        const panel = document.getElementById('aiAnalystPanel');
+        if (!panel) return;
+
+        // Find linked requirements via traceability or analyses
+        let reqIds = [];
+        try {
+            const traces = await API.get(`/traceability/linked-items/scope_item/${scopeItem.id}`);
+            reqIds = (traces.items || [])
+                .filter(t => t.entity_type === 'requirement')
+                .map(t => t.entity_id);
+        } catch(e) { /* traceability may return empty */ }
+
+        if (reqIds.length === 0) {
+            // Try to find requirements linked to this scope item's process
+            try {
+                const reqs = await API.get(`/programs/${programId}/requirements?per_page=5`);
+                reqIds = (reqs.items || reqs || []).slice(0, 3).map(r => r.id);
+            } catch(e) { /* ignore */ }
+        }
+
+        if (reqIds.length === 0) {
+            panel.innerHTML = `
+                <div class="ai-assistant-hint">
+                    <span>🤖</span> <em>No linked requirements found for AI analysis.</em>
+                </div>`;
+            return;
+        }
+
+        panel.innerHTML = `
+            <div class="ai-assistant-section">
+                <div class="ai-assistant-header">
+                    <span>🤖 AI Requirement Analyst</span>
+                    <button class="btn btn-sm btn-ai" id="btnAIClassify"
+                        onclick="AnalysisView.runAIClassify([${reqIds.join(',')}])">
+                        🎯 Classify Fit/Gap (${reqIds.length} req)
+                    </button>
+                </div>
+                <div id="aiClassifyResults"></div>
+            </div>`;
+    }
+
+    async function runAIClassify(reqIds) {
+        const btn = document.getElementById('btnAIClassify');
+        const results = document.getElementById('aiClassifyResults');
+        if (!btn || !results) return;
+
+        btn.disabled = true;
+        btn.textContent = '⏳ Analyzing...';
+        results.innerHTML = '<div class="spinner" style="margin:8px auto"></div>';
+
+        try {
+            const data = await API.post('/ai/analyst/requirement/batch', {
+                requirement_ids: reqIds,
+                create_suggestion: true,
+            });
+
+            results.innerHTML = (data.results || []).map(r => {
+                if (r.error) {
+                    return `<div class="ai-result-item ai-result--error">
+                        <strong>Req #${r.requirement_id}</strong>: ${esc(r.error)}
+                    </div>`;
+                }
+                const confPct = Math.round((r.confidence || 0) * 100);
+                const confClass = confPct >= 80 ? 'high' : confPct >= 50 ? 'medium' : 'low';
+                return `<div class="ai-result-item">
+                    <div class="ai-result-header">
+                        <span class="badge badge-${r.classification || 'unknown'}">${r.classification || '?'}</span>
+                        <span class="badge badge-confidence-${confClass}">${confPct}%</span>
+                        ${r.suggestion_id ? '<span class="badge badge-pending">📋 Suggestion created</span>' : ''}
+                    </div>
+                    <p class="ai-result-reasoning">${esc(r.reasoning || '')}</p>
+                    ${r.sap_solution ? `<p class="ai-result-detail"><strong>SAP Solution:</strong> ${esc(r.sap_solution)}</p>` : ''}
+                    ${(r.sap_transactions || []).length ? `<p class="ai-result-detail"><strong>Transactions:</strong> ${r.sap_transactions.map(t => esc(t)).join(', ')}</p>` : ''}
+                    ${r.effort_estimate ? `<p class="ai-result-detail"><strong>Effort:</strong> ${esc(r.effort_estimate)}</p>` : ''}
+                </div>`;
+            }).join('') || '<p>No results.</p>';
+        } catch(e) {
+            results.innerHTML = `<div class="ai-result-item ai-result--error">⚠️ ${esc(e.message)}</div>`;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = `🎯 Classify Fit/Gap (${reqIds.length} req)`;
+        }
     }
 
 
@@ -1001,5 +1094,6 @@ const AnalysisView = (() => {
         showAddRequirementModal, doAddRequirement, deleteScopeItem,
         smFilter, quickFitGap,
         renderActiveTab,
+        runAIClassify,
     };
 })();

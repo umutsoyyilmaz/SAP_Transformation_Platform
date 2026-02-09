@@ -10,6 +10,9 @@ const TestingView = (() => {
     let selectedProgramId = null;
     let currentTab = 'catalog';
 
+    // Utility
+    function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
     // State
     let testCases = [];
     let testPlans = [];
@@ -700,8 +703,10 @@ const TestingView = (() => {
                 <div class="form-group"><label>Transport Request</label>
                     <input id="defTransport" class="form-control" value="${d.transport_request || ''}"></div>
                 ` : ''}
+                <div id="aiTriagePanel" class="ai-assistant-panel" style="margin-top:12px"></div>
             </div>
             <div class="modal-footer">
+                ${isEdit ? `<button class="btn btn-ai btn-sm" id="btnAITriage" onclick="TestingView.runAITriage(${d.id})">🤖 AI Triage</button>` : ''}
                 <button class="btn" onclick="App.closeModal()">Cancel</button>
                 <button class="btn btn-primary" onclick="TestingView.saveDefect(${isEdit ? d.id : 'null'})">${isEdit ? 'Update' : 'Create'}</button>
             </div>
@@ -755,6 +760,81 @@ const TestingView = (() => {
         await API.delete(`/testing/defects/${id}`);
         App.toast('Defect deleted', 'success');
         await renderDefects();
+    }
+
+    /**
+     * Task 8.10 — Defect Triage AI integration.
+     * Calls POST /ai/triage/defect/<id> and displays results in the modal.
+     */
+    async function runAITriage(defectId) {
+        const btn = document.getElementById('btnAITriage');
+        const panel = document.getElementById('aiTriagePanel');
+        if (!btn || !panel) return;
+
+        btn.disabled = true;
+        btn.textContent = '⏳ Triaging...';
+        panel.innerHTML = '<div class="spinner" style="margin:8px auto"></div>';
+
+        try {
+            const data = await API.post(`/ai/triage/defect/${defectId}`, {
+                create_suggestion: true,
+            });
+
+            const confPct = Math.round((data.confidence || 0) * 100);
+            const confClass = confPct >= 80 ? 'high' : confPct >= 50 ? 'medium' : 'low';
+            const dupes = data.potential_duplicates || [];
+            const similar = data.similar_defects || [];
+
+            panel.innerHTML = `
+                <div class="ai-assistant-section">
+                    <div class="ai-assistant-header">
+                        <span>🤖 AI Triage Result</span>
+                        <span class="badge badge-confidence-${confClass}">${confPct}% confidence</span>
+                        ${data.suggestion_id ? '<span class="badge badge-pending">📋 Suggestion created</span>' : ''}
+                    </div>
+                    <div class="ai-result-item">
+                        <div class="ai-result-header">
+                            <span><strong>Suggested Severity:</strong>
+                                <span class="badge badge-severity-${data.suggested_severity || 'P3'}">${data.suggested_severity || '—'}</span>
+                            </span>
+                            ${data.suggested_module ? `<span><strong>Module:</strong> ${esc(data.suggested_module)}</span>` : ''}
+                        </div>
+                        <p class="ai-result-reasoning">${esc(data.reasoning || '')}</p>
+                        ${data.suggested_assigned_to ? `<p class="ai-result-detail"><strong>Assign to:</strong> ${esc(data.suggested_assigned_to)}</p>` : ''}
+                        ${data.root_cause_hint ? `<p class="ai-result-detail"><strong>Root Cause Hint:</strong> ${esc(data.root_cause_hint)}</p>` : ''}
+                    </div>
+                    ${dupes.length ? `
+                    <div class="ai-result-item ai-result--warning">
+                        <strong>⚠️ Potential Duplicates (${dupes.length})</strong>
+                        <ul>${dupes.map(dp => `<li>#${dp.id} — ${esc(dp.title)} <span class="badge">${Math.round((dp.similarity || 0) * 100)}%</span></li>`).join('')}</ul>
+                    </div>` : ''}
+                    ${similar.length ? `
+                    <div class="ai-result-item">
+                        <strong>🔗 Similar Defects (${similar.length})</strong>
+                        <ul>${similar.map(s => `<li>#${s.id} — ${esc(s.title)} <span class="badge">${Math.round((s.similarity || 0) * 100)}%</span></li>`).join('')}</ul>
+                    </div>` : ''}
+                    <div class="ai-result-actions" style="margin-top:8px">
+                        <button class="btn btn-sm btn-success" onclick="TestingView.applyTriageSuggestion(${defectId}, '${data.suggested_severity || ''}', '${esc(data.suggested_module || '')}')">✅ Apply Suggestions</button>
+                    </div>
+                </div>`;
+        } catch(e) {
+            panel.innerHTML = `<div class="ai-result-item ai-result--error">⚠️ ${esc(e.message)}</div>`;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '🤖 AI Triage';
+        }
+    }
+
+    function applyTriageSuggestion(defectId, severity, module) {
+        if (severity) {
+            const sel = document.getElementById('defSeverity');
+            if (sel) sel.value = severity;
+        }
+        if (module) {
+            const inp = document.getElementById('defModule');
+            if (inp) inp.value = module;
+        }
+        App.toast('AI suggestions applied to form. Click Update to save.', 'info');
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -961,5 +1041,7 @@ const TestingView = (() => {
         showDefectDetail,
         deleteDefect,
         filterDefects,
+        runAITriage,
+        applyTriageSuggestion,
     };
 })();
