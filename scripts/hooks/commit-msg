@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# ──────────────────────────────────────────────────────────────────────────────
+# commit-msg hook — SAP Transformation Platform
+#
+# Format rules:
+#   1. First line matches: [Sprint X.Y] or [Fix] or [Docs] or [Feat] or [Refactor] or [Test] or [Chore]
+#   2. First line max 72 characters
+#   3. Non-empty message
+#
+# Install: cp scripts/hooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg
+# ──────────────────────────────────────────────────────────────────────────────
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+MSG_FILE="$1"
+
+if [ ! -f "$MSG_FILE" ]; then
+    echo -e "${RED}✗ Commit message file not found.${NC}"
+    exit 1
+fi
+
+# Read first line (skip comment lines starting with #)
+FIRST_LINE=$(grep -v '^#' "$MSG_FILE" | head -1)
+
+# ── 1. Non-empty check ──────────────────────────────────────────────────────
+if [ -z "$FIRST_LINE" ] || [ ${#FIRST_LINE} -lt 3 ]; then
+    echo -e "${RED}✗ Commit message is empty or too short.${NC}"
+    echo "   Expected format: [Sprint X.Y] Short description"
+    echo "   Alternatives:    [Fix] / [Docs] / [Feat] / [Refactor] / [Test] / [Chore]"
+    exit 1
+fi
+
+# ── 2. Max 72 characters ────────────────────────────────────────────────────
+if [ ${#FIRST_LINE} -gt 72 ]; then
+    echo -e "${RED}✗ First line is ${#FIRST_LINE} chars (max 72).${NC}"
+    echo "   \"$FIRST_LINE\""
+    echo "   Shorten the message or move details to the body."
+    exit 1
+fi
+
+# ── 3. Format check ─────────────────────────────────────────────────────────
+VALID_PATTERN='^\[(Sprint [0-9]+(\.[0-9]+)?|Fix|Docs|Feat|Refactor|Test|Chore)\]'
+
+if ! echo "$FIRST_LINE" | grep -qE "$VALID_PATTERN"; then
+    echo -e "${RED}✗ Commit message doesn't match required format.${NC}"
+    echo "   Got:      \"$FIRST_LINE\""
+    echo ""
+    echo "   Expected: [Sprint X.Y] Short description"
+    echo "   Or:       [Fix] Short description"
+    echo "   Or:       [Docs] Short description"
+    echo "   Or:       [Feat] Short description"
+    echo "   Or:       [Refactor] Short description"
+    echo "   Or:       [Test] Short description"
+    echo "   Or:       [Chore] Short description"
+    echo ""
+    echo "   Override with: git commit --no-verify"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Commit message format OK.${NC}"

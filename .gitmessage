@@ -1,0 +1,9 @@
+[Sprint X.Y] Kısa açıklama (maks 72 karakter)
+
+Değişiklik detayı:
+- 
+
+Dosyalar:
+- 
+
+Test: pytest tests/test_xxx.py — X test geçiyor
