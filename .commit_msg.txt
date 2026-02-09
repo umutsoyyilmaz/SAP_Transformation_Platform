@@ -1,0 +1,13 @@
+[Feat] P2: Git Workflow — hooks, template, CHANGELOG
+
+Yeni dosyalar:
+- scripts/hooks/pre-commit: dosya sayisi (>15) + satir sayisi (>500) uyari + pytest
+- scripts/hooks/commit-msg: format kontrolu ([Sprint X.Y] / [Fix] / [Docs] / [Feat])
+- scripts/hooks/install.sh: tek komutla hook kurulumu
+- .gitmessage: commit sablonu
+- CHANGELOG.md: tum gecmis commit'ler belgelendi, mega commit'ler ayrintili
+
+Kurallar:
+- Ilk satir maks 72 karakter
+- Her task = 1 commit prensibi
+- Sprint 10+ icin task-commit mapping rehberi
