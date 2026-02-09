@@ -10,16 +10,18 @@
 | Metrik | Değer |
 |--------|-------|
 | Tamamlanan Sprint | 9 / 24 |
-| Toplam Commit | 23 |
-| Toplam Dosya | 112 |
-| Python LOC | 22,800+ |
-| JavaScript LOC | 7,900+ |
+| Toplam Commit | 27 |
+| Toplam Dosya | 117 |
+| Python LOC | 24,500+ (app: 14,745 · scripts: 3,371 · tests: 6,406) |
+| JavaScript LOC | 8,174 |
 | CSS LOC | 2,285 |
-| API Endpoint | ~212 |
-| Pytest Test | 526 (tümü geçiyor) |
+| API Endpoint | 216 |
+| Pytest Test | 527 (tümü geçiyor, 1 xfail) |
 | Veritabanı Modeli | 40 tablo |
-| Alembic Migration | 3 (consolidated) |
+| Alembic Migration | 4 (consolidated) |
 | Code Review Bulguları | 67 (5 CRITICAL + 16 HIGH + 26 MEDIUM + 20 LOW) → 28 düzeltildi |
+
+> **Son doğrulama:** 2026-02-09 — `python scripts/collect_metrics.py` çıktısı ile güncellendi
 
 ---
 
@@ -83,7 +85,7 @@
 | 19 | **Sprint 9.1-9.2**: Integration Factory models + API | `289a5af` | 2026-02-10 | 5 model (Interface, Wave, ConnectivityTest, SwitchPlan, InterfaceChecklist), 26 endpoint, 66 test (502 toplam) |
 | 20 | **Sprint 9.3**: Traceability v2 — Interface chain traversal | `365e817` | 2026-02-10 | Interface/Wave/CT/SP trace functions, BacklogItem→Interface downstream, program summary, 10 yeni test (512 toplam) |
 | 21 | **Sprint 9.4-9.5**: Integration Factory UI + Readiness Checklist | `a7edd8a` | 2026-02-10 | integration.js 520+ satır, 4-tab view, Interface/Wave CRUD, connectivity test, switch plan, readiness checklist toggle, KPI cards |
-| 22 | **Code Review & Hardening**: CRITICAL + HIGH + MEDIUM düzeltmeleri | `-` | 2026-02-09 | 28 bulgu düzeltildi: güvenlik (SQL injection, auth, CSRF, rate limiting), performans (dashboard SQL aggregate, N+1 fix, BM25, RAG pgvector), hata yönetimi (exception logging, pagination), kod kalitesi |
+| 22 | **Code Review & Hardening**: CRITICAL + HIGH + MEDIUM düzeltmeleri | `5552f12` | 2026-02-09 | 28 bulgu düzeltildi: güvenlik (SQL injection, auth, CSRF, rate limiting), performans (dashboard SQL aggregate, N+1 fix, BM25, RAG pgvector), hata yönetimi (exception logging, pagination), kod kalitesi |
 
 ---
 
@@ -174,8 +176,8 @@
 ✅ Workshop Documents: belge yükleme/silme altyapısı
 ✅ Backlog Workbench: WRICEF + Config + FS/TS lifecycle çalışıyor
 ✅ Traceability engine: Req ↔ WRICEF/Config link çalışıyor
-✅ 50+ API endpoint aktif (gerçek: 186)
-✅ pytest > 60% (gerçek: 436 test)
+✅ 50+ API endpoint aktif (gerçek: 216)
+✅ pytest > 60% (gerçek: 527 test)
 ✅ Docker Compose ile tek komutla ayağa kalkıyor
 ```
 
@@ -235,7 +237,7 @@
 
 ---
 
-### Sprint 8 — AI Phase 1: İlk 3 Asistan (Hafta 15-16) 🔄 DEVAM EDİYOR
+### Sprint 8 — AI Phase 1: İlk 3 Asistan (Hafta 15-16) ✅
 
 | # | Task (Plan Ref) | Açıklama | Durum |
 |---|-----------------|----------|-------|
@@ -291,7 +293,7 @@
 
 ---
 
-## Veritabanı Şeması (35 tablo)
+## Veritabanı Şeması (40 tablo)
 
 ```
 programs
@@ -322,7 +324,7 @@ programs
 
 ---
 
-## Test Kapsama (512 test)
+## Test Kapsama (527 test)
 
 | Test Dosyası | Test | Kapsam |
 |-------------|------|--------|
@@ -336,7 +338,7 @@ programs
 | test_api_integration.py | 76 | Interfaces, Waves, ConnectivityTests, SwitchPlans, Checklists, Traceability |
 | test_ai.py | 69 | AI Gateway, RAG, Suggestion Queue |
 | test_ai_assistants.py | 72 | NL Query, Requirement Analyst, Defect Triage, Gemini |
-| **Toplam** | **526** | **Tümü geçiyor (1 xfail)** |
+| **Toplam** | **527** | **Tümü geçiyor (1 xfail)** |
 
 ---
 
@@ -361,8 +363,8 @@ Tüm 12 task başarıyla tamamlandı. 3 AI asistan tam fonksiyonel:
 ✅ NL Query Assistant: doğal dille sorgulama
 ✅ Requirement Analyst: Fit/PFit/Gap önerisi + UI entegrasyonu
 ✅ Defect Triage: severity + duplicate detect + UI entegrasyonu
-✅ 100+ API endpoint (gerçek: 186)
-✅ pytest > 65% (gerçek: 436 test)
+✅ 100+ API endpoint (gerçek: 216)
+✅ pytest > 65% (gerçek: 527 test)
 ```
 
 ### Sprint 9 — Integration Factory ✅ TAMAMLANDI
