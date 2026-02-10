@@ -1,18 +1,25 @@
 # SAP Transformation Management Platform — Uygulama Mimarisi
 
-**Versiyon:** 2.0  
+**Versiyon:** 2.1  
 **Tarih:** 2026-02-10  
 **Hazırlayan:** Umut Soyyılmaz  
 **Kaynak:** SAP Transformation PM Playbook (S/4HANA + Public Cloud)
 
-**v2.0 Değişiklik Özeti:**
-- Scope & Requirements Domain → Explore Phase FS/TS v1.1 ile entegre (24 tablo, 50+ API endpoint)
-- Test Hub Domain → Test Management FS/TS v1.0 ile entegre (17 tablo, 40+ API endpoint)
-- Domain Model → 41 tabloya genişletildi (Explore 24 + Test Management 17)
-- Traceability zinciri L1→L2→L3→L4→Workshop→ProcessStep→Decision→Requirement→WRICEF/Config→TestCase→Defect olarak detaylandırıldı
-- Modül Mimarisi Bölüm 4.2 ve 4.6 tamamıyla yeniden yazıldı
-- API yapısı FS/TS dokümanlarıyla senkronize edildi
-- Implementation Roadmap güncellenmiş tablo sayılarıyla güncellendi
+### Revizyon Geçmişi
+
+| Versiyon | Tarih | Değişiklik |
+|----------|-------|------------|
+| 2.0 | 2026-02-10 | İlk v2 yayın — Explore Phase (24 tablo) + Test Management FS/TS v1.0 (17 tablo hedef) entegre |
+| 2.1 | 2026-02-10 | **[REVISED]** Test Management bölümü codebase ile senkronize edildi. Mevcut implementasyon: 5 tablo, 28 route. Kalan 12 tablo Phase 3 roadmap'ine taşındı. Modül 4.6 ve API bölümü güncellendi. Implementation Status bölümü eklendi. |
+
+**v2.1 Değişiklik Özeti:**
+- Scope & Requirements Domain → Explore Phase FS/TS v1.1 ile entegre (24 tablo, 50+ API endpoint) — **tam implement**
+- Test Hub Domain → Temel CRUD implement (5 tablo, 28 route). FS/TS v1.0 hedef (17 tablo, 40+ endpoint) Phase 3'te tamamlanacak
+- Domain Model → Mevcut: **29 tablo** (Explore 24 + Test Management 5). Hedef: 41 tablo (+ Test Management kalan 12)
+- Traceability zinciri Requirement→TestCase→TestExecution→Defect olarak çalışır durumda
+- Modül Mimarisi Bölüm 4.6 mevcut implementasyonu yansıtacak şekilde güncellendi
+- API yapısı gerçek route'larla senkronize edildi
+- Implementation Status bölümü eklendi (implement edilen vs planlanan tablo/feature ayrımı)
 
 ---
 
