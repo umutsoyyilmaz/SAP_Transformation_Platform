@@ -55,8 +55,10 @@ from flask import Blueprint, jsonify, request
 from app.models import db
 from app.models.testing import (
     TestPlan, TestCycle, TestCase, TestExecution, Defect,
+    TestSuite, TestStep, TestCaseDependency, TestCycleSuite,
     TEST_LAYERS, TEST_CASE_STATUSES, EXECUTION_RESULTS,
     DEFECT_SEVERITIES, DEFECT_STATUSES, CYCLE_STATUSES, PLAN_STATUSES,
+    SUITE_TYPES, SUITE_STATUSES, DEPENDENCY_TYPES,
 )
 from app.models.program import Program
 from app.models.requirement import Requirement
@@ -393,6 +395,7 @@ def create_test_case(pid):
         requirement_id=data.get("requirement_id"),
         backlog_item_id=data.get("backlog_item_id"),
         config_item_id=data.get("config_item_id"),
+        suite_id=data.get("suite_id"),
     )
     db.session.add(tc)
     try:
@@ -406,11 +409,12 @@ def create_test_case(pid):
 
 @testing_bp.route("/testing/catalog/<int:case_id>", methods=["GET"])
 def get_test_case(case_id):
-    """Get test case detail."""
+    """Get test case detail with steps."""
     tc, err = _get_or_404(TestCase, case_id)
     if err:
         return err
-    return jsonify(tc.to_dict())
+    include_steps = request.args.get("include_steps", "true").lower() in ("true", "1")
+    return jsonify(tc.to_dict(include_steps=include_steps))
 
 
 @testing_bp.route("/testing/catalog/<int:case_id>", methods=["PUT"])
@@ -424,7 +428,7 @@ def update_test_case(case_id):
     for field in ("code", "title", "description", "test_layer", "module",
                   "preconditions", "test_steps", "expected_result", "test_data_set",
                   "status", "priority", "is_regression", "assigned_to",
-                  "requirement_id", "backlog_item_id", "config_item_id"):
+                  "requirement_id", "backlog_item_id", "config_item_id", "suite_id"):
         if field in data:
             setattr(tc, field, data[field])
 
@@ -1030,3 +1034,269 @@ def testing_dashboard(pid):
         },
         "environment_stability": environment_stability,
     })
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST SUITES  (TS-Sprint 1)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/programs/<int:pid>/testing/suites", methods=["GET"])
+def list_test_suites(pid):
+    """
+    List test suites for a program.
+    Filters: suite_type, status, module, search
+    """
+    program, err = _get_or_404(Program, pid)
+    if err:
+        return err
+
+    q = TestSuite.query.filter_by(program_id=pid)
+
+    suite_type = request.args.get("suite_type")
+    if suite_type:
+        q = q.filter(TestSuite.suite_type == suite_type)
+
+    status = request.args.get("status")
+    if status:
+        q = q.filter(TestSuite.status == status)
+
+    module = request.args.get("module")
+    if module:
+        q = q.filter(TestSuite.module == module)
+
+    search = request.args.get("search")
+    if search:
+        term = f"%{search}%"
+        q = q.filter(db.or_(
+            TestSuite.name.ilike(term),
+            TestSuite.description.ilike(term),
+            TestSuite.tags.ilike(term),
+        ))
+
+    suites, total = paginate_query(q.order_by(TestSuite.created_at.desc()))
+    return jsonify({"items": [s.to_dict() for s in suites], "total": total})
+
+
+@testing_bp.route("/programs/<int:pid>/testing/suites", methods=["POST"])
+def create_test_suite(pid):
+    """Create a new test suite."""
+    program, err = _get_or_404(Program, pid)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    if not data.get("name"):
+        return jsonify({"error": "name is required"}), 400
+
+    suite = TestSuite(
+        program_id=pid,
+        name=data["name"],
+        description=data.get("description", ""),
+        suite_type=data.get("suite_type", "SIT"),
+        status=data.get("status", "draft"),
+        module=data.get("module", ""),
+        owner=data.get("owner", ""),
+        tags=data.get("tags", ""),
+    )
+    db.session.add(suite)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(suite.to_dict()), 201
+
+
+@testing_bp.route("/testing/suites/<int:suite_id>", methods=["GET"])
+def get_test_suite(suite_id):
+    """Get test suite detail with test cases."""
+    suite, err = _get_or_404(TestSuite, suite_id)
+    if err:
+        return err
+    include_cases = request.args.get("include_cases", "false").lower() in ("true", "1")
+    return jsonify(suite.to_dict(include_cases=include_cases))
+
+
+@testing_bp.route("/testing/suites/<int:suite_id>", methods=["PUT"])
+def update_test_suite(suite_id):
+    """Update a test suite."""
+    suite, err = _get_or_404(TestSuite, suite_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    for field in ("name", "description", "suite_type", "status", "module", "owner", "tags"):
+        if field in data:
+            setattr(suite, field, data[field])
+
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(suite.to_dict())
+
+
+@testing_bp.route("/testing/suites/<int:suite_id>", methods=["DELETE"])
+def delete_test_suite(suite_id):
+    """Delete a test suite (test cases become unlinked, not deleted)."""
+    suite, err = _get_or_404(TestSuite, suite_id)
+    if err:
+        return err
+    # Unlink test cases from this suite before deletion
+    TestCase.query.filter_by(suite_id=suite_id).update({"suite_id": None})
+    db.session.delete(suite)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify({"message": "Test suite deleted"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST STEPS  (TS-Sprint 1)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/catalog/<int:case_id>/steps", methods=["GET"])
+def list_test_steps(case_id):
+    """List steps for a test case, ordered by step_no."""
+    tc, err = _get_or_404(TestCase, case_id)
+    if err:
+        return err
+    steps = TestStep.query.filter_by(test_case_id=case_id).order_by(TestStep.step_no).all()
+    return jsonify([s.to_dict() for s in steps])
+
+
+@testing_bp.route("/testing/catalog/<int:case_id>/steps", methods=["POST"])
+def create_test_step(case_id):
+    """Add a step to a test case."""
+    tc, err = _get_or_404(TestCase, case_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    if not data.get("action"):
+        return jsonify({"error": "action is required"}), 400
+
+    # Auto-assign step_no if not provided
+    max_step = db.session.query(db.func.max(TestStep.step_no))\
+        .filter_by(test_case_id=case_id).scalar() or 0
+
+    step = TestStep(
+        test_case_id=case_id,
+        step_no=data.get("step_no", max_step + 1),
+        action=data["action"],
+        expected_result=data.get("expected_result", ""),
+        test_data=data.get("test_data", ""),
+        notes=data.get("notes", ""),
+    )
+    db.session.add(step)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(step.to_dict()), 201
+
+
+@testing_bp.route("/testing/steps/<int:step_id>", methods=["PUT"])
+def update_test_step(step_id):
+    """Update a test step."""
+    step, err = _get_or_404(TestStep, step_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    for field in ("step_no", "action", "expected_result", "test_data", "notes"):
+        if field in data:
+            setattr(step, field, data[field])
+
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(step.to_dict())
+
+
+@testing_bp.route("/testing/steps/<int:step_id>", methods=["DELETE"])
+def delete_test_step(step_id):
+    """Delete a test step."""
+    step, err = _get_or_404(TestStep, step_id)
+    if err:
+        return err
+    db.session.delete(step)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify({"message": "Test step deleted"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST CYCLE ↔ SUITE ASSIGNMENT  (TS-Sprint 1)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/cycles/<int:cycle_id>/suites", methods=["POST"])
+def assign_suite_to_cycle(cycle_id):
+    """Assign a test suite to a test cycle."""
+    cycle, err = _get_or_404(TestCycle, cycle_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    suite_id = data.get("suite_id")
+    if not suite_id:
+        return jsonify({"error": "suite_id is required"}), 400
+
+    suite, suite_err = _get_or_404(TestSuite, suite_id)
+    if suite_err:
+        return suite_err
+
+    # Check if already assigned
+    existing = TestCycleSuite.query.filter_by(cycle_id=cycle_id, suite_id=suite_id).first()
+    if existing:
+        return jsonify({"error": "Suite already assigned to this cycle"}), 409
+
+    max_order = db.session.query(db.func.max(TestCycleSuite.order))\
+        .filter_by(cycle_id=cycle_id).scalar() or 0
+
+    cs = TestCycleSuite(
+        cycle_id=cycle_id,
+        suite_id=suite_id,
+        order=data.get("order", max_order + 1),
+        notes=data.get("notes", ""),
+    )
+    db.session.add(cs)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(cs.to_dict()), 201
+
+
+@testing_bp.route("/testing/cycles/<int:cycle_id>/suites/<int:suite_id>", methods=["DELETE"])
+def remove_suite_from_cycle(cycle_id, suite_id):
+    """Remove a test suite assignment from a cycle."""
+    cs = TestCycleSuite.query.filter_by(cycle_id=cycle_id, suite_id=suite_id).first()
+    if not cs:
+        return jsonify({"error": "Suite not assigned to this cycle"}), 404
+
+    db.session.delete(cs)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify({"message": "Suite removed from cycle"}), 200
