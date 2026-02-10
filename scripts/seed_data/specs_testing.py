@@ -596,3 +596,125 @@ CYCLE_SUITE_DATA = [
     {"cycle_name": "Regression Cycle — Go-Live Öncesi",
      "suite_name": "Regression-Core — Go-Live Öncesi Regresyon", "order": 1},
 ]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST RUNS  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+TEST_RUN_DATA = [
+    {"cycle_name": "SIT Cycle 1 — Temel Akışlar",
+     "tc_code": "TC-FI-001", "run_type": "manual", "status": "completed",
+     "result": "pass", "environment": "SIT", "tester": "Ahmet Yıldız",
+     "notes": "Tüm kontrol noktaları başarılı", "duration_minutes": 35},
+    {"cycle_name": "SIT Cycle 1 — Temel Akışlar",
+     "tc_code": "TC-FI-002", "run_type": "manual", "status": "completed",
+     "result": "fail", "environment": "SIT", "tester": "Ahmet Yıldız",
+     "notes": "KDV hesaplama farkı bulundu", "duration_minutes": 28},
+    {"cycle_name": "SIT Cycle 1 — Temel Akışlar",
+     "tc_code": "TC-MM-001", "run_type": "manual", "status": "completed",
+     "result": "pass", "environment": "SIT", "tester": "Zeynep Koç",
+     "notes": "PR → PO akışı sorunsuz", "duration_minutes": 40},
+    {"cycle_name": "SIT Cycle 1 — Temel Akışlar",
+     "tc_code": "TC-SD-001", "run_type": "automated", "status": "completed",
+     "result": "pass", "environment": "SIT", "tester": "Otomasyon",
+     "notes": "Selenium ile siparişten faturaya test edildi", "duration_minutes": 12},
+    {"cycle_name": "UAT Cycle 1 — İş Senaryoları",
+     "tc_code": "TC-WM-001", "run_type": "manual", "status": "in_progress",
+     "result": "not_run", "environment": "UAT", "tester": "Hakan Güneş",
+     "notes": "Depo transferi senaryosu devam ediyor"},
+    {"cycle_name": "UAT Cycle 1 — İş Senaryoları",
+     "tc_code": "TC-PP-001", "run_type": "manual", "status": "not_started",
+     "result": "not_run", "environment": "UAT", "tester": "Elif Kara"},
+]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST STEP RESULTS  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+STEP_RESULT_DATA = [
+    # Run 1 (TC-FI-001, pass) — 2 adım
+    {"run_index": 0, "step_no": 1, "result": "pass",
+     "actual_result": "Hesap planı doğru yüklendi, bakiyeler tutarlı"},
+    {"run_index": 0, "step_no": 2, "result": "pass",
+     "actual_result": "BKPF/BSEG kayıtları doğrulandı"},
+    # Run 2 (TC-FI-002, fail) — 2 adım
+    {"run_index": 1, "step_no": 1, "result": "pass",
+     "actual_result": "Fatura oluşturuldu"},
+    {"run_index": 1, "step_no": 2, "result": "fail",
+     "actual_result": "KDV farkı: beklenen %10, gelen %18",
+     "notes": "Gıda kategorisi hatalı eşlendi"},
+    # Run 3 (TC-MM-001, pass) — 2 adım
+    {"run_index": 2, "step_no": 1, "result": "pass",
+     "actual_result": "PR otomatik oluşturuldu, tutar limiti doğru"},
+    {"run_index": 2, "step_no": 2, "result": "pass",
+     "actual_result": "PO onay akışı 4 kademe tamamlandı"},
+    # Run 4 (TC-SD-001 automated, pass) — 2 adım
+    {"run_index": 3, "step_no": 1, "result": "pass",
+     "actual_result": "Siparişten teslimata akış başarılı"},
+    {"run_index": 3, "step_no": 2, "result": "pass",
+     "actual_result": "Fatura ve muhasebe kayıtları eşleşti"},
+]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DEFECT COMMENTS  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+DEFECT_COMMENT_DATA = [
+    # Defect index 0 (P1 blocker — KDV farkı)
+    {"defect_index": 0, "author": "Ahmet Yıldız",
+     "body": "SIT ortamında KDV %18 yerine %10 hesaplanıyor. Gıda kategorisi mapping tablosu kontrol edilmeli."},
+    {"defect_index": 0, "author": "Elif Kara",
+     "body": "BAdI TAX_CALC_ENHANCE'da condition type koşulu eksik. Fix branch açıldı."},
+    {"defect_index": 0, "author": "Kemal Erdoğan",
+     "body": "Transport K900123 ile düzeltme taşındı. Retest bekleniyor."},
+    # Defect index 1 (PO onay)
+    {"defect_index": 1, "author": "Zeynep Koç",
+     "body": "PO onay timeout yapısı BRF+'da kontrol edilecek. SLA 24 saat."},
+    # Defect index 3 (Batch yönetimi)
+    {"defect_index": 3, "author": "Hakan Güneş",
+     "body": "FEFO sıralamasında aynı batch tarihi olan kayıtlarda FIFO uygulanmalı."},
+    {"defect_index": 3, "author": "Deniz Aydın",
+     "body": "User exit ZFEFO_SORT'a ek sort kriteri eklendi."},
+]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DEFECT HISTORY  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+DEFECT_HISTORY_DATA = [
+    # Defect index 0 lifecycle
+    {"defect_index": 0, "field": "status", "old_value": "open",
+     "new_value": "in_progress", "changed_by": "Elif Kara"},
+    {"defect_index": 0, "field": "assigned_to", "old_value": "",
+     "new_value": "Elif Kara", "changed_by": "Deniz Aydın"},
+    {"defect_index": 0, "field": "status", "old_value": "in_progress",
+     "new_value": "resolved", "changed_by": "Elif Kara"},
+    {"defect_index": 0, "field": "resolution", "old_value": "",
+     "new_value": "BAdI condition type düzeltildi", "changed_by": "Elif Kara"},
+    # Defect index 2 (GR-IR)
+    {"defect_index": 2, "field": "severity", "old_value": "medium",
+     "new_value": "high", "changed_by": "Kemal Erdoğan"},
+    {"defect_index": 2, "field": "status", "old_value": "open",
+     "new_value": "in_progress", "changed_by": "Ahmet Yıldız"},
+]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DEFECT LINKS  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+DEFECT_LINK_DATA = [
+    # Defect 0 ↔ Defect 1: related (KDV + PO onay her ikisi de Finans)
+    {"source_index": 0, "target_index": 1,
+     "link_type": "related", "notes": "Her ikisi de SIT-Finance paketinde tespit edildi"},
+    # Defect 3 ↔ Defect 4: related (Batch + MES)
+    {"source_index": 3, "target_index": 4,
+     "link_type": "related", "notes": "Her ikisi de envanter yönetimi ile ilgili"},
+    # Defect 5 blocks Defect 6 (E2E → Konsolidasyon)
+    {"source_index": 5, "target_index": 6,
+     "link_type": "blocks", "notes": "E2E akış kapanmadan konsolidasyon testi yapılamaz"},
+]

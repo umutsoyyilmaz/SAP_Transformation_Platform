@@ -30,6 +30,7 @@ from app.models.backlog import (
 from app.models.testing import (
     TestPlan, TestCycle, TestCase, TestExecution, Defect,
     TestSuite, TestStep, TestCaseDependency, TestCycleSuite,
+    TestRun, TestStepResult, DefectComment, DefectHistory, DefectLink,
 )
 from app.models.scope import Process, RequirementProcessMapping, Analysis
 from app.models.raid import (
@@ -47,6 +48,8 @@ from scripts.seed_data.backlog import SPRINTS, BACKLOG_ITEMS, CONFIG_ITEMS
 from scripts.seed_data.specs_testing import (
     FS_DATA, TS_DATA, TEST_PLAN_DATA, TEST_CASE_DATA, EXECUTION_DATA, DEFECT_DATA,
     SUITE_DATA, STEP_DATA, CYCLE_SUITE_DATA,
+    TEST_RUN_DATA, STEP_RESULT_DATA, DEFECT_COMMENT_DATA,
+    DEFECT_HISTORY_DATA, DEFECT_LINK_DATA,
 )
 from scripts.seed_data.raid import RISK_DATA, ACTION_DATA, ISSUE_DATA, DECISION_DATA
 
@@ -217,6 +220,8 @@ def seed_all(app, append=False, verbose=False):
         if not append:
             print("🗑️  Clearing existing data...")
             for model in [Notification, Decision, Issue, Action, Risk,
+                          DefectLink, DefectHistory, DefectComment,
+                          TestStepResult, TestRun,
                           TestCycleSuite, TestStep, TestCaseDependency,
                           TestExecution, Defect, TestCase, TestSuite,
                           TestCycle, TestPlan,
@@ -623,6 +628,103 @@ def seed_all(app, append=False, verbose=False):
             db.session.add(defect)
             d_d["tc_code"] = tc_code
         print(f"   ✅ {len(DEFECT_DATA)} defects")
+
+        # ── 19b. Test Runs  (TS-Sprint 2) ─────────────────────────────────
+        print("\n🏃 Creating test runs...")
+        run_objs = []
+        for tr_d in TEST_RUN_DATA:
+            cycle = cycle_name_map.get(tr_d["cycle_name"])
+            tc = tc_objs.get(tr_d["tc_code"])
+            if cycle and tc:
+                run = TestRun(
+                    cycle_id=cycle.id, test_case_id=tc.id,
+                    run_type=tr_d.get("run_type", "manual"),
+                    status=tr_d.get("status", "not_started"),
+                    result=tr_d.get("result", "not_run"),
+                    environment=tr_d.get("environment", ""),
+                    tester=tr_d.get("tester", ""),
+                    notes=tr_d.get("notes", ""),
+                    duration_minutes=tr_d.get("duration_minutes"),
+                )
+                if tr_d.get("status") in ("completed", "in_progress"):
+                    run.started_at = datetime.now(timezone.utc)
+                if tr_d.get("status") == "completed":
+                    run.finished_at = datetime.now(timezone.utc)
+                db.session.add(run)
+                db.session.flush()
+                run_objs.append(run)
+            else:
+                run_objs.append(None)
+        print(f"   ✅ {sum(1 for r in run_objs if r)} test runs")
+
+        # ── 19c. Step Results  (TS-Sprint 2) ─────────────────────────────
+        print("\n📋 Creating step results...")
+        sr_count = 0
+        for sr_d in STEP_RESULT_DATA:
+            idx = sr_d["run_index"]
+            run = run_objs[idx] if idx < len(run_objs) else None
+            if run:
+                sr = TestStepResult(
+                    run_id=run.id,
+                    step_no=sr_d["step_no"],
+                    result=sr_d.get("result", "not_run"),
+                    actual_result=sr_d.get("actual_result", ""),
+                    notes=sr_d.get("notes", ""),
+                    executed_at=datetime.now(timezone.utc),
+                )
+                db.session.add(sr)
+                sr_count += 1
+        print(f"   ✅ {sr_count} step results")
+
+        # ── 19d. Defect Comments  (TS-Sprint 2) ─────────────────────────
+        print("\n💬 Creating defect comments...")
+        defect_objs = Defect.query.filter_by(program_id=pid).order_by(Defect.id).all()
+        dc_count = 0
+        for dc_d in DEFECT_COMMENT_DATA:
+            idx = dc_d["defect_index"]
+            if idx < len(defect_objs):
+                comment = DefectComment(
+                    defect_id=defect_objs[idx].id,
+                    author=dc_d["author"],
+                    body=dc_d["body"],
+                )
+                db.session.add(comment)
+                dc_count += 1
+        print(f"   ✅ {dc_count} defect comments")
+
+        # ── 19e. Defect History  (TS-Sprint 2) ──────────────────────────
+        print("\n📜 Creating defect history...")
+        dh_count = 0
+        for dh_d in DEFECT_HISTORY_DATA:
+            idx = dh_d["defect_index"]
+            if idx < len(defect_objs):
+                hist = DefectHistory(
+                    defect_id=defect_objs[idx].id,
+                    field=dh_d["field"],
+                    old_value=dh_d["old_value"],
+                    new_value=dh_d["new_value"],
+                    changed_by=dh_d["changed_by"],
+                )
+                db.session.add(hist)
+                dh_count += 1
+        print(f"   ✅ {dh_count} defect history entries")
+
+        # ── 19f. Defect Links  (TS-Sprint 2) ────────────────────────────
+        print("\n🔗 Creating defect links...")
+        dl_count = 0
+        for dl_d in DEFECT_LINK_DATA:
+            s_idx = dl_d["source_index"]
+            t_idx = dl_d["target_index"]
+            if s_idx < len(defect_objs) and t_idx < len(defect_objs):
+                link = DefectLink(
+                    source_defect_id=defect_objs[s_idx].id,
+                    target_defect_id=defect_objs[t_idx].id,
+                    link_type=dl_d.get("link_type", "related"),
+                    notes=dl_d.get("notes", ""),
+                )
+                db.session.add(link)
+                dl_count += 1
+        print(f"   ✅ {dl_count} defect links")
 
         # ── 20. RAID ─────────────────────────────────────────────────────
         print("\n⚠️  Creating RAID items...")
