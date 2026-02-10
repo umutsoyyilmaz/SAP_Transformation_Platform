@@ -602,45 +602,82 @@ Cycle 0 (Trial)  → Cycle 1 (Volume) → Cycle 2 (Dress Rehearsal) → Cycle 3 
 
 **Amaç:** 6 test seviyesinin yaşam döngüsü, defect yönetimi, Go/No-Go scorecard, traceability matrix.
 
-**FS/TS Referansı:** `test-management-fs-ts.md` v1.0 (54KB, 13 bölüm, 17 tablo)
+**FS/TS Referansı:** `test-management-fs-ts.md` v1.0 (54KB, 13 bölüm, 17 tablo hedef)
+**Implementasyon:** `app/models/testing.py` + `app/blueprints/testing_bp.py`
 
-**6 Alt Modül (Ekran):**
+#### Mevcut Implementasyon Durumu
 
-| Modül | Ekran | Birincil İşlev |
-|-------|-------|----------------|
-| **T1** | Test Plan & Strategy | Strateji dokümanı, entry/exit criteria, ortam matrix, takvim |
-| **T2** | Test Suite Manager | 6 seviye tab, case authoring, WRICEF/process'ten otomatik üretim |
-| **T3** | Test Execution | Step-by-step runner, pass/fail/blocked, evidence upload, defect quick-create |
-| **T4** | Defect Tracker | 9 status lifecycle, severity/priority, SLA, root cause, kanban/table |
-| **T5** | Test Dashboard | 10 widget, Go/No-Go Scorecard (10 kriter), trend, export |
-| **T6** | Traceability Matrix | REQ→WRICEF/Config→TestCase→Execution→Defect zinciri, coverage gap |
+| Bileşen | Durum | Detay |
+|---------|-------|-------|
+| Veri modeli | ✅ 5/17 tablo | test_plan, test_cycle, test_case, test_execution, defect |
+| API routes | ✅ 28 route | CRUD (Plans, Cycles, Cases, Executions, Defects) + Dashboard + Traceability + Regression |
+| Dashboard | ✅ Implement | Pass rate, severity dist, aging, velocity, layer summary, coverage, env stability |
+| Traceability Matrix | ✅ Implement | REQ→TestCase→Defect zinciri |
+| Regression Sets | ✅ Implement | is_regression flag ile filtreleme |
+| Test Suite gruplama | ⬜ Phase 3 | Case'ler şu an direkt program'a bağlı |
+| Step-level execution | ⬜ Phase 3 | test_steps TEXT field olarak saklanıyor |
+| Go/No-Go Scorecard | ⬜ Phase 3 | 10 kriter auto-eval |
+| UAT Sign-off | ⬜ Phase 3 | BPO sign-off workflow |
+| Defect audit trail | ⬜ Phase 3 | defect_comment, defect_history, defect_link |
+| SLA engine | ⬜ Phase 3 | Otomatik SLA hesaplama |
+| Cloud ALM sync | ⬜ Phase 3 | Bidirectional test/defect sync |
+
+**Mevcut Alt Modüller:**
+
+| Modül | Ekran | Durum | Birincil İşlev |
+|-------|-------|-------|----------------|
+| **T1** | Test Plan & Strategy | ✅ Temel | Plan CRUD, strategy/entry/exit criteria (text), takvim |
+| **T2** | Test Catalog (Cases) | ✅ Temel | Case CRUD, layer/module/priority filtreleme, auto code gen |
+| **T3** | Test Execution | ✅ Temel | Case-level pass/fail/blocked/deferred, evidence URL |
+| **T4** | Defect Tracker | ✅ Temel | 8 status lifecycle, severity/priority, aging, reopen tracking |
+| **T5** | Test Dashboard | ✅ Temel | Pass rate, severity dist, velocity, layer summary, coverage |
+| **T6** | Traceability Matrix | ✅ Implement | REQ→TestCase→Defect zinciri, coverage % |
+
+**Phase 3'te Genişletilecek Modüller:**
+
+| Modül | Ekran | Planlanan | FS/TS Ref |
+|-------|-------|-----------|-----------|
+| **T2+** | Test Suite Manager | Suite gruplama, case→suite hierarchy, auto-generate from WRICEF/process | §3.3 |
+| **T3+** | Step-by-Step Runner | test_step ayrı tablo, per-step pass/fail, evidence per step | §3.5 |
+| **T4+** | Defect Tracker (advanced) | 9→ status lifecycle, SLA engine, comment/history/link | §3.7 |
+| **T5+** | Dashboard (advanced) | Go/No-Go Scorecard (10 kriter), daily snapshot trends | §5.4 |
+| **T7** | UAT Sign-Off | BPO sign-off workflow, usability score | §3.8 |
+| **T8** | Performance Testing | perf_test_result metrics (p95/p99/throughput) | §3.9 |
 
 **Test Seviyeleri ve Explore Phase Bağlantısı:**
 
 | Seviye | Kaynak (Explore'dan) | Test Edilen | Çıkış Kriteri |
 |--------|---------------------|------------|---------------|
 | **Unit** | WRICEF/Config Item → unit_test_steps | Tekil nesne | Pass ≥95%, critical=0 |
-| **String** | L2 Process Area → L3/L4 chain | Modül içi zincir | Zincir kırılması=0 |
 | **SIT** | E2E Scenario → process_step cross-module | Modüller arası | P1/P2=0, coverage ≥90% |
 | **UAT** | Workshop decisions + L3 scope items | İş perspektifi | BPO sign-off, critical=0 |
 | **Regression** | Changed WRICEF/Config → risk-based subset | Mevcut süreçler | 100% pass |
 | **Performance** | Kritik transaction'lar | Yük altında | Response < threshold |
+| **Cutover Rehearsal** | Cutover runbook tasks | Canlıya geçiş provası | Timing ≤ tolerance |
 
-**Otomatik Test Case Üretimi (Explore→Test köprüsü):**
-- `generate-from-wricef` → WRICEF/Config unit_test_steps'den Unit Test Case üretir
-- `generate-from-process` → Explore process_step'lerden SIT/UAT senaryosu üretir
+**Mevcut Defect Lifecycle (8 status):**
 
-**Defect Lifecycle:** new → assigned → in_progress → resolved → retest → closed (+ reopened, deferred, rejected)
+```
+new → open → in_progress → fixed → retest → closed
+                                       └──▶ reopened ──▶ in_progress
+              new/open → rejected
+```
 
-**SLA:** S1+P1: 1h/4h | S2+P2: 4h/1d | S3+P3: 1d/3d | S4+P4: 2d/sprint
+> **Not:** FS/TS hedef lifecycle 9 status (+ assigned, deferred). Phase 3'te genişletilecek.
 
-**Go/No-Go Scorecard:** 10 kriter (unit≥95%, SIT≥95%, UAT happy path 100%, BPO sign-off, S1=0, S2=0, S3≤5, regression 100%, perf≥95%, all critical closed)
+**Mevcut Veri Modeli (5 tablo):**
+- `test_plans` — plan CRUD, status lifecycle, strategy/criteria text
+- `test_cycles` — cycle within plan, test_layer, ordering
+- `test_cases` — catalog, auto code gen, traceability FKs (requirement, backlog_item, config_item)
+- `test_executions` — case-level result (not_run|pass|fail|blocked|deferred)
+- `defects` — 8 status lifecycle, severity P1-P4, aging_days computed, reopen tracking
 
-**Veri Modeli:** 17 tablo (test_plan, test_cycle, test_cycle_suite, test_suite, test_case, test_step, test_case_dependency, test_run, test_execution, test_step_result, defect, defect_comment, defect_history, defect_link, uat_sign_off, perf_test_result, test_daily_snapshot)
+**Hedef Veri Modeli (Phase 3 sonrası — 17 tablo):**
++ test_suite, test_cycle_suite, test_step, test_case_dependency, test_run,
+  test_step_result, defect_comment, defect_history, defect_link,
+  uat_sign_off, perf_test_result, test_daily_snapshot
 
-**Role Extension:** Mevcut 7 Explore rolüne ek olarak `test_lead` rolü
-
-**API:** 10 grup, 40+ endpoint (detay: test-management-fs-ts.md §3)
+**API (mevcut 28 route):** 5 grup (Plans, Cycles, Cases, Executions, Defects) + Dashboard + Traceability + Regression
 
 ### 4.7 Cutover Hub Module
 
