@@ -471,7 +471,7 @@ Brownfield seçildi →
   ✓ Readiness Check + ATC remediation backlog aktif
   ✓ Custom Code workstream → remediation/retirement odaklı
   ✓ Cutover Hub → rollback stratejisi zorunlu alan
-  ✓ Test Management System → regresyon ağırlıklı (17 tablo, 6 test seviyesi)
+  ✓ Test Management System → regresyon ağırlıklı (5 tablo implement, 17 hedef, 6 test seviyesi)
 
 Public Cloud seçildi →
   ✓ Fit-to-Standard → scope item bazlı (SAP Best Practices)
@@ -2233,13 +2233,21 @@ INTEGRATE (API):
 ### Phase 3 — Quality & Testing + Quality AI (10 hafta)
 
 **Platform Modülleri:**
-- **Test Management System** — 6 modül, 17 tablo (referans: `test-management-fs-ts.md` v1.0)
-  - Module T1: Test Plan & Strategy (strateji, entry/exit criteria, takvim)
-  - Module T2: Test Suite Manager (6 seviye, case authoring, auto-generate from WRICEF/process)
-  - Module T3: Test Execution (step-by-step runner, evidence, defect quick-create)
-  - Module T4: Defect Tracker (9 status lifecycle, SLA, severity/priority, kanban)
-  - Module T5: Test Dashboard (10 widget, Go/No-Go Scorecard, trend)
-  - Module T6: Traceability Matrix (REQ→WRICEF→TestCase→Execution→Defect)
+- **Test Management System — Phase 3 Genişletme** (referans: `test-management-fs-ts.md` v1.0)
+  - ✅ *Mevcut temel:* 5 tablo (test_plan, test_cycle, test_case, test_execution, defect), 28 route, CRUD + Dashboard + Traceability
+  - Kalan 12 tablo implementasyonu:
+    - test_suite + test_cycle_suite (suite gruplama katmanı)
+    - test_step (ayrı tablo — şu an TEXT field)
+    - test_case_dependency (N:M bağımlılık)
+    - test_run (execution session)
+    - test_step_result (per-step pass/fail)
+    - defect_comment, defect_history, defect_link (audit trail + linking)
+    - uat_sign_off (BPO sign-off workflow)
+    - perf_test_result (performance metrics)
+    - test_daily_snapshot (trend dashboard)
+  - Defect lifecycle genişletme: 8→9 status (+ assigned, deferred)
+  - Go/No-Go Scorecard: 10 kriter auto-evaluated
+  - SLA engine: severity-based otomatik due_date hesaplama
 - Role extension: `test_lead` rolü eklenir
 - Explore↔Test entegrasyonu: generate-from-wricef, generate-from-process endpoints
 - Cloud ALM test sync: test case push, execution results, bidirectional defect
@@ -2307,9 +2315,9 @@ INTEGRATE (API):
 | §5 Integration | Integration Factory | — | Impact Analyzer (interface etki) | 3 |
 | §5 Custom/Extensions | Backlog Workbench | — | WRICEF Spec Drafter + Impact Analyzer | 2-3 |
 | §5 Security | Security Module | — | — | 4 |
-| §5 Testing & Quality | **Test Management System** (17 tablo) | test-management-fs-ts.md v1.0 | Test Scenario Generator + Defect Triage | 1-3 |
+| §5 Testing & Quality | **Test Management System** (5/17 tablo implement) | test-management-fs-ts.md v1.0 | Test Scenario Generator + Defect Triage | 1-3 |
 | §5 Change & Training | Change Module | — | Meeting Intelligence | 5 |
-| §6 Test Yönetimi KPI | Test Dashboard (T5) + Go/No-Go | test-management-fs-ts.md §5.4 | NL Query + Steering Pack | 1-2 |
+| §6 Test Yönetimi KPI | Test Dashboard (T5 — ✅ temel) + Go/No-Go (⬜ Phase 3) | test-management-fs-ts.md §5.4 | NL Query + Steering Pack | 1-3 |
 | §7 Cutover & Go-Live | Cutover Hub | — | Cutover Optimizer + War Room Assistant | 4 |
 | §8 Risk & Kalite | RAID Module | — | Risk Sentinel | 2 |
 | §9 Platform Blueprint | Tüm mimari | Bu doküman (v2.0) | 14 AI Asistan | 1-5 |
@@ -2342,6 +2350,85 @@ INTEGRATE (API):
 > Orta ölçekli SAP projesi (50-100 kişi, 12-18 ay) baz alınmıştır.
 > Consultant saat ücreti €80-150 ile hesaplandığında aylık €19K-59K tasarruf potansiyeli.
 > AI altyapı maliyeti tasarrufun %1-3'ü seviyesindedir.
+
+---
+
+## 14. Implementation Status — Test Management Domain (v2.1 Snapshot)
+
+> **Tarih:** 2026-02-10 | **Kaynak:** `app/models/testing.py`, `app/blueprints/testing_bp.py`, `tests/test_api_testing.py`
+
+### 14.1 Tablo Durumu
+
+| # | Tablo | Durum | Model Sınıfı | LOC | Açıklama |
+|---|-------|-------|-------------|-----|----------|
+| 1 | `test_plans` | ✅ Implement | `TestPlan` | ~50 | Plan CRUD, strategy/criteria text, status lifecycle |
+| 2 | `test_cycles` | ✅ Implement | `TestCycle` | ~50 | Cycle within plan, test_layer, ordering |
+| 3 | `test_cases` | ✅ Implement | `TestCase` | ~80 | Catalog, auto code gen, traceability FKs, is_regression flag |
+| 4 | `test_executions` | ✅ Implement | `TestExecution` | ~40 | Case-level result, evidence URL |
+| 5 | `defects` | ✅ Implement | `Defect` | ~90 | 8 status lifecycle, aging_days computed, reopen tracking |
+| 6 | `test_suites` | ⬜ Phase 3 | — | — | Level-based grouping, process_area, e2e_scenario |
+| 7 | `test_cycle_suites` | ⬜ Phase 3 | — | — | N:M junction (cycle ↔ suite) |
+| 8 | `test_steps` | ⬜ Phase 3 | — | — | Per-case ordered steps (şu an TEXT field) |
+| 9 | `test_case_dependencies` | ⬜ Phase 3 | — | — | must_pass, must_run, data_dependency |
+| 10 | `test_runs` | ⬜ Phase 3 | — | — | Execution session within cycle |
+| 11 | `test_step_results` | ⬜ Phase 3 | — | — | Per-step pass/fail + evidence |
+| 12 | `defect_comments` | ⬜ Phase 3 | — | — | Comment, status_change, resolution |
+| 13 | `defect_histories` | ⬜ Phase 3 | — | — | Full field-level audit trail |
+| 14 | `defect_links` | ⬜ Phase 3 | — | — | duplicate_of, related_to, caused_by, blocks |
+| 15 | `uat_sign_offs` | ⬜ Phase 3 | — | — | BPO sign-off per UAT suite |
+| 16 | `perf_test_results` | ⬜ Phase 3 | — | — | p95/p99 response_ms, throughput, error_rate |
+| 17 | `test_daily_snapshots` | ⬜ Phase 3 | — | — | Daily metrics JSON for trend dashboard |
+
+### 14.2 API Route Durumu
+
+| Grup | Route Sayısı | Durum |
+|------|-------------|-------|
+| Test Plans CRUD | 5 | ✅ Implement |
+| Test Cycles CRUD | 5 | ✅ Implement |
+| Test Catalog (Cases) CRUD | 5 | ✅ Implement |
+| Test Executions CRUD | 5 | ✅ Implement |
+| Defects CRUD | 5 | ✅ Implement |
+| Traceability Matrix | 1 | ✅ Implement |
+| Regression Sets | 1 | ✅ Implement |
+| Dashboard | 1 | ✅ Implement |
+| **Toplam implement** | **28** | |
+| Suite Management | ~5 | ⬜ Phase 3 |
+| Test Run Management | ~3 | ⬜ Phase 3 |
+| Step-level Execution | ~3 | ⬜ Phase 3 |
+| UAT Sign-off | ~3 | ⬜ Phase 3 |
+| Go/No-Go Scorecard | 1 | ⬜ Phase 3 |
+| Auto-generate (WRICEF/Process) | 2 | ⬜ Phase 3 |
+| ALM Sync | ~3 | ⬜ Phase 3 |
+| Export | 1 | ⬜ Phase 3 |
+| **Toplam hedef (Phase 3)** | **~48** | |
+
+### 14.3 Mevcut vs FS/TS Farkları
+
+| Konu | Mevcut Implementasyon | FS/TS v1.0 Hedef |
+|------|----------------------|------------------|
+| Test steps | `test_steps` TEXT field (TestCase içinde) | Ayrı `test_step` tablosu (action, expected_result, sap_transaction) |
+| Suite gruplama | TestCase → Program (direkt) | TestCase → TestSuite → TestPlan |
+| Execution hierarchy | Cycle → Execution (direkt) | Cycle → TestRun → Execution |
+| Step-level results | Yok — case-level pass/fail | `test_step_result` tablosu (per-step) |
+| Defect lifecycle | 8 status (new, open, in_progress, fixed, retest, closed, rejected, reopened) | 9 status (+ assigned, deferred; resolved→fixed) |
+| Defect taxonomy | severity (P1-P4) tek alan | severity (S1-S4) + priority (P1-P4) ayrı alanlar + category |
+| SLA | `aging_days` computed property | Otomatik `due_date` hesaplama + `sla_breach` flag |
+| Defect audit | Yok | defect_comment + defect_history + defect_link |
+| UAT sign-off | Yok | uat_sign_off tablosu + BPO workflow |
+| Performance metrics | Yok | perf_test_result tablosu |
+| Daily trend | Yok | test_daily_snapshot tablosu |
+| Go/No-Go | Yok | 10 kriter auto-evaluated scorecard |
+| ALM sync | Yok | Bidirectional test_case + defect sync |
+
+### 14.4 Test Metrikleri
+
+| Metrik | Değer |
+|--------|-------|
+| Unit test sayısı (`test_api_testing.py`) | ~50 test |
+| Toplam platform testi | 766 test (tümü geçiyor) |
+| Model dosyası | `app/models/testing.py` — 503 LOC |
+| Blueprint dosyası | `app/blueprints/testing_bp.py` — 1033 LOC |
+| Dashboard KPI'ları | pass_rate, severity_dist, aging, velocity, layer_summary, coverage, env_stability |
 
 ---
 
