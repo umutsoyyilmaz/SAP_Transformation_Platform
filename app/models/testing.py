@@ -1,6 +1,6 @@
 """
 SAP Transformation Management Platform
-Testing domain models — Sprint 5 scope (Test Hub) + TS-Sprint 1 (Test Suite & Step).
+Testing domain models — Sprint 5 (Test Hub) + TS-Sprint 1 (Suite & Step) + TS-Sprint 2 (Run & Defect).
 
 Models (Sprint 5 — existing):
     - TestPlan:           top-level test planning container per program
@@ -9,18 +9,26 @@ Models (Sprint 5 — existing):
     - TestExecution:      execution record of a test case within a cycle
     - Defect:             defect/bug raised during testing
 
-Models (TS-Sprint 1 — new):
+Models (TS-Sprint 1):
     - TestSuite:          grouping of test cases (SIT/UAT/Regression suites)
     - TestStep:           atomic step within a test case
     - TestCaseDependency: predecessor/successor dependency between test cases
     - TestCycleSuite:     junction table for cycle ↔ suite N:M relationship
 
+Models (TS-Sprint 2 — new):
+    - TestRun:            execution-independent run (manual/automated), environment, timing
+    - TestStepResult:     step-level result within a run (pass/fail/blocked per step)
+    - DefectComment:      threaded comments on a defect
+    - DefectHistory:      field-level change audit trail for defects
+    - DefectLink:         inter-defect linking (duplicate/related/blocks)
+
 Architecture ref:
     Test Plan ──1:N──▶ Test Cycle ──N:M──▶ Test Suite ──1:N──▶ Test Case
     Test Case ──1:N──▶ Test Step
     Test Case ──N:M──▶ Test Case (dependencies)
-    Test Cycle ──1:N──▶ Test Execution
-    Test Case  ──1:N──▶ Defect
+    Test Cycle ──1:N──▶ Test Execution  (legacy, kept for backward compat)
+    Test Cycle ──1:N──▶ Test Run ──1:N──▶ Test Step Result
+    Test Case  ──1:N──▶ Defect ──1:N──▶ DefectComment / DefectHistory / DefectLink
 
 Traceability: Requirement ↔ Test Case ↔ Defect (auto-built)
 """
@@ -68,6 +76,24 @@ DEPENDENCY_TYPES = {
     "blocks",        # predecessor must pass before successor can run
     "related",       # informational link
     "data_feeds",    # predecessor produces test data for successor
+}
+
+# ── TS-Sprint 2 constants ────────────────────────────────────────────────
+
+RUN_TYPES = {"manual", "automated", "exploratory"}
+
+RUN_STATUSES = {
+    "not_started", "in_progress", "completed", "aborted",
+}
+
+STEP_RESULTS = {
+    "not_run", "pass", "fail", "blocked", "skipped",
+}
+
+DEFECT_LINK_TYPES = {
+    "duplicate",   # this defect duplicates target
+    "related",     # informational relationship
+    "blocks",      # this defect blocks fixing target
 }
 
 
@@ -442,6 +468,11 @@ class Defect(db.Model):
         db.Integer, db.ForeignKey("config_items.id", ondelete="SET NULL"),
         nullable=True, comment="Linked config item (fix target)",
     )
+    linked_requirement_id = db.Column(
+        db.Integer, db.ForeignKey("requirements.id", ondelete="SET NULL"),
+        nullable=True, comment="Linked requirement (TS-Sprint 2)",
+        index=True,
+    )
 
     # ── Identification
     code = db.Column(
@@ -482,6 +513,26 @@ class Defect(db.Model):
     transport_request = db.Column(db.String(30), default="", comment="SAP transport for the fix")
     notes = db.Column(db.Text, default="")
 
+    # ── Relationships (TS-Sprint 2)
+    comments = db.relationship(
+        "DefectComment", backref="defect", lazy="dynamic",
+        cascade="all, delete-orphan",
+        order_by="DefectComment.created_at",
+    )
+    history = db.relationship(
+        "DefectHistory", backref="defect", lazy="dynamic",
+        cascade="all, delete-orphan",
+        order_by="DefectHistory.changed_at.desc()",
+    )
+    source_links = db.relationship(
+        "DefectLink", foreign_keys="DefectLink.source_defect_id",
+        backref="source_defect", lazy="dynamic", cascade="all, delete-orphan",
+    )
+    target_links = db.relationship(
+        "DefectLink", foreign_keys="DefectLink.target_defect_id",
+        backref="target_defect", lazy="dynamic", cascade="all, delete-orphan",
+    )
+
     # ── Audit
     created_at = db.Column(
         db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
@@ -509,13 +560,14 @@ class Defect(db.Model):
             return (end - start).days
         return 0
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_comments=False):
+        d = {
             "id": self.id,
             "program_id": self.program_id,
             "test_case_id": self.test_case_id,
             "backlog_item_id": self.backlog_item_id,
             "config_item_id": self.config_item_id,
+            "linked_requirement_id": self.linked_requirement_id,
             "code": self.code,
             "title": self.title,
             "description": self.description,
@@ -535,9 +587,17 @@ class Defect(db.Model):
             "root_cause": self.root_cause,
             "transport_request": self.transport_request,
             "notes": self.notes,
+            "comment_count": self.comments.count() if self.id else 0,
+            "link_count": (
+                (self.source_links.count() + self.target_links.count())
+                if self.id else 0
+            ),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+        if include_comments:
+            d["comments"] = [c.to_dict() for c in self.comments.all()]
+        return d
 
     def __repr__(self):
         return f"<Defect {self.id}: [{self.severity}] {self.code or self.title[:30]}>"
@@ -783,3 +843,309 @@ class TestCycleSuite(db.Model):
 
     def __repr__(self):
         return f"<TestCycleSuite {self.id}: cycle#{self.cycle_id} ↔ suite#{self.suite_id}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST RUN  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestRun(db.Model):
+    """
+    Execution-independent test run.
+
+    A run represents a single end-to-end execution of a test case within a
+    test cycle.  Unlike TestExecution (legacy), TestRun captures run_type,
+    environment, timing, and links to step-level results.
+
+    Lifecycle: not_started → in_progress → completed / aborted
+    """
+
+    __tablename__ = "test_runs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cycle_id = db.Column(
+        db.Integer, db.ForeignKey("test_cycles.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    test_case_id = db.Column(
+        db.Integer, db.ForeignKey("test_cases.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    run_type = db.Column(
+        db.String(20), default="manual",
+        comment="manual | automated | exploratory",
+    )
+    status = db.Column(
+        db.String(20), default="not_started",
+        comment="not_started | in_progress | completed | aborted",
+    )
+    result = db.Column(
+        db.String(20), default="not_run",
+        comment="not_run | pass | fail | blocked | deferred",
+    )
+    environment = db.Column(db.String(50), default="", comment="DEV | QAS | PRD")
+    tester = db.Column(db.String(100), default="", comment="Tester name")
+    notes = db.Column(db.Text, default="")
+    evidence_url = db.Column(db.String(500), default="", comment="Screenshot / log URL")
+
+    # ── Timing
+    started_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    finished_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    duration_minutes = db.Column(db.Integer, nullable=True, comment="Run duration in minutes")
+
+    # ── Audit
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # ── Relationships
+    step_results = db.relationship(
+        "TestStepResult", backref="run", lazy="dynamic",
+        cascade="all, delete-orphan",
+        order_by="TestStepResult.step_no",
+    )
+
+    @property
+    def computed_duration(self):
+        """Calculate duration from timestamps if not explicitly set."""
+        if self.duration_minutes is not None:
+            return self.duration_minutes
+        if self.started_at and self.finished_at:
+            delta = self.finished_at - self.started_at
+            return int(delta.total_seconds() / 60)
+        return None
+
+    def to_dict(self, include_step_results=False):
+        d = {
+            "id": self.id,
+            "cycle_id": self.cycle_id,
+            "test_case_id": self.test_case_id,
+            "run_type": self.run_type,
+            "status": self.status,
+            "result": self.result,
+            "environment": self.environment,
+            "tester": self.tester,
+            "notes": self.notes,
+            "evidence_url": self.evidence_url,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
+            "duration_minutes": self.computed_duration,
+            "step_result_count": self.step_results.count() if self.id else 0,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_step_results:
+            d["step_results"] = [sr.to_dict() for sr in self.step_results.all()]
+        return d
+
+    def __repr__(self):
+        return f"<TestRun {self.id}: case#{self.test_case_id} [{self.run_type}] → {self.result}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST STEP RESULT  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestStepResult(db.Model):
+    """
+    Step-level result within a test run.
+
+    Records pass/fail/blocked at individual step granularity, enabling
+    precise failure pinpointing.
+    """
+
+    __tablename__ = "test_step_results"
+
+    id = db.Column(db.Integer, primary_key=True)
+    run_id = db.Column(
+        db.Integer, db.ForeignKey("test_runs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    step_id = db.Column(
+        db.Integer, db.ForeignKey("test_steps.id", ondelete="CASCADE"),
+        nullable=True, index=True, comment="Optional FK to TestStep",
+    )
+
+    step_no = db.Column(db.Integer, nullable=False, comment="Step number (copied from TestStep or manual)")
+    result = db.Column(
+        db.String(20), default="not_run",
+        comment="not_run | pass | fail | blocked | skipped",
+    )
+    actual_result = db.Column(db.Text, default="", comment="Actual observed result")
+    notes = db.Column(db.Text, default="")
+    screenshot_url = db.Column(db.String(500), default="", comment="Evidence screenshot")
+    executed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    # ── Audit
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "run_id": self.run_id,
+            "step_id": self.step_id,
+            "step_no": self.step_no,
+            "result": self.result,
+            "actual_result": self.actual_result,
+            "notes": self.notes,
+            "screenshot_url": self.screenshot_url,
+            "executed_at": self.executed_at.isoformat() if self.executed_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<TestStepResult {self.id}: run#{self.run_id} step#{self.step_no} → {self.result}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DEFECT COMMENT  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class DefectComment(db.Model):
+    """
+    Threaded comment on a defect — supports discussion between testers,
+    developers, and project leads.
+    """
+
+    __tablename__ = "defect_comments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    defect_id = db.Column(
+        db.Integer, db.ForeignKey("defects.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    author = db.Column(db.String(100), nullable=False, comment="Comment author")
+    body = db.Column(db.Text, nullable=False, comment="Comment body (Markdown supported)")
+
+    # ── Audit
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "defect_id": self.defect_id,
+            "author": self.author,
+            "body": self.body,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self):
+        return f"<DefectComment {self.id}: defect#{self.defect_id} by {self.author}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DEFECT HISTORY  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class DefectHistory(db.Model):
+    """
+    Field-level change audit trail for defects.
+
+    Automatically populated when a defect is updated (via API hook).
+    Enables full change replay and accountability.
+    """
+
+    __tablename__ = "defect_history"
+
+    id = db.Column(db.Integer, primary_key=True)
+    defect_id = db.Column(
+        db.Integer, db.ForeignKey("defects.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    field = db.Column(db.String(50), nullable=False, comment="Changed field name")
+    old_value = db.Column(db.Text, default="", comment="Previous value")
+    new_value = db.Column(db.Text, default="", comment="New value")
+    changed_by = db.Column(db.String(100), default="", comment="Who made the change")
+    changed_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "defect_id": self.defect_id,
+            "field": self.field,
+            "old_value": self.old_value,
+            "new_value": self.new_value,
+            "changed_by": self.changed_by,
+            "changed_at": self.changed_at.isoformat() if self.changed_at else None,
+        }
+
+    def __repr__(self):
+        return f"<DefectHistory {self.id}: defect#{self.defect_id} {self.field}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DEFECT LINK  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class DefectLink(db.Model):
+    """
+    Inter-defect link: duplicate, related, or blocks relationship.
+
+    source_defect → target_defect with a link_type.
+    Unique constraint prevents duplicate links between the same pair.
+    """
+
+    __tablename__ = "defect_links"
+
+    id = db.Column(db.Integer, primary_key=True)
+    source_defect_id = db.Column(
+        db.Integer, db.ForeignKey("defects.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    target_defect_id = db.Column(
+        db.Integer, db.ForeignKey("defects.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    link_type = db.Column(
+        db.String(20), default="related",
+        comment="duplicate | related | blocks",
+    )
+    notes = db.Column(db.Text, default="")
+
+    # ── Audit
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+
+    # ── Unique constraint
+    __table_args__ = (
+        db.UniqueConstraint(
+            "source_defect_id", "target_defect_id",
+            name="uq_defect_link",
+        ),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "source_defect_id": self.source_defect_id,
+            "target_defect_id": self.target_defect_id,
+            "link_type": self.link_type,
+            "notes": self.notes,
+            "source_title": self.source_defect.title if self.source_defect else None,
+            "target_title": self.target_defect.title if self.target_defect else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<DefectLink {self.id}: #{self.source_defect_id} —[{self.link_type}]→ #{self.target_defect_id}>"
