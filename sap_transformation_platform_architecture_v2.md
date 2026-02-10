@@ -183,59 +183,70 @@ Project → Scenario → Analysis → Requirement (Fit/Partial Fit/Gap)
                         │
                         ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│               TEST MANAGEMENT DOMAIN (FS/TS v1.0 — 17 tablo)                    │
+│         TEST MANAGEMENT DOMAIN (5 tablo implement | 17 tablo hedef FS/TS v1.0)  │
 │                                                                                  │
-│  ► Detay: test-management-fs-ts.md                                              │
+│  ► FS/TS Detay: test-management-fs-ts.md                                        │
+│  ► Implementasyon: app/models/testing.py (5 model, 503 LOC)                     │
+│  ► API: app/blueprints/testing_bp.py (28 route, 1033 LOC)                       │
 │                                                                                  │
-│  test_plan (project-level strategy container)                                    │
-│    ├── strategy_document (markdown)                                              │
-│    ├── entry_criteria / exit_criteria (per level, JSON)                          │
-│    └── environments (DEV/QAS/PRD config, JSON)                                  │
+│  ═══ IMPLEMENT EDİLEN TABLOLAR (5) ═══════════════════════════════════════════  │
 │                                                                                  │
-│  test_plan ──1:N──▶ test_cycle (time-boxed execution window)                   │
-│    ├── test_level: unit|string|sit|uat|regression|performance                    │
-│    ├── wave, planned_start/end, actual_start/end                                │
-│    ├── entry_criteria_met / exit_criteria_met                                    │
-│    └── ──N:M──▶ test_suite (via test_cycle_suite)                              │
+│  test_plan (program-level test planning container)                               │
+│    ├── name, description, test_strategy (text)                                  │
+│    ├── entry_criteria / exit_criteria (text)                                     │
+│    ├── status: draft|active|completed|cancelled                                  │
+│    ├── start_date / end_date                                                    │
+│    └── ──1:N──▶ test_cycle                                                     │
 │                                                                                  │
-│  test_plan ──1:N──▶ test_suite (level-based grouping)                          │
-│    ├── test_level, process_area, wave, e2e_scenario                             │
-│    ├── risk_level (regression), automation_status                                │
-│    └── ──1:N──▶ test_case                                                      │
-│                                                                                  │
-│  test_case (6 test levels in one table)                                         │
-│    ├── Traceability FKs: requirement_id, wricef_item_id, config_item_id,        │
-│    │   process_level_id (all from Explore Phase)                                │
-│    ├── Level-specific: uat_category, regression_risk, perf_test_type            │
-│    ├── ──1:N──▶ test_step (action, expected_result, sap_transaction)            │
-│    ├── ──N:M──▶ test_case_dependency (must_pass, must_run, data_dependency)     │
+│  test_plan ──1:N──▶ test_cycle (execution cycle within plan)                   │
+│    ├── test_layer: unit|sit|uat|regression|performance|cutover_rehearsal         │
+│    ├── status: planning|in_progress|completed|cancelled                          │
+│    ├── start_date / end_date, order                                             │
 │    └── ──1:N──▶ test_execution                                                 │
 │                                                                                  │
-│  test_cycle ──1:N──▶ test_run (execution session)                              │
-│    └── ──1:N──▶ test_execution (case-level result)                             │
-│                   ├── status: not_run|in_progress|pass|fail|blocked|skipped      │
-│                   ├── ──1:N──▶ test_step_result (per-step pass/fail + evidence) │
-│                   └── ──1:N──▶ defect (defects found during execution)          │
+│  test_case (catalog — directly linked to program)                               │
+│    ├── code (auto: TC-{MODULE}-{seq}), title, description                       │
+│    ├── test_layer, module, priority (low|medium|high|critical)                  │
+│    ├── preconditions, test_steps (TEXT), expected_result, test_data_set          │
+│    ├── status: draft|ready|approved|deprecated                                   │
+│    ├── is_regression (boolean flag for regression sets)                          │
+│    ├── Traceability FKs: requirement_id, backlog_item_id, config_item_id        │
+│    ├── ──1:N──▶ test_execution                                                 │
+│    └── ──1:N──▶ defect                                                         │
 │                                                                                  │
-│  defect (9-status lifecycle)                                                     │
-│    ├── severity: S1_showstopper→S4_minor                                        │
-│    ├── priority: P1_immediate→P4_low                                            │
-│    ├── category: functional|integration|performance|config|data|auth|ui|doc      │
-│    ├── root_cause, resolution, resolution_type                                   │
-│    ├── SLA: due_date (auto-calculated), sla_breach                              │
-│    ├── Traceability: test_case_id, requirement_id, wricef/config_item_id        │
-│    ├── ──1:N──▶ defect_comment (type: comment|status_change|resolution)         │
-│    ├── ──1:N──▶ defect_history (full field-level audit trail)                   │
-│    └── ──N:M──▶ defect_link (duplicate_of|related_to|caused_by|blocks)          │
+│  test_execution (case-level result within a cycle)                              │
+│    ├── result: not_run|pass|fail|blocked|deferred                               │
+│    ├── executed_by, executed_at, duration_minutes                                │
+│    ├── notes, evidence_url                                                      │
+│    └── FK: cycle_id, test_case_id                                               │
 │                                                                                  │
-│  uat_sign_off (BPO sign-off per UAT suite + usability_score 1-5)               │
-│  perf_test_result (avg/p95/p99 response_ms, throughput, error_rate)             │
-│  test_daily_snapshot (daily metrics JSON for trend dashboard)                    │
+│  defect (8-status lifecycle)                                                     │
+│    ├── code (auto: DEF-{seq}), title, description, steps_to_reproduce           │
+│    ├── severity: P1 (blocker)|P2 (critical)|P3 (major)|P4 (minor)              │
+│    ├── status: new|open|in_progress|fixed|retest|closed|rejected|reopened        │
+│    ├── module, environment (DEV|QAS|PRD)                                        │
+│    ├── reported_by, assigned_to, found_in_cycle                                 │
+│    ├── reopen_count, aging_days (computed property)                              │
+│    ├── resolution, root_cause, transport_request                                │
+│    └── FK: program_id, test_case_id, backlog_item_id, config_item_id            │
 │                                                                                  │
-│  ► 6 modules (T1-T6): Plan, Suite Manager, Execution, Defect, Dashboard, Trace │
-│  ► Go/No-Go Scorecard: 10 criteria auto-evaluated                               │
-│  ► Cloud ALM sync: test_case push, execution results, bidirectional defect      │
-│  ► New role: test_lead (extends Explore project_role)                           │
+│  ═══ PHASE 3'TE EKLENECEK TABLOLAR (12) — FS/TS v1.0 hedef ═════════════════  │
+│                                                                                  │
+│  ⬜ test_suite (level-based grouping, process_area, e2e_scenario)               │
+│  ⬜ test_cycle_suite (N:M junction: cycle ↔ suite)                              │
+│  ⬜ test_step (per-case ordered steps: action, expected_result, sap_txn)        │
+│  ⬜ test_case_dependency (must_pass, must_run, data_dependency)                 │
+│  ⬜ test_run (execution session within cycle)                                   │
+│  ⬜ test_step_result (per-step pass/fail + evidence within execution)           │
+│  ⬜ defect_comment (comment|status_change|resolution)                           │
+│  ⬜ defect_history (full field-level audit trail)                               │
+│  ⬜ defect_link (duplicate_of|related_to|caused_by|blocks)                      │
+│  ⬜ uat_sign_off (BPO sign-off per UAT suite + usability_score 1-5)            │
+│  ⬜ perf_test_result (avg/p95/p99 response_ms, throughput, error_rate)          │
+│  ⬜ test_daily_snapshot (daily metrics JSON for trend dashboard)                 │
+│                                                                                  │
+│  ► Mevcut: 5 tablo, 28 route, CRUD + dashboard + traceability matrix           │
+│  ► Hedef (Phase 3): + 12 tablo, + ~15 route, Go/No-Go Scorecard, ALM sync     │
 └──────────────────────────────────────────────────────────────────────────────────┘
                         │
                         ▼
@@ -356,8 +367,8 @@ Project → Scenario → Analysis → Requirement (Fit/Partial Fit/Gap)
 ### 3.2 Uçtan Uca İzlenebilirlik Zinciri (Traceability Chain)
 
 ```
-EXPLORE PHASE (24 tablo)                    TEST MANAGEMENT (17 tablo)
-────────────────────────                    ──────────────────────────
+EXPLORE PHASE (24 tablo — tam implement)        TEST MANAGEMENT (5/17 tablo implement)
+────────────────────────────────────────        ──────────────────────────────────────
 process_level (L1: Value Chain)
   └─▶ process_level (L2: Process Area, e.g., FI, SD)
        └─▶ process_level (L3: Scope Item, e.g., J58, BD9)
@@ -389,36 +400,44 @@ process_level (L1: Value Chain)
                  │                  ├── requirement_open_item_link (blocking)
                  │                  │
                  │                  ├─▶ WRICEF Item ──▶ FS ──▶ TS
-                 │                  │     └── unit_test_steps ──────────▶ test_case (Unit)
-                 │                  │                                        │
-                 │                  ├─▶ Config Item ──▶ Config Log          │
-                 │                  │     └── unit_test_steps ──────────▶ test_case (Unit)
-                 │                  │                                        │
-                 │                  └───────────────────────────────────▶ test_case (SIT/UAT)
-                 │                                                           │
-                 │                                                           ├─▶ test_step
-                 │                                                           ├─▶ test_execution
-                 │                                                           │    ├─▶ test_step_result
-                 │                                                           │    └─▶ defect
-                 │                                                           │         ├── severity (S1-S4)
-                 │                                                           │         ├── priority (P1-P4)
-                 │                                                           │         ├── SLA tracking
-                 │                                                           │         ├─▶ defect_comment
-                 │                                                           │         ├─▶ defect_history
-                 │                                                           │         └─▶ defect_link
-                 │                                                           │
-                 │                                                           └─▶ uat_sign_off (BPO)
+                 │                  │     └── unit_test_steps ──────────▶ ✅ test_case (Unit)
+                 │                  │                                         │
+                 │                  ├─▶ Config Item ──▶ Config Log            │
+                 │                  │     └── unit_test_steps ──────────▶ ✅ test_case (Unit)
+                 │                  │                                         │
+                 │                  └────────────────────────────────────▶ ✅ test_case (SIT/UAT)
+                 │                                                            │
+                 │                                   ┌────────────────────────┘
+                 │                                   │
+                 │                     ✅ IMPLEMENT (mevcut codebase):
+                 │                     ├─▶ test_execution (case-level pass/fail)
+                 │                     │    └─▶ defect
+                 │                     │         ├── severity: P1-P4
+                 │                     │         ├── status: 8 durum lifecycle
+                 │                     │         ├── aging_days (computed)
+                 │                     │         └── FK: test_case, backlog_item, config_item
+                 │                     │
+                 │                     ⬜ PHASE 3'TE EKLENECEK:
+                 │                     ├─▶ test_step (ayrı tablo, şu an TEXT field)
+                 │                     ├─▶ test_suite (gruplama katmanı)
+                 │                     ├─▶ test_run (execution session)
+                 │                     ├─▶ test_step_result (per-step)
+                 │                     ├─▶ defect_comment / defect_history / defect_link
+                 │                     ├─▶ uat_sign_off (BPO)
+                 │                     └─▶ perf_test_result
                  │
                  └── cross_module_flag, attachment, scope_change_request
 
 CROSS-CUTTING:
-  daily_snapshot (Explore) + test_daily_snapshot (Test) → Dashboard trends
-  cloud_alm_sync_log → requirement push + test_case push + defect sync
-  project_role (7+1 roles) → Permission matrix across both domains
+  daily_snapshot (Explore) → Dashboard trends (✅ implement)
+  test_daily_snapshot (Test) → Dashboard trends (⬜ Phase 3)
+  cloud_alm_sync_log → requirement push (✅) + test_case push (⬜ Phase 3)
+  project_role (7 roles) → Permission matrix (✅ implement)
 ```
 
 Platform herhangi bir noktadan, zincirin tamamını yukarı ve aşağı gezebilmelidir.
-**Toplam tablo sayısı:** Explore 24 + Test Management 17 = **41 tablo**
+**Mevcut tablo sayısı:** Explore 24 + Test Management 5 = **29 tablo** (implement)
+**Hedef tablo sayısı:** Explore 24 + Test Management 17 = **41 tablo** (Phase 3 sonrası)
 (Backlog, Integration, Data, Cutover, Run, RAID, Security domain tabloları hariç)
 
 ---
