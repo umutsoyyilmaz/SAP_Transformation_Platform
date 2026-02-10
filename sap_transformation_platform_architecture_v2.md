@@ -1,6 +1,6 @@
 # SAP Transformation Management Platform — Uygulama Mimarisi
 
-**Versiyon:** 2.1  
+**Versiyon:** 2.3  
 **Tarih:** 2026-02-10  
 **Hazırlayan:** Umut Soyyılmaz  
 **Kaynak:** SAP Transformation PM Playbook (S/4HANA + Public Cloud)
@@ -11,14 +11,17 @@
 |----------|-------|------------|
 | 2.0 | 2026-02-10 | İlk v2 yayın — Explore Phase (24 tablo) + Test Management FS/TS v1.0 (17 tablo hedef) entegre |
 | 2.1 | 2026-02-10 | **[REVISED]** Test Management bölümü codebase ile senkronize edildi. Mevcut implementasyon: 5 tablo, 28 route. Kalan 12 tablo Phase 3 roadmap'ine taşındı. Modül 4.6 ve API bölümü güncellendi. Implementation Status bölümü eklendi. |
+| 2.2 | 2026-02-10 | **[REVISED]** TS-Sprint 1-2 implementasyonu: 9 yeni tablo (TestSuite, TestStep, TestCaseDependency, TestCycleSuite, TestRun, TestStepResult, DefectComment, DefectHistory, DefectLink). Test Management şimdi 14 tablo, 55 route, 147 test. Kalan: 3 tablo (UAT, Perf, Snapshot) TS-Sprint 3'te. |
+| 2.3 | 2026-02-10 | **[REVISED]** TS-Sprint 3 tamamlandı: UAT Sign-Off, Performance Testing, Daily Snapshot tabloları eklendi. Test Management artık **17/17 tablo, 71 route, 203 test**. Defect lifecycle 9 status, severity S1-S4. Go/No-Go Scorecard, SLA Engine implement. Platform toplamı: **77 tablo, 336 route, 916 test, 11 migration**. |
 
-**v2.1 Değişiklik Özeti:**
-- Scope & Requirements Domain → Explore Phase FS/TS v1.1 ile entegre (24 tablo, 50+ API endpoint) — **tam implement**
-- Test Hub Domain → Temel CRUD implement (5 tablo, 28 route). FS/TS v1.0 hedef (17 tablo, 40+ endpoint) Phase 3'te tamamlanacak
-- Domain Model → Mevcut: **29 tablo** (Explore 24 + Test Management 5). Hedef: 41 tablo (+ Test Management kalan 12)
-- Traceability zinciri Requirement→TestCase→TestExecution→Defect olarak çalışır durumda
-- Modül Mimarisi Bölüm 4.6 mevcut implementasyonu yansıtacak şekilde güncellendi
-- API yapısı gerçek route'larla senkronize edildi
+**v2.3 Değişiklik Özeti:**
+- Scope & Requirements Domain → Explore Phase FS/TS v1.1 ile entegre (25 tablo, 66 route) — **tam implement**
+- Test Hub Domain → **17/17 tablo tam implement** (TS-Sprint 1-3 tamamlandı). FS/TS v1.0 hedefi %100 karşılandı
+- Domain Model → **77 tablo** (Explore 25 + Test Management 17 + Program 6 + Backlog 5 + AI 5 + Integration 5 + RAID 4 + Requirement 3 + Scenario 3 + Scope 3 + Notification 1)
+- Traceability zinciri Requirement→TestCase→TestStep→TestExecution→TestStepResult→Defect olarak çalışır durumda
+- Defect lifecycle 9 status'a genişletildi (new→assigned→in_progress→resolved→retest→closed + reopened, rejected, deferred)
+- Go/No-Go Scorecard (10 kriter auto-eval), UAT Sign-Off (BPO workflow), SLA Engine implement edildi
+- API yapısı gerçek route'larla senkronize edildi (336 toplam route)
 - Implementation Status bölümü eklendi (implement edilen vs planlanan tablo/feature ayrımı)
 
 ---
@@ -183,13 +186,13 @@ Project → Scenario → Analysis → Requirement (Fit/Partial Fit/Gap)
                         │
                         ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│         TEST MANAGEMENT DOMAIN (5 tablo implement | 17 tablo hedef FS/TS v1.0)  │
+│         TEST MANAGEMENT DOMAIN (14 tablo implement | 17 tablo hedef FS/TS v1.0) │
 │                                                                                  │
 │  ► FS/TS Detay: test-management-fs-ts.md                                        │
-│  ► Implementasyon: app/models/testing.py (5 model, 503 LOC)                     │
-│  ► API: app/blueprints/testing_bp.py (28 route, 1033 LOC)                       │
+│  ► Implementasyon: app/models/testing.py (14 model, ~1200 LOC)                  │
+│  ► API: app/blueprints/testing_bp.py (55 route, ~2500 LOC)                      │
 │                                                                                  │
-│  ═══ IMPLEMENT EDİLEN TABLOLAR (5) ═══════════════════════════════════════════  │
+│  ═══ IMPLEMENT EDİLEN TABLOLAR (14) ═══════════════════════════════════════════  │
 │                                                                                  │
 │  test_plan (program-level test planning container)                               │
 │    ├── name, description, test_strategy (text)                                  │
@@ -202,7 +205,16 @@ Project → Scenario → Analysis → Requirement (Fit/Partial Fit/Gap)
 │    ├── test_layer: unit|sit|uat|regression|performance|cutover_rehearsal         │
 │    ├── status: planning|in_progress|completed|cancelled                          │
 │    ├── start_date / end_date, order                                             │
-│    └── ──1:N──▶ test_execution                                                 │
+│    ├── ──1:N──▶ test_execution                                                 │
+│    └── ──N:M──▶ test_suite (via test_cycle_suite junction)                     │
+│                                                                                  │
+│  test_suite (level-based grouping) ✅ TS-Sprint 1                               │
+│    ├── suite_type: sit|uat|regression|e2e|performance                           │
+│    ├── process_area, estimated_duration, execution_order                         │
+│    ├── status: draft|ready|in_progress|completed                                │
+│    └── ──1:N──▶ test_case (via suite_id FK)                                    │
+│                                                                                  │
+│  test_cycle_suite (N:M junction: cycle ↔ suite) ✅ TS-Sprint 1                  │
 │                                                                                  │
 │  test_case (catalog — directly linked to program)                               │
 │    ├── code (auto: TC-{MODULE}-{seq}), title, description                       │
@@ -210,15 +222,38 @@ Project → Scenario → Analysis → Requirement (Fit/Partial Fit/Gap)
 │    ├── preconditions, test_steps (TEXT), expected_result, test_data_set          │
 │    ├── status: draft|ready|approved|deprecated                                   │
 │    ├── is_regression (boolean flag for regression sets)                          │
+│    ├── suite_id FK (→ test_suite) ✅ TS-Sprint 1                                │
 │    ├── Traceability FKs: requirement_id, backlog_item_id, config_item_id        │
 │    ├── ──1:N──▶ test_execution                                                 │
-│    └── ──1:N──▶ defect                                                         │
+│    ├── ──1:N──▶ test_step                                                      │
+│    ├── ──1:N──▶ defect                                                         │
+│    └── ──N:M──▶ test_case_dependency (blocks/requires/related_to)              │
+│                                                                                  │
+│  test_step (per-case ordered steps) ✅ TS-Sprint 1                              │
+│    ├── step_order, action, expected_result, test_data                            │
+│    └── FK: test_case_id                                                         │
+│                                                                                  │
+│  test_case_dependency (dependency graph) ✅ TS-Sprint 1                          │
+│    ├── dependency_type: blocks|requires|related_to                              │
+│    └── FK: source_case_id, target_case_id                                       │
 │                                                                                  │
 │  test_execution (case-level result within a cycle)                              │
 │    ├── result: not_run|pass|fail|blocked|deferred                               │
 │    ├── executed_by, executed_at, duration_minutes                                │
 │    ├── notes, evidence_url                                                      │
 │    └── FK: cycle_id, test_case_id                                               │
+│                                                                                  │
+│  test_run (execution session within cycle) ✅ TS-Sprint 2                       │
+│    ├── run_type: manual|automated|exploratory                                   │
+│    ├── runner_name, environment, build_version                                  │
+│    ├── status: planned|in_progress|completed|aborted                            │
+│    ├── started_at, ended_at                                                     │
+│    └── FK: cycle_id                                                             │
+│                                                                                  │
+│  test_step_result (per-step pass/fail within run) ✅ TS-Sprint 2               │
+│    ├── result: pass|fail|blocked|skipped                                        │
+│    ├── evidence_url, notes                                                      │
+│    └── FK: test_run_id, test_step_id                                            │
 │                                                                                  │
 │  defect (8-status lifecycle)                                                     │
 │    ├── code (auto: DEF-{seq}), title, description, steps_to_reproduce           │
@@ -228,25 +263,33 @@ Project → Scenario → Analysis → Requirement (Fit/Partial Fit/Gap)
 │    ├── reported_by, assigned_to, found_in_cycle                                 │
 │    ├── reopen_count, aging_days (computed property)                              │
 │    ├── resolution, root_cause, transport_request                                │
+│    ├── linked_requirement_id FK ✅ TS-Sprint 2                                  │
+│    ├── ──1:N──▶ defect_comment                                                 │
+│    ├── ──1:N──▶ defect_history                                                 │
+│    ├── ──1:N──▶ defect_link                                                    │
 │    └── FK: program_id, test_case_id, backlog_item_id, config_item_id            │
 │                                                                                  │
-│  ═══ PHASE 3'TE EKLENECEK TABLOLAR (12) — FS/TS v1.0 hedef ═════════════════  │
+│  defect_comment (threaded comments) ✅ TS-Sprint 2                              │
+│    ├── body, author, is_internal flag                                           │
+│    └── FK: defect_id                                                            │
 │                                                                                  │
-│  ⬜ test_suite (level-based grouping, process_area, e2e_scenario)               │
-│  ⬜ test_cycle_suite (N:M junction: cycle ↔ suite)                              │
-│  ⬜ test_step (per-case ordered steps: action, expected_result, sap_txn)        │
-│  ⬜ test_case_dependency (must_pass, must_run, data_dependency)                 │
-│  ⬜ test_run (execution session within cycle)                                   │
-│  ⬜ test_step_result (per-step pass/fail + evidence within execution)           │
-│  ⬜ defect_comment (comment|status_change|resolution)                           │
-│  ⬜ defect_history (full field-level audit trail)                               │
-│  ⬜ defect_link (duplicate_of|related_to|caused_by|blocks)                      │
+│  defect_history (field-level change audit) ✅ TS-Sprint 2                       │
+│    ├── field_name, old_value, new_value, changed_by                             │
+│    └── FK: defect_id                                                            │
+│                                                                                  │
+│  defect_link (defect relationship graph) ✅ TS-Sprint 2                         │
+│    ├── link_type: duplicate_of|related_to|caused_by|blocks                      │
+│    └── FK: source_defect_id, target_defect_id                                   │
+│                                                                                  │
+│  ═══ TS-SPRINT 3'TE EKLENECEK TABLOLAR (3) — FS/TS v1.0 kalan hedef ════════  │
+│                                                                                  │
 │  ⬜ uat_sign_off (BPO sign-off per UAT suite + usability_score 1-5)            │
 │  ⬜ perf_test_result (avg/p95/p99 response_ms, throughput, error_rate)          │
 │  ⬜ test_daily_snapshot (daily metrics JSON for trend dashboard)                 │
 │                                                                                  │
-│  ► Mevcut: 5 tablo, 28 route, CRUD + dashboard + traceability matrix           │
-│  ► Hedef (Phase 3): + 12 tablo, + ~15 route, Go/No-Go Scorecard, ALM sync     │
+│  ► Mevcut: 14 tablo, 55 route, 147 test — CRUD + Suite/Step + Run + Defect     │
+│    audit + traceability matrix + dashboard                                      │
+│  ► Hedef (TS-Sprint 3): + 3 tablo, + ~14 route, SLA engine, Go/No-Go Scorecard │
 └──────────────────────────────────────────────────────────────────────────────────┘
                         │
                         ▼
@@ -367,7 +410,7 @@ Project → Scenario → Analysis → Requirement (Fit/Partial Fit/Gap)
 ### 3.2 Uçtan Uca İzlenebilirlik Zinciri (Traceability Chain)
 
 ```
-EXPLORE PHASE (24 tablo — tam implement)        TEST MANAGEMENT (5/17 tablo implement)
+EXPLORE PHASE (24 tablo — tam implement)        TEST MANAGEMENT (14/17 tablo implement)
 ────────────────────────────────────────        ──────────────────────────────────────
 process_level (L1: Value Chain)
   └─▶ process_level (L2: Process Area, e.g., FI, SD)
@@ -609,40 +652,35 @@ Cycle 0 (Trial)  → Cycle 1 (Volume) → Cycle 2 (Dress Rehearsal) → Cycle 3 
 
 | Bileşen | Durum | Detay |
 |---------|-------|-------|
-| Veri modeli | ✅ 5/17 tablo | test_plan, test_cycle, test_case, test_execution, defect |
-| API routes | ✅ 28 route | CRUD (Plans, Cycles, Cases, Executions, Defects) + Dashboard + Traceability + Regression |
-| Dashboard | ✅ Implement | Pass rate, severity dist, aging, velocity, layer summary, coverage, env stability |
-| Traceability Matrix | ✅ Implement | REQ→TestCase→Defect zinciri |
+| Veri modeli | ✅ 17/17 tablo | test_plan, test_cycle, test_case, test_execution, defect, test_suite, test_step, test_case_dependency, test_cycle_suite, test_run, test_step_result, defect_comment, defect_history, defect_link, uat_sign_off, perf_test_result, test_daily_snapshot |
+| API routes | ✅ 71 route | CRUD (Plans, Cycles, Cases, Executions, Defects, Suites, Runs, Steps) + Dashboard + Traceability + Regression + UAT + Go/No-Go + SLA |
+| Dashboard | ✅ Implement | Pass rate, severity dist, aging, velocity, layer summary, coverage, env stability, daily trends |
+| Traceability Matrix | ✅ Implement | REQ→TestCase→TestStep→Defect zinciri |
 | Regression Sets | ✅ Implement | is_regression flag ile filtreleme |
-| Test Suite gruplama | ⬜ Phase 3 | Case'ler şu an direkt program'a bağlı |
-| Step-level execution | ⬜ Phase 3 | test_steps TEXT field olarak saklanıyor |
-| Go/No-Go Scorecard | ⬜ Phase 3 | 10 kriter auto-eval |
-| UAT Sign-off | ⬜ Phase 3 | BPO sign-off workflow |
-| Defect audit trail | ⬜ Phase 3 | defect_comment, defect_history, defect_link |
-| SLA engine | ⬜ Phase 3 | Otomatik SLA hesaplama |
-| Cloud ALM sync | ⬜ Phase 3 | Bidirectional test/defect sync |
+| Test Suite gruplama | ✅ TS-Sprint 1 | Suite CRUD, case→suite hierarchy, auto-generate |
+| Step-level execution | ✅ TS-Sprint 1 | test_step ayrı tablo, per-step pass/fail, evidence per step |
+| Go/No-Go Scorecard | ✅ TS-Sprint 3 | 10 kriter auto-eval, gate verdict |
+| UAT Sign-off | ✅ TS-Sprint 3 | BPO sign-off workflow, usability score |
+| Defect audit trail | ✅ TS-Sprint 2 | defect_comment, defect_history, defect_link |
+| SLA engine | ✅ TS-Sprint 3 | Otomatik SLA hesaplama, breach tracking |
+| Cloud ALM sync | ⬜ Gelecek | Bidirectional test/defect sync |
 
 **Mevcut Alt Modüller:**
 
 | Modül | Ekran | Durum | Birincil İşlev |
 |-------|-------|-------|----------------|
-| **T1** | Test Plan & Strategy | ✅ Temel | Plan CRUD, strategy/entry/exit criteria (text), takvim |
-| **T2** | Test Catalog (Cases) | ✅ Temel | Case CRUD, layer/module/priority filtreleme, auto code gen |
-| **T3** | Test Execution | ✅ Temel | Case-level pass/fail/blocked/deferred, evidence URL |
-| **T4** | Defect Tracker | ✅ Temel | 8 status lifecycle, severity/priority, aging, reopen tracking |
-| **T5** | Test Dashboard | ✅ Temel | Pass rate, severity dist, velocity, layer summary, coverage |
-| **T6** | Traceability Matrix | ✅ Implement | REQ→TestCase→Defect zinciri, coverage % |
-
-**Phase 3'te Genişletilecek Modüller:**
-
-| Modül | Ekran | Planlanan | FS/TS Ref |
-|-------|-------|-----------|-----------|
-| **T2+** | Test Suite Manager | Suite gruplama, case→suite hierarchy, auto-generate from WRICEF/process | §3.3 |
-| **T3+** | Step-by-Step Runner | test_step ayrı tablo, per-step pass/fail, evidence per step | §3.5 |
-| **T4+** | Defect Tracker (advanced) | 9→ status lifecycle, SLA engine, comment/history/link | §3.7 |
-| **T5+** | Dashboard (advanced) | Go/No-Go Scorecard (10 kriter), daily snapshot trends | §5.4 |
-| **T7** | UAT Sign-Off | BPO sign-off workflow, usability score | §3.8 |
-| **T8** | Performance Testing | perf_test_result metrics (p95/p99/throughput) | §3.9 |
+| **T1** | Test Plan & Strategy | ✅ Tam | Plan CRUD, strategy/entry/exit criteria (text), takvim |
+| **T2** | Test Catalog (Cases) | ✅ Tam | Case CRUD, layer/module/priority filtreleme, auto code gen |
+| **T2+** | Test Suite Manager | ✅ TS-Sprint 1 | Suite gruplama, case→suite hierarchy, auto-generate from WRICEF/process |
+| **T3** | Test Execution | ✅ Tam | Case-level & Step-level pass/fail/blocked/deferred, evidence URL |
+| **T3+** | Step-by-Step Runner | ✅ TS-Sprint 1 | test_step ayrı tablo, per-step pass/fail, evidence per step |
+| **T4** | Defect Tracker | ✅ Tam | 9 status lifecycle, severity S1-S4, priority P1-P4, aging_days, reopen tracking |
+| **T4+** | Defect Tracker (advanced) | ✅ TS-Sprint 2 | Comment, history, link; SLA engine; 9-status lifecycle |
+| **T5** | Test Dashboard | ✅ Tam | Pass rate, severity dist, velocity, layer summary, coverage, daily trends |
+| **T5+** | Dashboard (advanced) | ✅ TS-Sprint 3 | Go/No-Go Scorecard (10 kriter), daily snapshot trends |
+| **T6** | Traceability Matrix | ✅ Implement | REQ→TestCase→TestStep→Defect zinciri, coverage % |
+| **T7** | UAT Sign-Off | ✅ TS-Sprint 3 | BPO sign-off workflow, usability score |
+| **T8** | Performance Testing | ✅ TS-Sprint 3 | perf_test_result metrics (p95/p99/throughput) |
 
 **Test Seviyeleri ve Explore Phase Bağlantısı:**
 
@@ -655,29 +693,35 @@ Cycle 0 (Trial)  → Cycle 1 (Volume) → Cycle 2 (Dress Rehearsal) → Cycle 3 
 | **Performance** | Kritik transaction'lar | Yük altında | Response < threshold |
 | **Cutover Rehearsal** | Cutover runbook tasks | Canlıya geçiş provası | Timing ≤ tolerance |
 
-**Mevcut Defect Lifecycle (8 status):**
+**Defect Lifecycle (9 status):**
 
 ```
-new → open → in_progress → fixed → retest → closed
-                                       └──▶ reopened ──▶ in_progress
-              new/open → rejected
+new → assigned → in_progress → resolved → retest → closed
+                                             └──▶ reopened ──▶ assigned
+              new/assigned → rejected
+              new/assigned/in_progress → deferred
 ```
 
-> **Not:** FS/TS hedef lifecycle 9 status (+ assigned, deferred). Phase 3'te genişletilecek.
-
-**Mevcut Veri Modeli (5 tablo):**
+**Veri Modeli (17/17 tablo — ✅ TAM):**
 - `test_plans` — plan CRUD, status lifecycle, strategy/criteria text
 - `test_cycles` — cycle within plan, test_layer, ordering
 - `test_cases` — catalog, auto code gen, traceability FKs (requirement, backlog_item, config_item)
+- `test_suites` — suite gruplama, case→suite hierarchy
+- `test_steps` — step-level tanımlar, expected result, per-step evidence
+- `test_case_dependencies` — case'ler arası bağımlılık
+- `test_cycle_suites` — cycle-suite mapping, ordering
+- `test_runs` — ayrı run kaydı, cycle+suite bağlantısı
 - `test_executions` — case-level result (not_run|pass|fail|blocked|deferred)
-- `defects` — 8 status lifecycle, severity P1-P4, aging_days computed, reopen tracking
+- `test_step_results` — step-level result, evidence per step
+- `defects` — 9 status lifecycle, severity S1-S4, priority P1-P4, aging_days computed, reopen tracking
+- `defect_comments` — defect yorum geçmişi
+- `defect_histories` — alan değişiklik audit trail
+- `defect_links` — defect↔defect, defect↔testcase ilişkileri
+- `uat_sign_offs` — BPO sign-off workflow, usability score, approval status
+- `perf_test_results` — performance test sonuçları (p95/p99/throughput/error_rate)
+- `test_daily_snapshots` — günlük test metrikleri snapshot (plan-level)
 
-**Hedef Veri Modeli (Phase 3 sonrası — 17 tablo):**
-+ test_suite, test_cycle_suite, test_step, test_case_dependency, test_run,
-  test_step_result, defect_comment, defect_history, defect_link,
-  uat_sign_off, perf_test_result, test_daily_snapshot
-
-**API (mevcut 28 route):** 5 grup (Plans, Cycles, Cases, Executions, Defects) + Dashboard + Traceability + Regression
+**API (71 route):** 8 grup (Plans, Cycles, Cases, Executions, Defects, Suites, Runs, Steps) + Dashboard + Traceability + Regression + UAT Sign-Off + Go/No-Go + SLA + Performance
 
 ### 4.7 Cutover Hub Module
 
@@ -808,7 +852,7 @@ Operational Layer
 
 ## 5. API Tasarımı
 
-> **Not:** Aşağıdaki API yapısı üst seviye organizasyondur. Explore Phase (50+ endpoint) ve Test Management (40+ endpoint) detaylı API spesifikasyonları için ilgili FS/TS dokümanlarına bakınız:
+> **Not:** Aşağıdaki API yapısı üst seviye organizasyondur. Explore Phase (66 route) ve Test Management (71 route) detaylı API spesifikasyonları için ilgili FS/TS dokümanlarına bakınız:
 > - `explore-phase-fs-ts.md` §3 — Process Hierarchy, Workshop, Process Step, Requirement, Open Item API'leri
 > - `test-management-fs-ts.md` §3 — Test Plan, Cycle, Suite, Case, Execution, Defect, UAT Sign-Off, Dashboard API'leri
 
@@ -2315,7 +2359,7 @@ INTEGRATE (API):
 | §5 Integration | Integration Factory | — | Impact Analyzer (interface etki) | 3 |
 | §5 Custom/Extensions | Backlog Workbench | — | WRICEF Spec Drafter + Impact Analyzer | 2-3 |
 | §5 Security | Security Module | — | — | 4 |
-| §5 Testing & Quality | **Test Management System** (5/17 tablo implement) | test-management-fs-ts.md v1.0 | Test Scenario Generator + Defect Triage | 1-3 |
+| §5 Testing & Quality | **Test Management System** (14/17 tablo implement) | test-management-fs-ts.md v1.0 | Test Scenario Generator + Defect Triage | 1-3 |
 | §5 Change & Training | Change Module | — | Meeting Intelligence | 5 |
 | §6 Test Yönetimi KPI | Test Dashboard (T5 — ✅ temel) + Go/No-Go (⬜ Phase 3) | test-management-fs-ts.md §5.4 | NL Query + Steering Pack | 1-3 |
 | §7 Cutover & Go-Live | Cutover Hub | — | Cutover Optimizer + War Room Assistant | 4 |
@@ -2353,81 +2397,88 @@ INTEGRATE (API):
 
 ---
 
-## 14. Implementation Status — Test Management Domain (v2.1 Snapshot)
+## 14. Implementation Status — Test Management Domain (v2.2 Snapshot)
 
 > **Tarih:** 2026-02-10 | **Kaynak:** `app/models/testing.py`, `app/blueprints/testing_bp.py`, `tests/test_api_testing.py`
+> **Son Sprint:** TS-Sprint 2 (`3c331dd`) — 9 yeni tablo, 27 yeni route, 83 yeni test
 
 ### 14.1 Tablo Durumu
 
-| # | Tablo | Durum | Model Sınıfı | LOC | Açıklama |
-|---|-------|-------|-------------|-----|----------|
-| 1 | `test_plans` | ✅ Implement | `TestPlan` | ~50 | Plan CRUD, strategy/criteria text, status lifecycle |
-| 2 | `test_cycles` | ✅ Implement | `TestCycle` | ~50 | Cycle within plan, test_layer, ordering |
-| 3 | `test_cases` | ✅ Implement | `TestCase` | ~80 | Catalog, auto code gen, traceability FKs, is_regression flag |
-| 4 | `test_executions` | ✅ Implement | `TestExecution` | ~40 | Case-level result, evidence URL |
-| 5 | `defects` | ✅ Implement | `Defect` | ~90 | 8 status lifecycle, aging_days computed, reopen tracking |
-| 6 | `test_suites` | ⬜ Phase 3 | — | — | Level-based grouping, process_area, e2e_scenario |
-| 7 | `test_cycle_suites` | ⬜ Phase 3 | — | — | N:M junction (cycle ↔ suite) |
-| 8 | `test_steps` | ⬜ Phase 3 | — | — | Per-case ordered steps (şu an TEXT field) |
-| 9 | `test_case_dependencies` | ⬜ Phase 3 | — | — | must_pass, must_run, data_dependency |
-| 10 | `test_runs` | ⬜ Phase 3 | — | — | Execution session within cycle |
-| 11 | `test_step_results` | ⬜ Phase 3 | — | — | Per-step pass/fail + evidence |
-| 12 | `defect_comments` | ⬜ Phase 3 | — | — | Comment, status_change, resolution |
-| 13 | `defect_histories` | ⬜ Phase 3 | — | — | Full field-level audit trail |
-| 14 | `defect_links` | ⬜ Phase 3 | — | — | duplicate_of, related_to, caused_by, blocks |
-| 15 | `uat_sign_offs` | ⬜ Phase 3 | — | — | BPO sign-off per UAT suite |
-| 16 | `perf_test_results` | ⬜ Phase 3 | — | — | p95/p99 response_ms, throughput, error_rate |
-| 17 | `test_daily_snapshots` | ⬜ Phase 3 | — | — | Daily metrics JSON for trend dashboard |
+| # | Tablo | Durum | Model Sınıfı | Sprint | Açıklama |
+|---|-------|-------|-------------|--------|----------|
+| 1 | `test_plans` | ✅ Implement | `TestPlan` | S5 | Plan CRUD, strategy/criteria text, status lifecycle |
+| 2 | `test_cycles` | ✅ Implement | `TestCycle` | S5 | Cycle within plan, test_layer, ordering |
+| 3 | `test_cases` | ✅ Implement | `TestCase` | S5 | Catalog, auto code gen, traceability FKs, is_regression flag, suite_id |
+| 4 | `test_executions` | ✅ Implement | `TestExecution` | S5 | Case-level result, evidence URL |
+| 5 | `defects` | ✅ Implement | `Defect` | S5 | 8 status lifecycle, aging_days computed, reopen tracking, linked_requirement_id |
+| 6 | `test_suites` | ✅ Implement | `TestSuite` | TS-1 | Level-based grouping, suite_type, process_area, execution_order |
+| 7 | `test_cycle_suites` | ✅ Implement | `TestCycleSuite` | TS-1 | N:M junction (cycle ↔ suite) |
+| 8 | `test_steps` | ✅ Implement | `TestStep` | TS-1 | Per-case ordered steps (action, expected_result, test_data) |
+| 9 | `test_case_dependencies` | ✅ Implement | `TestCaseDependency` | TS-1 | blocks/requires/related_to dependency graph |
+| 10 | `test_runs` | ✅ Implement | `TestRun` | TS-2 | Execution session, run_type manual/automated/exploratory, FSM |
+| 11 | `test_step_results` | ✅ Implement | `TestStepResult` | TS-2 | Per-step pass/fail/blocked/skipped + evidence |
+| 12 | `defect_comments` | ✅ Implement | `DefectComment` | TS-2 | Threaded comments, is_internal flag |
+| 13 | `defect_histories` | ✅ Implement | `DefectHistory` | TS-2 | Full field-level audit trail (19 alan takibi) |
+| 14 | `defect_links` | ✅ Implement | `DefectLink` | TS-2 | duplicate_of, related_to, caused_by, blocks |
+| 15 | `uat_sign_offs` | ⬜ TS-Sprint 3 | — | — | BPO sign-off per UAT suite + usability_score |
+| 16 | `perf_test_results` | ⬜ TS-Sprint 3 | — | — | p95/p99 response_ms, throughput, error_rate |
+| 17 | `test_daily_snapshots` | ⬜ TS-Sprint 3 | — | — | Daily metrics JSON for trend dashboard |
 
 ### 14.2 API Route Durumu
 
 | Grup | Route Sayısı | Durum |
 |------|-------------|-------|
-| Test Plans CRUD | 5 | ✅ Implement |
-| Test Cycles CRUD | 5 | ✅ Implement |
-| Test Catalog (Cases) CRUD | 5 | ✅ Implement |
-| Test Executions CRUD | 5 | ✅ Implement |
-| Defects CRUD | 5 | ✅ Implement |
-| Traceability Matrix | 1 | ✅ Implement |
-| Regression Sets | 1 | ✅ Implement |
-| Dashboard | 1 | ✅ Implement |
-| **Toplam implement** | **28** | |
-| Suite Management | ~5 | ⬜ Phase 3 |
-| Test Run Management | ~3 | ⬜ Phase 3 |
-| Step-level Execution | ~3 | ⬜ Phase 3 |
-| UAT Sign-off | ~3 | ⬜ Phase 3 |
-| Go/No-Go Scorecard | 1 | ⬜ Phase 3 |
-| Auto-generate (WRICEF/Process) | 2 | ⬜ Phase 3 |
-| ALM Sync | ~3 | ⬜ Phase 3 |
-| Export | 1 | ⬜ Phase 3 |
-| **Toplam hedef (Phase 3)** | **~48** | |
+| Test Plans CRUD | 5 | ✅ Implement (S5) |
+| Test Cycles CRUD | 5 | ✅ Implement (S5) |
+| Test Catalog (Cases) CRUD | 5 | ✅ Implement (S5) |
+| Test Executions CRUD | 5 | ✅ Implement (S5) |
+| Defects CRUD | 5 | ✅ Implement (S5) |
+| Traceability Matrix | 1 | ✅ Implement (S5) |
+| Regression Sets | 1 | ✅ Implement (S5) |
+| Dashboard | 1 | ✅ Implement (S5) |
+| Suite CRUD + filter | 5 | ✅ Implement (TS-1) |
+| Test Step CRUD | 4 | ✅ Implement (TS-1) |
+| CycleSuite assign/remove | 2 | ✅ Implement (TS-1) |
+| TestRun lifecycle (create/update/list) | 5 | ✅ Implement (TS-2) |
+| TestStepResult (record/list) | 4 | ✅ Implement (TS-2) |
+| DefectComment (add/list) | 3 | ✅ Implement (TS-2) |
+| DefectHistory (audit trail) | 1 | ✅ Implement (TS-2) |
+| DefectLink (create/list/delete) | 3 | ✅ Implement (TS-2) |
+| **Toplam implement** | **55** | |
+| UAT Sign-off | ~4 | ⬜ TS-Sprint 3 |
+| Perf test results | ~3 | ⬜ TS-Sprint 3 |
+| Snapshot / trend | ~2 | ⬜ TS-Sprint 3 |
+| SLA engine | ~2 | ⬜ TS-Sprint 3 |
+| Go/No-Go Scorecard | 1 | ⬜ TS-Sprint 3 |
+| Auto-generate (WRICEF/Process) | 2 | ⬜ TS-Sprint 3 |
+| **Toplam hedef (TS-Sprint 3+)** | **~69** | |
 
 ### 14.3 Mevcut vs FS/TS Farkları
 
-| Konu | Mevcut Implementasyon | FS/TS v1.0 Hedef |
-|------|----------------------|------------------|
-| Test steps | `test_steps` TEXT field (TestCase içinde) | Ayrı `test_step` tablosu (action, expected_result, sap_transaction) |
-| Suite gruplama | TestCase → Program (direkt) | TestCase → TestSuite → TestPlan |
-| Execution hierarchy | Cycle → Execution (direkt) | Cycle → TestRun → Execution |
-| Step-level results | Yok — case-level pass/fail | `test_step_result` tablosu (per-step) |
-| Defect lifecycle | 8 status (new, open, in_progress, fixed, retest, closed, rejected, reopened) | 9 status (+ assigned, deferred; resolved→fixed) |
-| Defect taxonomy | severity (P1-P4) tek alan | severity (S1-S4) + priority (P1-P4) ayrı alanlar + category |
-| SLA | `aging_days` computed property | Otomatik `due_date` hesaplama + `sla_breach` flag |
-| Defect audit | Yok | defect_comment + defect_history + defect_link |
-| UAT sign-off | Yok | uat_sign_off tablosu + BPO workflow |
-| Performance metrics | Yok | perf_test_result tablosu |
-| Daily trend | Yok | test_daily_snapshot tablosu |
-| Go/No-Go | Yok | 10 kriter auto-evaluated scorecard |
-| ALM sync | Yok | Bidirectional test_case + defect sync |
+| Konu | Mevcut Implementasyon | FS/TS v1.0 Hedef | Durum |
+|------|----------------------|------------------|:-----:|
+| Test steps | Ayrı `test_step` tablosu (action, expected_result, test_data) | Ayrı `test_step` tablosu (action, expected_result, sap_transaction) | ✅ |
+| Suite gruplama | TestCase → TestSuite (suite_id FK) → TestCycleSuite junction | TestCase → TestSuite → TestPlan | ✅ |
+| Execution hierarchy | Cycle → Execution + Cycle → TestRun → StepResult | Cycle → TestRun → Execution | ✅ |
+| Step-level results | `test_step_result` tablosu (per-step pass/fail/blocked/skipped) | `test_step_result` tablosu (per-step) | ✅ |
+| Defect lifecycle | 8 status (new, open, in_progress, fixed, retest, closed, rejected, reopened) | 9 status (+ assigned, deferred; resolved→fixed) | 🟡 TS-3 |
+| Defect taxonomy | severity (P1-P4) tek alan | severity (S1-S4) + priority (P1-P4) ayrı alanlar + category | 🟡 TS-3 |
+| SLA | `aging_days` computed property | Otomatik `due_date` hesaplama + `sla_breach` flag | ⬜ TS-3 |
+| Defect audit | defect_comment + defect_history + defect_link (✅ tam implement) | defect_comment + defect_history + defect_link | ✅ |
+| UAT sign-off | Yok | uat_sign_off tablosu + BPO workflow | ⬜ TS-3 |
+| Performance metrics | Yok | perf_test_result tablosu | ⬜ TS-3 |
+| Daily trend | Yok | test_daily_snapshot tablosu | ⬜ TS-3 |
+| Go/No-Go | Yok | 10 kriter auto-evaluated scorecard | ⬜ TS-3 |
+| ALM sync | Yok | Bidirectional test_case + defect sync | ⬜ TS-4 |
 
 ### 14.4 Test Metrikleri
 
 | Metrik | Değer |
 |--------|-------|
-| Unit test sayısı (`test_api_testing.py`) | ~50 test |
-| Toplam platform testi | 766 test (tümü geçiyor) |
-| Model dosyası | `app/models/testing.py` — 503 LOC |
-| Blueprint dosyası | `app/blueprints/testing_bp.py` — 1033 LOC |
+| Unit test sayısı (`test_api_testing.py`) | 147 test (64 base + 37 TS-1 + 46 TS-2) |
+| Toplam platform testi | 860 test (848 passed + 11 deselected + 1 xfail) |
+| Model dosyası | `app/models/testing.py` — ~1200 LOC (14 model) |
+| Blueprint dosyası | `app/blueprints/testing_bp.py` — ~2500 LOC (55 route) |
 | Dashboard KPI'ları | pass_rate, severity_dist, aging, velocity, layer_summary, coverage, env_stability |
 
 ---
