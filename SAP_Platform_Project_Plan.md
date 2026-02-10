@@ -702,6 +702,153 @@ RELEASE 6: Advanced + AI Maturity (Sprint 21-24, 8 hafta)
 
 ---
 
+### 📋 TEST SUITE SPRINT PLAN (Test Management FS/TS Genişletme)
+
+> **Kapsam:** Test Management FS/TS dokümanındaki 17 tablo / 45 endpoint hedefine ulaşmak için 6 sprint planı.
+> Mevcut durum: 5/17 tablo, 28/45 endpoint — **Hedef: Tam uyum (%100)**
+
+#### Özet Tablo
+
+| Sprint | Odak | Yeni Tablo | Yeni Route | Yeni Test | Task |
+|--------|------|-----------|------------|-----------|------|
+| TS-1 | Test Suite & Step Altyapısı | +4 | +11 | ~40 | 12 |
+| TS-2 | TestRun & Defect Zenginleştirme | +5 | +15 | ~50 | 15 |
+| TS-3 | UAT Sign-off, SLA & Go/No-Go | +3 | +9 | ~35 | 12 |
+| TS-4 | Cloud ALM Sync & URL Standardizasyonu | 0 | +3 | ~20 | 10 |
+| TS-5 | Legacy Model Sunset & Veri Taşıma | 0 | 0 | ~10 | 10 |
+| TS-6 | Final Temizlik, Performans & Dokümantasyon | -9 (legacy drop) | 0 | ~5 | 10 |
+| **Toplam** | | **+12 / -9 net** | **+38** | **~160** | **69** |
+
+---
+
+#### TS-Sprint 1 — Test Suite & Step Altyapısı (Kısa Vade)
+
+| # | Task | Açıklama | Tahmini Süre |
+|---|------|----------|-------------|
+| TS-1.1 | `TestSuite` modeli oluştur | suite_type (SIT/UAT/Regression), status FSM, program_id FK | 2 saat |
+| TS-1.2 | `TestStep` modeli oluştur | test_case_id FK, step_no, action, expected, test_data | 1.5 saat |
+| TS-1.3 | `TestCaseDependency` modeli | predecessor/successor ilişkisi, dependency_type | 1 saat |
+| TS-1.4 | `TestCycleSuite` junction modeli | cycle ↔ suite N:M ilişkisi | 1 saat |
+| TS-1.5 | Alembic migration — 4 yeni tablo | Mevcut testing.py'ye entegre | 0.5 saat |
+| TS-1.6 | TestSuite CRUD API (5 endpoint) | POST/GET/PUT/DELETE/list + filtreleme | 2 saat |
+| TS-1.7 | TestStep CRUD API (4 endpoint) | case/:id/steps altında nested | 1.5 saat |
+| TS-1.8 | TestCycleSuite assign/remove (2 endpoint) | cycle ↔ suite bağlama | 1 saat |
+| TS-1.9 | TestCase.steps eager loading | Mevcut case endpoint'lerini güncelle | 0.5 saat |
+| TS-1.10 | Seed data — suite & step demo verisi | seed_demo_data.py genişlet | 1 saat |
+| TS-1.11 | pytest — suite/step/dependency testleri (~40 test) | CRUD + FSM + edge case | 2 saat |
+| TS-1.12 | Mevcut TestCase modelini TestSuite FK ile güncelle | suite_id nullable FK ekle | 0.5 saat |
+
+**TS-Sprint 1 Toplam: ~14.5 saat**
+
+---
+
+#### TS-Sprint 2 — TestRun & Defect Zenginleştirme (Kısa Vade)
+
+| # | Task | Açıklama | Tahmini Süre |
+|---|------|----------|-------------|
+| TS-2.1 | `TestRun` modeli oluştur | execution bağımsız — run_type (manual/automated), environment, started/finished | 2 saat |
+| TS-2.2 | `TestStepResult` modeli | run_id + step_id → step-level pass/fail/blocked, screenshot_url | 1.5 saat |
+| TS-2.3 | `DefectComment` modeli | defect_id FK, author, body, created_at | 1 saat |
+| TS-2.4 | `DefectHistory` modeli | defect_id FK, field, old/new, changed_by, timestamp | 1 saat |
+| TS-2.5 | `DefectLink` modeli | source_defect / target_defect, link_type (duplicate/related/blocks) | 1 saat |
+| TS-2.6 | Alembic migration — 5 yeni tablo | Tek migration, FK constraint'ler | 0.5 saat |
+| TS-2.7 | TestRun lifecycle API (5 endpoint) | start, progress, complete, abort, get | 2 saat |
+| TS-2.8 | TestStepResult API (4 endpoint) | run/:id/steps altında CRUD | 1.5 saat |
+| TS-2.9 | DefectComment API (3 endpoint) | defect/:id/comments altında | 1 saat |
+| TS-2.10 | DefectHistory otomatik kayıt | Defect PUT hook → history insert (event-driven) | 1.5 saat |
+| TS-2.11 | DefectLink API (3 endpoint) | link CRUD + duplicate chain traversal | 1 saat |
+| TS-2.12 | Defect modelini genişlet | root_cause, resolution, environment, linked_requirement alanları | 1 saat |
+| TS-2.13 | TestExecution → TestRun migration bridge | Mevcut execution verilerini run'a map'le | 1 saat |
+| TS-2.14 | Seed data — run & defect enrichment | Demo senaryolar | 1 saat |
+| TS-2.15 | pytest — run/step-result/defect testleri (~50 test) | Lifecycle + history + linking | 2.5 saat |
+
+**TS-Sprint 2 Toplam: ~19.5 saat**
+
+---
+
+#### TS-Sprint 3 — UAT Sign-off, SLA Engine & Go/No-Go (Orta Vade)
+
+| # | Task | Açıklama | Tahmini Süre |
+|---|------|----------|-------------|
+| TS-3.1 | `UATSignOff` modeli | suite_id, approver, status (pending/approved/rejected), criteria JSON | 1.5 saat |
+| TS-3.2 | `PerfTestResult` modeli | test_case_id, response_time, throughput, error_rate, environment | 1.5 saat |
+| TS-3.3 | `TestDailySnapshot` modeli | snapshot_date, total/passed/failed/blocked, defect_open/closed | 1 saat |
+| TS-3.4 | Alembic migration — 3 yeni tablo | FK constraint'ler + index'ler | 0.5 saat |
+| TS-3.5 | UAT Sign-off API (4 endpoint) | initiate / approve / reject / status | 2 saat |
+| TS-3.6 | Performance test result API (3 endpoint) | POST result / GET trend / GET comparison | 1.5 saat |
+| TS-3.7 | Snapshot cron/trigger servisi | Günlük snapshot oluşturma + manual trigger endpoint | 2 saat |
+| TS-3.8 | SLA engine — cycle deadline & defect SLA | sla_config JSON, overdue hesaplama, dashboard kırmızı flag | 2.5 saat |
+| TS-3.9 | Go/No-Go readiness aggregation | Suite pass rate + critical defect count + sign-off status → readiness score | 2 saat |
+| TS-3.10 | Dashboard endpoint genişletme | Burn-down chart data + SLA compliance + trend verisi | 1.5 saat |
+| TS-3.11 | Seed data — UAT & perf senaryoları | 3 UAT suite + 10 perf result + 30 gün snapshot | 1 saat |
+| TS-3.12 | pytest — UAT/SLA/snapshot testleri (~35 test) | Sign-off flow + SLA overdue + aggregation | 2 saat |
+
+**TS-Sprint 3 Toplam: ~19 saat**
+
+---
+
+#### TS-Sprint 4 — Cloud ALM Sync & URL Standardizasyonu (Orta Vade)
+
+| # | Task | Açıklama | Tahmini Süre |
+|---|------|----------|-------------|
+| TS-4.1 | Cloud ALM test case sync servisi | Explore'daki CloudALMSyncLog pattern'ini kullan | 2 saat |
+| TS-4.2 | Cloud ALM defect sync servisi | Bidirectional sync stub + webhook receiver | 2 saat |
+| TS-4.3 | Cloud ALM sync status API (3 endpoint) | trigger-sync / status / history | 1.5 saat |
+| TS-4.4 | URL pattern standardizasyonu | `/api/testing/*` prefix'ini FS/TS ile hizala | 1.5 saat |
+| TS-4.5 | Regression set endpoint genişletme | Auto-select by module, risk priority, last-failed | 1.5 saat |
+| TS-4.6 | Export endpoint'leri | CSV/Excel export for test cases, defects, results | 2 saat |
+| TS-4.7 | Bulk operations API | Bulk status update, bulk assign, bulk re-run | 1.5 saat |
+| TS-4.8 | Webhook notification entegrasyonu | Test fail → notification, defect critical → alert | 1.5 saat |
+| TS-4.9 | API documentation (OpenAPI spec) | Testing modülü Swagger tanımları | 1.5 saat |
+| TS-4.10 | pytest — sync/export/bulk testleri (~20 test) | Sync mock + export format + bulk ops | 2 saat |
+
+**TS-Sprint 4 Toplam: ~17 saat**
+
+---
+
+#### TS-Sprint 5 — Legacy Model Sunset & Veri Taşıma (Uzun Vade)
+
+| # | Task | Açıklama | Tahmini Süre |
+|---|------|----------|-------------|
+| TS-5.1 | TestExecution → TestRun veri taşıma scripti | Mevcut execution kayıtlarını run + step_result'a dönüştür | 2 saat |
+| TS-5.2 | TestExecution deprecation flag'i | Soft-delete, API uyarı header'ı | 1 saat |
+| TS-5.3 | Eski testing endpoint'lerini yeni yapıya yönlendir | 301 redirect veya alias route | 1.5 saat |
+| TS-5.4 | Dashboard SQL sorgularını yeni tablolara güncelle | Aggregate sorgular test_run + step_result kullanacak | 2 saat |
+| TS-5.5 | Traceability servisini güncelle | Suite → Case → Step → Run → Defect zinciri | 2 saat |
+| TS-5.6 | AI Defect Triage asistanını güncelle | Yeni DefectHistory + DefectLink verilerini kullan | 1.5 saat |
+| TS-5.7 | AI Test Generator asistanını güncelle | TestSuite + TestStep yapısına uyumlu output | 1.5 saat |
+| TS-5.8 | Regression test — tüm mevcut 64 testing testi güncelle | Yeni model referanslarına geçir | 2 saat |
+| TS-5.9 | Seed data güncelle | seed_demo_data.py yeni yapıya uyumlu hale getir | 1 saat |
+| TS-5.10 | Integration test — cross-module doğrulama | Requirement → Suite → Case → Run → Defect → ALM zinciri | 1.5 saat |
+
+**TS-Sprint 5 Toplam: ~16 saat**
+
+---
+
+#### TS-Sprint 6 — Final Temizlik, Performans & Dokümantasyon (Uzun Vade)
+
+| # | Task | Açıklama | Tahmini Süre |
+|---|------|----------|-------------|
+| TS-6.1 | Legacy tablo drop migration | TestExecution + eski scope/scenario tabloları kaldır (-9 tablo) | 1 saat |
+| TS-6.2 | Orphan foreign key temizliği | Eski FK referanslarını kontrol et ve temizle | 1.5 saat |
+| TS-6.3 | Index optimizasyonu | Yeni tablolar için composite index + partial index | 1.5 saat |
+| TS-6.4 | Query performans testi | 1000 test case + 500 defect ile yük testi | 2 saat |
+| TS-6.5 | API response time benchmark | Her endpoint <200ms hedefi | 1 saat |
+| TS-6.6 | FS/TS compliance final check | 17/17 tablo, 45/45 endpoint kontrol listesi | 1 saat |
+| TS-6.7 | Mimari doküman güncellemesi | architecture_v2.md Test Management bölümünü güncelle | 1.5 saat |
+| TS-6.8 | Progress report güncellemesi | Tüm metrikleri final değerlerle güncelle | 1 saat |
+| TS-6.9 | Test coverage raporu | pytest --cov ile coverage analizi + eksik coverage doldur | 1.5 saat |
+| TS-6.10 | Gate check — Test Management modülü final | FS/TS tam uyum onayı | 0.5 saat |
+
+**TS-Sprint 6 Toplam: ~13 saat**
+
+---
+
+> **📌 Test Suite Sprint Plan Toplam Effort:** ~99 saat (69 task)
+> **Hedef:** testing.py 5 tablo → 17 tablo, testing_bp.py 28 route → 66 route, testler 64 → 224+
+
+---
+
 ### RELEASE 4: Go-Live Readiness + AI Quality (Hafta 25-32)
 
 #### Sprint 13: Cutover Hub + Vue 3 Phase 2c & 3 (Hafta 25-26)

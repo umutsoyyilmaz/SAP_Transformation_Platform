@@ -442,6 +442,72 @@ Explore Phase FS/TS dokümanından (2,787 satır) çıkarılan 150 atomik görev
 
 ---
 
+## 📋 Test Suite Sprint Plan (Test Management FS/TS Genişletme)
+
+> **Durum:** Test Management FS/TS dokümanıyla karşılaştırma sonucu oluşturulan 6 sprint'lik genişletme planı.
+> **Mevcut:** 5/17 tablo, 28/45 endpoint — **Hedef:** 17/17 tablo, 66 endpoint, ~224 test
+
+### Özet
+
+| Sprint | Odak | Yeni Tablo | Yeni Route | Yeni Test | Task |
+|--------|------|-----------|------------|-----------|------|
+| TS-1 | Test Suite & Step Altyapısı | +4 | +11 | ~40 | 12 |
+| TS-2 | TestRun & Defect Zenginleştirme | +5 | +15 | ~50 | 15 |
+| TS-3 | UAT Sign-off, SLA & Go/No-Go | +3 | +9 | ~35 | 12 |
+| TS-4 | Cloud ALM Sync & URL Standardizasyonu | 0 | +3 | ~20 | 10 |
+| TS-5 | Legacy Model Sunset & Veri Taşıma | 0 | 0 | ~10 | 10 |
+| TS-6 | Final Temizlik, Performans & Dokümantasyon | -9 (legacy drop) | 0 | ~5 | 10 |
+| **Toplam** | | **+12 / -9 net** | **+38** | **~160** | **69** |
+
+**Toplam Effort:** ~99 saat (69 task)
+
+### Sprint Detayları
+
+**TS-Sprint 1 — Test Suite & Step Altyapısı (Kısa Vade, ~14.5 saat)**
+- `TestSuite` modeli (suite_type SIT/UAT/Regression, status FSM)
+- `TestStep` modeli (action, expected, test_data)
+- `TestCaseDependency` + `TestCycleSuite` junction modelleri
+- Suite CRUD (5 endpoint) + Step CRUD (4 endpoint) + CycleSuite assign (2 endpoint)
+- Seed data + 40 test
+
+**TS-Sprint 2 — TestRun & Defect Zenginleştirme (Kısa Vade, ~19.5 saat)**
+- `TestRun` modeli (run_type manual/automated, environment)
+- `TestStepResult` modeli (step-level pass/fail/blocked)
+- `DefectComment` + `DefectHistory` + `DefectLink` modelleri
+- TestRun lifecycle (5 endpoint) + StepResult (4) + DefectComment (3) + DefectLink (3)
+- Defect model genişletme (root_cause, resolution, environment)
+- Seed data + 50 test
+
+**TS-Sprint 3 — UAT Sign-off, SLA & Go/No-Go (Orta Vade, ~19 saat)**
+- `UATSignOff` + `PerfTestResult` + `TestDailySnapshot` modelleri
+- UAT Sign-off API (4 endpoint) + Perf result (3) + Snapshot service (2)
+- SLA engine (deadline & defect SLA, overdue hesaplama)
+- Go/No-Go readiness aggregation
+- 35 test
+
+**TS-Sprint 4 — Cloud ALM Sync & URL Standardizasyonu (Orta Vade, ~17 saat)**
+- Cloud ALM test case + defect sync servisleri
+- URL pattern standardizasyonu (`/api/testing/*` hizalama)
+- Regression set genişletme + Export (CSV/Excel) + Bulk operations
+- API documentation (OpenAPI spec) + 20 test
+
+**TS-Sprint 5 — Legacy Model Sunset & Veri Taşıma (Uzun Vade, ~16 saat)**
+- TestExecution → TestRun veri taşıma scripti
+- Eski endpoint redirect + dashboard SQL güncelleme
+- Traceability servis güncelleme (Suite → Case → Step → Run → Defect)
+- AI Defect Triage + Test Generator asistanlarını güncelle
+- Mevcut 64 testing testini yeni modele geçir + 10 cross-module test
+
+**TS-Sprint 6 — Final Temizlik, Performans & Dokümantasyon (Uzun Vade, ~13 saat)**
+- Legacy tablo drop migration (-9 tablo)
+- Index optimizasyonu + query performans testi (1000 case, 500 defect)
+- FS/TS compliance final check (17/17 tablo, 45/45 endpoint)
+- Mimari doküman + progress report güncelleme + test coverage raporu
+
+> **📌 Detaylı task listesi:** SAP_Platform_Project_Plan.md → "TEST SUITE SPRINT PLAN" bölümü
+
+---
+
 ## Code Review & Hardening (28 Bulgu Düzeltildi)
 
 Kapsamlı kod incelemesi sonrasında 67 bulgu tespit edildi. CRITICAL, HIGH ve MEDIUM öncelikli 28 bulgu düzeltildi.
