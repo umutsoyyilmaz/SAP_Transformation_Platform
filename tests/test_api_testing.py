@@ -1,6 +1,7 @@
 """
 SAP Transformation Management Platform
-Tests — Testing API (Sprint 5: Test Hub + TS-Sprint 1: Suite & Step).
+Tests — Testing API (Sprint 5: Test Hub + TS-Sprint 1: Suite & Step
+                     + TS-Sprint 2: TestRun, StepResult, DefectComment/History/Link).
 
 Covers:
     - Test Plans CRUD
@@ -15,6 +16,11 @@ Covers:
     - Test Steps CRUD + auto step_no
     - Cycle ↔ Suite assignments
     - TestCase.suite_id support
+    - Test Runs CRUD + lifecycle (TS-Sprint 2)
+    - Test Step Results CRUD (TS-Sprint 2)
+    - Defect Comments CRUD (TS-Sprint 2)
+    - Defect History auto-record (TS-Sprint 2)
+    - Defect Links CRUD (TS-Sprint 2)
 """
 
 import pytest
@@ -1002,3 +1008,431 @@ class TestCycleSuiteAssignment:
         res = client.delete(
             f"/api/v1/testing/cycles/{cycle['id']}/suites/{suite['id']}")
         assert res.status_code == 404
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# HELPERS — TS-Sprint 2
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _create_run(client, cycle_id, case_id, **overrides):
+    payload = {"test_case_id": case_id, "run_type": "manual",
+               "environment": "SIT", "tester": "Ahmet"}
+    payload.update(overrides)
+    res = client.post(f"/api/v1/testing/cycles/{cycle_id}/runs", json=payload)
+    assert res.status_code == 201
+    return res.get_json()
+
+
+def _create_step_result(client, run_id, step_no=1, **overrides):
+    payload = {"step_no": step_no, "result": "pass",
+               "actual_result": "OK"}
+    payload.update(overrides)
+    res = client.post(f"/api/v1/testing/runs/{run_id}/step-results", json=payload)
+    assert res.status_code == 201
+    return res.get_json()
+
+
+def _create_defect_comment(client, defect_id, **overrides):
+    payload = {"author": "Tester A", "body": "Investigating root cause"}
+    payload.update(overrides)
+    res = client.post(f"/api/v1/testing/defects/{defect_id}/comments", json=payload)
+    assert res.status_code == 201
+    return res.get_json()
+
+
+def _setup_run_env(client):
+    """Helper: program, plan, cycle, case → returns (pid, cycle, case)."""
+    p = _create_program(client)
+    plan = _create_plan(client, p["id"])
+    cycle = _create_cycle(client, plan["id"])
+    tc = _create_case(client, p["id"])
+    return p["id"], cycle, tc
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST RUNS  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestTestRuns:
+    def test_create_run(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        run = _create_run(client, cycle["id"], tc["id"])
+        assert run["run_type"] == "manual"
+        assert run["status"] == "not_started"
+        assert run["cycle_id"] == cycle["id"]
+
+    def test_create_run_no_case(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        res = client.post(f"/api/v1/testing/cycles/{cycle['id']}/runs", json={})
+        assert res.status_code == 400
+
+    def test_create_run_case_not_found(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        res = client.post(f"/api/v1/testing/cycles/{cycle['id']}/runs",
+                          json={"test_case_id": 99999})
+        assert res.status_code == 404
+
+    def test_list_runs(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        _create_run(client, cycle["id"], tc["id"])
+        _create_run(client, cycle["id"], tc["id"], run_type="automated")
+        res = client.get(f"/api/v1/testing/cycles/{cycle['id']}/runs")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["total"] == 2
+
+    def test_list_runs_filter_type(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        _create_run(client, cycle["id"], tc["id"], run_type="manual")
+        _create_run(client, cycle["id"], tc["id"], run_type="automated")
+        res = client.get(f"/api/v1/testing/cycles/{cycle['id']}/runs?run_type=automated")
+        data = res.get_json()
+        assert data["total"] == 1
+        assert data["items"][0]["run_type"] == "automated"
+
+    def test_list_runs_filter_status(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        _create_run(client, cycle["id"], tc["id"], status="completed")
+        _create_run(client, cycle["id"], tc["id"], status="not_started")
+        res = client.get(f"/api/v1/testing/cycles/{cycle['id']}/runs?status=completed")
+        data = res.get_json()
+        assert data["total"] == 1
+
+    def test_get_run(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        run = _create_run(client, cycle["id"], tc["id"])
+        res = client.get(f"/api/v1/testing/runs/{run['id']}")
+        assert res.status_code == 200
+        assert res.get_json()["id"] == run["id"]
+
+    def test_get_run_not_found(self, client):
+        res = client.get("/api/v1/testing/runs/99999")
+        assert res.status_code == 404
+
+    def test_get_run_include_step_results(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        run = _create_run(client, cycle["id"], tc["id"])
+        _create_step_result(client, run["id"], step_no=1)
+        res = client.get(f"/api/v1/testing/runs/{run['id']}?include_step_results=1")
+        data = res.get_json()
+        assert "step_results" in data
+        assert len(data["step_results"]) == 1
+
+    def test_update_run(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        run = _create_run(client, cycle["id"], tc["id"])
+        res = client.put(f"/api/v1/testing/runs/{run['id']}",
+                         json={"status": "in_progress"})
+        assert res.status_code == 200
+        assert res.get_json()["status"] == "in_progress"
+        # started_at should be auto-set
+        assert res.get_json()["started_at"] is not None
+
+    def test_update_run_complete(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        run = _create_run(client, cycle["id"], tc["id"])
+        client.put(f"/api/v1/testing/runs/{run['id']}",
+                   json={"status": "in_progress"})
+        res = client.put(f"/api/v1/testing/runs/{run['id']}",
+                         json={"status": "completed", "result": "pass"})
+        data = res.get_json()
+        assert data["status"] == "completed"
+        assert data["finished_at"] is not None
+
+    def test_update_run_not_found(self, client):
+        res = client.put("/api/v1/testing/runs/99999", json={"status": "completed"})
+        assert res.status_code == 404
+
+    def test_delete_run(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        run = _create_run(client, cycle["id"], tc["id"])
+        res = client.delete(f"/api/v1/testing/runs/{run['id']}")
+        assert res.status_code == 200
+        assert client.get(f"/api/v1/testing/runs/{run['id']}").status_code == 404
+
+    def test_delete_run_not_found(self, client):
+        res = client.delete("/api/v1/testing/runs/99999")
+        assert res.status_code == 404
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST STEP RESULTS  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestStepResults:
+    def test_create_step_result(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        run = _create_run(client, cycle["id"], tc["id"])
+        sr = _create_step_result(client, run["id"], step_no=1)
+        assert sr["result"] == "pass"
+        assert sr["step_no"] == 1
+
+    def test_create_step_result_no_step_no(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        run = _create_run(client, cycle["id"], tc["id"])
+        res = client.post(f"/api/v1/testing/runs/{run['id']}/step-results",
+                          json={"result": "pass"})
+        assert res.status_code == 400
+
+    def test_list_step_results(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        run = _create_run(client, cycle["id"], tc["id"])
+        _create_step_result(client, run["id"], step_no=1)
+        _create_step_result(client, run["id"], step_no=2, result="fail")
+        res = client.get(f"/api/v1/testing/runs/{run['id']}/step-results")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert len(data) == 2
+        assert data[0]["step_no"] == 1
+        assert data[1]["step_no"] == 2
+
+    def test_list_step_results_run_not_found(self, client):
+        res = client.get("/api/v1/testing/runs/99999/step-results")
+        assert res.status_code == 404
+
+    def test_update_step_result(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        run = _create_run(client, cycle["id"], tc["id"])
+        sr = _create_step_result(client, run["id"])
+        res = client.put(f"/api/v1/testing/step-results/{sr['id']}",
+                         json={"result": "fail", "actual_result": "Error found"})
+        assert res.status_code == 200
+        assert res.get_json()["result"] == "fail"
+
+    def test_update_step_result_not_found(self, client):
+        res = client.put("/api/v1/testing/step-results/99999",
+                         json={"result": "pass"})
+        assert res.status_code == 404
+
+    def test_delete_step_result(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        run = _create_run(client, cycle["id"], tc["id"])
+        sr = _create_step_result(client, run["id"])
+        res = client.delete(f"/api/v1/testing/step-results/{sr['id']}")
+        assert res.status_code == 200
+
+    def test_delete_step_result_not_found(self, client):
+        res = client.delete("/api/v1/testing/step-results/99999")
+        assert res.status_code == 404
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DEFECT COMMENTS  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestDefectComments:
+    def test_create_comment(self, client):
+        p = _create_program(client)
+        defect = _create_defect(client, p["id"])
+        comment = _create_defect_comment(client, defect["id"])
+        assert comment["author"] == "Tester A"
+        assert comment["body"] == "Investigating root cause"
+
+    def test_create_comment_missing_fields(self, client):
+        p = _create_program(client)
+        defect = _create_defect(client, p["id"])
+        res = client.post(f"/api/v1/testing/defects/{defect['id']}/comments",
+                          json={"author": "A"})
+        assert res.status_code == 400
+
+    def test_create_comment_defect_not_found(self, client):
+        res = client.post("/api/v1/testing/defects/99999/comments",
+                          json={"author": "A", "body": "B"})
+        assert res.status_code == 404
+
+    def test_list_comments(self, client):
+        p = _create_program(client)
+        defect = _create_defect(client, p["id"])
+        _create_defect_comment(client, defect["id"], body="Comment 1")
+        _create_defect_comment(client, defect["id"], body="Comment 2")
+        res = client.get(f"/api/v1/testing/defects/{defect['id']}/comments")
+        assert res.status_code == 200
+        assert len(res.get_json()) == 2
+
+    def test_list_comments_defect_not_found(self, client):
+        res = client.get("/api/v1/testing/defects/99999/comments")
+        assert res.status_code == 404
+
+    def test_delete_comment(self, client):
+        p = _create_program(client)
+        defect = _create_defect(client, p["id"])
+        comment = _create_defect_comment(client, defect["id"])
+        res = client.delete(f"/api/v1/testing/defect-comments/{comment['id']}")
+        assert res.status_code == 200
+
+    def test_delete_comment_not_found(self, client):
+        res = client.delete("/api/v1/testing/defect-comments/99999")
+        assert res.status_code == 404
+
+    def test_include_comments_in_defect(self, client):
+        p = _create_program(client)
+        defect = _create_defect(client, p["id"])
+        _create_defect_comment(client, defect["id"])
+        res = client.get(f"/api/v1/testing/defects/{defect['id']}?include_comments=1")
+        data = res.get_json()
+        assert "comments" in data
+        assert len(data["comments"]) == 1
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DEFECT HISTORY  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestDefectHistory:
+    def test_history_auto_on_status_change(self, client):
+        p = _create_program(client)
+        defect = _create_defect(client, p["id"])
+        client.put(f"/api/v1/testing/defects/{defect['id']}",
+                   json={"status": "in_progress", "changed_by": "Dev A"})
+        res = client.get(f"/api/v1/testing/defects/{defect['id']}/history")
+        assert res.status_code == 200
+        entries = res.get_json()
+        assert len(entries) >= 1
+        status_entry = [e for e in entries if e["field"] == "status"]
+        assert len(status_entry) == 1
+        assert status_entry[0]["new_value"] == "in_progress"
+        assert status_entry[0]["changed_by"] == "Dev A"
+
+    def test_history_multi_field_change(self, client):
+        p = _create_program(client)
+        defect = _create_defect(client, p["id"])
+        client.put(f"/api/v1/testing/defects/{defect['id']}",
+                   json={"severity": "P1", "assigned_to": "Elif Kara",
+                         "changed_by": "PM"})
+        res = client.get(f"/api/v1/testing/defects/{defect['id']}/history")
+        entries = res.get_json()
+        fields_changed = {e["field"] for e in entries}
+        assert "severity" in fields_changed
+        assert "assigned_to" in fields_changed
+
+    def test_history_no_change_no_entry(self, client):
+        """Updating with the same value should not create history entries."""
+        p = _create_program(client)
+        defect = _create_defect(client, p["id"])
+        # Update with same severity
+        client.put(f"/api/v1/testing/defects/{defect['id']}",
+                   json={"severity": "P2"})
+        res = client.get(f"/api/v1/testing/defects/{defect['id']}/history")
+        entries = res.get_json()
+        sev_entries = [e for e in entries if e["field"] == "severity"]
+        assert len(sev_entries) == 0
+
+    def test_history_defect_not_found(self, client):
+        res = client.get("/api/v1/testing/defects/99999/history")
+        assert res.status_code == 404
+
+    def test_history_reopen_creates_entry(self, client):
+        p = _create_program(client)
+        defect = _create_defect(client, p["id"])
+        client.put(f"/api/v1/testing/defects/{defect['id']}",
+                   json={"status": "reopened", "changed_by": "QA"})
+        # Reopen should increment reopen_count
+        res = client.get(f"/api/v1/testing/defects/{defect['id']}")
+        data = res.get_json()
+        assert data["reopen_count"] == 1
+
+    def test_defect_linked_requirement_id(self, client):
+        """Test that linked_requirement_id can be set and tracked."""
+        p = _create_program(client)
+        req = _create_requirement(client, p["id"])
+        defect = _create_defect(client, p["id"])
+        client.put(f"/api/v1/testing/defects/{defect['id']}",
+                   json={"linked_requirement_id": req["id"]})
+        res = client.get(f"/api/v1/testing/defects/{defect['id']}")
+        assert res.get_json()["linked_requirement_id"] == req["id"]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DEFECT LINKS  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestDefectLinks:
+    def test_create_link(self, client):
+        p = _create_program(client)
+        d1 = _create_defect(client, p["id"], title="Defect A", code="D-001")
+        d2 = _create_defect(client, p["id"], title="Defect B", code="D-002")
+        res = client.post(f"/api/v1/testing/defects/{d1['id']}/links",
+                          json={"target_defect_id": d2["id"],
+                                "link_type": "related"})
+        assert res.status_code == 201
+        link = res.get_json()
+        assert link["link_type"] == "related"
+        assert link["source_defect_id"] == d1["id"]
+        assert link["target_defect_id"] == d2["id"]
+
+    def test_create_link_self_ref(self, client):
+        p = _create_program(client)
+        d1 = _create_defect(client, p["id"])
+        res = client.post(f"/api/v1/testing/defects/{d1['id']}/links",
+                          json={"target_defect_id": d1["id"]})
+        assert res.status_code == 400
+
+    def test_create_link_target_not_found(self, client):
+        p = _create_program(client)
+        d1 = _create_defect(client, p["id"])
+        res = client.post(f"/api/v1/testing/defects/{d1['id']}/links",
+                          json={"target_defect_id": 99999})
+        assert res.status_code == 404
+
+    def test_create_link_missing_target(self, client):
+        p = _create_program(client)
+        d1 = _create_defect(client, p["id"])
+        res = client.post(f"/api/v1/testing/defects/{d1['id']}/links", json={})
+        assert res.status_code == 400
+
+    def test_create_link_duplicate(self, client):
+        p = _create_program(client)
+        d1 = _create_defect(client, p["id"], title="A", code="D-01")
+        d2 = _create_defect(client, p["id"], title="B", code="D-02")
+        client.post(f"/api/v1/testing/defects/{d1['id']}/links",
+                    json={"target_defect_id": d2["id"]})
+        res = client.post(f"/api/v1/testing/defects/{d1['id']}/links",
+                          json={"target_defect_id": d2["id"]})
+        assert res.status_code == 409
+
+    def test_list_links(self, client):
+        p = _create_program(client)
+        d1 = _create_defect(client, p["id"], title="A", code="D-A")
+        d2 = _create_defect(client, p["id"], title="B", code="D-B")
+        d3 = _create_defect(client, p["id"], title="C", code="D-C")
+        # d1 → d2, d3 → d1
+        client.post(f"/api/v1/testing/defects/{d1['id']}/links",
+                    json={"target_defect_id": d2["id"]})
+        client.post(f"/api/v1/testing/defects/{d3['id']}/links",
+                    json={"target_defect_id": d1["id"]})
+        res = client.get(f"/api/v1/testing/defects/{d1['id']}/links")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert len(data["outgoing"]) == 1
+        assert len(data["incoming"]) == 1
+
+    def test_list_links_defect_not_found(self, client):
+        res = client.get("/api/v1/testing/defects/99999/links")
+        assert res.status_code == 404
+
+    def test_delete_link(self, client):
+        p = _create_program(client)
+        d1 = _create_defect(client, p["id"], title="X", code="D-X")
+        d2 = _create_defect(client, p["id"], title="Y", code="D-Y")
+        link_res = client.post(f"/api/v1/testing/defects/{d1['id']}/links",
+                               json={"target_defect_id": d2["id"]})
+        link_id = link_res.get_json()["id"]
+        res = client.delete(f"/api/v1/testing/defect-links/{link_id}")
+        assert res.status_code == 200
+
+    def test_delete_link_not_found(self, client):
+        res = client.delete("/api/v1/testing/defect-links/99999")
+        assert res.status_code == 404
+
+    def test_defect_to_dict_counts(self, client):
+        """Defect to_dict should include comment_count and link_count."""
+        p = _create_program(client)
+        d1 = _create_defect(client, p["id"], title="DX", code="D-DX")
+        d2 = _create_defect(client, p["id"], title="DY", code="D-DY")
+        _create_defect_comment(client, d1["id"])
+        client.post(f"/api/v1/testing/defects/{d1['id']}/links",
+                    json={"target_defect_id": d2["id"]})
+        res = client.get(f"/api/v1/testing/defects/{d1['id']}")
+        data = res.get_json()
+        assert data["comment_count"] == 1
+        assert data["link_count"] >= 1

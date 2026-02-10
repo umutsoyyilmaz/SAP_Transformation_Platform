@@ -1326,7 +1326,8 @@ def list_test_runs(cycle_id):
     if request.args.get("result"):
         q = q.filter_by(result=request.args["result"])
     q = q.order_by(TestRun.created_at.desc())
-    return jsonify(paginate_query(q, TestRun))
+    runs, total = paginate_query(q)
+    return jsonify({"items": [r.to_dict() for r in runs], "total": total})
 
 
 @testing_bp.route("/testing/cycles/<int:cycle_id>/runs", methods=["POST"])
