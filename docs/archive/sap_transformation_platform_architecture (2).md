@@ -1,6 +1,13 @@
+> **⚠️ ARCHIVED — 2026-02-10**  
+> Bu doküman v1.3 sürümüdür ve artık güncel değildir.  
+> Güncel mimari değişiklikler için bkz: `architecture_v2.2_changelog.md`  
+> Arşiv nedeni: Metrikler (65/295/766) gerçek durumla (71/321/860) uyumsuz, Test Hub 5→14 model eksik.
+
+---
+
 # SAP Transformation Management Platform — Uygulama Mimarisi
 
-**Versiyon:** 1.3  
+**Versiyon:** 1.3 (ARCHIVED)  
 **Tarih:** 2026-02-09 (Güncelleme: Haziran 2025)  
 **Hazırlayan:** Umut Soyyılmaz  
 **Kaynak:** SAP Transformation PM Playbook (S/4HANA + Public Cloud)
