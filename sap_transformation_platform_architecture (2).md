@@ -1,7 +1,7 @@
 # SAP Transformation Management Platform — Uygulama Mimarisi
 
-**Versiyon:** 1.2  
-**Tarih:** 2026-02-09  
+**Versiyon:** 1.3  
+**Tarih:** 2026-02-09 (Güncelleme: Haziran 2025)  
 **Hazırlayan:** Umut Soyyılmaz  
 **Kaynak:** SAP Transformation PM Playbook (S/4HANA + Public Cloud)
 
@@ -12,6 +12,7 @@
 | 1.0 | 2026-02-07 | İlk yayın |
 | 1.1 | 2026-02-09 | **[REVISED]** Program Selector → Context-Based Program Selection (card grid + sidebar disable). **[REVISED]** Scenario modülü what-if karşılaştırmadan → İş Senaryosu + Workshop/Analiz Oturumu modeline geçirildi. Workshop CRUD, requirement bağlantısı eklendi. |
 | 1.2 | 2026-02-09 | **[REVISED]** Hiyerarşi refactoring: ScopeItem ayrı tablo kaldırıldı → scope/fit-gap alanları Process L3'e absorbe edildi. Scenario=L1 olarak eşlendi. RequirementProcessMapping N:M junction table eklendi. OpenItem modeli eklendi. **[NEW]** WorkshopDocument modeli (belge ekleri). **[NEW]** Workshop'tan requirement ekleme + Requirement'tan L3 oluşturma API'leri. 35 tablo, 436 test. |
+| 1.3 | Haziran 2025 | **[MAJOR]** Explore Phase implementasyonu: 25 yeni model (ExploreScenario, FitGapItem, WorkshopSession, RequirementItem, OpenItem, ScopeChangeRequest, SteeringCommitteeDecision, BPMNDiagram, ExploreWorkshopDocument, DailySnapshot vb.), 66 yeni API route, 8 servis (FitPropagation, WorkshopSession, RequirementLifecycle, OpenItemLifecycle, ScopeChange, Signoff, MinutesGenerator, Snapshot). Release 1+2 tamamlandı, Sprint 9 tamamlandı. **65 tablo, 295 route, 766 test.** |
 
 ---
 
@@ -294,6 +295,72 @@ Requirement ↔ Process L3 (N:M via RequirementProcessMapping)
 │  UAT Access Readiness Checklist                                         │
 │  Go-Live Access Checklist                                               │
 └─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 3.1.1 Explore Phase Domain (YENİ — v1.3)
+
+> **[NEW v1.3]** Explore Phase tam implementasyonu. 25 model, 5 tablo grubu, 66 API route.
+> Bu domain SAP Activate Explore fazına ait tüm deliverable'ları kapsar.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                         EXPLORE PHASE DOMAIN (25 Model)                             │
+│                                                                                      │
+│  ExploreScenario (L1 İş Senaryosu)                                                  │
+│    ├──1:N──▶ ExploreProcessL2 (Süreç)                                               │
+│    │           └──1:N──▶ ExploreProcessL3 (Süreç Adımı)                             │
+│    │                       └──0:N──▶ FitGapItem (Fit/PartialFit/Gap)                │
+│    │                                   ├── propagation_status                        │
+│    │                                   └── linked_requirement_id                     │
+│    │                                                                                 │
+│    ├──1:N──▶ WorkshopSession (Analiz Oturumu)                                       │
+│    │           ├── type (fit_gap/requirement_gathering/process_mapping/review/...)   │
+│    │           ├── status (planned/in_progress/completed/cancelled)                  │
+│    │           ├──0:N──▶ WorkshopAgendaItem                                         │
+│    │           ├──0:N──▶ WorkshopDecision                                           │
+│    │           ├──0:N──▶ WorkshopActionItem                                         │
+│    │           ├──0:N──▶ ExploreWorkshopDocument (belge ekleri)                     │
+│    │           └──0:N──▶ RequirementItem (workshop'tan türeyen)                     │
+│    │                                                                                 │
+│    ├──1:N──▶ RequirementItem (Fit/PartialFit/Gap)                                   │
+│    │           ├── requirement_code (otomatik: REQ-XXX-NNNN)                        │
+│    │           ├── fit_status, gap_description, priority                             │
+│    │           ├── decision, decision_date, decision_owner                           │
+│    │           ├── lifecycle: Draft→UnderReview→Approved→Implemented→Verified        │
+│    │           ├──0:N──▶ OpenItem (çözülmemiş sorular)                              │
+│    │           └──N:M──▶ ExploreProcessL3 (RequirementProcessMapping)               │
+│    │                                                                                 │
+│    └──0:N──▶ ScopeChangeRequest                                                     │
+│                ├── change_type (add_scope/remove_scope/modify_requirement)           │
+│                ├── impact_analysis, effort_estimate                                  │
+│                └── approval: Submitted→UnderReview→Approved/Rejected                │
+│                                                                                      │
+│  SteeringCommitteeDecision (Gate kararları)                                          │
+│    ├── decision_type (gate_approval/scope_change/escalation/budget)                  │
+│    ├── status (proposed→approved/rejected/deferred)                                  │
+│    └── linked_items (JSON: scope_changes, risks, requirements)                      │
+│                                                                                      │
+│  SignoffRecord (Faz/Gate/Workstream sign-off)                                        │
+│    ├── signoff_type (phase_gate/workshop/deliverable/go_no_go)                      │
+│    └── status (pending→signed_off/rejected/conditional)                             │
+│                                                                                      │
+│  BPMNDiagram (Süreç diyagramları)                                                   │
+│    ├── diagram_type (as_is/to_be/gap_analysis)                                      │
+│    └── bpmn_xml, svg_content                                                        │
+│                                                                                      │
+│  DailySnapshot (Günlük KPI snapshot'ları)                                            │
+│    └── snapshot_data (JSON: tüm metriklerin anlık görüntüsü)                        │
+│                                                                                      │
+│  8 Servis Katmanı:                                                                   │
+│    ├── FitPropagationService: L3 fit_status → Scenario/L2 rollup                    │
+│    ├── WorkshopSessionService: Workshop CRUD + agenda/decision/action yönetimi       │
+│    ├── RequirementLifecycleService: Lifecycle state machine + validation             │
+│    ├── OpenItemLifecycleService: Open item tracking + aging                          │
+│    ├── ScopeChangeService: Change request workflow + impact analysis                 │
+│    ├── SignoffService: Sign-off workflow + multi-level approval                      │
+│    ├── MinutesGeneratorService: Workshop → meeting minutes (AI-ready)               │
+│    └── SnapshotService: Daily/weekly KPI snapshot + trend calculation                │
+└─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 3.2 Uçtan Uca İzlenebilirlik Zinciri (Traceability Chain)
@@ -1997,46 +2064,60 @@ INTEGRATE (API):
 
 ## 11. Güncellenmiş Uygulama Fazları (Platform + AI Entegre Roadmap)
 
-### Phase 1 — Foundation + Foundation AI (10 hafta)
+> **📌 v1.3 Güncelleme:** Phase 1 tamamlandı, Phase 2 kısmen tamamlandı (Integration Factory ✅, Data Factory bekliyor).
+> Ek olarak **Explore Phase** (orijinal planda bulunmayan) büyük ölçüde tamamlandı: 175/179 görev (%98).
 
-**Platform Modülleri:**
-- Program Setup modülü (proje tipi, fazlar, gate'ler, workstream'ler, RACI)
-- Scope & Requirements modülü (process hierarchy, requirement CRUD, Fit/PFit/Gap)
-- RAID modülü (temel CRUD)
-- Kullanıcı yönetimi ve RBAC
-- Temel dashboard (program health)
+### Phase 1 — Foundation + Foundation AI (10 hafta) ✅ TAMAMLANDI
 
-**AI Altyapı (tüm sonraki fazların temeli):**
-- LLM Gateway kurulumu (Claude API + OpenAI fallback + provider router)
-- RAG Pipeline kurulumu (pgvector + embedding + chunking + retrieval)
-- Suggestion Queue altyapısı (pending/approve/reject akışı)
-- Prompt Registry (versiyonlama + A/B test altyapısı)
-- SAP Knowledge Base v1 (scope item kataloğu, modül listesi, temel terminoloji)
-- AI audit logging
+**Platform Modülleri:** ✅ Tamamı uygulandı
+- ✅ Program Setup modülü (proje tipi, fazlar, gate'ler, workstream'ler, RACI) — 25 route
+- ✅ Scope & Requirements modülü (process hierarchy, requirement CRUD, Fit/PFit/Gap) — 20 route
+- ✅ RAID modülü (Risk, Action, Issue, Decision — CRUD + scoring + dashboard) — 30 route
+- ✅ Backlog Workbench (WRICEF + Config + FS/TS lifecycle) — 28 route
+- ✅ Test Hub (TestPlan, TestCase, TestExecution, Defect) — 28 route
+- ✅ Traceability Engine v1
+- ✅ Notification Service (in-app)
+- ✅ Temel dashboard (program health)
 
-**AI Asistanlar:**
+**AI Altyapı:** ✅ Tamamı uygulandı
+- ✅ LLM Gateway kurulumu (Claude API + OpenAI fallback + provider router)
+- ✅ RAG Pipeline kurulumu (embedding + chunking + retrieval)
+- ✅ Suggestion Queue altyapısı (pending/approve/reject akışı)
+- ✅ Prompt Registry (versiyonlama + YAML şablonlar)
+- ✅ SAP Knowledge Base v1 (scope item kataloğu, modül listesi, temel terminoloji)
+- ✅ AI audit logging — 29 AI route
+
+**AI Asistanlar:** ✅ 3/3 tamamlandı
 - ✅ **NL Query Assistant** — platform verileri üzerinde doğal dille sorgulama
 - ✅ **Requirement Analyst Copilot** — Fit/PFit/Gap sınıflandırma + benzer requirement önerisi
 - ✅ **Defect Triage Assistant** (temel versiyon — severity önerisi + duplicate detection)
 
-### Phase 2 — Core Delivery + Core AI (12 hafta)
+**Explore Phase (Ek):** ✅ %98 tamamlandı (175/179 görev)
+- ✅ 25 SQLAlchemy model (explore.py)
+- ✅ 66 API route (explore_bp.py)
+- ✅ 8 business servis (fit_propagation, workshop_session, requirement_lifecycle, vb.)
+- ✅ 192 test (tüm explore domainini kapsar)
+- ✅ 10 frontend modül (CSS tokens, shared components, API client, 5 view, dashboard)
+- ⬜ 4 kalan görev: data migration script, Vitest, Playwright E2E, OpenAPI docs
+
+### Phase 2 — Core Delivery + Core AI (12 hafta) 🔄 DEVAM EDİYOR
 
 **Platform Modülleri:**
-- Backlog Workbench (WRICEF lifecycle, FS/TS, status flow)
-- Integration Factory (interface inventory, wave planning)
-- Data Factory (object list, mapping, cycle management)
-- Traceability engine (requirement ↔ backlog ↔ test ↔ defect)
-- Workstream bazlı filtreleme
+- ✅ Backlog Workbench (WRICEF lifecycle, FS/TS, status flow) — 28 route
+- ✅ Integration Factory (interface inventory, wave planning) — 26 route
+- ⬜ Data Factory (object list, mapping, cycle management) — PLANLANMIŞ
+- ✅ Traceability engine (requirement ↔ backlog ↔ test ↔ defect) — çalışıyor
+- ✅ Workstream bazlı filtreleme — uygulandı
 
 **AI Knowledge Base Genişletme:**
-- SAP E2E süreç akış şablonları (O2C, P2P, RTR)
-- WRICEF FS/TS şablonları (modül ve tip bazlı)
-- Sektöre özel konfigürasyon pattern'leri
+- ⬜ SAP E2E süreç akış şablonları (O2C, P2P, RTR) — PLANLANMIŞ
+- ⬜ WRICEF FS/TS şablonları (modül ve tip bazlı) — PLANLANMIŞ
+- ⬜ Sektöre özel konfigürasyon pattern'leri — PLANLANMIŞ
 
 **AI Asistanlar:**
-- ✅ **Steering Pack Generator** — haftalık rapor otomasyonu
-- ✅ **Risk Sentinel** — kural tabanlı risk izleme + KPI threshold alert'leri
-- ✅ **Work Breakdown Engine** — scenario'dan workshop/Fit-Gap/WRICEF kırılımı
+- ⬜ **Steering Pack Generator** — haftalık rapor otomasyonu — PLANLANMIŞ
+- ⬜ **Risk Sentinel** — kural tabanlı risk izleme — PLANLANMIŞ
+- ⬜ **Work Breakdown Engine** — scenario kırılımı — PLANLANMIŞ
 - ✅ **WRICEF Spec Drafter** — FS taslak üretimi
 
 ### Phase 3 — Quality & Testing + Quality AI (10 hafta)
@@ -2150,3 +2231,24 @@ INTEGRATE (API):
 ---
 
 *Bu mimari doküman, SAP Transformation PM Playbook'undaki tüm domain'leri, deliverable'ları ve KPI'ları kapsayan bir uygulama temelini oluşturur. Her modül bağımsız geliştirilebilir ancak traceability zinciri ile birbirine bağlıdır. AI katmanı 14 asistan ile platform'un her modülüne zeka ekler; tüm asistanlar human-in-the-loop pattern'iyle çalışır ve aynı 4 temel bileşeni (LLM Gateway, RAG Engine, Rule Engine, Graph Analyzer) paylaşır.*
+
+---
+
+## 14. Güncel Platform Metrikleri (v1.3 — Haziran 2025)
+
+| Metrik | Değer |
+|--------|-------|
+| DB Tabloları | 65 |
+| API Route | 295 |
+| Test Sayısı | 766 (0 fail) |
+| Model Dosyaları | 12 |
+| Blueprint Dosyaları | 13 |
+| Servis Dosyaları | 13 |
+| Alembic Migration | 8 |
+| Frontend JS Dosyaları | 22 (16 view modülü) |
+| Python LOC | ~36,000 |
+| JavaScript LOC | ~9,400 |
+| Git Commit | 48+ |
+| Tamamlanan Modüller | 8/12 (Program, Scope, Backlog, Test, RAID, Integration, AI, Explore) |
+| Aktif AI Asistan | 3/14 (NL Query, Requirement Analyst, Defect Triage) |
+| Explore Phase | 175/179 görev (%98) |
