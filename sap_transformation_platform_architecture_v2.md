@@ -885,31 +885,66 @@ Operational Layer
 │   ├── PUT    /cycles/:cycleId           # Update cycle result
 │   └── GET    /dashboard                 # Migration KPIs
 │
-├── /testing                                 # Test Management System (detay: test-management-fs-ts.md §3)
-│   ├── GET    /plans                        # Test plan
-│   ├── POST   /plans                        # Create/approve plan
-│   ├── GET    /cycles                       # Test cycles (filter: level, wave)
-│   ├── POST   /cycles                       # Create cycle
-│   ├── POST   /cycles/:id/start             # Start (entry criteria check)
-│   ├── POST   /cycles/:id/complete          # Complete (exit criteria eval)
-│   ├── GET    /suites                       # Test suites (6 level tabs)
-│   ├── POST   /suites/:id/generate-from-wricef   # Auto-gen unit tests
-│   ├── POST   /suites/:id/generate-from-process  # Auto-gen SIT/UAT
-│   ├── GET    /cases                        # Test cases (filter: level, area, priority)
-│   ├── POST   /cases/:id/steps              # Batch create/update steps
-│   ├── POST   /runs                         # Create test run
-│   ├── PUT    /executions/:id               # Update execution + step results
-│   ├── POST   /executions/:id/create-defect # Auto-create defect from fail
-│   ├── GET    /defects                      # Defect tracker (filter: severity, SLA)
-│   ├── POST   /defects/:id/transition       # Lifecycle transition (9 states)
-│   ├── GET    /uat-sign-offs                # UAT BPO sign-offs
-│   ├── POST   /uat-sign-offs                # Create sign-off
-│   ├── GET    /dashboard                    # Test Dashboard (10 widgets)
-│   ├── GET    /dashboard/go-no-go           # Go/No-Go Scorecard (10 criteria)
-│   ├── GET    /dashboard/traceability-matrix # Full REQ→Defect chain
-│   ├── POST   /cases/:id/sync-to-alm       # Push test case to ALM
-│   ├── POST   /defects/:id/sync-to-alm     # Push defect to ALM
-│   └── POST   /dashboard/export             # PPTX/PDF/XLSX export
+├── /testing                                 # Test Management System (28 route implement)
+│   │                                        # ✅ = implement, ⬜ = Phase 3 hedef
+│   │
+│   │  ── Test Plans (5 route) ──────────────────────────────────────────────
+│   ├── GET    /programs/:pid/testing/plans       # ✅ List plans (status filter)
+│   ├── POST   /programs/:pid/testing/plans       # ✅ Create plan
+│   ├── GET    /testing/plans/:id                 # ✅ Detail (+ cycles)
+│   ├── PUT    /testing/plans/:id                 # ✅ Update plan
+│   ├── DELETE /testing/plans/:id                 # ✅ Delete plan
+│   │
+│   │  ── Test Cycles (5 route) ─────────────────────────────────────────────
+│   ├── GET    /testing/plans/:pid/cycles         # ✅ List cycles for plan
+│   ├── POST   /testing/plans/:pid/cycles         # ✅ Create cycle
+│   ├── GET    /testing/cycles/:id                # ✅ Detail (+ executions)
+│   ├── PUT    /testing/cycles/:id                # ✅ Update cycle
+│   ├── DELETE /testing/cycles/:id                # ✅ Delete cycle
+│   │
+│   │  ── Test Catalog / Cases (5 route) ────────────────────────────────────
+│   ├── GET    /programs/:pid/testing/catalog     # ✅ List cases (layer/status/module/search filter)
+│   ├── POST   /programs/:pid/testing/catalog     # ✅ Create case (auto code gen)
+│   ├── GET    /testing/catalog/:id               # ✅ Detail
+│   ├── PUT    /testing/catalog/:id               # ✅ Update case
+│   ├── DELETE /testing/catalog/:id               # ✅ Delete case
+│   │
+│   │  ── Test Executions (5 route) ─────────────────────────────────────────
+│   ├── GET    /testing/cycles/:cid/executions    # ✅ List executions in cycle
+│   ├── POST   /testing/cycles/:cid/executions    # ✅ Create execution
+│   ├── GET    /testing/executions/:id            # ✅ Detail
+│   ├── PUT    /testing/executions/:id            # ✅ Update (record result)
+│   ├── DELETE /testing/executions/:id            # ✅ Delete execution
+│   │
+│   │  ── Defects (5 route) ─────────────────────────────────────────────────
+│   ├── GET    /programs/:pid/testing/defects     # ✅ List defects (severity/status/module/search)
+│   ├── POST   /programs/:pid/testing/defects     # ✅ Create defect (auto code gen)
+│   ├── GET    /testing/defects/:id               # ✅ Detail
+│   ├── PUT    /testing/defects/:id               # ✅ Update (lifecycle transition inline)
+│   ├── DELETE /testing/defects/:id               # ✅ Delete defect
+│   │
+│   │  ── Traceability & Regression (2 route) ───────────────────────────────
+│   ├── GET    /programs/:pid/testing/traceability-matrix  # ✅ Full REQ→TC→Defect
+│   ├── GET    /programs/:pid/testing/regression-sets      # ✅ Regression flagged cases
+│   │
+│   │  ── Dashboard (1 route) ───────────────────────────────────────────────
+│   ├── GET    /programs/:pid/testing/dashboard   # ✅ KPI dashboard (pass rate, severity, aging, velocity, coverage)
+│   │
+│   │  ── Phase 3 Hedef Endpoints ───────────────────────────────────────────
+│   │   POST   /plans/:id/approve                 # ⬜ Plan approval workflow
+│   │   POST   /cycles/:id/start                  # ⬜ Start (entry criteria check)
+│   │   POST   /cycles/:id/complete               # ⬜ Complete (exit criteria eval)
+│   │   GET    /suites                            # ⬜ Test suite management
+│   │   POST   /suites/:id/generate-from-wricef   # ⬜ Auto-gen unit tests
+│   │   POST   /suites/:id/generate-from-process  # ⬜ Auto-gen SIT/UAT
+│   │   POST   /cases/:id/steps                   # ⬜ Batch create test steps
+│   │   POST   /runs                              # ⬜ Test run management
+│   │   POST   /executions/:id/create-defect      # ⬜ Auto-create defect from fail
+│   │   POST   /defects/:id/transition             # ⬜ Formal lifecycle transition
+│   │   GET    /uat-sign-offs                     # ⬜ UAT BPO sign-offs
+│   │   GET    /dashboard/go-no-go                # ⬜ Go/No-Go Scorecard
+│   │   POST   /cases/:id/sync-to-alm            # ⬜ ALM sync
+│   └── POST   /dashboard/export                  # ⬜ PPTX/PDF/XLSX export
 │
 ├── /cutover
 │   ├── GET    /plans
