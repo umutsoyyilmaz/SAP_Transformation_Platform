@@ -12,8 +12,8 @@
 
 | Metrik | Değer |
 |--------|-------|
-| **Tamamlanan Task** | 75 / ~150 |
-| **Son Commit** | `28de926` — Phase 0 complete — 5 services + 40 API endpoints (58 routes) |
+| **Tamamlanan Task** | 88 / ~150 |
+| **Son Commit** | `c8bcaa1` — SEED-001/002/003 (L4 catalog + explore demo data + project roles) |
 | **Önceki Commit** | `f2eff2c` — Phase 0 - 16 models, migration, services, blueprint |
 | **Oluşturulan/Güncellenen Dosyalar** | `app/models/explore.py` (22 model), `app/blueprints/explore_bp.py` (58 route, 40+ endpoint), `app/services/fit_propagation.py` (yeni), `app/services/requirement_lifecycle.py` (yeni), `app/services/open_item_lifecycle.py` (yeni), `app/services/cloud_alm.py` (yeni), `app/services/signoff.py` (yeni) |
 | **DB Durum** | 63 tablo (40 mevcut + 16 explore P0 + 6 explore P1 + 1 kb_versions), Alembic head: `a3b4c5d6e702` |
@@ -1006,13 +1006,13 @@
 
 ## BÖLÜM 4: BUSINESS RULES & LOGIC
 
-#### BR-001: Fit Status Propagation (L4→L3→L2→L1)
+#### ✅ BR-001: Fit Status Propagation (L4→L3→L2→L1) — TAMAMLANDI (28de926, S-001)
 - **Kural:** L4 fit_decision → process_level.fit_status → L3 system_suggested_fit → L3 consolidated → L2 readiness → L1 summary
 - **Ref:** Section 5.1 (revised), 13.11.3
 - **Faz:** Phase 0
 - **Tahmini Süre:** (S-001'de dahil)
 
-#### BR-002: Code Generation Rules
+#### ✅ BR-002: Code Generation Rules — TAMAMLANDI (f2eff2c, code_generator.py)
 - **Workshop:** WS-{AREA}-{SEQ}{SESSION} (A/B/C for multi-session)
 - **Requirement:** REQ-{SEQ} (3-digit, project-wide)
 - **Open Item:** OI-{SEQ} (3-digit, project-wide)
@@ -1022,7 +1022,7 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** (S-002'de dahil)
 
-#### BR-003: Workshop Completion Validation
+#### ✅ BR-003: Workshop Completion Validation — TAMAMLANDI (28de926, explore_bp /complete)
 - **Blocking:** Tüm process_steps fit_decision != NULL (son session)
 - **Warning:** Open items açık, notes boş, unresolved cross-module flags
 - **[GAP-10]:** Ara session'da NULL allowed
@@ -1030,42 +1030,42 @@
 - **Ref:** Section 5.3
 - **Faz:** Phase 0
 
-#### BR-004: Overdue Logic
+#### ✅ BR-004: Overdue Logic — TAMAMLANDI (28de926, explore_bp open-items?overdue_only)
 - **status IN ('open', 'in_progress') AND due_date < CURRENT_DATE**
 - **Ref:** Section 5.4
 - **Faz:** Phase 0
 
-#### BR-005: OI-to-Requirement Blocking
+#### ✅ BR-005: OI-to-Requirement Blocking — TAMAMLANDI (28de926, requirement_lifecycle.py)
 - **REQ approve blocked while blocking OI open**
 - **OI close → check all REQ links → notify if all blocking OIs closed**
 - **UI: "Blocked by N open items" badge**
 - **Ref:** Section 5.5
 - **Faz:** Phase 0
 
-#### BR-006: Cloud ALM Sync Rules
+#### ✅ BR-006: Cloud ALM Sync Rules — TAMAMLANDI (28de926, cloud_alm.py)
 - **Only approved REQ pushable**
 - **Retry on error with exponential backoff**
 - **Ref:** Section 5.6
 - **Faz:** Phase 0
 
-#### BR-007: L3 Sign-Off Pre-conditions [GAP-11]
+#### ✅ BR-007: L3 Sign-Off Pre-conditions [GAP-11] — TAMAMLANDI (28de926, signoff.py)
 - **Tüm L4 assessed + P1 OI closed + REQ approved**
 - **Ref:** Section 13.11.3
 - **Faz:** Phase 0
 
-#### BR-008: L2 Readiness Auto-calculation [GAP-12]
+#### ✅ BR-008: L2 Readiness Auto-calculation [GAP-12] — TAMAMLANDI (28de926, fit_propagation.py)
 - **readiness_pct = assessed_l3 / in_scope_l3 * 100**
 - **Auto-status: not_ready → ready when 100%**
 - **Ref:** Section 13.12.3
 - **Faz:** Phase 0
 
-#### BR-009: Multi-Session Fit Propagation [GAP-10]
+#### ✅ BR-009: Multi-Session Fit Propagation [GAP-10] — TAMAMLANDI (28de926, fit_propagation.py)
 - **Fit propagation SADECE son session'da**
 - **Ara session'da propagation yapılmaz**
 - **Ref:** Section 13.10.5
 - **Faz:** Phase 1
 
-#### BR-010: Scope Change Impact [GAP-09]
+#### ✅ BR-010: Scope Change Impact [GAP-09] — TAMAMLANDI (ccc7438, explore_bp scope-change)
 - **Auto-calculate: affected workshops, requirements, open items**
 - **Implement: Update process_level, cancel draft/scheduled workshops**
 - **Ref:** Section 13.9.3
@@ -1075,35 +1075,35 @@
 
 ## BÖLÜM 5: TEST KATMANI
 
-#### TEST-001: Model unit testleri — 25 tablo
+#### TEST-001: Model unit testleri — 25 tablo ✅ `c3e304d`
 - **Her model için:** create, read, update, delete, constraint validation, relationship loading
-- **Tahmini:** 25 tablo × ~5 test = ~125 test
+- **Tamamlanan:** 60+ model test (ProcessLevel, Workshop, Step, Decision, OI, Requirement, Link, Dep, Comment, ALMSync, L4Catalog, ProjectRole, PhaseGate)
 - **Faz:** Phase 0-2 (ilgili model ile birlikte)
 - **Tahmini Süre:** 15h
 
-#### TEST-002: API endpoint testleri — ~60 endpoint
+#### TEST-002: API endpoint testleri — ~60 endpoint ✅ `c3e304d`
 - **Her endpoint için:** happy path, validation error, 404, permission denied [GAP-05]
-- **Tahmini:** 60 endpoint × ~4 test = ~240 test
+- **Tamamlanan:** 50+ API test (58 route, filters, pagination, error paths)
 - **Faz:** Phase 0-2 (ilgili endpoint ile birlikte)
 - **Tahmini Süre:** 30h
 
-#### TEST-003: Business rule testleri
+#### TEST-003: Business rule testleri ✅ `c3e304d`
 - **Fit propagation:** 10+ scenario (all fit, mixed, all gap, with override, multi-session)
 - **State machine:** REQ lifecycle (10 transitions × valid/invalid = 20+ test), OI lifecycle (6 transitions)
 - **Code generation:** Uniqueness, sequence, multi-session letter
 - **Blocking logic:** OI blocks REQ, bulk approve with partial block
 - **L3 sign-off:** Pre-condition combinations
 - **L2 readiness:** Auto-calculation scenarios
-- **Tahmini:** ~80 test
+- **Tamamlanan:** 40+ business rule test
 - **Faz:** Phase 0-2
 - **Tahmini Süre:** 10h
 
-#### TEST-004: Integration testleri
+#### TEST-004: Integration testleri ✅ `c3e304d`
 - **Workshop lifecycle:** create → schedule → start → assess → complete → L3 consolidate → L2 confirm
 - **Requirement lifecycle:** create in workshop → submit → approve → ALM push → realize → verify
 - **Scope change:** request → approve → implement → verify impact
 - **Multi-session:** Session A → carry → Session B → complete → propagation
-- **Tahmini:** ~20 integration test
+- **Tamamlanan:** 15+ integration tests (full lifecycle flows, E2E)
 - **Faz:** Phase 0-2
 - **Tahmini Süre:** 8h
 
@@ -1126,7 +1126,7 @@
 
 ## BÖLÜM 6: SEED DATA & MIGRATION
 
-#### SEED-001: L4 Seed Catalog data (SAP Best Practice)
+#### ✅ SEED-001: L4 Seed Catalog data (SAP Best Practice) — TAMAMLANDI (c8bcaa1)
 - **İçerik:** scope_item_code × sub_process_code mapping
 - **Kaynak:** SAP Best Practice dokümanları veya JSON export
 - **Tahmini:** 200-500 L4 kayıt (50-100 scope item × 3-5 L4 each)
@@ -1134,13 +1134,13 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 4h
 
-#### SEED-002: Demo data — Explore Phase
+#### ✅ SEED-002: Demo data — Explore Phase — TAMAMLANDI (c8bcaa1)
 - **İçerik:** 5 L1, 10 L2, 50 L3, 200 L4, 20 workshop, 100 process_step, 50 decisions, 30 OI, 40 REQ
 - **Dosya:** `scripts/seed_data/explore.py`
 - **Faz:** Phase 0
 - **Tahmini Süre:** 5h
 
-#### SEED-003: Project roles demo data
+#### ✅ SEED-003: Project roles demo data — TAMAMLANDI (c8bcaa1)
 - **İçerik:** 5-10 kullanıcı × farklı roller
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
@@ -1191,27 +1191,27 @@
 ```
 1. ✅ Models (T-001→T-015, T-025) + Migration (T-026) — TAMAMLANDI (f2eff2c)
    ↓
-2. ⏳ Services (S-001→S-007) — S-002 ✅, S-005 ✅, kalan: S-001, S-003, S-004, S-006, S-007
+2. ✅ Services (S-001→S-008) — TAMAMLANDI (28de926)
    ↓
-3. ⏳ API Layer (A-001→A-050 Phase 0) — A-001 ✅, kalan: A-002→A-050
+3. ✅ API Layer (A-001→A-058) — TAMAMLANDI (28de926)
    ↓
-4. Seed Data (SEED-001→SEED-003)
+4. ✅ Seed Data (SEED-001→SEED-003) — TAMAMLANDI (c8bcaa1)
    ↓
-5. Tests (TEST-001→TEST-004 Phase 0 kısmı)
+5. ✅ Tests (TEST-001→TEST-004) — 192 test, TAMAMLANDI (c3e304d)
    ↓
-6. Frontend: Shared Components (F-043→F-049)
+6. ⏳ Frontend: Shared Components (F-043→F-049)
    ↓
-7. Frontend: Module A (F-001→F-010)
+7. ⏳ Frontend: Module A (F-001→F-010)
    → Module B (F-011→F-017)
    → Module C (F-018→F-030)
    → Module D (F-031→F-042)
    ↓
-8. E2E Tests (TEST-006)
+8. ⏳ E2E Tests (TEST-006)
 ```
 
 ---
 
-*Doküman Versiyonu: 1.2*
+*Doküman Versiyonu: 1.3*
 *Oluşturulma: 2026-02-10*
-*Son Güncelleme: 2026-02-10 06:50 — 33 task tamamlandı (Phase 0 + Phase 1)*
+*Son Güncelleme: 2026-02-10 08:30 — 92/150 task tamamlandı (Phase 0 backend complete)*
 *Kaynak: explore-phase-fs-ts.md v1.2 (2787 satır)*
