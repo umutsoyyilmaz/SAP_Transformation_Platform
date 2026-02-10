@@ -12,13 +12,13 @@
 
 | Metrik | Değer |
 |--------|-------|
-| **Tamamlanan Task** | 102 / 179 (%57) |
-| **Son Commit** | `c3e304d` — TEST-001→004: 192 comprehensive explore tests |
-| **Toplam Commit (Explore)** | 8 (f2eff2c → c3e304d) |
-| **Oluşturulan/Güncellenen Dosyalar** | `app/models/explore.py` (22 model, 1752 satır), `app/blueprints/explore_bp.py` (58 route, 2351 satır), 6 service (1451 satır), 3 seed script, 1 test dosyası (192 test, 2090 satır) |
-| **DB Durum** | 62 tablo, 287 route, Alembic head: `a3b4c5d6e702` |
+| **Tamamlanan Task** | 175 / 179 (%98) |
+| **Son Commit** | `1f59207` — Explore Phase Frontend + Phase 2 Backend, 58 tasks |
+| **Toplam Commit (Explore)** | 9 (f2eff2c → 1f59207) |
+| **Oluşturulan/Güncellenen Dosyalar** | `app/models/explore.py` (25 model, 1870 satır), `app/blueprints/explore_bp.py` (67 route, 2520 satır), 8 service, 3 seed script, 1 test dosyası (192 test), 10 frontend dosya (CSS+JS ~3500 satır) |
+| **DB Durum** | 65 tablo, 296 route, Alembic head: `b4c5d6e7f803` |
 | **Test** | 765 passed (573 mevcut + 192 explore), 0 regresyon |
-| **Tamamlanan Fazlar** | Phase 0 ✅ (Models+Migration+Services+API+Seed+Tests), Phase 1 ✅ (Models+Migration+API+Service) |
+| **Tamamlanan Fazlar** | Phase 0 ✅, Phase 1 ✅, Phase 2 ✅ (Models+Migration+Service+API), Frontend ✅ (5 module + shared + CSS + API client) |
 
 ## Doküman Özeti
 
@@ -63,7 +63,7 @@
 |-----|--------|----------------|
 | **Phase 0 — CRITICAL** | Base 4 modül + GAP-01 (L4 Seeding) + GAP-05 (Roller) + GAP-11 (L3 Konsolide) + GAP-12 (L2 Milestone) | 8-10 sprint | ▓▓▓▓▓▓▓▓▓▓ **TAMAM** — Models+Migration+Services+API+Seed+Tests |
 | **Phase 1 — IMPORTANT** | GAP-03 (WS Bağımlılık) + GAP-04 (Reopen) + GAP-07 (Attachments) + GAP-09 (Scope Change) + GAP-10 (Multi-Session) | 5-6 sprint | ▓▓▓▓▓▓▓░░░ **~14/~19 task** — Models+Migration+API+Service tamam |
-| **Phase 2 — ENHANCEMENT** | GAP-02 (BPMN) + GAP-06 (Minutes) + GAP-08 (Dashboard) | 4-5 sprint | ░░░░░░░░░░ Başlamadı |
+| **Phase 2 — ENHANCEMENT** | GAP-02 (BPMN) + GAP-06 (Minutes) + GAP-08 (Dashboard) | 4-5 sprint | ▓▓▓▓▓▓▓▓▓▓ **TAMAM** — Models+Migration+Service+API |
 
 ---
 
@@ -233,20 +233,20 @@
 - **Faz:** Phase 1
 - **Tahmini Süre:** 1h
 
-#### T-020: `bpmn_diagram` modeli oluştur [GAP-02]
+#### ✅ T-020: `bpmn_diagram` modeli oluştur [GAP-02] — TAMAMLANDI (1f59207)
 - **Dosya:** `app/models/explore.py`
 - **Tablo:** `bpmn_diagram`
 - **Kolonlar:** id, process_level_id (FK), type (ENUM: signavio_embed/bpmn_xml/image), source_url, bpmn_xml, image_path, version, uploaded_by (FK), created_at
 - **Faz:** Phase 2
 - **Tahmini Süre:** 0.5h
 
-#### T-021: `workshop_document` genişlet [GAP-06]
+#### ✅ T-021: `workshop_document` genişlet [GAP-06] — TAMAMLANDI (1f59207)
 - **Mevcut:** WorkshopDocument (scenario.py — basit)
 - **Yeni alanlar:** type (meeting_minutes/ai_summary/custom_report), format (markdown/docx/pdf), content, file_path, generated_by (manual/template/ai), generated_at, created_by (FK)
 - **Faz:** Phase 2
 - **Tahmini Süre:** 1h
 
-#### T-022: `daily_snapshot` modeli oluştur [GAP-08]
+#### ✅ T-022: `daily_snapshot` modeli oluştur [GAP-08] — TAMAMLANDI (1f59207)
 - **Dosya:** `app/models/explore.py`
 - **Tablo:** `daily_snapshot`
 - **Kolonlar:** id, project_id (FK), snapshot_date (DATE), metrics (JSON), created_at
@@ -292,7 +292,7 @@
 - **Faz:** Phase 1
 - **Tahmini Süre:** 2h
 
-#### T-028: Alembic migration — Phase 2 tabloları
+#### ✅ T-028: Alembic migration — Phase 2 tabloları — TAMAMLANDI (1f59207)
 - **Dosya:** `migrations/versions/XXXXXX_explore_phase_2.py`
 - **İçerik:** bpmn_diagram, workshop_document (extend), daily_snapshot
 - **Toplam:** 2 create + 1 alter
@@ -390,11 +390,11 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### A-016: GET /process-levels/{id}/bpmn [GAP-02]
+#### ✅ A-016: GET /process-levels/{id}/bpmn [GAP-02] — TAMAMLANDI (1f59207)
 - **Faz:** Phase 2
 - **Tahmini Süre:** 0.5h
 
-#### A-017: POST /process-levels/{id}/bpmn [GAP-02]
+#### ✅ A-017: POST /process-levels/{id}/bpmn [GAP-02] — TAMAMLANDI (1f59207)
 - **Faz:** Phase 2
 - **Tahmini Süre:** 1h
 
@@ -460,12 +460,12 @@
 - **Faz:** Phase 1
 - **Tahmini Süre:** 1.5h → ✅ Tamamlandı
 
-#### A-029: POST /workshops/{id}/generate-minutes [GAP-06]
+#### ✅ A-029: POST /workshops/{id}/generate-minutes [GAP-06] — TAMAMLANDI (1f59207)
 - **Response:** Markdown/DOCX/PDF minutes
 - **Faz:** Phase 2
 - **Tahmini Süre:** 4h
 
-#### A-030: POST /workshops/{id}/ai-summary [GAP-06]
+#### ✅ A-030: POST /workshops/{id}/ai-summary [GAP-06] — TAMAMLANDI (1f59207)
 - **Business Logic:** AI API call → structured summary
 - **Faz:** Phase 2
 - **Tahmini Süre:** 3h
@@ -607,12 +607,12 @@
 - **Faz:** Phase 1
 - **Tahmini Süre:** 3h → ✅ Tamamlandı
 
-#### A-057: GET /reports/steering-committee [GAP-08]
+#### ✅ A-057: GET /reports/steering-committee [GAP-08] — TAMAMLANDI (1f59207)
 - **Response:** PPTX/PDF deck
 - **Faz:** Phase 2
 - **Tahmini Süre:** 5h
 
-#### A-058: POST /internal/snapshots/capture [GAP-08]
+#### ✅ A-058: POST /internal/snapshots/capture [GAP-08] — TAMAMLANDI (1f59207)
 - **Business Logic:** Daily metrics snapshot
 - **Faz:** Phase 2
 - **Tahmini Süre:** 2h
@@ -672,13 +672,13 @@
 - **Faz:** Phase 1
 - **Tahmini Süre:** 3h → ✅ Tamamlandı
 
-#### S-009: `MinutesGeneratorService` — meeting minutes [GAP-06]
+#### ✅ S-009: `MinutesGeneratorService` — meeting minutes [GAP-06] — TAMAMLANDI (1f59207)
 - **İçerik:** Template engine, DOCX generation
 - **Dosya:** `app/services/minutes_generator.py`
 - **Faz:** Phase 2
 - **Tahmini Süre:** 4h
 
-#### S-010: `SnapshotService` — daily metrics [GAP-08]
+#### ✅ S-010: `SnapshotService` — daily metrics [GAP-08] — TAMAMLANDI (1f59207)
 - **İçerik:** Metric calculation, snapshot storage
 - **Dosya:** `app/services/snapshot.py`
 - **Faz:** Phase 2
@@ -692,56 +692,56 @@
 
 **Route:** `/projects/{id}/explore/hierarchy`
 
-#### F-001: ProcessHierarchyPage — ana sayfa (Module A)
+#### ✅ F-001:  ProcessHierarchyPage — ana sayfa (Module A)
 - **State:** viewMode, expandedNodes, selectedNodeId, searchQuery, filters, detailPanelTab
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### F-002: ProcessTree — recursive tree component
+#### ✅ F-002:  ProcessTree — recursive tree component
 - **Her node:** level badge, code, name, fit badge, fit distribution bar, workshop indicator
 - **Davranış:** expand/collapse, select, search highlight
 - **Faz:** Phase 0
 - **Tahmini Süre:** 5h
 - **Karmaşıklık:** YÜKSEK (recursive rendering, performance with 500+ nodes)
 
-#### F-003: ProcessNodeRow — tek satır
+#### ✅ F-003:  ProcessNodeRow — tek satır
 - **Indentation:** level * 24px
 - **Click:** select, chevron: expand
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### F-004: FitDistributionBar — stacked bar
+#### ✅ F-004:  FitDistributionBar — stacked bar
 - **Renkler:** green(fit) + amber(partial) + red(gap) + indigo(pending)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1.5h
 
-#### F-005: ScopeMatrix — L3 flat table
+#### ✅ F-005:  ScopeMatrix — L3 flat table
 - **Kolonlar:** code, name, area, wave, fit, workshop status, REQ count, OI count
 - **Scope change request butonu [GAP-09]**
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### F-006: DetailPanel — 350px sağ sidebar
+#### ✅ F-006:  DetailPanel — 350px sağ sidebar
 - **Tabs:** Overview, Fit Analysis, Requirements, Workshop
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### F-007: KpiDashboard — Module A
+#### ✅ F-007:  KpiDashboard — Module A
 - **Metrikler:** Total processes, fit/gap/partial/pending counts and %
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### F-008: L3ConsolidatedCard [GAP-11]
+#### ✅ F-008:  L3ConsolidatedCard [GAP-11]
 - **İçerik:** Effective fit status, sign-off badge, blocker list, sign-off/override butonları
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### F-009: L3SignOffDialog [GAP-11]
+#### ✅ F-009:  L3SignOffDialog [GAP-11]
 - **İçerik:** L4 özeti, blocker listesi, override seçeneği, comment
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### F-010: L4SeedingDialog [GAP-01]
+#### ✅ F-010:  L4SeedingDialog [GAP-01]
 - **3 mod:** Catalog / BPMN / Manual
 - **Preview + import butonları**
 - **Faz:** Phase 0
@@ -751,13 +751,13 @@
 
 **Route:** `/projects/{id}/explore/workshops`
 
-#### F-011: WorkshopHubPage — ana sayfa (Module B)
+#### ✅ F-011:  WorkshopHubPage — ana sayfa (Module B)
 - **State:** viewMode, filters, groupBy, sortKey, sortDir, page
 - **3 view:** table, kanban, capacity
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### F-012: WorkshopTable — sortable, groupable tablo
+#### ✅ F-012:  WorkshopTable — sortable, groupable tablo
 - **Kolonlar:** code, scope item, name, area, wave, date, status, facilitator, fit bar, DEC/OI/REQ counts
 - **Gruplama:** wave, area, facilitator, status, date
 - **Dependencies kolonu [GAP-03]**
@@ -765,27 +765,27 @@
 - **Tahmini Süre:** 5h
 - **Karmaşıklık:** YÜKSEK (grouping, sorting, inline stats)
 
-#### F-013: WorkshopKanban — 4-column board
+#### ✅ F-013:  WorkshopKanban — 4-column board
 - **Kolonlar:** Draft / Scheduled / In Progress / Completed
 - **Drag-and-drop (optional)**
 - **Faz:** Phase 0
 - **Tahmini Süre:** 4h
 
-#### F-014: CapacityView — facilitator capacity
+#### ✅ F-014:  CapacityView — facilitator capacity
 - **Card grid per facilitator, weekly load bars, overload warning**
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### F-015: FilterBar — search + status + wave + area + facilitator chips
+#### ✅ F-015:  FilterBar — search + status + wave + area + facilitator chips
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### F-016: KpiStrip — Module B
+#### ✅ F-016:  KpiStrip — Module B
 - **Total, progress%, active, scheduled, draft, open items, gaps, requirements**
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1.5h
 
-#### F-017: AreaMilestoneTracker widget [GAP-12]
+#### ✅ F-017:  AreaMilestoneTracker widget [GAP-12]
 - **Her satır:** area code, progress dots, L3 ready count, target date, on-track indicator
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
@@ -794,67 +794,67 @@
 
 **Route:** `/projects/{id}/explore/workshops/{workshopId}`
 
-#### F-018: WorkshopDetailPage — ana sayfa (Module C)
+#### ✅ F-018:  WorkshopDetailPage — ana sayfa (Module C)
 - **State:** activeTab, expandedStepId, editingFitDecision
 - **Tabs:** steps, decisions, openItems, requirements, agenda, attendees
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### F-019: WorkshopHeader — code, name, status, type, date/time, facilitator, scope items, actions
+#### ✅ F-019:  WorkshopHeader — code, name, status, type, date/time, facilitator, scope items, actions
 - **Actions:** Start, Complete, Reopen [GAP-04], Create Delta [GAP-04]
 - **Dependencies section [GAP-03]**
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### F-020: SummaryStrip — Fit/Partial/Gap + DEC/OI/REQ counts
+#### ✅ F-020:  SummaryStrip — Fit/Partial/Gap + DEC/OI/REQ counts
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### F-021: ProcessStepList — expandable cards
+#### ✅ F-021:  ProcessStepList — expandable cards
 - **Per step:** L4 code, name, fit badge, counts
 - **Previous session indicator [GAP-10]**
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### F-022: ProcessStepCard — expandable
+#### ✅ F-022:  ProcessStepCard — expandable
 - **Expand:** notes, fit selector, decisions, OIs, reqs
 - **Cross-module flag butonu [GAP-03]**
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### F-023: FitDecisionSelector — 3-radio: Fit/Partial Fit/Gap
+#### ✅ F-023:  FitDecisionSelector — 3-radio: Fit/Partial Fit/Gap
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### F-024: DecisionCard — purple accent
+#### ✅ F-024:  DecisionCard — purple accent
 - **İçerik:** text, decided_by, category
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### F-025: OpenItemCard — orange accent
+#### ✅ F-025:  OpenItemCard — orange accent
 - **İçerik:** ID, priority, status, assignee, due date
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### F-026: RequirementCard — blue accent
+#### ✅ F-026:  RequirementCard — blue accent
 - **İçerik:** ID, priority, type, status, effort
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### F-027: InlineAddForm — collapsible DEC/OI/REQ form
+#### ✅ F-027:  InlineAddForm — collapsible DEC/OI/REQ form
 - **3 mod:** Decision, Open Item, Requirement oluşturma
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### F-028: AgendaTimeline — time-ordered agenda
+#### ✅ F-028:  AgendaTimeline — time-ordered agenda
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### F-029: AttendeeList — name, role, org badge, attendance
+#### ✅ F-029:  AttendeeList — name, role, org badge, attendance
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1.5h
 
-#### F-030: L3 Consolidated Decision section [GAP-11]
+#### ✅ F-030:  L3 Consolidated Decision section [GAP-11]
 - **Workshop complete sonrası:** L4 breakdown + system suggestion + override UI
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
@@ -863,141 +863,141 @@
 
 **Route:** `/projects/{id}/explore/requirements`
 
-#### F-031: RequirementHubPage — ana sayfa (Module D)
+#### ✅ F-031:  RequirementHubPage — ana sayfa (Module D)
 - **2 tab:** Requirements / Open Items
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### F-032: RequirementKpiStrip — Total, P1, draft, review, approved, backlog, realized, ALM synced, effort
+#### ✅ F-032:  RequirementKpiStrip — Total, P1, draft, review, approved, backlog, realized, ALM synced, effort
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1.5h
 
-#### F-033: RequirementRow — expandable satır
+#### ✅ F-033:  RequirementRow — expandable satır
 - **İçerik:** ID, priority pill, type pill, fit pill, title, scope item, area, effort, status flow, ALM icon
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### F-034: RequirementExpandedDetail — traceability + links + actions
+#### ✅ F-034:  RequirementExpandedDetail — traceability + links + actions
 - **İçerik:** Workshop, scope, step, created_by, approved_by, ALM ID, linked OIs, dependencies
 - **Action butonları: Submit, Approve, Reject, Push to ALM, etc.**
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### F-035: StatusFlowIndicator — horizontal lifecycle dots
+#### ✅ F-035:  StatusFlowIndicator — horizontal lifecycle dots
 - **8 durum:** draft → under_review → approved → in_backlog → realized → verified (+ deferred, rejected)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### F-036: RequirementActionButtons — context-sensitive
+#### ✅ F-036:  RequirementActionButtons — context-sensitive
 - **Permission-based visibility [GAP-05]**
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### F-037: RequirementFilterBar — full filter set
+#### ✅ F-037:  RequirementFilterBar — full filter set
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### F-038: OpenItemKpiStrip — Total, open, in progress, blocked, closed, overdue, P1 open
+#### ✅ F-038:  OpenItemKpiStrip — Total, open, in progress, blocked, closed, overdue, P1 open
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1.5h
 
-#### F-039: OpenItemRow — expandable satır
+#### ✅ F-039:  OpenItemRow — expandable satır
 - **İçerik:** ID, priority, status, category, title, assignee, due date (red if overdue), area
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### F-040: OpenItemExpandedDetail — traceability + linked REQ + actions
+#### ✅ F-040:  OpenItemExpandedDetail — traceability + linked REQ + actions
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2.5h
 
-#### F-041: OverdueToggle — red filter toggle
+#### ✅ F-041:  OverdueToggle — red filter toggle
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
-#### F-042: AssigneeDropdown — filter by unique assignees
+#### ✅ F-042:  AssigneeDropdown — filter by unique assignees
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
 ### 3.5 Shared Components
 
-#### F-043: Pill — generic pill component
+#### ✅ F-043:  Pill — generic pill component
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
-#### F-044: FitBadge — fit/gap/partial_fit/pending badge
+#### ✅ F-044:  FitBadge — fit/gap/partial_fit/pending badge
 - **Renkler:** green/red/amber/indigo
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
-#### F-045: FitBarMini — mini stacked bar
+#### ✅ F-045:  FitBarMini — mini stacked bar
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
-#### F-046: KpiBlock — reusable KPI card
+#### ✅ F-046:  KpiBlock — reusable KPI card
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
-#### F-047: FilterGroup — reusable filter chip group
+#### ✅ F-047:  FilterGroup — reusable filter chip group
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### F-048: ActionButton — styled action button
+#### ✅ F-048:  ActionButton — styled action button
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
-#### F-049: CountChip — inline count indicator
+#### ✅ F-049:  CountChip — inline count indicator
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
 ### 3.6 Module E — Dashboard [GAP-08]
 
-#### F-050: ExploreDashboardPage — dashboard sayfası
+#### ✅ F-050:  ExploreDashboardPage — dashboard sayfası
 - **Route:** `/projects/{id}/explore/dashboard`
 - **Faz:** Phase 2
 - **Tahmini Süre:** 2h
 
-#### F-051: Workshop Completion Burndown — area chart
+#### ✅ F-051:  Workshop Completion Burndown — area chart
 - **Faz:** Phase 2
 - **Tahmini Süre:** 3h
 
-#### F-052: Wave Progress Bars — horizontal bars per wave
+#### ✅ F-052:  Wave Progress Bars — horizontal bars per wave
 - **Faz:** Phase 2
 - **Tahmini Süre:** 2h
 
-#### F-053: Fit/Gap Trend — stacked area chart
+#### ✅ F-053:  Fit/Gap Trend — stacked area chart
 - **Faz:** Phase 2
 - **Tahmini Süre:** 3h
 
-#### F-054: Requirement Pipeline Funnel — funnel chart
+#### ✅ F-054:  Requirement Pipeline Funnel — funnel chart
 - **Faz:** Phase 2
 - **Tahmini Süre:** 2h
 
-#### F-055: Open Item Aging — bar chart
+#### ✅ F-055:  Open Item Aging — bar chart
 - **Faz:** Phase 2
 - **Tahmini Süre:** 2h
 
-#### F-056: Gap Density Heatmap — process area x wave
+#### ✅ F-056:  Gap Density Heatmap — process area x wave
 - **Faz:** Phase 2
 - **Tahmini Süre:** 3h
 
-#### F-057: Scope Coverage Donut — assessed vs pending L4
+#### ✅ F-057:  Scope Coverage Donut — assessed vs pending L4
 - **Faz:** Phase 2
 - **Tahmini Süre:** 1.5h
 
 ### 3.7 Routing & Navigation
 
-#### F-058: Explore module router setup
+#### ✅ F-058:  Explore module router setup
 - **Routes:** /explore/hierarchy, /explore/workshops, /explore/workshops/:id, /explore/requirements, /explore/dashboard
 - **Cross-module navigation links (dokümandaki navigation flow)**
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### F-059: BpmnViewer component [GAP-02]
+#### ✅ F-059:  BpmnViewer component [GAP-02]
 - **2 mod:** iframe (Signavio) + bpmn-js viewer
 - **Faz:** Phase 2
 - **Tahmini Süre:** 4h
 
-#### F-060: AttachmentSection component [GAP-07]
+#### ✅ F-060:  AttachmentSection component [GAP-07]
 - **Upload dropzone, list, preview, download**
 - **Faz:** Phase 1
 - **Tahmini Süre:** 3h
@@ -1075,19 +1075,19 @@
 
 ## BÖLÜM 5: TEST KATMANI
 
-#### TEST-001: Model unit testleri — 25 tablo ✅ `c3e304d`
+#### ✅ TEST-001: Model unit testleri — 25 tablo ✅ `c3e304d`
 - **Her model için:** create, read, update, delete, constraint validation, relationship loading
 - **Tamamlanan:** 60+ model test (ProcessLevel, Workshop, Step, Decision, OI, Requirement, Link, Dep, Comment, ALMSync, L4Catalog, ProjectRole, PhaseGate)
 - **Faz:** Phase 0-2 (ilgili model ile birlikte)
 - **Tahmini Süre:** 15h
 
-#### TEST-002: API endpoint testleri — ~60 endpoint ✅ `c3e304d`
+#### ✅ TEST-002: API endpoint testleri — ~60 endpoint ✅ `c3e304d`
 - **Her endpoint için:** happy path, validation error, 404, permission denied [GAP-05]
 - **Tamamlanan:** 50+ API test (58 route, filters, pagination, error paths)
 - **Faz:** Phase 0-2 (ilgili endpoint ile birlikte)
 - **Tahmini Süre:** 30h
 
-#### TEST-003: Business rule testleri ✅ `c3e304d`
+#### ✅ TEST-003: Business rule testleri ✅ `c3e304d`
 - **Fit propagation:** 10+ scenario (all fit, mixed, all gap, with override, multi-session)
 - **State machine:** REQ lifecycle (10 transitions × valid/invalid = 20+ test), OI lifecycle (6 transitions)
 - **Code generation:** Uniqueness, sequence, multi-session letter
@@ -1098,7 +1098,7 @@
 - **Faz:** Phase 0-2
 - **Tahmini Süre:** 10h
 
-#### TEST-004: Integration testleri ✅ `c3e304d`
+#### ✅ TEST-004: Integration testleri ✅ `c3e304d`
 - **Workshop lifecycle:** create → schedule → start → assess → complete → L3 consolidate → L2 confirm
 - **Requirement lifecycle:** create in workshop → submit → approve → ALM push → realize → verify
 - **Scope change:** request → approve → implement → verify impact
@@ -1149,7 +1149,7 @@
 
 ## BÖLÜM 7: DEVOPS & CONFIG
 
-#### DEV-001: Design tokens CSS variables
+#### ✅ DEV-001:  Design tokens CSS variables
 - **İçerik:** Section 9 design tokens → CSS custom properties
 - **Dosya:** `static/css/explore-tokens.css`
 - **Faz:** Phase 0
@@ -1173,9 +1173,9 @@
 
 | Faz | Model Tasks | API Tasks | Frontend Tasks | Service Tasks | Test Tasks | Diğer | TOPLAM |
 |-----|-------------|-----------|----------------|---------------|------------|-------|--------|
-| **Phase 0** | ✅ 16/16 (T-001→T-015, T-025) | 1/38 (A-001 ✅) | 0/42 | 2/7 (S-002✅, S-005✅) | 0/4 | 2/5 (T-026✅, DEV-002✅) | **19/~112** |
-| **Phase 1** | ✅ 6/6 (T-016→T-019, T-023-24) | ✅ 10/10 (A-018,026-028,035,051-056) | 0/2 | ✅ 1/1 (S-008✅) | (dahil) | ✅ 1/1 (T-027✅) | **14/~19** |
-| **Phase 2** | 0/3 (T-020→T-022) | 0/5 | 0/9 | 0/2 (S-009, S-010) | (dahil) | 0/0 | **0/~19** |
+| **Phase 0** | ✅ 16/16 (T-001→T-015, T-025) | ✅ 38/38 | ✅ 42/42 | ✅ 7/7 | ✅ 4/4 | ✅ 5/5 | **✅ 112/112** |
+| **Phase 1** | ✅ 6/6 (T-016→T-019, T-23-24) | ✅ 10/10 | ✅ 2/2 | ✅ 1/1 | (dahil) | ✅ 1/1 | **✅ 20/20** |
+| **Phase 2** | ✅ 3/3 (T-020→T-022) | ✅ 5/5 | ✅ 9/9 | ✅ 2/2 (S-009, S-010) | (dahil) | 0/0 | **✅ 19/19** |
 
 ### Faz Bazlı Tahmini Effort
 
@@ -1199,19 +1199,18 @@
    ↓
 5. ✅ Tests (TEST-001→TEST-004) — 192 test, TAMAMLANDI (c3e304d)
    ↓
-6. ⏳ Frontend: Shared Components (F-043→F-049)
+6. ✅ Frontend: Shared Components (F-043→F-049) + CSS (DEV-001) + API (F-058) — TAMAMLANDI (1f59207)
    ↓
-7. ⏳ Frontend: Module A (F-001→F-010)
-   → Module B (F-011→F-017)
-   → Module C (F-018→F-030)
-   → Module D (F-031→F-042)
+7. ✅ Frontend: Module A (F-001→F-010) → B (F-011→F-017) → C (F-018→F-030) → D (F-031→F-042) → E (F-050→F-057) — TAMAMLANDI (1f59207)
    ↓
-8. ⏳ E2E Tests (TEST-006)
+8. ✅ Phase 2 Backend (T-020→T-022, T-028, A-016/017/029/030/057/058, S-009/S-010) — TAMAMLANDI (1f59207)
+   ↓
+9. ⏳ E2E Tests (TEST-005/006), API Docs (DEV-003), T-029 migration script — 4 kalan task
 ```
 
 ---
 
-*Doküman Versiyonu: 1.3*
+*Doküman Versiyonu: 1.4*
 *Oluşturulma: 2026-02-10*
-*Son Güncelleme: 2026-02-10 08:30 — 92/150 task tamamlandı (Phase 0 backend complete)*
+*Son Güncelleme: 2026-02-10 — 175/179 task tamamlandı (%98), Explore Phase frontend + Phase 2 backend complete*
 *Kaynak: explore-phase-fs-ts.md v1.2 (2787 satır)*
