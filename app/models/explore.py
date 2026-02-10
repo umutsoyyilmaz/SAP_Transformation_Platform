@@ -1750,3 +1750,140 @@ class ScopeChangeLog(db.Model):
 
     def __repr__(self):
         return f"<ScopeChangeLog {self.field_changed}: {self.old_value} → {self.new_value}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 23. BPMNDiagram — Process-level BPMN diagrams [GAP-02] (T-020)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class BPMNDiagram(db.Model):
+    """Stores BPMN diagrams (Signavio embed, raw XML, or uploaded images)."""
+    __tablename__ = "bpmn_diagrams"
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    process_level_id = db.Column(
+        db.String(36), db.ForeignKey("process_levels.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    type = db.Column(
+        db.String(30), nullable=False, default="bpmn_xml",
+        comment="signavio_embed | bpmn_xml | image",
+    )
+    source_url = db.Column(db.Text, nullable=True, comment="Signavio collaboration hub URL")
+    bpmn_xml = db.Column(db.Text, nullable=True, comment="Raw BPMN 2.0 XML")
+    image_path = db.Column(db.String(500), nullable=True, comment="Uploaded diagram image path")
+    version = db.Column(db.Integer, nullable=False, default=1)
+    uploaded_by = db.Column(db.String(36), nullable=True, comment="FK → user")
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    # ── Relationships ────────────────────────────────────────────────────
+    process_level = db.relationship("ProcessLevel", uselist=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "process_level_id": self.process_level_id,
+            "type": self.type,
+            "source_url": self.source_url,
+            "bpmn_xml": self.bpmn_xml,
+            "image_path": self.image_path,
+            "version": self.version,
+            "uploaded_by": self.uploaded_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<BPMNDiagram {self.id} type={self.type} v{self.version}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 24. WorkshopDocument — Meeting minutes / AI summaries [GAP-06] (T-021)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class ExploreWorkshopDocument(db.Model):
+    """Documents generated from or associated with explore workshops."""
+    __tablename__ = "explore_workshop_documents"
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    workshop_id = db.Column(
+        db.String(36), db.ForeignKey("explore_workshops.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    project_id = db.Column(
+        db.String(36), nullable=False, index=True,
+        comment="FK → programs, denormalized for fast queries",
+    )
+    type = db.Column(
+        db.String(30), nullable=False, default="meeting_minutes",
+        comment="meeting_minutes | ai_summary | custom_report",
+    )
+    format = db.Column(
+        db.String(20), nullable=False, default="markdown",
+        comment="markdown | docx | pdf",
+    )
+    title = db.Column(db.String(300), nullable=True)
+    content = db.Column(db.Text, nullable=True, comment="Markdown/text content")
+    file_path = db.Column(db.String(500), nullable=True, comment="Generated file path")
+    generated_by = db.Column(
+        db.String(20), nullable=False, default="manual",
+        comment="manual | template | ai",
+    )
+    generated_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    created_by = db.Column(db.String(36), nullable=True, comment="FK → user")
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    # ── Relationships ────────────────────────────────────────────────────
+    workshop = db.relationship("ExploreWorkshop", uselist=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "workshop_id": self.workshop_id,
+            "project_id": self.project_id,
+            "type": self.type,
+            "format": self.format,
+            "title": self.title,
+            "content": self.content,
+            "file_path": self.file_path,
+            "generated_by": self.generated_by,
+            "generated_at": self.generated_at.isoformat() if self.generated_at else None,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<WorkshopDocument {self.type} ({self.format}) ws={self.workshop_id}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 25. DailySnapshot — Daily project metrics snapshot [GAP-08] (T-022)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class DailySnapshot(db.Model):
+    """Stores daily aggregated metrics for project dashboards & trend charts."""
+    __tablename__ = "daily_snapshots"
+    __table_args__ = (
+        db.UniqueConstraint("project_id", "snapshot_date", name="uq_snapshot_project_date"),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    project_id = db.Column(
+        db.String(36), nullable=False, index=True,
+        comment="FK → programs",
+    )
+    snapshot_date = db.Column(db.Date, nullable=False, default=date.today)
+    metrics = db.Column(db.Text, nullable=True, comment="JSON blob of metrics")
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    def to_dict(self):
+        import json
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "snapshot_date": self.snapshot_date.isoformat() if self.snapshot_date else None,
+            "metrics": json.loads(self.metrics) if self.metrics else {},
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<DailySnapshot {self.project_id} {self.snapshot_date}>"

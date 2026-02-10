@@ -37,6 +37,12 @@ const App = (() => {
         reports:      () => placeholder('Reports', 'Sprint 11'),
         'ai-query':   () => AIQueryView.render(),
         'ai-admin':   () => AIAdminView.render(),
+        // Explore Phase views
+        'explore-dashboard':       () => ExploreDashboardView.render(),
+        'explore-hierarchy':       () => ExploreHierarchyView.render(),
+        'explore-workshops':       () => ExploreWorkshopHubView.render(),
+        'explore-workshop-detail': () => ExploreWorkshopDetailView.render(),
+        'explore-requirements':    () => ExploreRequirementHubView.render(),
     };
 
     let currentView = 'dashboard';
@@ -47,6 +53,7 @@ const App = (() => {
         'scenarios', 'analysis', 'requirements', 'backlog', 'testing',
         'integration', 'process-hierarchy', 'data-factory', 'cutover', 'raid',
         'reports', 'ai-query',
+        'explore-dashboard', 'explore-hierarchy', 'explore-workshops', 'explore-workshop-detail', 'explore-requirements',
     ]);
 
     function getActiveProgram() {

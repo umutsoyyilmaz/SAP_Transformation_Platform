@@ -1,0 +1,949 @@
+/* ============================================
+   Explore Phase — CSS Design Tokens
+   Source: FS/TS Section 9 (UI/UX Design Tokens)
+   Adapted for SAP Fiori Horizon Light Theme
+   ============================================ */
+
+:root {
+    /* ── Fit / Gap / Partial / Pending ──────────────────────────────── */
+    --exp-fit:              #10B981;
+    --exp-fit-bg:           #d1fae5;
+    --exp-fit-text:         #065f46;
+
+    --exp-gap:              #EF4444;
+    --exp-gap-bg:           #fee2e2;
+    --exp-gap-text:         #991b1b;
+
+    --exp-partial:          #F59E0B;
+    --exp-partial-bg:       #fef3c7;
+    --exp-partial-text:     #92400e;
+
+    --exp-pending:          #6366F1;
+    --exp-pending-bg:       #e0e7ff;
+    --exp-pending-text:     #3730a3;
+
+    /* ── Priority Colours ───────────────────────────────────────────── */
+    --exp-p1:               #EF4444;
+    --exp-p1-bg:            #fee2e2;
+    --exp-p2:               #F59E0B;
+    --exp-p2-bg:            #fef3c7;
+    --exp-p3:               #3B82F6;
+    --exp-p3-bg:            #dbeafe;
+    --exp-p4:               #64748B;
+    --exp-p4-bg:            #f1f5f9;
+
+    /* ── Entity Accent Colours ──────────────────────────────────────── */
+    --exp-open-item:        #F97316;
+    --exp-open-item-bg:     #fff7ed;
+    --exp-open-item-text:   #9a3412;
+
+    --exp-decision:         #8B5CF6;
+    --exp-decision-bg:      #ede9fe;
+    --exp-decision-text:    #5b21b6;
+
+    --exp-requirement:      #3B82F6;
+    --exp-requirement-bg:   #eff6ff;
+    --exp-requirement-text: #1e40af;
+
+    /* ── Process Level Colours ──────────────────────────────────────── */
+    --exp-l1:               #8B5CF6;
+    --exp-l1-bg:            #ede9fe;
+    --exp-l2:               #3B82F6;
+    --exp-l2-bg:            #dbeafe;
+    --exp-l3:               #10B981;
+    --exp-l3-bg:            #d1fae5;
+    --exp-l4:               #F59E0B;
+    --exp-l4-bg:            #fef3c7;
+
+    /* ── Wave Colours ───────────────────────────────────────────────── */
+    --exp-wave1:            #3B82F6;
+    --exp-wave1-bg:         #dbeafe;
+    --exp-wave2:            #8B5CF6;
+    --exp-wave2-bg:         #ede9fe;
+    --exp-wave3:            #EC4899;
+    --exp-wave3-bg:         #fce7f3;
+    --exp-wave4:            #14B8A6;
+    --exp-wave4-bg:         #ccfbf1;
+
+    /* ── SAP Area Colours ───────────────────────────────────────────── */
+    --exp-area-FI:          #3B82F6;
+    --exp-area-CO:          #6366F1;
+    --exp-area-SD:          #10B981;
+    --exp-area-MM:          #F59E0B;
+    --exp-area-PP:          #EF4444;
+    --exp-area-QM:          #EC4899;
+    --exp-area-PM:          #14B8A6;
+    --exp-area-WM:          #F97316;
+    --exp-area-HR:          #8B5CF6;
+    --exp-area-PS:          #06B6D4;
+
+    /* ── Workshop Status Colours ────────────────────────────────────── */
+    --exp-ws-draft:         #94A3B8;
+    --exp-ws-draft-bg:      #f1f5f9;
+    --exp-ws-scheduled:     #3B82F6;
+    --exp-ws-scheduled-bg:  #dbeafe;
+    --exp-ws-in-progress:   #F59E0B;
+    --exp-ws-in-progress-bg:#fef3c7;
+    --exp-ws-completed:     #10B981;
+    --exp-ws-completed-bg:  #d1fae5;
+
+    /* ── Requirement Status Colours ─────────────────────────────────── */
+    --exp-rs-draft:         #94A3B8;
+    --exp-rs-under-review:  #F59E0B;
+    --exp-rs-approved:      #10B981;
+    --exp-rs-in-backlog:    #3B82F6;
+    --exp-rs-realized:      #8B5CF6;
+    --exp-rs-verified:      #059669;
+    --exp-rs-deferred:      #64748B;
+    --exp-rs-rejected:      #EF4444;
+
+    /* ── Open Item Status Colours ───────────────────────────────────── */
+    --exp-oi-open:          #F97316;
+    --exp-oi-in-progress:   #3B82F6;
+    --exp-oi-blocked:       #EF4444;
+    --exp-oi-resolved:      #10B981;
+    --exp-oi-closed:        #64748B;
+
+    /* ── Typography ─────────────────────────────────────────────────── */
+    --exp-font-family:      '72', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --exp-font-mono:        'JetBrains Mono', 'Fira Code', 'Menlo', monospace;
+    --exp-font-size-xs:     11px;
+    --exp-font-size-sm:     12px;
+    --exp-font-size-md:     14px;
+    --exp-font-size-lg:     16px;
+    --exp-font-size-xl:     20px;
+    --exp-font-size-2xl:    24px;
+    --exp-font-size-3xl:    30px;
+
+    /* ── Spacing Scale ──────────────────────────────────────────────── */
+    --exp-space-xs:         4px;
+    --exp-space-sm:         8px;
+    --exp-space-md:         12px;
+    --exp-space-lg:         16px;
+    --exp-space-xl:         24px;
+    --exp-space-2xl:        32px;
+    --exp-space-3xl:        48px;
+
+    /* ── Border Radius ──────────────────────────────────────────────── */
+    --exp-radius-sm:        4px;
+    --exp-radius-md:        6px;
+    --exp-radius-lg:        8px;
+    --exp-radius-xl:        12px;
+    --exp-radius-pill:      9999px;
+
+    /* ── Shadows ────────────────────────────────────────────────────── */
+    --exp-shadow-xs:        0 1px 2px rgba(0,0,0,0.05);
+    --exp-shadow-sm:        0 1px 3px rgba(0,0,0,0.08);
+    --exp-shadow-md:        0 4px 12px rgba(0,0,0,0.10);
+    --exp-shadow-lg:        0 8px 24px rgba(0,0,0,0.12);
+
+    /* ── Z-Index Scale ──────────────────────────────────────────────── */
+    --exp-z-dropdown:       200;
+    --exp-z-sticky:         300;
+    --exp-z-modal:          400;
+    --exp-z-toast:          500;
+
+    /* ── Component Tokens ───────────────────────────────────────────── */
+    /* KPI Card */
+    --exp-kpi-bg:           #ffffff;
+    --exp-kpi-border:       #e2e8f0;
+    --exp-kpi-shadow:       var(--exp-shadow-sm);
+    --exp-kpi-radius:       var(--exp-radius-lg);
+    --exp-kpi-padding:      var(--exp-space-lg) var(--exp-space-xl);
+
+    /* Detail Panel */
+    --exp-panel-width:      350px;
+    --exp-panel-bg:         #ffffff;
+    --exp-panel-border:     #e2e8f0;
+    --exp-panel-shadow:     -4px 0 16px rgba(0,0,0,0.06);
+
+    /* Tree Node */
+    --exp-tree-indent:      24px;
+    --exp-tree-node-height: 44px;
+    --exp-tree-hover-bg:    #f8fafc;
+    --exp-tree-active-bg:   #eff6ff;
+    --exp-tree-active-border: var(--sap-blue);
+
+    /* Table */
+    --exp-table-header-bg:  #f8fafc;
+    --exp-table-stripe-bg:  #fafbfc;
+    --exp-table-hover-bg:   #f1f5f9;
+    --exp-table-border:     #e2e8f0;
+
+    /* Kanban */
+    --exp-kanban-col-bg:    #f1f5f9;
+    --exp-kanban-card-bg:   #ffffff;
+    --exp-kanban-card-shadow: var(--exp-shadow-sm);
+
+    /* Filter Chip */
+    --exp-chip-bg:          #f1f5f9;
+    --exp-chip-bg-active:   var(--sap-blue);
+    --exp-chip-text:        #475569;
+    --exp-chip-text-active: #ffffff;
+    --exp-chip-radius:      var(--exp-radius-pill);
+
+    /* Transition */
+    --exp-transition-fast:  0.15s ease;
+    --exp-transition:       0.2s ease;
+    --exp-transition-slow:  0.35s ease;
+}
+
+/* ── Explore Layout Container ───────────────────────────────────────── */
+.explore-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--exp-space-lg);
+    padding: var(--exp-space-lg);
+    min-height: 100%;
+}
+
+.explore-page__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--exp-space-md);
+}
+
+.explore-page__title {
+    font-size: var(--exp-font-size-2xl);
+    font-weight: 700;
+    color: var(--sap-text-primary);
+    margin: 0;
+}
+
+.explore-page__subtitle {
+    font-size: var(--exp-font-size-sm);
+    color: var(--sap-text-secondary);
+    margin: 0;
+}
+
+/* ── KPI Strip ──────────────────────────────────────────────────────── */
+.exp-kpi-strip {
+    display: flex;
+    gap: var(--exp-space-md);
+    flex-wrap: wrap;
+}
+
+.exp-kpi-card {
+    flex: 1 1 140px;
+    min-width: 130px;
+    background: var(--exp-kpi-bg);
+    border: 1px solid var(--exp-kpi-border);
+    border-radius: var(--exp-kpi-radius);
+    padding: var(--exp-kpi-padding);
+    box-shadow: var(--exp-kpi-shadow);
+    transition: box-shadow var(--exp-transition);
+}
+
+.exp-kpi-card:hover {
+    box-shadow: var(--exp-shadow-md);
+}
+
+.exp-kpi-card__value {
+    font-size: var(--exp-font-size-2xl);
+    font-weight: 700;
+    line-height: 1;
+    color: var(--sap-text-primary);
+}
+
+.exp-kpi-card__value--accent {
+    color: var(--sap-blue);
+}
+
+.exp-kpi-card__label {
+    font-size: var(--exp-font-size-xs);
+    color: var(--sap-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: var(--exp-space-xs);
+}
+
+/* ── Card (Explore) ─────────────────────────────────────────────────── */
+.exp-card {
+    background: var(--sap-card-bg);
+    border: 1px solid var(--exp-kpi-border);
+    border-radius: var(--exp-radius-lg);
+    box-shadow: var(--exp-shadow-xs);
+}
+
+.exp-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--exp-space-md) var(--exp-space-lg);
+    border-bottom: 1px solid var(--exp-kpi-border);
+}
+
+.exp-card__title {
+    font-size: var(--exp-font-size-lg);
+    font-weight: 600;
+    color: var(--sap-text-primary);
+    margin: 0;
+}
+
+.exp-card__body {
+    padding: var(--exp-space-lg);
+}
+
+/* ── Tabs ───────────────────────────────────────────────────────────── */
+.exp-tabs {
+    display: flex;
+    border-bottom: 2px solid #e2e8f0;
+    gap: 0;
+}
+
+.exp-tab {
+    padding: var(--exp-space-sm) var(--exp-space-lg);
+    font-size: var(--exp-font-size-md);
+    font-weight: 500;
+    color: var(--sap-text-secondary);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all var(--exp-transition-fast);
+    white-space: nowrap;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+}
+
+.exp-tab:hover {
+    color: var(--sap-text-primary);
+    background: #f8fafc;
+}
+
+.exp-tab--active {
+    color: var(--sap-blue);
+    border-bottom-color: var(--sap-blue);
+    font-weight: 600;
+}
+
+/* ── Table (Explore) ────────────────────────────────────────────────── */
+.exp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--exp-font-size-md);
+}
+
+.exp-table thead th {
+    background: var(--exp-table-header-bg);
+    color: var(--sap-text-secondary);
+    font-weight: 600;
+    font-size: var(--exp-font-size-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding: var(--exp-space-sm) var(--exp-space-md);
+    border-bottom: 2px solid var(--exp-table-border);
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+
+.exp-table thead th:hover {
+    background: #eef2f6;
+}
+
+.exp-table thead th .sort-icon {
+    margin-left: 4px;
+    opacity: 0.4;
+}
+
+.exp-table thead th .sort-icon--active {
+    opacity: 1;
+}
+
+.exp-table tbody tr {
+    border-bottom: 1px solid var(--exp-table-border);
+    transition: background var(--exp-transition-fast);
+}
+
+.exp-table tbody tr:hover {
+    background: var(--exp-table-hover-bg);
+}
+
+.exp-table tbody tr:nth-child(even) {
+    background: var(--exp-table-stripe-bg);
+}
+
+.exp-table tbody tr:nth-child(even):hover {
+    background: var(--exp-table-hover-bg);
+}
+
+.exp-table td {
+    padding: var(--exp-space-sm) var(--exp-space-md);
+    vertical-align: middle;
+}
+
+/* ── Empty State ────────────────────────────────────────────────────── */
+.exp-empty {
+    text-align: center;
+    padding: var(--exp-space-3xl) var(--exp-space-xl);
+    color: var(--sap-text-secondary);
+}
+
+.exp-empty__icon {
+    font-size: 48px;
+    margin-bottom: var(--exp-space-md);
+}
+
+.exp-empty__title {
+    font-size: var(--exp-font-size-lg);
+    font-weight: 600;
+    color: var(--sap-text-primary);
+    margin-bottom: var(--exp-space-sm);
+}
+
+.exp-empty__text {
+    font-size: var(--exp-font-size-md);
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+/* ── Search Input ───────────────────────────────────────────────────── */
+.exp-search {
+    position: relative;
+}
+
+.exp-search__input {
+    width: 100%;
+    padding: var(--exp-space-sm) var(--exp-space-md);
+    padding-left: 36px;
+    border: 1px solid var(--sap-border);
+    border-radius: var(--exp-radius-md);
+    font-size: var(--exp-font-size-md);
+    outline: none;
+    transition: border-color var(--exp-transition-fast);
+}
+
+.exp-search__input:focus {
+    border-color: var(--sap-blue);
+    box-shadow: 0 0 0 3px rgba(0, 112, 242, 0.1);
+}
+
+.exp-search__icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--sap-text-secondary);
+    font-size: 14px;
+    pointer-events: none;
+}
+
+/* ── Toolbar ────────────────────────────────────────────────────────── */
+.exp-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--exp-space-md);
+    flex-wrap: wrap;
+}
+
+.exp-toolbar__group {
+    display: flex;
+    align-items: center;
+    gap: var(--exp-space-sm);
+}
+
+.exp-toolbar__spacer {
+    flex: 1;
+}
+
+/* ── 2-Column Layout (Content + Detail Panel) ───────────────────────── */
+.exp-layout-split {
+    display: flex;
+    gap: 0;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.exp-layout-split__main {
+    flex: 1;
+    overflow-y: auto;
+    min-width: 0;
+}
+
+.exp-layout-split__panel {
+    width: var(--exp-panel-width);
+    background: var(--exp-panel-bg);
+    border-left: 1px solid var(--exp-panel-border);
+    box-shadow: var(--exp-panel-shadow);
+    overflow-y: auto;
+    transition: width var(--exp-transition);
+    flex-shrink: 0;
+}
+
+.exp-layout-split__panel--collapsed {
+    width: 0;
+    border-left: none;
+    box-shadow: none;
+    overflow: hidden;
+}
+
+/* ── Expandable Row ─────────────────────────────────────────────────── */
+.exp-expandable-row {
+    cursor: pointer;
+}
+
+.exp-expandable-row__chevron {
+    display: inline-block;
+    transition: transform var(--exp-transition-fast);
+    color: var(--sap-text-secondary);
+    font-size: 12px;
+    width: 20px;
+    text-align: center;
+}
+
+.exp-expandable-row__chevron--open {
+    transform: rotate(90deg);
+}
+
+.exp-expandable-detail {
+    background: #fafbfc;
+    border-top: 1px solid var(--exp-table-border);
+    padding: var(--exp-space-lg);
+    animation: exp-slideDown 0.2s ease;
+}
+
+@keyframes exp-slideDown {
+    from { opacity: 0; max-height: 0; }
+    to   { opacity: 1; max-height: 600px; }
+}
+
+/* ── Kanban Board ───────────────────────────────────────────────────── */
+.exp-kanban {
+    display: flex;
+    gap: var(--exp-space-md);
+    overflow-x: auto;
+    padding-bottom: var(--exp-space-sm);
+}
+
+.exp-kanban__column {
+    flex: 1;
+    min-width: 260px;
+    max-width: 340px;
+    background: var(--exp-kanban-col-bg);
+    border-radius: var(--exp-radius-lg);
+    padding: var(--exp-space-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--exp-space-sm);
+}
+
+.exp-kanban__col-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--exp-space-sm) var(--exp-space-sm);
+    font-weight: 600;
+    font-size: var(--exp-font-size-sm);
+    color: var(--sap-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.exp-kanban__col-count {
+    background: #e2e8f0;
+    color: var(--sap-text-secondary);
+    padding: 2px 8px;
+    border-radius: var(--exp-radius-pill);
+    font-size: var(--exp-font-size-xs);
+    font-weight: 700;
+}
+
+.exp-kanban__card {
+    background: var(--exp-kanban-card-bg);
+    border-radius: var(--exp-radius-md);
+    padding: var(--exp-space-md);
+    box-shadow: var(--exp-kanban-card-shadow);
+    cursor: pointer;
+    transition: box-shadow var(--exp-transition-fast);
+    border-left: 3px solid transparent;
+}
+
+.exp-kanban__card:hover {
+    box-shadow: var(--exp-shadow-md);
+}
+
+/* ── Timeline ───────────────────────────────────────────────────────── */
+.exp-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    position: relative;
+    padding-left: 24px;
+}
+
+.exp-timeline::before {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background: #e2e8f0;
+}
+
+.exp-timeline__item {
+    position: relative;
+    padding: var(--exp-space-sm) 0 var(--exp-space-md) 0;
+}
+
+.exp-timeline__item::before {
+    content: '';
+    position: absolute;
+    left: -20px;
+    top: 12px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--sap-blue);
+    border: 2px solid #ffffff;
+}
+
+.exp-timeline__time {
+    font-size: var(--exp-font-size-xs);
+    color: var(--sap-text-secondary);
+    font-weight: 600;
+}
+
+.exp-timeline__content {
+    font-size: var(--exp-font-size-md);
+    color: var(--sap-text-primary);
+    margin-top: 2px;
+}
+
+/* ── Process Tree ───────────────────────────────────────────────────── */
+.exp-tree {
+    display: flex;
+    flex-direction: column;
+    font-size: var(--exp-font-size-md);
+}
+
+.exp-tree-node {
+    display: flex;
+    align-items: center;
+    gap: var(--exp-space-sm);
+    height: var(--exp-tree-node-height);
+    padding: 0 var(--exp-space-md);
+    cursor: pointer;
+    transition: background var(--exp-transition-fast);
+    border-left: 3px solid transparent;
+}
+
+.exp-tree-node:hover {
+    background: var(--exp-tree-hover-bg);
+}
+
+.exp-tree-node--active {
+    background: var(--exp-tree-active-bg);
+    border-left-color: var(--exp-tree-active-border);
+}
+
+.exp-tree-node__chevron {
+    width: 16px;
+    font-size: 10px;
+    color: var(--sap-text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform var(--exp-transition-fast);
+    text-align: center;
+}
+
+.exp-tree-node__chevron--open {
+    transform: rotate(90deg);
+}
+
+.exp-tree-node__chevron--leaf {
+    visibility: hidden;
+}
+
+.exp-tree-node__level {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 20px;
+    border-radius: var(--exp-radius-sm);
+    font-size: var(--exp-font-size-xs);
+    font-weight: 700;
+    flex-shrink: 0;
+    color: #ffffff;
+}
+
+.exp-tree-node__code {
+    font-size: var(--exp-font-size-sm);
+    font-family: var(--exp-font-mono);
+    color: var(--sap-text-secondary);
+    flex-shrink: 0;
+    min-width: 80px;
+}
+
+.exp-tree-node__name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.exp-tree-node__meta {
+    display: flex;
+    align-items: center;
+    gap: var(--exp-space-sm);
+    flex-shrink: 0;
+}
+
+/* ── Status Flow Indicator ──────────────────────────────────────────── */
+.exp-status-flow {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.exp-status-flow__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    transition: background var(--exp-transition-fast);
+}
+
+.exp-status-flow__dot--reached {
+    background: var(--sap-blue);
+}
+
+.exp-status-flow__dot--current {
+    background: var(--sap-blue);
+    box-shadow: 0 0 0 3px rgba(0, 112, 242, 0.2);
+}
+
+.exp-status-flow__dot--rejected {
+    background: var(--exp-gap);
+}
+
+.exp-status-flow__dot--deferred {
+    background: var(--exp-p4);
+}
+
+.exp-status-flow__connector {
+    width: 12px;
+    height: 2px;
+    background: #e2e8f0;
+}
+
+.exp-status-flow__connector--reached {
+    background: var(--sap-blue);
+}
+
+/* ── Detail Panel Sections ──────────────────────────────────────────── */
+.exp-detail-section {
+    padding: var(--exp-space-lg);
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.exp-detail-section:last-child {
+    border-bottom: none;
+}
+
+.exp-detail-section__title {
+    font-size: var(--exp-font-size-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--sap-text-secondary);
+    margin-bottom: var(--exp-space-sm);
+}
+
+.exp-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 4px 0;
+    font-size: var(--exp-font-size-md);
+}
+
+.exp-detail-row__label {
+    color: var(--sap-text-secondary);
+    font-size: var(--exp-font-size-sm);
+    min-width: 100px;
+}
+
+.exp-detail-row__value {
+    font-weight: 500;
+    text-align: right;
+    flex: 1;
+}
+
+/* ── Capacity Bar ───────────────────────────────────────────────────── */
+.exp-capacity-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: #e2e8f0;
+    overflow: hidden;
+}
+
+.exp-capacity-bar__fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width var(--exp-transition);
+}
+
+.exp-capacity-bar__fill--ok      { background: var(--exp-fit); }
+.exp-capacity-bar__fill--warning { background: var(--exp-partial); }
+.exp-capacity-bar__fill--over    { background: var(--exp-gap); }
+
+/* ── Form Inline ────────────────────────────────────────────────────── */
+.exp-inline-form {
+    background: #fafbfc;
+    border: 1px solid #e2e8f0;
+    border-radius: var(--exp-radius-md);
+    padding: var(--exp-space-lg);
+    animation: exp-slideDown 0.2s ease;
+}
+
+.exp-inline-form__row {
+    display: flex;
+    gap: var(--exp-space-md);
+    align-items: flex-start;
+    margin-bottom: var(--exp-space-md);
+}
+
+.exp-inline-form__field {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.exp-inline-form__field label {
+    font-size: var(--exp-font-size-sm);
+    font-weight: 600;
+    color: var(--sap-text-secondary);
+}
+
+.exp-inline-form__field input,
+.exp-inline-form__field select,
+.exp-inline-form__field textarea {
+    padding: var(--exp-space-sm) var(--exp-space-md);
+    border: 1px solid var(--sap-border);
+    border-radius: var(--exp-radius-md);
+    font-size: var(--exp-font-size-md);
+    font-family: inherit;
+    outline: none;
+    transition: border-color var(--exp-transition-fast);
+}
+
+.exp-inline-form__field input:focus,
+.exp-inline-form__field select:focus,
+.exp-inline-form__field textarea:focus {
+    border-color: var(--sap-blue);
+    box-shadow: 0 0 0 3px rgba(0, 112, 242, 0.1);
+}
+
+.exp-inline-form__actions {
+    display: flex;
+    gap: var(--exp-space-sm);
+    justify-content: flex-end;
+    padding-top: var(--exp-space-md);
+    border-top: 1px solid #e2e8f0;
+}
+
+/* ── Attendee List ──────────────────────────────────────────────────── */
+.exp-attendee {
+    display: flex;
+    align-items: center;
+    gap: var(--exp-space-md);
+    padding: var(--exp-space-sm) 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.exp-attendee:last-child { border-bottom: none; }
+
+.exp-attendee__avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--sap-blue);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--exp-font-size-xs);
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.exp-attendee__info {
+    flex: 1;
+    min-width: 0;
+}
+
+.exp-attendee__name {
+    font-weight: 500;
+    font-size: var(--exp-font-size-md);
+}
+
+.exp-attendee__role {
+    font-size: var(--exp-font-size-sm);
+    color: var(--sap-text-secondary);
+}
+
+.exp-attendee__status {
+    flex-shrink: 0;
+}
+
+/* ── Utility: Truncate ──────────────────────────────────────────────── */
+.exp-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── Utility: Accent Left Border ────────────────────────────────────── */
+.exp-accent--fit       { border-left-color: var(--exp-fit) !important; }
+.exp-accent--gap       { border-left-color: var(--exp-gap) !important; }
+.exp-accent--partial   { border-left-color: var(--exp-partial) !important; }
+.exp-accent--pending   { border-left-color: var(--exp-pending) !important; }
+.exp-accent--decision  { border-left-color: var(--exp-decision) !important; }
+.exp-accent--open-item { border-left-color: var(--exp-open-item) !important; }
+.exp-accent--requirement { border-left-color: var(--exp-requirement) !important; }
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+    .exp-layout-split__panel {
+        width: 280px;
+    }
+    .exp-kanban__column {
+        min-width: 220px;
+    }
+}
+
+@media (max-width: 768px) {
+    .exp-layout-split {
+        flex-direction: column;
+    }
+    .exp-layout-split__panel {
+        width: 100%;
+        border-left: none;
+        border-top: 1px solid var(--exp-panel-border);
+        max-height: 300px;
+    }
+    .exp-kpi-strip {
+        gap: var(--exp-space-sm);
+    }
+    .exp-kpi-card {
+        min-width: 100px;
+        padding: var(--exp-space-md);
+    }
+    .exp-kanban {
+        flex-direction: column;
+    }
+    .exp-kanban__column {
+        max-width: none;
+        min-width: auto;
+    }
+}

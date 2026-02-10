@@ -2349,3 +2349,176 @@ def open_item_stats():
         "p1_open_count": p1_open,
         "by_assignee": by_assignee,
     })
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PHASE 2 ENDPOINTS
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+# ── BPMN Diagram (A-016, A-017) ──────────────────────────────────────────────
+
+@explore_bp.route(
+    "/programs/<project_id>/explore/process-levels/<level_id>/bpmn",
+    methods=["GET"],
+)
+def get_bpmn(project_id, level_id):
+    """A-016: Get BPMN diagrams for a process level."""
+    from app.models.explore import BPMNDiagram
+
+    diagrams = BPMNDiagram.query.filter_by(process_level_id=level_id).order_by(
+        BPMNDiagram.version.desc()
+    ).all()
+    return jsonify([d.to_dict() for d in diagrams])
+
+
+@explore_bp.route(
+    "/programs/<project_id>/explore/process-levels/<level_id>/bpmn",
+    methods=["POST"],
+)
+def create_bpmn(project_id, level_id):
+    """A-017: Upload/create a BPMN diagram for a process level."""
+    from app.models.explore import BPMNDiagram
+
+    data = request.get_json(silent=True) or {}
+    level = db.session.get(ProcessLevel, level_id)
+    if not level:
+        return jsonify({"error": "Process level not found"}), 404
+
+    # Auto-increment version
+    latest = BPMNDiagram.query.filter_by(process_level_id=level_id).order_by(
+        BPMNDiagram.version.desc()
+    ).first()
+    next_version = (latest.version + 1) if latest else 1
+
+    diagram = BPMNDiagram(
+        process_level_id=level_id,
+        type=data.get("type", "bpmn_xml"),
+        source_url=data.get("source_url"),
+        bpmn_xml=data.get("bpmn_xml"),
+        image_path=data.get("image_path"),
+        version=next_version,
+        uploaded_by=data.get("uploaded_by"),
+    )
+    db.session.add(diagram)
+    db.session.commit()
+    return jsonify(diagram.to_dict()), 201
+
+
+# ── Workshop Documents / Minutes (A-029, A-030) ──────────────────────────────
+
+@explore_bp.route(
+    "/programs/<project_id>/explore/workshops/<workshop_id>/generate-minutes",
+    methods=["POST"],
+)
+def generate_minutes(project_id, workshop_id):
+    """A-029: Generate meeting minutes for a workshop."""
+    from app.services.minutes_generator import MinutesGeneratorService
+
+    data = request.get_json(silent=True) or {}
+    try:
+        doc = MinutesGeneratorService.generate(
+            workshop_id,
+            format=data.get("format", "markdown"),
+            created_by=data.get("created_by"),
+            session_number=data.get("session_number"),
+        )
+        return jsonify(doc), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@explore_bp.route(
+    "/programs/<project_id>/explore/workshops/<workshop_id>/ai-summary",
+    methods=["POST"],
+)
+def generate_ai_summary(project_id, workshop_id):
+    """A-030: Generate AI-powered summary for a workshop."""
+    from app.services.minutes_generator import MinutesGeneratorService
+
+    data = request.get_json(silent=True) or {}
+    try:
+        doc = MinutesGeneratorService.generate_ai_summary(
+            workshop_id,
+            created_by=data.get("created_by"),
+        )
+        return jsonify(doc), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@explore_bp.route(
+    "/programs/<project_id>/explore/workshops/<workshop_id>/documents",
+    methods=["GET"],
+)
+def list_workshop_documents(project_id, workshop_id):
+    """List all documents for a workshop."""
+    from app.models.explore import ExploreWorkshopDocument
+
+    docs = ExploreWorkshopDocument.query.filter_by(workshop_id=workshop_id).order_by(
+        ExploreWorkshopDocument.created_at.desc()
+    ).all()
+    return jsonify([d.to_dict() for d in docs])
+
+
+# ── Snapshot / Steering-Committee (A-057, A-058) ─────────────────────────────
+
+@explore_bp.route(
+    "/programs/<project_id>/explore/reports/steering-committee",
+    methods=["GET"],
+)
+def steering_committee_report(project_id):
+    """A-057: Get steering-committee report for a project."""
+    from app.services.snapshot import SnapshotService
+
+    report = SnapshotService.steering_committee_report(project_id)
+    return jsonify(report)
+
+
+@explore_bp.route(
+    "/programs/<project_id>/explore/snapshots/capture",
+    methods=["POST"],
+)
+def capture_snapshot(project_id):
+    """A-058: Capture daily metrics snapshot."""
+    from app.services.snapshot import SnapshotService
+    from datetime import date as _date
+
+    data = request.get_json(silent=True) or {}
+    snap_date_str = data.get("snapshot_date")
+    snap_date = _date.fromisoformat(snap_date_str) if snap_date_str else None
+
+    try:
+        snapshot = SnapshotService.capture(project_id, snapshot_date=snap_date)
+        return jsonify(snapshot), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@explore_bp.route(
+    "/programs/<project_id>/explore/snapshots",
+    methods=["GET"],
+)
+def list_snapshots(project_id):
+    """List daily snapshots for a project."""
+    from app.services.snapshot import SnapshotService
+    from datetime import date as _date
+
+    from_date = request.args.get("from_date")
+    to_date = request.args.get("to_date")
+    limit = request.args.get("limit", 90, type=int)
+
+    snaps = SnapshotService.list_snapshots(
+        project_id,
+        from_date=_date.fromisoformat(from_date) if from_date else None,
+        to_date=_date.fromisoformat(to_date) if to_date else None,
+        limit=limit,
+    )
+    return jsonify(snaps)

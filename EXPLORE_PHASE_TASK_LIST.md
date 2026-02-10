@@ -4,7 +4,7 @@
 **Hazırlayan:** ProjektCoPilot  
 **Tarih:** 2026-02-10  
 **Kaynak Doküman:** explore-phase-fs-ts.md (2787 satır, v1.2)  
-**Son Güncelleme:** 2026-02-10 06:50
+**Son Güncelleme:** 2026-02-10 08:45
 
 ---
 
@@ -12,13 +12,13 @@
 
 | Metrik | Değer |
 |--------|-------|
-| **Tamamlanan Task** | 88 / ~150 |
-| **Son Commit** | `c8bcaa1` — SEED-001/002/003 (L4 catalog + explore demo data + project roles) |
-| **Önceki Commit** | `f2eff2c` — Phase 0 - 16 models, migration, services, blueprint |
-| **Oluşturulan/Güncellenen Dosyalar** | `app/models/explore.py` (22 model), `app/blueprints/explore_bp.py` (58 route, 40+ endpoint), `app/services/fit_propagation.py` (yeni), `app/services/requirement_lifecycle.py` (yeni), `app/services/open_item_lifecycle.py` (yeni), `app/services/cloud_alm.py` (yeni), `app/services/signoff.py` (yeni) |
-| **DB Durum** | 63 tablo (40 mevcut + 16 explore P0 + 6 explore P1 + 1 kb_versions), Alembic head: `a3b4c5d6e702` |
-| **Test** | 573 passed, 0 regresyon |
-| **Tamamlanan Fazlar** | Phase 0 Models+Migration+Services+API ✅, Phase 1 Models+Migration+API+Service ✅ |
+| **Tamamlanan Task** | 102 / 179 (%57) |
+| **Son Commit** | `c3e304d` — TEST-001→004: 192 comprehensive explore tests |
+| **Toplam Commit (Explore)** | 8 (f2eff2c → c3e304d) |
+| **Oluşturulan/Güncellenen Dosyalar** | `app/models/explore.py` (22 model, 1752 satır), `app/blueprints/explore_bp.py` (58 route, 2351 satır), 6 service (1451 satır), 3 seed script, 1 test dosyası (192 test, 2090 satır) |
+| **DB Durum** | 62 tablo, 287 route, Alembic head: `a3b4c5d6e702` |
+| **Test** | 765 passed (573 mevcut + 192 explore), 0 regresyon |
+| **Tamamlanan Fazlar** | Phase 0 ✅ (Models+Migration+Services+API+Seed+Tests), Phase 1 ✅ (Models+Migration+API+Service) |
 
 ## Doküman Özeti
 
@@ -61,7 +61,7 @@
 
 | Faz | Kapsam | Tahmini Sprint |
 |-----|--------|----------------|
-| **Phase 0 — CRITICAL** | Base 4 modül + GAP-01 (L4 Seeding) + GAP-05 (Roller) + GAP-11 (L3 Konsolide) + GAP-12 (L2 Milestone) | 8-10 sprint | ▓▓▓▓▓▓▓▓▓░ **~75/~80 task** — Models+Migration+Services+API tamam |
+| **Phase 0 — CRITICAL** | Base 4 modül + GAP-01 (L4 Seeding) + GAP-05 (Roller) + GAP-11 (L3 Konsolide) + GAP-12 (L2 Milestone) | 8-10 sprint | ▓▓▓▓▓▓▓▓▓▓ **TAMAM** — Models+Migration+Services+API+Seed+Tests |
 | **Phase 1 — IMPORTANT** | GAP-03 (WS Bağımlılık) + GAP-04 (Reopen) + GAP-07 (Attachments) + GAP-09 (Scope Change) + GAP-10 (Multi-Session) | 5-6 sprint | ▓▓▓▓▓▓▓░░░ **~14/~19 task** — Models+Migration+API+Service tamam |
 | **Phase 2 — ENHANCEMENT** | GAP-02 (BPMN) + GAP-06 (Minutes) + GAP-08 (Dashboard) | 4-5 sprint | ░░░░░░░░░░ Başlamadı |
 
