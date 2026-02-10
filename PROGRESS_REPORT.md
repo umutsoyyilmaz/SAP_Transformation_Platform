@@ -15,14 +15,14 @@
 | Python LOC | 35,998 (app: 21,636 · scripts: 4,523 · tests: 9,839) |
 | JavaScript LOC | 9,363 |
 | CSS LOC | 2,285 |
-| API Endpoint | 287 (216 core + 58 explore + 13 utility) |
-| Pytest Test | 765 (tümü geçiyor, 11 deselected, 1 xfail) |
-| Veritabanı Modeli | 62 tablo (40 core + 22 explore) |
-| Alembic Migration | 7 (4 core + 2 explore + 1 workshop docs) |
+| API Endpoint | 298 (216 core + 58 explore + 13 utility + 11 TS-Sprint 1) |
+| Pytest Test | 802 (765 mevcut + 37 TS-Sprint 1) |
+| Veritabanı Modeli | 66 tablo (40 core + 22 explore + 4 TS-Sprint 1) |
+| Alembic Migration | 8 (4 core + 2 explore + 1 workshop docs + 1 TS-Sprint 1) |
 | Code Review Bulguları | 67 (5 CRITICAL + 16 HIGH + 26 MEDIUM + 20 LOW) → 28 düzeltildi |
 | Explore Phase Task | 92 / 150 tamamlandı (%61) |
 
-> **Son doğrulama:** 2026-02-10 — `pytest: 765 passed`, tüm metrikler doğrulandı
+> **Son doğrulama:** 2026-02-10 — `pytest: 802 passed` (765 mevcut + 37 TS-Sprint 1), tüm metrikler doğrulandı
 
 ---
 
@@ -463,12 +463,15 @@ Explore Phase FS/TS dokümanından (2,787 satır) çıkarılan 150 atomik görev
 
 ### Sprint Detayları
 
-**TS-Sprint 1 — Test Suite & Step Altyapısı (Kısa Vade, ~14.5 saat)**
-- `TestSuite` modeli (suite_type SIT/UAT/Regression, status FSM)
-- `TestStep` modeli (action, expected, test_data)
-- `TestCaseDependency` + `TestCycleSuite` junction modelleri
-- Suite CRUD (5 endpoint) + Step CRUD (4 endpoint) + CycleSuite assign (2 endpoint)
-- Seed data + 40 test
+**TS-Sprint 1 — Test Suite & Step Altyapısı (Kısa Vade, ~14.5 saat) ✅ TAMAMLANDI**
+- ✅ `TestSuite` modeli (suite_type SIT/UAT/Regression, status FSM) — commit `0271aa8`
+- ✅ `TestStep` modeli (action, expected, test_data) — commit `0271aa8`
+- ✅ `TestCaseDependency` + `TestCycleSuite` junction modelleri — commit `0271aa8`
+- ✅ `TestCase.suite_id` FK eklendi — commit `0271aa8`
+- ✅ Alembic migration (4 yeni tablo + suite_id FK) — commit `26107f0`
+- ✅ Suite CRUD (5 endpoint) + Step CRUD (4 endpoint) + CycleSuite assign (2 endpoint) — commit `5a3756a`
+- ✅ Seed data: 3 suite, 32 step, 4 cycle-suite assignment — commit `22ed08c`
+- ✅ 37 yeni pytest testi (101 testing toplam) — commit `28535f8`
 
 **TS-Sprint 2 — TestRun & Defect Zenginleştirme (Kısa Vade, ~19.5 saat)**
 - `TestRun` modeli (run_type manual/automated, environment)
