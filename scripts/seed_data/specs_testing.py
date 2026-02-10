@@ -1,13 +1,15 @@
 """
 Aşama 6 — Functional Specs, Technical Specs, Test Plans/Cycles/Cases,
-           Test Executions, Defects
+           Test Suites, Test Steps, Test Executions, Defects
 Şirket: Anadolu Gıda ve İçecek A.Ş.
 
 10 Functional Specs  (WRICEF & Config items için)
  8 Technical Specs   (FS'e 1:1 bağlı)
  2 Test Plans        (SIT, UAT)
  4 Test Cycles       (SIT-C1, SIT-C2, UAT-C1, Regression)
-18 Test Cases        (modül bazlı)
+ 3 Test Suites       (SIT-Finance, UAT-Logistics, Regression-Core)
+18 Test Cases        (modül bazlı, suite'e atanmış)
+36 Test Steps        (her TC için 2 detaylı adım)
 18 Test Executions   (SIT-C1 cycle için)
  8 Defects           (P1→P4)
 """
@@ -410,4 +412,187 @@ DEFECT_DATA = [
      "steps_to_reproduce": "1. e-Fatura gönder\n2. GİB timeout\n3. Retry 0/3 — retry tetiklenmedi",
      "reported_by": "Zeynep Koç", "assigned_to": "Zeynep Koç",
      "found_in_cycle": "SIT Cycle 1"},
+]
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST SUITES — Test Case grupları  (TS-Sprint 1)
+# ═════════════════════════════════════════════════════════════════════════════
+
+SUITE_DATA = [
+    {"name": "SIT-Finance — Finans Entegrasyon Paketi",
+     "description": "FI modülü SIT test case'lerini içeren ana suite. 3-way match, KDV, konsolidasyon.",
+     "suite_type": "SIT", "status": "active", "module": "FI",
+     "owner": "Ahmet Yıldız",
+     "tags": "finance,sit,fi",
+     "tc_codes": ["TC-FI-001", "TC-FI-002", "TC-FI-003", "TC-INT-001"]},
+    {"name": "UAT-Logistics — Lojistik Kabul Paketi",
+     "description": "MM/SD/PP/EWM UAT test case'leri. Tedarik zinciri uçtan uca doğrulama.",
+     "suite_type": "UAT", "status": "draft", "module": "MM",
+     "owner": "Elif Kara",
+     "tags": "logistics,uat,mm,sd,pp",
+     "tc_codes": ["TC-MM-001", "TC-MM-002", "TC-MM-003", "TC-SD-001", "TC-SD-002",
+                   "TC-SD-003", "TC-PP-001", "TC-PP-002", "TC-QM-001", "TC-EWM-001"]},
+    {"name": "Regression-Core — Go-Live Öncesi Regresyon",
+     "description": "Go-Live öncesi kritik E2E regresyon suite. is_regression=True olan TC'ler.",
+     "suite_type": "Regression", "status": "draft", "module": "CROSS",
+     "owner": "Deniz Aydın",
+     "tags": "regression,e2e,golive",
+     "tc_codes": ["TC-FI-001", "TC-FI-002", "TC-MM-001", "TC-SD-001",
+                   "TC-SD-002", "TC-E2E-001", "TC-E2E-002"]},
+]
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST STEPS — Her TC için detaylı adımlar  (TS-Sprint 1)
+# ═════════════════════════════════════════════════════════════════════════════
+
+STEP_DATA = [
+    # ── TC-FI-001 ──
+    {"tc_code": "TC-FI-001", "step_no": 1,
+     "action": "MIRO ile satınalma faturası gir (PO numarası referansla)",
+     "expected_result": "Fatura başlığı oluşturulur, PO kalemi otomatik getirilir",
+     "test_data": "PO: 4500001234, Tutar: ₺125.000"},
+    {"tc_code": "TC-FI-001", "step_no": 2,
+     "action": "3-way matching kontrolü yap (PO-GR-IR)",
+     "expected_result": "Tutar farkı tolerans içinde, muhasebe kayıtları otomatik oluşur",
+     "test_data": "Tolerans: ±%2"},
+    # ── TC-FI-002 ──
+    {"tc_code": "TC-FI-002", "step_no": 1,
+     "action": "Temel gıda ürünü ile satış faturası oluştur (V1 vergi kodu)",
+     "expected_result": "KDV %1 otomatik hesaplanır",
+     "test_data": "Malzeme: MAT-FOOD-001, Vergi kodu: V1"},
+    {"tc_code": "TC-FI-002", "step_no": 2,
+     "action": "İçecek ürünü ile satış faturası oluştur (V3 + ÖİV)",
+     "expected_result": "KDV %20 + ÖİV doğru hesaplanır, vergi satırları ayrı görünür",
+     "test_data": "Malzeme: MAT-BEV-001, Vergi kodu: V3"},
+    # ── TC-FI-003 ──
+    {"tc_code": "TC-FI-003", "step_no": 1,
+     "action": "ZFI_BALANCE raporu çalıştır — 3 şirket kodu seç (TFRS)",
+     "expected_result": "Konsolide bilanço raporu oluşur, döviz çevrimi doğru",
+     "test_data": "Şirket kodları: 1000/2000/3000, Dönem: 2026-03"},
+    {"tc_code": "TC-FI-003", "step_no": 2,
+     "action": "VUK versiyonu ile karşılaştır",
+     "expected_result": "TFRS ve VUK bakiyeleri paralel görünür, farklar açıklanır"},
+    # ── TC-MM-001 ──
+    {"tc_code": "TC-MM-001", "step_no": 1,
+     "action": "ME21N ile ₺200K tutarlı PO oluştur",
+     "expected_result": "PO oluşur, onay WF tetiklenir — Direktör onayına düşer",
+     "test_data": "Tedarikçi: 100001, Malzeme: MAT-RAW-001, Tutar: ₺200.000"},
+    {"tc_code": "TC-MM-001", "step_no": 2,
+     "action": "Onay WF'yi 4 kademe boyunca tamamla",
+     "expected_result": "Her kademede doğru onaylayıcıya yönlendirilir, PO serbest bırakılır"},
+    # ── TC-MM-002 ──
+    {"tc_code": "TC-MM-002", "step_no": 1,
+     "action": "Farklı SKT'li 3 lot stokta oluştur ve sevkiyat talebi gir",
+     "expected_result": "FEFO kuralı ile en yakın SKT'li lot önerilir",
+     "test_data": "Lot A: SKT 2026-04-15, Lot B: SKT 2026-05-01, Lot C: SKT 2026-06-30"},
+    {"tc_code": "TC-MM-002", "step_no": 2,
+     "action": "SKT < 30 gün olan lot için bloke kontrolü yap",
+     "expected_result": "Kısa ömürlü lot otomatik bloke, uyarı mesajı"},
+    # ── TC-MM-003 ──
+    {"tc_code": "TC-MM-003", "step_no": 1,
+     "action": "Göç programını çalıştır, staging tablodan yükle",
+     "expected_result": "60.000 kayıt işlenir, hata logu oluşur",
+     "test_data": "Staging tablo: ZTMP_MAT_STG, Kayıt sayısı: 60.000"},
+    {"tc_code": "TC-MM-003", "step_no": 2,
+     "action": "Malzeme tipi mapping ve BOM doğrulama yap",
+     "expected_result": "Hata oranı < %0.5, tüm malzeme tipleri doğru eşleşmiş"},
+    # ── TC-SD-001 ──
+    {"tc_code": "TC-SD-001", "step_no": 1,
+     "action": "VA01 → VL01N → VF01 tam akış çalıştır",
+     "expected_result": "Sipariş → sevkiyat → fatura akışı sorunsuz tamamlanır",
+     "test_data": "Müşteri: 200001, Malzeme: MAT-FG-001, Miktar: 100 AD"},
+    {"tc_code": "TC-SD-001", "step_no": 2,
+     "action": "Muhasebe kayıtlarını kontrol et (gelir/maliyet/KDV)",
+     "expected_result": "FI kayıtları otomatik oluşur, bakiye doğru"},
+    # ── TC-SD-002 ──
+    {"tc_code": "TC-SD-002", "step_no": 1,
+     "action": "VF01 fatura oluştur ve e-Fatura tetikle",
+     "expected_result": "UBL-TR XML oluşur, GİB'e iletilir",
+     "test_data": "Fatura tipi: ZF1, GİB ortamı: TEST"},
+    {"tc_code": "TC-SD-002", "step_no": 2,
+     "action": "GİB yanıtını (kabul/red) kontrol et",
+     "expected_result": "Kabul yanıtı alınır, durum 'Onaylı' olarak güncellenir"},
+    # ── TC-SD-003 ──
+    {"tc_code": "TC-SD-003", "step_no": 1,
+     "action": "Perakende kanalı üzerinden sipariş gir (ZK01 koşulu)",
+     "expected_result": "Kanal iskontosu otomatik uygulanır",
+     "test_data": "Kanal: Perakende, İskonto: %5"},
+    {"tc_code": "TC-SD-003", "step_no": 2,
+     "action": "Toptan ve e-ticaret kanalıyla aynı ürün siparişi gir, fiyat karşılaştır",
+     "expected_result": "Her kanalda farklı fiyat/iskonto doğru uygulanır"},
+    # ── TC-PP-001 ──
+    {"tc_code": "TC-PP-001", "step_no": 1,
+     "action": "MD01 MRP çalıştır, planlı sipariş → üretim emrine dönüştür",
+     "expected_result": "Doğru miktar ve tarihte planlı sipariş oluşur",
+     "test_data": "Malzeme: MAT-FG-001, Talep: 500 AD"},
+    {"tc_code": "TC-PP-001", "step_no": 2,
+     "action": "Üretim emrini serbest bırak, onay gir, maliyet hesaplat",
+     "expected_result": "Emri tamamlanır, fiili maliyet hesaplanır"},
+    # ── TC-PP-002 ──
+    {"tc_code": "TC-PP-002", "step_no": 1,
+     "action": "MES'ten üretim onay mesajı gönder (OData API)",
+     "expected_result": "SAP'de BAPI ile onay kaydı oluşur",
+     "test_data": "Üretim emri: 1000001, Operasyon: 0010, Miktar: 100, Hurda: 5"},
+    {"tc_code": "TC-PP-002", "step_no": 2,
+     "action": "Hurda miktarını doğrula ve hata mesajlarını kontrol et",
+     "expected_result": "Hurda miktarı pozitif, onay başarılı kaydedilir"},
+    # ── TC-QM-001 ──
+    {"tc_code": "TC-QM-001", "step_no": 1,
+     "action": "Gıda hammaddesi mal girişi yap (MIGO)",
+     "expected_result": "Otomatik muayene lotu oluşur, HACCP kontrol noktası tetiklenir",
+     "test_data": "Malzeme: MAT-RAW-FOOD-01, Muayene planı: QP-001"},
+    {"tc_code": "TC-QM-001", "step_no": 2,
+     "action": "HACCP sonuç gir ve kabul/red kararı ver",
+     "expected_result": "Kabul → stok serbest, Red → bloke stok"},
+    # ── TC-EWM-001 ──
+    {"tc_code": "TC-EWM-001", "step_no": 1,
+     "action": "Outbound delivery oluştur ve wave ata",
+     "expected_result": "Wave oluşur, picking task otomatik başlatılır",
+     "test_data": "Depo: WH01, Alan: PICK-01"},
+    {"tc_code": "TC-EWM-001", "step_no": 2,
+     "action": "Picking teyidi gir ve PGI yap",
+     "expected_result": "Stok hareketi SAP'ye yansır, sevk irsaliyesi yazdırılabilir"},
+    # ── TC-INT-001 ──
+    {"tc_code": "TC-INT-001", "step_no": 1,
+     "action": "MT940 banka hesap özeti dosyasını sisteme yükle",
+     "expected_result": "Dosya başarılı parse edilir, ekstre kalemleri listelenir",
+     "test_data": "Banka: AKBANK, Hesap: TR12 0004 6001"},
+    {"tc_code": "TC-INT-001", "step_no": 2,
+     "action": "Otomatik eşleştirme çalıştır, eşleşmeyen kalemleri kontrol et",
+     "expected_result": "Eşleşme oranı ≥ %90, kalan kalemler işaretlenir"},
+    # ── TC-E2E-001 ──
+    {"tc_code": "TC-E2E-001", "step_no": 1,
+     "action": "PR → PO → GR → IR tam akışı çalıştır",
+     "expected_result": "Satınalma talebi → sipariş → mal girişi → fatura akışı sorunsuz",
+     "test_data": "Tedarikçi: 100002, Malzeme: MAT-RAW-002, Tutar: ₺75.000"},
+    {"tc_code": "TC-E2E-001", "step_no": 2,
+     "action": "F110 ödeme çalıştır ve muhasebe kayıtlarını doğrula",
+     "expected_result": "Ödeme tamamlanır, banka hesabı bakiyesi güncellenir"},
+    # ── TC-E2E-002 ──
+    {"tc_code": "TC-E2E-002", "step_no": 1,
+     "action": "Ay içi FI kayıtları üzerinden tahakkuk ve amortisman çalıştır",
+     "expected_result": "Tahakkuk kayıtları oluşur, amortisman doğru hesaplanır",
+     "test_data": "Dönem: 2026-03, Şirket kodu: 1000"},
+    {"tc_code": "TC-E2E-002", "step_no": 2,
+     "action": "Dönem kapanış prosedürü ve raporlama kontrolü",
+     "expected_result": "Kapanış < 4 saat, bilanço/gelir tablosu doğru"},
+]
+
+# ═════════════════════════════════════════════════════════════════════════════
+# CYCLE ↔ SUITE atama  (TS-Sprint 1)
+# ═════════════════════════════════════════════════════════════════════════════
+
+CYCLE_SUITE_DATA = [
+    # SIT Cycle 1 ← SIT-Finance suite
+    {"cycle_name": "SIT Cycle 1 — Temel Akışlar",
+     "suite_name": "SIT-Finance — Finans Entegrasyon Paketi", "order": 1},
+    # SIT Cycle 2 ← SIT-Finance suite (regresyon)
+    {"cycle_name": "SIT Cycle 2 — Hata Düzeltme & Regresyon",
+     "suite_name": "SIT-Finance — Finans Entegrasyon Paketi", "order": 1},
+    # UAT Cycle 1 ← UAT-Logistics suite
+    {"cycle_name": "UAT Cycle 1 — İş Senaryoları",
+     "suite_name": "UAT-Logistics — Lojistik Kabul Paketi", "order": 1},
+    # Regression Cycle ← Regression-Core suite
+    {"cycle_name": "Regression Cycle — Go-Live Öncesi",
+     "suite_name": "Regression-Core — Go-Live Öncesi Regresyon", "order": 1},
 ]

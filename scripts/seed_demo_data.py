@@ -29,6 +29,7 @@ from app.models.backlog import (
 )
 from app.models.testing import (
     TestPlan, TestCycle, TestCase, TestExecution, Defect,
+    TestSuite, TestStep, TestCaseDependency, TestCycleSuite,
 )
 from app.models.scope import Process, RequirementProcessMapping, Analysis
 from app.models.raid import (
@@ -45,6 +46,7 @@ from scripts.seed_data.requirements import REQUIREMENTS, TRACES, RPM_DATA, OI_DA
 from scripts.seed_data.backlog import SPRINTS, BACKLOG_ITEMS, CONFIG_ITEMS
 from scripts.seed_data.specs_testing import (
     FS_DATA, TS_DATA, TEST_PLAN_DATA, TEST_CASE_DATA, EXECUTION_DATA, DEFECT_DATA,
+    SUITE_DATA, STEP_DATA, CYCLE_SUITE_DATA,
 )
 from scripts.seed_data.raid import RISK_DATA, ACTION_DATA, ISSUE_DATA, DECISION_DATA
 
@@ -215,7 +217,9 @@ def seed_all(app, append=False, verbose=False):
         if not append:
             print("🗑️  Clearing existing data...")
             for model in [Notification, Decision, Issue, Action, Risk,
-                          TestExecution, Defect, TestCase, TestCycle, TestPlan,
+                          TestCycleSuite, TestStep, TestCaseDependency,
+                          TestExecution, Defect, TestCase, TestSuite,
+                          TestCycle, TestPlan,
                           TechnicalSpec, FunctionalSpec, ConfigItem, BacklogItem,
                           Sprint, RequirementTrace, OpenItem, RequirementProcessMapping, Requirement,
                           Analysis, Process, Workshop, Scenario,
@@ -519,6 +523,65 @@ def seed_all(app, append=False, verbose=False):
             tc_d["req_code"] = req_code
         print(f"   ✅ {len(TEST_CASE_DATA)} test cases")
 
+        # ── 17b. Test Suites & assign cases ──────────────────────────────
+        print("\n📦 Creating test suites...")
+        suite_objs = {}
+        for s_d in SUITE_DATA:
+            tc_codes = s_d.pop("tc_codes", [])
+            suite = TestSuite(
+                program_id=pid, name=s_d["name"],
+                description=s_d.get("description", ""),
+                suite_type=s_d.get("suite_type", "Custom"),
+                status=s_d.get("status", "draft"),
+                module=s_d.get("module", ""),
+                owner=s_d.get("owner", ""),
+                tags=s_d.get("tags", ""),
+            )
+            db.session.add(suite)
+            db.session.flush()
+            suite_objs[suite.name] = suite
+            for code in tc_codes:
+                tc = tc_objs.get(code)
+                if tc:
+                    tc.suite_id = suite.id
+            s_d["tc_codes"] = tc_codes  # restore
+        print(f"   ✅ {len(SUITE_DATA)} suites")
+
+        # ── 17c. Test Steps ──────────────────────────────────────────────
+        print("\n🪜 Creating test steps...")
+        step_count = 0
+        for st_d in STEP_DATA:
+            tc = tc_objs.get(st_d["tc_code"])
+            if tc:
+                step = TestStep(
+                    test_case_id=tc.id,
+                    step_no=st_d["step_no"],
+                    action=st_d["action"],
+                    expected_result=st_d.get("expected_result", ""),
+                    test_data=st_d.get("test_data", ""),
+                    notes=st_d.get("notes", ""),
+                )
+                db.session.add(step)
+                step_count += 1
+        print(f"   ✅ {step_count} test steps")
+
+        # ── 17d. Cycle ↔ Suite assignments ───────────────────────────────
+        print("\n🔗 Assigning suites to cycles...")
+        cs_count = 0
+        cycle_name_map = {c.name: c for c in cycle_objs}
+        for cs_d in CYCLE_SUITE_DATA:
+            cycle = cycle_name_map.get(cs_d["cycle_name"])
+            suite = suite_objs.get(cs_d["suite_name"])
+            if cycle and suite:
+                cs = TestCycleSuite(
+                    cycle_id=cycle.id, suite_id=suite.id,
+                    order=cs_d.get("order", 1),
+                    notes=cs_d.get("notes", ""),
+                )
+                db.session.add(cs)
+                cs_count += 1
+        print(f"   ✅ {cs_count} cycle-suite assignments")
+
         # ── 18. Test Executions ──────────────────────────────────────────
         print("\n▶️  Creating test executions...")
         exec_count = 0
@@ -636,6 +699,7 @@ def seed_all(app, append=False, verbose=False):
                  + len(SPRINTS) + len(BACKLOG_ITEMS) + len(CONFIG_ITEMS)
                  + len(FS_DATA) + len(TS_DATA)
                  + len(TEST_PLAN_DATA) + len(cycle_objs) + len(TEST_CASE_DATA)
+                 + len(SUITE_DATA) + step_count + cs_count
                  + exec_count + len(DEFECT_DATA)
                  + len(RISK_DATA) + len(ACTION_DATA) + len(ISSUE_DATA) + len(DECISION_DATA))
         print(f"\n{'='*60}")
