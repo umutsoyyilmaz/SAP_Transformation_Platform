@@ -1,21 +1,26 @@
 """
 SAP Transformation Management Platform
-Testing domain models — Sprint 5 scope (Test Hub).
+Testing domain models — Sprint 5 scope (Test Hub) + TS-Sprint 1 (Test Suite & Step).
 
-Models:
-    - TestPlan:       top-level test planning container per program
-    - TestCycle:      execution cycle within a plan (e.g. SIT Cycle 1, UAT Cycle 2)
-    - TestCase:       individual test case in the catalog (linked to requirements)
-    - TestExecution:  execution record of a test case within a cycle
-    - Defect:         defect/bug raised during testing (linked to WRICEF/Config + test case)
+Models (Sprint 5 — existing):
+    - TestPlan:           top-level test planning container per program
+    - TestCycle:          execution cycle within a plan
+    - TestCase:           individual test case in the catalog
+    - TestExecution:      execution record of a test case within a cycle
+    - Defect:             defect/bug raised during testing
+
+Models (TS-Sprint 1 — new):
+    - TestSuite:          grouping of test cases (SIT/UAT/Regression suites)
+    - TestStep:           atomic step within a test case
+    - TestCaseDependency: predecessor/successor dependency between test cases
+    - TestCycleSuite:     junction table for cycle ↔ suite N:M relationship
 
 Architecture ref:
-    Test Plan ──1:N──▶ Test Cycle ──1:N──▶ Test Execution
-    Test Catalog ──1:N──▶ Test Case
-                           ├── linked_requirements[]
-                           ├── test_layer (Unit/SIT/UAT/Regression/Perf)
-                           ├── test_data_set
-                           └──1:N──▶ Defect
+    Test Plan ──1:N──▶ Test Cycle ──N:M──▶ Test Suite ──1:N──▶ Test Case
+    Test Case ──1:N──▶ Test Step
+    Test Case ──N:M──▶ Test Case (dependencies)
+    Test Cycle ──1:N──▶ Test Execution
+    Test Case  ──1:N──▶ Defect
 
 Traceability: Requirement ↔ Test Case ↔ Defect (auto-built)
 """
@@ -51,6 +56,18 @@ CYCLE_STATUSES = {
 
 PLAN_STATUSES = {
     "draft", "active", "completed", "cancelled",
+}
+
+SUITE_TYPES = {"SIT", "UAT", "Regression", "E2E", "Performance", "Custom"}
+
+SUITE_STATUSES = {
+    "draft", "active", "locked", "archived",
+}
+
+DEPENDENCY_TYPES = {
+    "blocks",        # predecessor must pass before successor can run
+    "related",       # informational link
+    "data_feeds",    # predecessor produces test data for successor
 }
 
 
@@ -221,6 +238,10 @@ class TestCase(db.Model):
         db.Integer, db.ForeignKey("config_items.id", ondelete="SET NULL"),
         nullable=True, index=True, comment="Linked config item",
     )
+    suite_id = db.Column(
+        db.Integer, db.ForeignKey("test_suites.id", ondelete="SET NULL"),
+        nullable=True, index=True, comment="Linked test suite",
+    )
 
     # ── Identification
     code = db.Column(
@@ -275,14 +296,31 @@ class TestCase(db.Model):
         "Defect", backref="test_case", lazy="dynamic",
         cascade="save-update, merge",
     )
+    steps = db.relationship(
+        "TestStep", backref="test_case", lazy="select",
+        cascade="all, delete-orphan", order_by="TestStep.step_no",
+    )
+    predecessor_deps = db.relationship(
+        "TestCaseDependency",
+        foreign_keys="TestCaseDependency.successor_id",
+        backref="successor_case", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    successor_deps = db.relationship(
+        "TestCaseDependency",
+        foreign_keys="TestCaseDependency.predecessor_id",
+        backref="predecessor_case", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_steps=False):
+        result = {
             "id": self.id,
             "program_id": self.program_id,
             "requirement_id": self.requirement_id,
             "backlog_item_id": self.backlog_item_id,
             "config_item_id": self.config_item_id,
+            "suite_id": self.suite_id,
             "code": self.code,
             "title": self.title,
             "description": self.description,
@@ -299,6 +337,9 @@ class TestCase(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+        if include_steps:
+            result["steps"] = [s.to_dict() for s in self.steps]
+        return result
 
     def __repr__(self):
         return f"<TestCase {self.id}: {self.code or self.title[:30]}>"
@@ -500,3 +541,245 @@ class Defect(db.Model):
 
     def __repr__(self):
         return f"<Defect {self.id}: [{self.severity}] {self.code or self.title[:30]}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST SUITE  (TS-Sprint 1)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestSuite(db.Model):
+    """
+    Logical grouping of test cases by type (SIT, UAT, Regression, etc.).
+
+    A suite owns test cases and can be assigned to multiple test cycles
+    via the TestCycleSuite junction table.
+
+    Status FSM: draft → active → locked → archived
+    """
+
+    __tablename__ = "test_suites"
+
+    id = db.Column(db.Integer, primary_key=True)
+    program_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    name = db.Column(db.String(200), nullable=False, comment="e.g. SIT Suite — Finance")
+    description = db.Column(db.Text, default="")
+    suite_type = db.Column(
+        db.String(30), default="SIT",
+        comment="SIT | UAT | Regression | E2E | Performance | Custom",
+    )
+    status = db.Column(
+        db.String(30), default="draft",
+        comment="draft | active | locked | archived",
+    )
+    module = db.Column(db.String(50), default="", comment="SAP module scope: FI, MM, SD, etc.")
+    owner = db.Column(db.String(100), default="", comment="Suite owner / test lead")
+    tags = db.Column(db.Text, default="", comment="Comma-separated tags for filtering")
+
+    # ── Audit
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # ── Relationships
+    test_cases = db.relationship(
+        "TestCase", backref="suite", lazy="dynamic",
+        cascade="save-update, merge",
+        foreign_keys="TestCase.suite_id",
+    )
+    cycle_suites = db.relationship(
+        "TestCycleSuite", backref="suite", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+
+    def to_dict(self, include_cases=False):
+        result = {
+            "id": self.id,
+            "program_id": self.program_id,
+            "name": self.name,
+            "description": self.description,
+            "suite_type": self.suite_type,
+            "status": self.status,
+            "module": self.module,
+            "owner": self.owner,
+            "tags": self.tags,
+            "case_count": self.test_cases.count(),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_cases:
+            result["test_cases"] = [tc.to_dict() for tc in self.test_cases]
+        return result
+
+    def __repr__(self):
+        return f"<TestSuite {self.id}: [{self.suite_type}] {self.name}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST STEP  (TS-Sprint 1)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestStep(db.Model):
+    """
+    Atomic step within a test case.
+
+    Provides structured step-by-step execution instructions
+    replacing the free-text test_steps field on TestCase.
+    """
+
+    __tablename__ = "test_steps"
+
+    id = db.Column(db.Integer, primary_key=True)
+    test_case_id = db.Column(
+        db.Integer, db.ForeignKey("test_cases.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    step_no = db.Column(db.Integer, nullable=False, comment="Sequential step number")
+    action = db.Column(db.Text, nullable=False, comment="Action to perform")
+    expected_result = db.Column(db.Text, default="", comment="Expected outcome")
+    test_data = db.Column(db.Text, default="", comment="Test data for this step")
+    notes = db.Column(db.Text, default="", comment="Additional notes / hints")
+
+    # ── Audit
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "test_case_id": self.test_case_id,
+            "step_no": self.step_no,
+            "action": self.action,
+            "expected_result": self.expected_result,
+            "test_data": self.test_data,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self):
+        return f"<TestStep {self.id}: case#{self.test_case_id} step#{self.step_no}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST CASE DEPENDENCY  (TS-Sprint 1)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestCaseDependency(db.Model):
+    """
+    Dependency link between two test cases.
+
+    Types:
+        blocks     — predecessor must pass before successor can execute
+        related    — informational link (no execution constraint)
+        data_feeds — predecessor produces test data consumed by successor
+    """
+
+    __tablename__ = "test_case_dependencies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    predecessor_id = db.Column(
+        db.Integer, db.ForeignKey("test_cases.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    successor_id = db.Column(
+        db.Integer, db.ForeignKey("test_cases.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    dependency_type = db.Column(
+        db.String(30), default="blocks",
+        comment="blocks | related | data_feeds",
+    )
+    notes = db.Column(db.Text, default="", comment="Dependency description")
+
+    # ── Audit
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+
+    # ── Unique constraint: no duplicate dependency between same pair
+    __table_args__ = (
+        db.UniqueConstraint("predecessor_id", "successor_id", name="uq_tc_dependency"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "predecessor_id": self.predecessor_id,
+            "successor_id": self.successor_id,
+            "dependency_type": self.dependency_type,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return (
+            f"<TestCaseDependency {self.id}: "
+            f"#{self.predecessor_id} → #{self.successor_id} ({self.dependency_type})>"
+        )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST CYCLE ↔ SUITE JUNCTION  (TS-Sprint 1)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestCycleSuite(db.Model):
+    """
+    Junction table linking test cycles and test suites (N:M).
+
+    A test cycle can include multiple suites, and a suite can be
+    assigned to multiple cycles across different plans.
+    """
+
+    __tablename__ = "test_cycle_suites"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cycle_id = db.Column(
+        db.Integer, db.ForeignKey("test_cycles.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    suite_id = db.Column(
+        db.Integer, db.ForeignKey("test_suites.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    order = db.Column(db.Integer, default=0, comment="Execution order within cycle")
+    notes = db.Column(db.Text, default="", comment="Assignment notes")
+
+    # ── Audit
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+
+    # ── Unique constraint: no duplicate assignment
+    __table_args__ = (
+        db.UniqueConstraint("cycle_id", "suite_id", name="uq_cycle_suite"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "cycle_id": self.cycle_id,
+            "suite_id": self.suite_id,
+            "order": self.order,
+            "notes": self.notes,
+            "suite_name": self.suite.name if self.suite else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<TestCycleSuite {self.id}: cycle#{self.cycle_id} ↔ suite#{self.suite_id}>"
