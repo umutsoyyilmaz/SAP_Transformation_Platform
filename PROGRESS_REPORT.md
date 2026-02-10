@@ -15,14 +15,14 @@
 | Python LOC | 35,998 (app: 21,636 · scripts: 4,523 · tests: 9,839) |
 | JavaScript LOC | 9,363 |
 | CSS LOC | 2,285 |
-| API Endpoint | 298 (216 core + 58 explore + 13 utility + 11 TS-Sprint 1) |
-| Pytest Test | 802 (765 mevcut + 37 TS-Sprint 1) |
-| Veritabanı Modeli | 66 tablo (40 core + 22 explore + 4 TS-Sprint 1) |
-| Alembic Migration | 8 (4 core + 2 explore + 1 workshop docs + 1 TS-Sprint 1) |
+| API Endpoint | 321 (216 core + 58 explore + 13 utility + 11 TS-1 + 16 TS-2 + 7 AI) |
+| Pytest Test | 848 (765 mevcut + 37 TS-Sprint 1 + 46 TS-Sprint 2) |
+| Veritabanı Modeli | 71 tablo (40 core + 22 explore + 4 TS-1 + 5 TS-2) |
+| Alembic Migration | 9 (4 core + 2 explore + 1 workshop docs + 1 TS-1 + 1 TS-2) |
 | Code Review Bulguları | 67 (5 CRITICAL + 16 HIGH + 26 MEDIUM + 20 LOW) → 28 düzeltildi |
 | Explore Phase Task | 92 / 150 tamamlandı (%61) |
 
-> **Son doğrulama:** 2026-02-10 — `pytest: 802 passed` (765 mevcut + 37 TS-Sprint 1), tüm metrikler doğrulandı
+> **Son doğrulama:** 2026-02-11 — `pytest: 848 passed` (765 + 37 TS-1 + 46 TS-2), 321 route, 71 tablo
 
 ---
 
@@ -473,13 +473,16 @@ Explore Phase FS/TS dokümanından (2,787 satır) çıkarılan 150 atomik görev
 - ✅ Seed data: 3 suite, 32 step, 4 cycle-suite assignment — commit `22ed08c`
 - ✅ 37 yeni pytest testi (101 testing toplam) — commit `28535f8`
 
-**TS-Sprint 2 — TestRun & Defect Zenginleştirme (Kısa Vade, ~19.5 saat)**
-- `TestRun` modeli (run_type manual/automated, environment)
-- `TestStepResult` modeli (step-level pass/fail/blocked)
-- `DefectComment` + `DefectHistory` + `DefectLink` modelleri
-- TestRun lifecycle (5 endpoint) + StepResult (4) + DefectComment (3) + DefectLink (3)
-- Defect model genişletme (root_cause, resolution, environment)
-- Seed data + 50 test
+**TS-Sprint 2 — TestRun & Defect Zenginleştirme (Kısa Vade, ~19.5 saat) ✅ TAMAMLANDI**
+- ✅ `TestRun` modeli (run_type manual/automated/exploratory, status FSM, duration) — commit `d180bd5`
+- ✅ `TestStepResult` modeli (step-level pass/fail/blocked/skipped) — commit `d180bd5`
+- ✅ `DefectComment` + `DefectHistory` + `DefectLink` modelleri — commit `d180bd5`
+- ✅ `Defect` genişletme: `linked_requirement_id` FK, comment/history/link relationships — commit `d180bd5`
+- ✅ Alembic migration (5 yeni tablo + defects FK) — commit `0f92711`
+- ✅ TestRun lifecycle (5 ep) + StepResult (4 ep) + DefectComment (3 ep) + DefectHistory (1 ep) + DefectLink (3 ep) — commit `7c97796`
+- ✅ DefectHistory otomatik kayıt (update_defect'te 19 alan takibi) — commit `7c97796`
+- ✅ Seed data: 6 run, 8 step result, 6 comment, 6 history, 3 link — commit `1bb9c4e`
+- ✅ 46 yeni pytest testi (147 testing toplam, 848 genel toplam) — commit `b52a24f`
 
 **TS-Sprint 3 — UAT Sign-off, SLA & Go/No-Go (Orta Vade, ~19 saat)**
 - `UATSignOff` + `PerfTestResult` + `TestDailySnapshot` modelleri
