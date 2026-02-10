@@ -4,7 +4,7 @@
 **Hazırlayan:** ProjektCoPilot  
 **Tarih:** 2026-02-10  
 **Kaynak Doküman:** explore-phase-fs-ts.md (2787 satır, v1.2)  
-**Son Güncelleme:** 2026-02-10 01:30
+**Son Güncelleme:** 2026-02-10 06:50
 
 ---
 
@@ -12,12 +12,13 @@
 
 | Metrik | Değer |
 |--------|-------|
-| **Tamamlanan Task** | 19 / ~150 |
-| **Commit** | `f2eff2c` — feat: Explore Phase 0 - 16 models, migration, services, blueprint |
-| **Oluşturulan Dosyalar** | `app/models/explore.py` (16 model), `app/blueprints/explore_bp.py`, `app/services/code_generator.py`, `app/services/permission.py`, migration `9017f5b06e47` |
-| **DB Durum** | 57 tablo (40 mevcut + 16 explore + 1 kb_versions), Alembic head: `9017f5b06e47` |
+| **Tamamlanan Task** | 33 / ~150 |
+| **Son Commit** | Phase 1 — 6 models, migration, 15 API endpoints, WorkshopSessionService |
+| **Önceki Commit** | `f2eff2c` — Phase 0 - 16 models, migration, services, blueprint |
+| **Oluşturulan/Güncellenen Dosyalar** | `app/models/explore.py` (22 model), `app/blueprints/explore_bp.py` (15+ endpoint), `app/services/code_generator.py` (+SCR), `app/services/workshop_session.py` (yeni), migration `a3b4c5d6e702` |
+| **DB Durum** | 63 tablo (40 mevcut + 16 explore P0 + 6 explore P1 + 1 kb_versions), Alembic head: `a3b4c5d6e702` |
 | **Test** | 573 passed, 0 regresyon |
-| **Tamamlanan Fazlar** | Veri Katmanı (Models + Migration) %95 — Phase 0 modelleri + migration tamam |
+| **Tamamlanan Fazlar** | Phase 0 Models+Migration ✅, Phase 1 Models+Migration+API+Service ✅ |
 
 ## Doküman Özeti
 
@@ -61,7 +62,7 @@
 | Faz | Kapsam | Tahmini Sprint |
 |-----|--------|----------------|
 | **Phase 0 — CRITICAL** | Base 4 modül + GAP-01 (L4 Seeding) + GAP-05 (Roller) + GAP-11 (L3 Konsolide) + GAP-12 (L2 Milestone) | 8-10 sprint | ▓▓▓░░░░░░░ **~19/~80 task** — Models+Migration+Services tamam, API endpoints devam edecek |
-| **Phase 1 — IMPORTANT** | GAP-03 (WS Bağımlılık) + GAP-04 (Reopen) + GAP-07 (Attachments) + GAP-09 (Scope Change) + GAP-10 (Multi-Session) | 5-6 sprint | ░░░░░░░░░░ Başlamadı |
+| **Phase 1 — IMPORTANT** | GAP-03 (WS Bağımlılık) + GAP-04 (Reopen) + GAP-07 (Attachments) + GAP-09 (Scope Change) + GAP-10 (Multi-Session) | 5-6 sprint | ▓▓▓▓▓▓▓░░░ **~14/~19 task** — Models+Migration+API+Service tamam |
 | **Phase 2 — ENHANCEMENT** | GAP-02 (BPMN) + GAP-06 (Minutes) + GAP-08 (Dashboard) | 4-5 sprint | ░░░░░░░░░░ Başlamadı |
 
 ---
@@ -202,31 +203,31 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1.5h
 
-#### T-016: `workshop_dependency` modeli oluştur [GAP-03]
+#### ✅ T-016: `workshop_dependency` modeli oluştur [GAP-03] — TAMAMLANDI
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `workshop_dependency`
+- **Tablo:** `workshop_dependencies`
 - **Kolonlar:** id, workshop_id (FK), depends_on_workshop_id (FK), dependency_type (ENUM: must_complete_first/information_needed/cross_module_review/shared_decision), description, status (active/resolved), created_by (FK), created_at, resolved_at
 - **Constraint:** No self-reference, UNIQUE (workshop_id, depends_on_workshop_id)
 - **Faz:** Phase 1
 - **Tahmini Süre:** 1h
 
-#### T-017: `cross_module_flag` modeli oluştur [GAP-03]
+#### ✅ T-017: `cross_module_flag` modeli oluştur [GAP-03] — TAMAMLANDI
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `cross_module_flag`
+- **Tablo:** `cross_module_flags`
 - **Kolonlar:** id, process_step_id (FK), target_process_area, target_scope_item_code, description, status (open/discussed/resolved), resolved_in_workshop_id (FK), created_at
 - **Faz:** Phase 1
 - **Tahmini Süre:** 0.5h
 
-#### T-018: `workshop_revision_log` modeli oluştur [GAP-04]
+#### ✅ T-018: `workshop_revision_log` modeli oluştur [GAP-04] — TAMAMLANDI
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `workshop_revision_log`
+- **Tablo:** `workshop_revision_logs`
 - **Kolonlar:** id, workshop_id (FK), action (ENUM: reopened/delta_created/fit_decision_changed), previous_value (TEXT/JSON), new_value (TEXT/JSON), reason, changed_by (FK), created_at
 - **Faz:** Phase 1
 - **Tahmini Süre:** 0.5h
 
-#### T-019: `attachment` modeli oluştur [GAP-07]
+#### ✅ T-019: `attachment` modeli oluştur [GAP-07] — TAMAMLANDI
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `attachment`
+- **Tablo:** `attachments`
 - **Kolonlar:** id, project_id (FK), entity_type (ENUM: workshop/process_step/requirement/open_item/decision/process_level), entity_id, file_name, file_path, file_size, mime_type, category (ENUM: 7 tip), description, uploaded_by (FK), created_at
 - **İndeksler:** idx_attachment_entity, idx_attachment_project
 - **Faz:** Phase 1
@@ -253,16 +254,16 @@
 - **Faz:** Phase 2
 - **Tahmini Süre:** 0.5h
 
-#### T-023: `scope_change_request` modeli oluştur [GAP-09]
+#### ✅ T-023: `scope_change_request` modeli oluştur [GAP-09] — TAMAMLANDI
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `scope_change_request`
+- **Tablo:** `scope_change_requests`
 - **Kolonlar:** id, project_id, code (auto: SCR-{seq}), process_level_id (FK), change_type (ENUM: 5 tip), current_value (JSON), proposed_value (JSON), justification, impact_assessment, status (ENUM: requested/under_review/approved/rejected/implemented), requested_by (FK), reviewed_by (FK), approved_by (FK), created_at, decided_at, implemented_at
 - **Faz:** Phase 1
 - **Tahmini Süre:** 1.5h
 
-#### T-024: `scope_change_log` modeli oluştur [GAP-09]
+#### ✅ T-024: `scope_change_log` modeli oluştur [GAP-09] — TAMAMLANDI
 - **Dosya:** `app/models/explore.py`
-- **Tablo:** `scope_change_log`
+- **Tablo:** `scope_change_logs`
 - **Kolonlar:** id, project_id, process_level_id (FK), field_changed, old_value, new_value, scope_change_request_id (FK, nullable), changed_by (FK), created_at
 - **Faz:** Phase 1
 - **Tahmini Süre:** 0.5h
@@ -284,10 +285,10 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 4h → ✅ Gerçekleşen: ~1.5h
 
-#### T-027: Alembic migration — Phase 1 tabloları
-- **Dosya:** `migrations/versions/XXXXXX_explore_phase_1.py`
-- **İçerik:** workshop_dependency, cross_module_flag, workshop_revision_log, attachment, scope_change_request, scope_change_log + workshop tablosuna reopen alanları + process_step ek alanları
-- **Toplam:** 6 tablo + 2 alter
+#### ✅ T-027: Alembic migration — Phase 1 tabloları — TAMAMLANDI
+- **Dosya:** `migrations/versions/a3b4c5d6e702_explore_phase_1_6_tables.py`
+- **İçerik:** workshop_dependencies, cross_module_flags, workshop_revision_logs, attachments, scope_change_requests, scope_change_logs
+- **Toplam:** 6 tablo CREATE (hand-written, SQLite-safe)
 - **Faz:** Phase 1
 - **Tahmini Süre:** 2h
 
@@ -397,9 +398,9 @@
 - **Faz:** Phase 2
 - **Tahmini Süre:** 1h
 
-#### A-018: GET /process-levels/{id}/change-history [GAP-09]
+#### ✅ A-018: GET /process-levels/{id}/change-history [GAP-09] — TAMAMLANDI
 - **Faz:** Phase 1
-- **Tahmini Süre:** 1h
+- **Tahmini Süre:** 1h → ✅ Tamamlandı
 
 ### 2.2 Workshop API
 
@@ -444,19 +445,20 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### A-026: POST /workshops/{id}/reopen [GAP-04]
-- **Business Logic:** completed → in_progress, reopen_count++, revision log
+#### ✅ A-026: POST /workshops/{id}/reopen [GAP-04] — TAMAMLANDI
+- **Business Logic:** completed → in_progress, reopen_count++, revision log ✅
 - **Faz:** Phase 1
-- **Tahmini Süre:** 2h
+- **Tahmini Süre:** 2h → ✅ Tamamlandı
 
-#### A-027: POST /workshops/{id}/create-delta [GAP-04]
-- **Business Logic:** Yeni delta_design workshop, step kopyalama
+#### ✅ A-027: POST /workshops/{id}/create-delta [GAP-04] — TAMAMLANDI
+- **Business Logic:** Yeni delta_design workshop, scope item kopyalama, revision log ✅
 - **Faz:** Phase 1
-- **Tahmini Süre:** 3h
+- **Tahmini Süre:** 3h → ✅ Tamamlandı
 
-#### A-028: GET/POST /workshops/{id}/dependencies [GAP-03]
+#### ✅ A-028: GET/POST /workshops/{id}/dependencies [GAP-03] — TAMAMLANDI
+- **Ek:** PUT /workshop-dependencies/{id}/resolve endpoint dahil
 - **Faz:** Phase 1
-- **Tahmini Süre:** 1.5h
+- **Tahmini Süre:** 1.5h → ✅ Tamamlandı
 
 #### A-029: POST /workshops/{id}/generate-minutes [GAP-06]
 - **Response:** Markdown/DOCX/PDF minutes
@@ -491,9 +493,10 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1.5h
 
-#### A-035: POST /process-steps/{id}/cross-module-flags [GAP-03]
+#### ✅ A-035: POST /process-steps/{id}/cross-module-flags [GAP-03] — TAMAMLANDI
+- **Ek:** PUT /cross-module-flags/{id} update endpoint dahil
 - **Faz:** Phase 1
-- **Tahmini Süre:** 1h
+- **Tahmini Süre:** 1h → ✅ Tamamlandı
 
 ### 2.4 Requirement API
 
@@ -574,32 +577,35 @@
 
 ### 2.6 Cross-cutting API'ler
 
-#### A-051: GET /cross-module-flags?status=open [GAP-03]
+#### ✅ A-051: GET /cross-module-flags?status=open [GAP-03] — TAMAMLANDI
+- **Filtreler:** status, target_process_area
 - **Faz:** Phase 1
-- **Tahmini Süre:** 1h
+- **Tahmini Süre:** 1h → ✅ Tamamlandı
 
-#### A-052: POST /scope-change-requests [GAP-09]
-- **Business Logic:** Auto-calculate impact
+#### ✅ A-052: POST /scope-change-requests [GAP-09] — TAMAMLANDI
+- **Business Logic:** Auto-capture current_value, SCR-{seq} code gen ✅
 - **Faz:** Phase 1
-- **Tahmini Süre:** 3h
+- **Tahmini Süre:** 3h → ✅ Tamamlandı
 
-#### A-053: POST /scope-change-requests/{id}/transition [GAP-09]
+#### ✅ A-053: POST /scope-change-requests/{id}/transition [GAP-09] — TAMAMLANDI
+- **5 transition:** submit_for_review, approve, reject, implement, cancel
 - **Faz:** Phase 1
-- **Tahmini Süre:** 1.5h
+- **Tahmini Süre:** 1.5h → ✅ Tamamlandı
 
-#### A-054: POST /scope-change-requests/{id}/implement [GAP-09]
-- **Side effects:** Update process_level, cancel workshops, notify
+#### ✅ A-054: POST /scope-change-requests/{id}/implement [GAP-09] — TAMAMLANDI
+- **Side effects:** Update process_level fields, create ScopeChangeLog entries ✅
 - **Faz:** Phase 1
-- **Tahmini Süre:** 3h
+- **Tahmini Süre:** 3h → ✅ Tamamlandı
 
-#### A-055: GET /scope-change-requests [GAP-09]
+#### ✅ A-055: GET /scope-change-requests [GAP-09] — TAMAMLANDI
+- **Ek:** GET /scope-change-requests/{id} detay endpoint dahil
 - **Faz:** Phase 1
-- **Tahmini Süre:** 1h
+- **Tahmini Süre:** 1h → ✅ Tamamlandı
 
-#### A-056: Attachment CRUD API [GAP-07]
-- **Endpoints:** POST upload, GET list, GET download, DELETE
+#### ✅ A-056: Attachment CRUD API [GAP-07] — TAMAMLANDI
+- **Endpoints:** POST create, GET list (filtreleme), GET /{id}, DELETE /{id} ✅
 - **Faz:** Phase 1
-- **Tahmini Süre:** 3h
+- **Tahmini Süre:** 3h → ✅ Tamamlandı
 
 #### A-057: GET /reports/steering-committee [GAP-08]
 - **Response:** PPTX/PDF deck
@@ -659,11 +665,12 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### S-008: `WorkshopSessionService` — multi-session continuity [GAP-10]
-- **İçerik:** Previous session step linking, carry-over logic
+#### ✅ S-008: `WorkshopSessionService` — multi-session continuity [GAP-10] — TAMAMLANDI
+- **İçerik:** `carry_forward_steps()`, `link_session_steps()`, `get_session_summary()`, `validate_session_start()`
 - **Dosya:** `app/services/workshop_session.py`
+- **Dependency check:** GAP-03 must_complete_first bağımlılık kontrolü dahil
 - **Faz:** Phase 1
-- **Tahmini Süre:** 3h
+- **Tahmini Süre:** 3h → ✅ Tamamlandı
 
 #### S-009: `MinutesGeneratorService` — meeting minutes [GAP-06]
 - **İçerik:** Template engine, DOCX generation
@@ -1167,7 +1174,7 @@
 | Faz | Model Tasks | API Tasks | Frontend Tasks | Service Tasks | Test Tasks | Diğer | TOPLAM |
 |-----|-------------|-----------|----------------|---------------|------------|-------|--------|
 | **Phase 0** | ✅ 16/16 (T-001→T-015, T-025) | 1/38 (A-001 ✅) | 0/42 | 2/7 (S-002✅, S-005✅) | 0/4 | 2/5 (T-026✅, DEV-002✅) | **19/~112** |
-| **Phase 1** | 0/5 (T-016→T-019, T-023-24) | 0/10 | 0/2 | 0/1 (S-008) | (dahil) | 0/1 | **0/~19** |
+| **Phase 1** | ✅ 6/6 (T-016→T-019, T-023-24) | ✅ 10/10 (A-018,026-028,035,051-056) | 0/2 | ✅ 1/1 (S-008✅) | (dahil) | ✅ 1/1 (T-027✅) | **14/~19** |
 | **Phase 2** | 0/3 (T-020→T-022) | 0/5 | 0/9 | 0/2 (S-009, S-010) | (dahil) | 0/0 | **0/~19** |
 
 ### Faz Bazlı Tahmini Effort
@@ -1204,7 +1211,7 @@
 
 ---
 
-*Doküman Versiyonu: 1.1*
+*Doküman Versiyonu: 1.2*
 *Oluşturulma: 2026-02-10*
-*Son Güncelleme: 2026-02-10 01:30 — 19 task tamamlandı (f2eff2c)*
+*Son Güncelleme: 2026-02-10 06:50 — 33 task tamamlandı (Phase 0 + Phase 1)*
 *Kaynak: explore-phase-fs-ts.md v1.2 (2787 satır)*

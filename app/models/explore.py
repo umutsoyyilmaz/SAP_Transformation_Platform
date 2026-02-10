@@ -1,6 +1,6 @@
 """
 SAP Transformation Management Platform
-Explore Phase Management System — Domain Models v1.0
+Explore Phase Management System — Domain Models v1.1
 
 Implements the SAP Activate Explore Phase with 4 interconnected modules:
   Module A: Process Hierarchy Manager (L1-L4)
@@ -24,14 +24,22 @@ Models (Phase 0 — 16 tables):
     12. OpenItemComment       — Activity log per open item
     13. CloudALMSyncLog       — SAP Cloud ALM sync audit trail
 
-  Gap Analysis:
+  Gap Analysis (Phase 0):
     14. L4SeedCatalog         — SAP Best Practice L4 reference catalog
     15. ProjectRole           — Role-based access control per project
     16. PhaseGate             — Formal phase closure tracking
 
+Models (Phase 1 — 6 tables):
+    17. WorkshopDependency    — Inter-workshop dependency tracking [GAP-03]
+    18. CrossModuleFlag       — Cross-module coordination flags [GAP-03]
+    19. WorkshopRevisionLog   — Workshop change audit trail [GAP-04]
+    20. Attachment            — Polymorphic file attachments [GAP-07]
+    21. ScopeChangeRequest    — Formal scope change workflow [GAP-09]
+    22. ScopeChangeLog        — Audit trail for scope field changes [GAP-09]
+
 References:
-  - explore-phase-fs-ts.md Sections 2, 13.1, 13.5, 13.11, 13.12
-  - EXPLORE_PHASE_TASK_LIST.md Tasks T-001 → T-015, T-025
+  - explore-phase-fs-ts.md Sections 2, 13.1, 13.3, 13.4, 13.5, 13.7, 13.9, 13.11, 13.12
+  - EXPLORE_PHASE_TASK_LIST.md Tasks T-001 → T-019, T-023-T-026
 """
 
 import uuid
@@ -1322,3 +1330,423 @@ class PhaseGate(db.Model):
 
     def __repr__(self):
         return f"<PhaseGate {self.phase}:{self.gate_type} [{self.status}]>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ═══ PHASE 1 MODELS ═════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 17. WorkshopDependency — Inter-workshop dependency (T-016, GAP-03)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class WorkshopDependency(db.Model):
+    """
+    Dependency link between two workshops.
+    Enables cross-module coordination by tracking which workshops
+    must complete (or share info) before others can proceed.
+    """
+
+    __tablename__ = "workshop_dependencies"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "workshop_id", "depends_on_workshop_id",
+            name="uq_wdep_ws_dep",
+        ),
+        db.CheckConstraint(
+            "workshop_id != depends_on_workshop_id",
+            name="ck_wdep_no_self_ref",
+        ),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    workshop_id = db.Column(
+        db.String(36), db.ForeignKey("explore_workshops.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+        comment="Workshop that has the dependency",
+    )
+    depends_on_workshop_id = db.Column(
+        db.String(36), db.ForeignKey("explore_workshops.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+        comment="Workshop that must complete / provide info first",
+    )
+    dependency_type = db.Column(
+        db.String(30), nullable=False, default="information_needed",
+        comment="must_complete_first | information_needed | cross_module_review | shared_decision",
+    )
+    description = db.Column(db.Text, nullable=True)
+    status = db.Column(
+        db.String(10), nullable=False, default="active",
+        comment="active | resolved",
+    )
+    created_by = db.Column(db.String(36), nullable=False, comment="FK → user")
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+    resolved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    # ── Relationships ────────────────────────────────────────────────────
+    workshop = db.relationship(
+        "ExploreWorkshop", foreign_keys=[workshop_id],
+        backref=db.backref("dependencies_out", lazy="dynamic"),
+    )
+    depends_on_workshop = db.relationship(
+        "ExploreWorkshop", foreign_keys=[depends_on_workshop_id],
+        backref=db.backref("dependencies_in", lazy="dynamic"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "workshop_id": self.workshop_id,
+            "depends_on_workshop_id": self.depends_on_workshop_id,
+            "dependency_type": self.dependency_type,
+            "description": self.description,
+            "status": self.status,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+        }
+
+    def __repr__(self):
+        return f"<WorkshopDep {self.workshop_id[:8]} → {self.depends_on_workshop_id[:8]} ({self.dependency_type})>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 18. CrossModuleFlag — Cross-module coordination (T-017, GAP-03)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class CrossModuleFlag(db.Model):
+    """
+    Flag raised during a process step that requires attention from
+    another process area / module. Enables cross-module coordination.
+    """
+
+    __tablename__ = "cross_module_flags"
+    __table_args__ = (
+        db.Index("idx_cmf_target_area", "target_process_area", "status"),
+        db.Index("idx_cmf_step", "process_step_id"),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    process_step_id = db.Column(
+        db.String(36), db.ForeignKey("process_steps.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+        comment="Step where the flag was raised",
+    )
+    target_process_area = db.Column(
+        db.String(5), nullable=False,
+        comment="Target area code: FI, CO, SD, MM, etc.",
+    )
+    target_scope_item_code = db.Column(
+        db.String(10), nullable=True,
+        comment="Optional: specific target scope item",
+    )
+    description = db.Column(db.Text, nullable=False)
+    status = db.Column(
+        db.String(10), nullable=False, default="open",
+        comment="open | discussed | resolved",
+    )
+    resolved_in_workshop_id = db.Column(
+        db.String(36), db.ForeignKey("explore_workshops.id", ondelete="SET NULL"),
+        nullable=True, comment="Workshop where this was resolved",
+    )
+    created_by = db.Column(db.String(36), nullable=False, comment="FK → user")
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+    resolved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    # ── Relationships ────────────────────────────────────────────────────
+    process_step = db.relationship(
+        "ProcessStep",
+        backref=db.backref("cross_module_flags", lazy="dynamic"),
+    )
+    resolved_in_workshop = db.relationship(
+        "ExploreWorkshop", foreign_keys=[resolved_in_workshop_id],
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "process_step_id": self.process_step_id,
+            "target_process_area": self.target_process_area,
+            "target_scope_item_code": self.target_scope_item_code,
+            "description": self.description,
+            "status": self.status,
+            "resolved_in_workshop_id": self.resolved_in_workshop_id,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+        }
+
+    def __repr__(self):
+        return f"<CrossModuleFlag → {self.target_process_area} [{self.status}]>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 19. WorkshopRevisionLog — Workshop change audit (T-018, GAP-04)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class WorkshopRevisionLog(db.Model):
+    """
+    Audit trail for workshop reopen, delta creation, and fit decision changes.
+    Created automatically when workshops are reopened or decisions modified.
+    """
+
+    __tablename__ = "workshop_revision_logs"
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    workshop_id = db.Column(
+        db.String(36), db.ForeignKey("explore_workshops.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    action = db.Column(
+        db.String(30), nullable=False,
+        comment="reopened | delta_created | fit_decision_changed",
+    )
+    previous_value = db.Column(db.Text, nullable=True, comment="JSON or plain text")
+    new_value = db.Column(db.Text, nullable=True, comment="JSON or plain text")
+    reason = db.Column(db.Text, nullable=True)
+    changed_by = db.Column(db.String(36), nullable=False, comment="FK → user")
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    # ── Relationship ─────────────────────────────────────────────────────
+    workshop = db.relationship(
+        "ExploreWorkshop",
+        backref=db.backref("revision_logs", lazy="dynamic"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "workshop_id": self.workshop_id,
+            "action": self.action,
+            "previous_value": self.previous_value,
+            "new_value": self.new_value,
+            "reason": self.reason,
+            "changed_by": self.changed_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<WorkshopRevisionLog {self.action} on WS:{self.workshop_id[:8]}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 20. Attachment — Polymorphic file attachments (T-019, GAP-07)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class Attachment(db.Model):
+    """
+    Polymorphic file attachment — can be linked to any explore entity
+    (workshop, process_step, requirement, open_item, decision, process_level).
+
+    Uses entity_type + entity_id pattern for polymorphic association.
+    """
+
+    __tablename__ = "attachments"
+    __table_args__ = (
+        db.Index(
+            "idx_att_entity", "entity_type", "entity_id",
+        ),
+        db.Index("idx_att_project", "project_id"),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    project_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    entity_type = db.Column(
+        db.String(20), nullable=False,
+        comment="workshop | process_step | requirement | open_item | decision | process_level",
+    )
+    entity_id = db.Column(
+        db.String(36), nullable=False,
+        comment="UUID of the parent entity",
+    )
+    file_name = db.Column(db.String(255), nullable=False)
+    file_path = db.Column(db.String(500), nullable=False, comment="Server storage path")
+    file_size = db.Column(db.Integer, nullable=True, comment="Size in bytes")
+    mime_type = db.Column(db.String(100), nullable=True)
+    category = db.Column(
+        db.String(20), nullable=False, default="general",
+        comment="screenshot | bpmn_diagram | test_evidence | meeting_notes | config_doc | design_doc | general",
+    )
+    description = db.Column(db.Text, nullable=True)
+    uploaded_by = db.Column(db.String(36), nullable=False, comment="FK → user")
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "entity_type": self.entity_type,
+            "entity_id": self.entity_id,
+            "file_name": self.file_name,
+            "file_path": self.file_path,
+            "file_size": self.file_size,
+            "mime_type": self.mime_type,
+            "category": self.category,
+            "description": self.description,
+            "uploaded_by": self.uploaded_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<Attachment {self.file_name} on {self.entity_type}:{self.entity_id[:8]}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 21. ScopeChangeRequest — Formal scope change workflow (T-023, GAP-09)
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Valid status transitions for scope change request lifecycle
+SCOPE_CHANGE_TRANSITIONS = {
+    "submit_for_review": {"from": ["requested"], "to": "under_review"},
+    "approve": {"from": ["under_review"], "to": "approved"},
+    "reject": {"from": ["under_review"], "to": "rejected"},
+    "implement": {"from": ["approved"], "to": "implemented"},
+    "cancel": {"from": ["requested", "under_review"], "to": "cancelled"},
+}
+
+
+class ScopeChangeRequest(db.Model):
+    """
+    Formal scope change request with approval workflow.
+    Tracks proposed changes to process hierarchy scope/fit and their impact.
+    Code auto-generated: SCR-{seq} (3-digit, project-wide).
+    """
+
+    __tablename__ = "scope_change_requests"
+    __table_args__ = (
+        db.UniqueConstraint("project_id", "code", name="uq_scr_project_code"),
+        db.Index("idx_scr_project_status", "project_id", "status"),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    project_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    code = db.Column(
+        db.String(10), nullable=False,
+        comment="Auto: SCR-{seq}. Project-wide.",
+    )
+    process_level_id = db.Column(
+        db.String(36), db.ForeignKey("process_levels.id", ondelete="SET NULL"),
+        nullable=True, comment="Affected process level",
+    )
+    change_type = db.Column(
+        db.String(20), nullable=False,
+        comment="add_to_scope | remove_from_scope | change_fit_status | change_wave | change_priority",
+    )
+    current_value = db.Column(db.JSON, nullable=True, comment="Snapshot of current field value(s)")
+    proposed_value = db.Column(db.JSON, nullable=True, comment="Proposed new value(s)")
+    justification = db.Column(db.Text, nullable=False)
+    impact_assessment = db.Column(db.Text, nullable=True)
+
+    # Workflow
+    status = db.Column(
+        db.String(20), nullable=False, default="requested",
+        comment="requested | under_review | approved | rejected | implemented | cancelled",
+    )
+    requested_by = db.Column(db.String(36), nullable=False, comment="FK → user")
+    reviewed_by = db.Column(db.String(36), nullable=True, comment="FK → user")
+    approved_by = db.Column(db.String(36), nullable=True, comment="FK → user")
+
+    # Timestamps
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+    updated_at = db.Column(
+        db.DateTime(timezone=True), nullable=False,
+        default=_utcnow, onupdate=_utcnow,
+    )
+    decided_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    implemented_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    # ── Relationships ────────────────────────────────────────────────────
+    process_level = db.relationship("ProcessLevel", uselist=False)
+    change_logs = db.relationship(
+        "ScopeChangeLog", backref="scope_change_request", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "code": self.code,
+            "process_level_id": self.process_level_id,
+            "change_type": self.change_type,
+            "current_value": self.current_value,
+            "proposed_value": self.proposed_value,
+            "justification": self.justification,
+            "impact_assessment": self.impact_assessment,
+            "status": self.status,
+            "requested_by": self.requested_by,
+            "reviewed_by": self.reviewed_by,
+            "approved_by": self.approved_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "decided_at": self.decided_at.isoformat() if self.decided_at else None,
+            "implemented_at": self.implemented_at.isoformat() if self.implemented_at else None,
+        }
+
+    def __repr__(self):
+        return f"<ScopeChangeRequest {self.code}: {self.change_type} [{self.status}]>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 22. ScopeChangeLog — Scope field change audit trail (T-024, GAP-09)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class ScopeChangeLog(db.Model):
+    """
+    Granular audit trail for every field change on a process level's scope/fit.
+    May be linked to a ScopeChangeRequest, or created automatically on direct edits.
+    """
+
+    __tablename__ = "scope_change_logs"
+    __table_args__ = (
+        db.Index("idx_scl_project", "project_id"),
+        db.Index("idx_scl_process_level", "process_level_id"),
+    )
+
+    id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    project_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    process_level_id = db.Column(
+        db.String(36), db.ForeignKey("process_levels.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    field_changed = db.Column(
+        db.String(50), nullable=False,
+        comment="e.g. scope_status, fit_status, wave, etc.",
+    )
+    old_value = db.Column(db.Text, nullable=True)
+    new_value = db.Column(db.Text, nullable=True)
+    scope_change_request_id = db.Column(
+        db.String(36), db.ForeignKey("scope_change_requests.id", ondelete="SET NULL"),
+        nullable=True, comment="Link to formal SCR if applicable",
+    )
+    changed_by = db.Column(db.String(36), nullable=False, comment="FK → user")
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    # ── Relationships ────────────────────────────────────────────────────
+    process_level = db.relationship("ProcessLevel", uselist=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "process_level_id": self.process_level_id,
+            "field_changed": self.field_changed,
+            "old_value": self.old_value,
+            "new_value": self.new_value,
+            "scope_change_request_id": self.scope_change_request_id,
+            "changed_by": self.changed_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<ScopeChangeLog {self.field_changed}: {self.old_value} → {self.new_value}>"

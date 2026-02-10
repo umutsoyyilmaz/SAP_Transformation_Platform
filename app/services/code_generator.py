@@ -2,10 +2,11 @@
 Explore Phase — Auto-Code Generator Service
 
 Generates sequential codes for:
-  - Workshops:    WS-{area}-{seq}{letter}  (e.g. WS-SD-01, WS-FI-03A)
-  - Requirements: REQ-{seq}                (e.g. REQ-001, REQ-042)
-  - Open Items:   OI-{seq}                 (e.g. OI-001, OI-137)
-  - Decisions:    DEC-{seq}                (e.g. DEC-001, DEC-015)
+  - Workshops:              WS-{area}-{seq}{letter}  (e.g. WS-SD-01, WS-FI-03A)
+  - Requirements:           REQ-{seq}                (e.g. REQ-001, REQ-042)
+  - Open Items:             OI-{seq}                 (e.g. OI-001, OI-137)
+  - Decisions:              DEC-{seq}                (e.g. DEC-001, DEC-015)
+  - Scope Change Requests:  SCR-{seq}                (e.g. SCR-001, SCR-008)
 
 All codes are project-wide unique. Thread-safe via DB query + retry.
 """
@@ -18,6 +19,7 @@ from app.models.explore import (
     ExploreOpenItem,
     ExploreRequirement,
     ExploreWorkshop,
+    ScopeChangeRequest,
 )
 
 # ── Workshop code: WS-{area}-{seq}{letter} ──────────────────────────────────
@@ -82,3 +84,8 @@ def generate_open_item_code(project_id: int) -> str:
 def generate_decision_code(project_id: int) -> str:
     """Generate next decision code: DEC-001, DEC-002, ..."""
     return _generate_sequential_code(ExploreDecision, "DEC", project_id)
+
+
+def generate_scope_change_code(project_id: int) -> str:
+    """Generate next scope change request code: SCR-001, SCR-002, ..."""
+    return _generate_sequential_code(ScopeChangeRequest, "SCR", project_id)
