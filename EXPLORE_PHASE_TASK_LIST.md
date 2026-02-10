@@ -12,13 +12,13 @@
 
 | Metrik | Değer |
 |--------|-------|
-| **Tamamlanan Task** | 33 / ~150 |
-| **Son Commit** | Phase 1 — 6 models, migration, 15 API endpoints, WorkshopSessionService |
+| **Tamamlanan Task** | 75 / ~150 |
+| **Son Commit** | `28de926` — Phase 0 complete — 5 services + 40 API endpoints (58 routes) |
 | **Önceki Commit** | `f2eff2c` — Phase 0 - 16 models, migration, services, blueprint |
-| **Oluşturulan/Güncellenen Dosyalar** | `app/models/explore.py` (22 model), `app/blueprints/explore_bp.py` (15+ endpoint), `app/services/code_generator.py` (+SCR), `app/services/workshop_session.py` (yeni), migration `a3b4c5d6e702` |
+| **Oluşturulan/Güncellenen Dosyalar** | `app/models/explore.py` (22 model), `app/blueprints/explore_bp.py` (58 route, 40+ endpoint), `app/services/fit_propagation.py` (yeni), `app/services/requirement_lifecycle.py` (yeni), `app/services/open_item_lifecycle.py` (yeni), `app/services/cloud_alm.py` (yeni), `app/services/signoff.py` (yeni) |
 | **DB Durum** | 63 tablo (40 mevcut + 16 explore P0 + 6 explore P1 + 1 kb_versions), Alembic head: `a3b4c5d6e702` |
 | **Test** | 573 passed, 0 regresyon |
-| **Tamamlanan Fazlar** | Phase 0 Models+Migration ✅, Phase 1 Models+Migration+API+Service ✅ |
+| **Tamamlanan Fazlar** | Phase 0 Models+Migration+Services+API ✅, Phase 1 Models+Migration+API+Service ✅ |
 
 ## Doküman Özeti
 
@@ -61,7 +61,7 @@
 
 | Faz | Kapsam | Tahmini Sprint |
 |-----|--------|----------------|
-| **Phase 0 — CRITICAL** | Base 4 modül + GAP-01 (L4 Seeding) + GAP-05 (Roller) + GAP-11 (L3 Konsolide) + GAP-12 (L2 Milestone) | 8-10 sprint | ▓▓▓░░░░░░░ **~19/~80 task** — Models+Migration+Services tamam, API endpoints devam edecek |
+| **Phase 0 — CRITICAL** | Base 4 modül + GAP-01 (L4 Seeding) + GAP-05 (Roller) + GAP-11 (L3 Konsolide) + GAP-12 (L2 Milestone) | 8-10 sprint | ▓▓▓▓▓▓▓▓▓░ **~75/~80 task** — Models+Migration+Services+API tamam |
 | **Phase 1 — IMPORTANT** | GAP-03 (WS Bağımlılık) + GAP-04 (Reopen) + GAP-07 (Attachments) + GAP-09 (Scope Change) + GAP-10 (Multi-Session) | 5-6 sprint | ▓▓▓▓▓▓▓░░░ **~14/~19 task** — Models+Migration+API+Service tamam |
 | **Phase 2 — ENHANCEMENT** | GAP-02 (BPMN) + GAP-06 (Minutes) + GAP-08 (Dashboard) | 4-5 sprint | ░░░░░░░░░░ Başlamadı |
 
@@ -318,7 +318,7 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h → ✅ Tamamlandı
 
-#### A-002: GET /process-levels (tree + flat mode)
+#### ✅ A-002: GET /process-levels (tree + flat mode) — TAMAMLANDI (28de926)
 - **Query params:** level, scope_status, fit_status, process_area, wave, flat, include_stats
 - **Response:** Nested tree with fit_summary aggregates (recursive CTE)
 - **Computed:** fit_summary (L1/L2/L3), completion_pct
@@ -326,66 +326,66 @@
 - **Tahmini Süre:** 4h (recursive CTE + aggregation)
 - **Karmaşıklık:** YÜKSEK
 
-#### A-003: GET /process-levels/{id} — tek node + children
+#### ✅ A-003: GET /process-levels/{id} — tek node + children — TAMAMLANDI (28de926)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### A-004: PUT /process-levels/{id} — güncelleme
+#### ✅ A-004: PUT /process-levels/{id} — güncelleme — TAMAMLANDI (28de926)
 - **Fields:** scope_status, fit_status, description, etc.
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### A-005: GET /scope-matrix — L3 flat tablo
+#### ✅ A-005: GET /scope-matrix — L3 flat tablo — TAMAMLANDI (28de926)
 - **Response:** L3 list + workshop/req/OI stats per row
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### A-006: POST /process-levels/{l3Id}/seed-from-catalog [GAP-01]
+#### ✅ A-006: POST /process-levels/{l3Id}/seed-from-catalog [GAP-01] — TAMAMLANDI (28de926)
 - **Business Logic:** l4_seed_catalog lookup → L4 kayıt oluştur, idempotent
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### A-007: POST /process-levels/{l3Id}/seed-from-bpmn [GAP-01]
+#### ✅ A-007: POST /process-levels/{l3Id}/seed-from-bpmn [GAP-01] — TAMAMLANDI (28de926)
 - **Business Logic:** BPMN XML parse → L4 kayıt oluştur
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h (BPMN parsing)
 
-#### A-008: POST /process-levels/{l3Id}/children — manuel L4 ekleme
+#### ✅ A-008: POST /process-levels/{l3Id}/children — manuel L4 ekleme — TAMAMLANDI (28de926)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### A-009: POST /process-levels/{l3Id}/consolidate-fit [GAP-11]
+#### ✅ A-009: POST /process-levels/{l3Id}/consolidate-fit [GAP-11] — TAMAMLANDI (28de926)
 - **Business Logic:** L4'lerden system suggestion → business decision (override)
 - **Validation:** All L4 assessed, permission check
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### A-010: GET /process-levels/{l3Id}/consolidated-view [GAP-11]
+#### ✅ A-010: GET /process-levels/{l3Id}/consolidated-view [GAP-11] — TAMAMLANDI (28de926)
 - **Response:** L4 breakdown + blocking items + sign-off status + signoff_ready flag
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### A-011: POST /process-levels/{l3Id}/override-fit-status [GAP-11]
+#### ✅ A-011: POST /process-levels/{l3Id}/override-fit-status [GAP-11] — TAMAMLANDI (28de926)
 - **Business Logic:** Override + rationale (zorunlu) + permission check
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### A-012: POST /process-levels/{l3Id}/signoff [GAP-11]
+#### ✅ A-012: POST /process-levels/{l3Id}/signoff [GAP-11] — TAMAMLANDI (28de926)
 - **Pre-conditions:** Tüm L4 assessed, P1 OI closed, REQ approved
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### A-013: GET /process-levels/l2-readiness [GAP-12]
+#### ✅ A-013: GET /process-levels/l2-readiness [GAP-12] — TAMAMLANDI (28de926)
 - **Response:** Tüm L2 readiness durumu, L3 breakdown, completion_pct
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### A-014: POST /process-levels/{l2Id}/confirm [GAP-12]
+#### ✅ A-014: POST /process-levels/{l2Id}/confirm [GAP-12] — TAMAMLANDI (28de926)
 - **Validation:** readiness_pct = 100, permission check
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1.5h
 
-#### A-015: GET /area-milestones [GAP-12]
+#### ✅ A-015: GET /area-milestones [GAP-12] — TAMAMLANDI (28de926)
 - **Response:** Process area milestone tracker data
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
@@ -404,27 +404,27 @@
 
 ### 2.2 Workshop API
 
-#### A-019: GET /workshops — liste (filtreleme, sıralama, sayfalama)
+#### ✅ A-019: GET /workshops — liste (filtreleme, sıralama, sayfalama) — TAMAMLANDI (28de926)
 - **Query params:** status, process_area, wave, facilitator_id, date_from, date_to, scope_item_code, search, sort_by, sort_dir, page, per_page
 - **Response:** + stats per workshop (steps_total, fit_count, gap_count, etc.)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### A-020: GET /workshops/{id} — detay
+#### ✅ A-020: GET /workshops/{id} — detay — TAMAMLANDI (28de926)
 - **Response:** Full detail: agenda, attendees, process_steps + nested decisions/OIs/reqs
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### A-021: POST /workshops — yeni workshop oluştur
+#### ✅ A-021: POST /workshops — yeni workshop oluştur — TAMAMLANDI (28de926)
 - **Business Logic:** Code generation (WS-{area}-{seq}{letter})
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### A-022: PUT /workshops/{id} — güncelleme
+#### ✅ A-022: PUT /workshops/{id} — güncelleme — TAMAMLANDI (28de926)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### A-023: POST /workshops/{id}/start — başlat
+#### ✅ A-023: POST /workshops/{id}/start — başlat — TAMAMLANDI (28de926)
 - **Side effects:** status → in_progress, started_at set, L4 children → process_step kayıtları
 - **Validation:** scope item'ların L4 child'ları var mı? [GAP-01]
 - **Multi-session logic [GAP-10]:** session_number > 1 ise previous session steps taşı
@@ -432,7 +432,7 @@
 - **Tahmini Süre:** 4h
 - **Karmaşıklık:** YÜKSEK
 
-#### A-024: POST /workshops/{id}/complete — tamamla
+#### ✅ A-024: POST /workshops/{id}/complete — tamamla — TAMAMLANDI (28de926)
 - **Validation:** Tüm steps fit_decision != NULL (son session'da zorunlu, ara session'da opsiyonel [GAP-10])
 - **Side effects:** fit_decision → process_level propagation, L3 recalculate, L3 system_suggested_fit hesapla [GAP-11]
 - **Warning:** Open items açık, notes boş, unresolved cross-module flags [GAP-03]
@@ -440,7 +440,7 @@
 - **Tahmini Süre:** 4h
 - **Karmaşıklık:** YÜKSEK (propagation + validation + warnings)
 
-#### A-025: GET /workshops/capacity — facilitator capacity
+#### ✅ A-025: GET /workshops/capacity — facilitator capacity — TAMAMLANDI (28de926)
 - **Response:** weekly load per facilitator, overloaded weeks
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
@@ -472,23 +472,23 @@
 
 ### 2.3 Process Step API
 
-#### A-031: PUT /process-steps/{id} — fit_decision, notes güncelle
+#### ✅ A-031: PUT /process-steps/{id} — fit_decision, notes güncelle — TAMAMLANDI (28de926)
 - **Side effect:** fit_decision → process_level.fit_status propagation
 - **[GAP-04]:** revision log kaydı (fit_decision değişirse)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### A-032: POST /process-steps/{id}/decisions — karar ekle
+#### ✅ A-032: POST /process-steps/{id}/decisions — karar ekle — TAMAMLANDI (28de926)
 - **Business Logic:** DEC-{seq} code gen, auto-link workshop/project
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### A-033: POST /process-steps/{id}/open-items — OI oluştur
+#### ✅ A-033: POST /process-steps/{id}/open-items — OI oluştur — TAMAMLANDI (28de926)
 - **Business Logic:** OI-{seq} code gen, auto-assign workshop_id, process_level_id, process_area, wave
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1.5h
 
-#### A-034: POST /process-steps/{id}/requirements — REQ oluştur
+#### ✅ A-034: POST /process-steps/{id}/requirements — REQ oluştur — TAMAMLANDI (28de926)
 - **Business Logic:** REQ-{seq} code gen, auto-assign all context, status=draft
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1.5h
@@ -500,20 +500,20 @@
 
 ### 2.4 Requirement API
 
-#### A-036: GET /requirements — liste (filtreleme, gruplama, sayfalama)
+#### ✅ A-036: GET /requirements — liste (filtreleme, gruplama, sayfalama) — TAMAMLANDI (28de926)
 - **Query params:** status, priority, type, process_area, wave, scope_item_code, workshop_id, alm_synced, search, group_by, sort_by, sort_dir, page, per_page
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### A-037: GET /requirements/{id} — detay + audit trail + linked OIs + dependencies
+#### ✅ A-037: GET /requirements/{id} — detay + audit trail + linked OIs + dependencies — TAMAMLANDI (28de926)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### A-038: PUT /requirements/{id} — güncelleme
+#### ✅ A-038: PUT /requirements/{id} — güncelleme — TAMAMLANDI (28de926)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### A-039: POST /requirements/{id}/transition — durum geçişi
+#### ✅ A-039: POST /requirements/{id}/transition — durum geçişi — TAMAMLANDI (28de926)
 - **10 valid action:** submit_for_review, approve, reject, return_to_draft, defer, push_to_alm, mark_realized, verify, reactivate
 - **Side effects:** approve → set approved_by/at, reject → rejection_reason, push_to_alm → Cloud ALM call, defer → deferred_to_phase
 - **[GAP-05]:** Permission check per action
@@ -522,55 +522,55 @@
 - **Tahmini Süre:** 5h
 - **Karmaşıklık:** ÇOK YÜKSEK (state machine + permissions + side effects)
 
-#### A-040: POST /requirements/{id}/link-open-item
+#### ✅ A-040: POST /requirements/{id}/link-open-item — TAMAMLANDI (28de926)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
-#### A-041: POST /requirements/{id}/add-dependency
+#### ✅ A-041: POST /requirements/{id}/add-dependency — TAMAMLANDI (28de926)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 0.5h
 
-#### A-042: POST /requirements/bulk-sync-alm — toplu ALM push
+#### ✅ A-042: POST /requirements/bulk-sync-alm — toplu ALM push — TAMAMLANDI (28de926)
 - **Validation:** Sadece approved REQ'lar
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### A-043: GET /requirements/stats — KPI aggregation
+#### ✅ A-043: GET /requirements/stats — KPI aggregation — TAMAMLANDI (28de926)
 - **Response:** by_status, by_priority, by_type, by_area, total_effort, alm_synced_count
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
-#### A-044: POST /requirements/batch-transition [GAP-05]
+#### ✅ A-044: POST /requirements/batch-transition [GAP-05] — TAMAMLANDI (28de926)
 - **Business Logic:** Partial success allowed, per-item permission check
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
 
 ### 2.5 Open Item API
 
-#### A-045: GET /open-items — liste (filtreleme, gruplama, sayfalama)
+#### ✅ A-045: GET /open-items — liste (filtreleme, gruplama, sayfalama) — TAMAMLANDI (28de926)
 - **Query params:** status, priority, category, process_area, wave, assignee_id, workshop_id, overdue, search, group_by, sort_by, page, per_page
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2.5h
 
-#### A-046: PUT /open-items/{id} — güncelleme
+#### ✅ A-046: PUT /open-items/{id} — güncelleme — TAMAMLANDI (28de926)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### A-047: POST /open-items/{id}/transition — durum geçişi
+#### ✅ A-047: POST /open-items/{id}/transition — durum geçişi — TAMAMLANDI (28de926)
 - **6 action:** start_progress, mark_blocked, unblock, close, cancel, reopen
 - **Close side effect:** blocking OI → check all REQ links → notify if all closed
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h
 
-#### A-048: POST /open-items/{id}/reassign
+#### ✅ A-048: POST /open-items/{id}/reassign — TAMAMLANDI (28de926)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### A-049: POST /open-items/{id}/comments — activity log
+#### ✅ A-049: POST /open-items/{id}/comments — activity log — TAMAMLANDI (28de926)
 - **Faz:** Phase 0
 - **Tahmini Süre:** 1h
 
-#### A-050: GET /open-items/stats — KPI aggregation
+#### ✅ A-050: GET /open-items/stats — KPI aggregation — TAMAMLANDI (28de926)
 - **Response:** by_status, by_priority, overdue_count, p1_open_count, avg_resolution_days, by_assignee, by_category
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h
@@ -619,7 +619,7 @@
 
 ### 2.7 Service Katmanı
 
-#### S-001: `FitPropagationService` — fit status propagation engine
+#### ✅ S-001: `FitPropagationService` — fit status propagation engine — TAMAMLANDI (28de926)
 - **İçerik:** L4→L3→L2→L1 propagation, system_suggested_fit calculation, override logic
 - **Dosya:** `app/services/fit_propagation.py`
 - **Faz:** Phase 0
@@ -633,14 +633,14 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 2h → ✅ Tamamlandı
 
-#### S-003: `RequirementLifecycleService` — durum makinesi
+#### ✅ S-003: `RequirementLifecycleService` — durum makinesi — TAMAMLANDI (28de926)
 - **İçerik:** Transition validation, permission check, side effect execution
 - **Dosya:** `app/services/requirement_lifecycle.py`
 - **Faz:** Phase 0
 - **Tahmini Süre:** 4h
 - **Karmaşıklık:** YÜKSEK
 
-#### S-004: `OpenItemLifecycleService` — OI durum makinesi
+#### ✅ S-004: `OpenItemLifecycleService` — OI durum makinesi — TAMAMLANDI (28de926)
 - **İçerik:** Transition validation, blocking check, close side effects
 - **Dosya:** `app/services/open_item_lifecycle.py`
 - **Faz:** Phase 0
@@ -653,13 +653,13 @@
 - **Faz:** Phase 0
 - **Tahmini Süre:** 3h → ✅ Tamamlandı
 
-#### S-006: `CloudALMService` — SAP Cloud ALM integration
+#### ✅ S-006: `CloudALMService` — SAP Cloud ALM integration — TAMAMLANDI (28de926)
 - **İçerik:** Push requirement, bulk sync, retry with backoff, field mapping
 - **Dosya:** `app/services/cloud_alm.py`
 - **Faz:** Phase 0
 - **Tahmini Süre:** 4h
 
-#### S-007: `L3SignOffService` — L3 sign-off logic [GAP-11]
+#### ✅ S-007: `L3SignOffService` — L3 sign-off logic [GAP-11] — TAMAMLANDI (28de926)
 - **İçerik:** Pre-condition check, auto-status update, L2 readiness recalculation
 - **Dosya:** `app/services/signoff.py`
 - **Faz:** Phase 0
