@@ -1,49 +1,35 @@
 """
 SAP Transformation Management Platform
-Testing Blueprint — Test Hub CRUD API for test plans, cases, executions, defects, and dashboards.
+Testing Blueprint — Test Hub CRUD API.
 
-Endpoints (Sprint 5 scope):
-    Test Plans:
-        GET    /api/v1/programs/<pid>/testing/plans          — List plans (filterable)
-        POST   /api/v1/programs/<pid>/testing/plans          — Create plan
-        GET    /api/v1/testing/plans/<id>                    — Detail (+ cycles)
-        PUT    /api/v1/testing/plans/<id>                    — Update plan
-        DELETE /api/v1/testing/plans/<id>                    — Delete plan
+Sprint 5 + TS-Sprint 1 + TS-Sprint 2 endpoints.
 
-    Test Cycles:
-        GET    /api/v1/testing/plans/<pid>/cycles            — List cycles for plan
-        POST   /api/v1/testing/plans/<pid>/cycles            — Create cycle
-        GET    /api/v1/testing/cycles/<id>                   — Detail (+ executions)
-        PUT    /api/v1/testing/cycles/<id>                   — Update cycle
-        DELETE /api/v1/testing/cycles/<id>                   — Delete cycle
+TS-Sprint 2 new endpoints:
+    Test Runs:
+        GET    /api/v1/testing/cycles/<cid>/runs             — List runs in cycle
+        POST   /api/v1/testing/cycles/<cid>/runs             — Start new run
+        GET    /api/v1/testing/runs/<id>                     — Detail (+ step_results)
+        PUT    /api/v1/testing/runs/<id>                     — Update / complete / abort
+        DELETE /api/v1/testing/runs/<id>                     — Delete run
 
-    Test Catalog (Cases):
-        GET    /api/v1/programs/<pid>/testing/catalog        — List cases (filterable)
-        POST   /api/v1/programs/<pid>/testing/catalog        — Create case
-        GET    /api/v1/testing/catalog/<id>                  — Detail
-        PUT    /api/v1/testing/catalog/<id>                  — Update case
-        DELETE /api/v1/testing/catalog/<id>                  — Delete case
+    Step Results:
+        GET    /api/v1/testing/runs/<rid>/step-results       — List step results
+        POST   /api/v1/testing/runs/<rid>/step-results       — Record step result
+        PUT    /api/v1/testing/step-results/<id>             — Update step result
+        DELETE /api/v1/testing/step-results/<id>             — Delete step result
 
-    Test Executions:
-        GET    /api/v1/testing/cycles/<cid>/executions       — List executions in cycle
-        POST   /api/v1/testing/cycles/<cid>/executions       — Create execution
-        GET    /api/v1/testing/executions/<id>               — Detail
-        PUT    /api/v1/testing/executions/<id>               — Update execution (record result)
-        DELETE /api/v1/testing/executions/<id>               — Delete execution
+    Defect Comments:
+        GET    /api/v1/testing/defects/<did>/comments        — List comments
+        POST   /api/v1/testing/defects/<did>/comments        — Add comment
+        DELETE /api/v1/testing/defect-comments/<id>          — Delete comment
 
-    Defects:
-        GET    /api/v1/programs/<pid>/testing/defects        — List defects (filterable)
-        POST   /api/v1/programs/<pid>/testing/defects        — Create defect
-        GET    /api/v1/testing/defects/<id>                  — Detail
-        PUT    /api/v1/testing/defects/<id>                  — Update defect
-        DELETE /api/v1/testing/defects/<id>                  — Delete defect
+    Defect History:
+        GET    /api/v1/testing/defects/<did>/history          — Audit trail
 
-    Traceability & Regression:
-        GET    /api/v1/programs/<pid>/testing/traceability-matrix — Full matrix
-        GET    /api/v1/programs/<pid>/testing/regression-sets     — Regression test set
-
-    Dashboard:
-        GET    /api/v1/programs/<pid>/testing/dashboard      — KPI dashboard data
+    Defect Links:
+        GET    /api/v1/testing/defects/<did>/links            — List links
+        POST   /api/v1/testing/defects/<did>/links            — Create link
+        DELETE /api/v1/testing/defect-links/<id>              — Delete link
 """
 
 import logging
@@ -56,9 +42,11 @@ from app.models import db
 from app.models.testing import (
     TestPlan, TestCycle, TestCase, TestExecution, Defect,
     TestSuite, TestStep, TestCaseDependency, TestCycleSuite,
+    TestRun, TestStepResult, DefectComment, DefectHistory, DefectLink,
     TEST_LAYERS, TEST_CASE_STATUSES, EXECUTION_RESULTS,
     DEFECT_SEVERITIES, DEFECT_STATUSES, CYCLE_STATUSES, PLAN_STATUSES,
     SUITE_TYPES, SUITE_STATUSES, DEPENDENCY_TYPES,
+    RUN_TYPES, RUN_STATUSES, STEP_RESULTS, DEFECT_LINK_TYPES,
 )
 from app.models.program import Program
 from app.models.requirement import Requirement
@@ -656,29 +644,47 @@ def create_defect(pid):
 
 @testing_bp.route("/testing/defects/<int:defect_id>", methods=["GET"])
 def get_defect(defect_id):
-    """Get defect detail."""
+    """Get defect detail, optionally including comments."""
     defect, err = _get_or_404(Defect, defect_id)
     if err:
         return err
-    return jsonify(defect.to_dict())
+    include_comments = request.args.get("include_comments", "0") in ("1", "true")
+    return jsonify(defect.to_dict(include_comments=include_comments))
 
 
 @testing_bp.route("/testing/defects/<int:defect_id>", methods=["PUT"])
 def update_defect(defect_id):
-    """Update a defect — lifecycle transitions, assignment, resolution."""
+    """Update a defect — lifecycle transitions, assignment, resolution. Records history."""
     defect, err = _get_or_404(Defect, defect_id)
     if err:
         return err
 
     data = request.get_json(silent=True) or {}
     old_status = defect.status
+    changed_by = data.pop("changed_by", "")
 
-    for field in ("code", "title", "description", "steps_to_reproduce",
-                  "severity", "status", "module", "environment",
-                  "reported_by", "assigned_to", "found_in_cycle",
-                  "resolution", "root_cause", "transport_request", "notes",
-                  "test_case_id", "backlog_item_id", "config_item_id"):
+    tracked_fields = (
+        "code", "title", "description", "steps_to_reproduce",
+        "severity", "status", "module", "environment",
+        "reported_by", "assigned_to", "found_in_cycle",
+        "resolution", "root_cause", "transport_request", "notes",
+        "test_case_id", "backlog_item_id", "config_item_id",
+        "linked_requirement_id",
+    )
+
+    for field in tracked_fields:
         if field in data:
+            old_val = str(getattr(defect, field, "") or "")
+            new_val = str(data[field]) if data[field] is not None else ""
+            if old_val != new_val:
+                hist = DefectHistory(
+                    defect_id=defect.id,
+                    field=field,
+                    old_value=old_val,
+                    new_value=new_val,
+                    changed_by=changed_by,
+                )
+                db.session.add(hist)
             setattr(defect, field, data[field])
 
     # Auto-increment reopen_count
@@ -1300,3 +1306,361 @@ def remove_suite_from_cycle(cycle_id, suite_id):
         db.session.rollback()
         return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Suite removed from cycle"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST RUNS  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/cycles/<int:cycle_id>/runs", methods=["GET"])
+def list_test_runs(cycle_id):
+    """List test runs within a cycle — filterable by run_type, status, result."""
+    cycle, err = _get_or_404(TestCycle, cycle_id)
+    if err:
+        return err
+    q = TestRun.query.filter_by(cycle_id=cycle_id)
+    if request.args.get("run_type"):
+        q = q.filter_by(run_type=request.args["run_type"])
+    if request.args.get("status"):
+        q = q.filter_by(status=request.args["status"])
+    if request.args.get("result"):
+        q = q.filter_by(result=request.args["result"])
+    q = q.order_by(TestRun.created_at.desc())
+    return jsonify(paginate_query(q, TestRun))
+
+
+@testing_bp.route("/testing/cycles/<int:cycle_id>/runs", methods=["POST"])
+def create_test_run(cycle_id):
+    """Start a new test run within a cycle."""
+    cycle, err = _get_or_404(TestCycle, cycle_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    tc_id = data.get("test_case_id")
+    if not tc_id:
+        return jsonify({"error": "test_case_id is required"}), 400
+    tc, tc_err = _get_or_404(TestCase, tc_id)
+    if tc_err:
+        return tc_err
+
+    run = TestRun(
+        cycle_id=cycle_id,
+        test_case_id=tc_id,
+        run_type=data.get("run_type", "manual"),
+        status=data.get("status", "not_started"),
+        result=data.get("result", "not_run"),
+        environment=data.get("environment", ""),
+        tester=data.get("tester", ""),
+        notes=data.get("notes", ""),
+        evidence_url=data.get("evidence_url", ""),
+    )
+    if data.get("started_at"):
+        try:
+            run.started_at = datetime.fromisoformat(data["started_at"])
+        except (ValueError, TypeError):
+            pass
+    db.session.add(run)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(run.to_dict()), 201
+
+
+@testing_bp.route("/testing/runs/<int:run_id>", methods=["GET"])
+def get_test_run(run_id):
+    """Get test run detail, optionally including step results."""
+    run, err = _get_or_404(TestRun, run_id)
+    if err:
+        return err
+    include_steps = request.args.get("include_step_results", "0") in ("1", "true")
+    return jsonify(run.to_dict(include_step_results=include_steps))
+
+
+@testing_bp.route("/testing/runs/<int:run_id>", methods=["PUT"])
+def update_test_run(run_id):
+    """Update a test run — progress, complete, abort, record result."""
+    run, err = _get_or_404(TestRun, run_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+
+    for field in ("run_type", "status", "result", "environment", "tester",
+                  "notes", "evidence_url", "duration_minutes"):
+        if field in data:
+            setattr(run, field, data[field])
+
+    # Handle timestamp fields
+    for dt_field in ("started_at", "finished_at"):
+        if dt_field in data:
+            try:
+                setattr(run, dt_field, datetime.fromisoformat(data[dt_field]) if data[dt_field] else None)
+            except (ValueError, TypeError):
+                pass
+
+    # Auto-set started_at on transition to in_progress
+    if data.get("status") == "in_progress" and not run.started_at:
+        run.started_at = datetime.now(timezone.utc)
+
+    # Auto-set finished_at on completion/abort
+    if data.get("status") in ("completed", "aborted") and not run.finished_at:
+        run.finished_at = datetime.now(timezone.utc)
+
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(run.to_dict())
+
+
+@testing_bp.route("/testing/runs/<int:run_id>", methods=["DELETE"])
+def delete_test_run(run_id):
+    """Delete a test run and its step results."""
+    run, err = _get_or_404(TestRun, run_id)
+    if err:
+        return err
+    db.session.delete(run)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify({"message": "Test run deleted"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST STEP RESULTS  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/runs/<int:run_id>/step-results", methods=["GET"])
+def list_step_results(run_id):
+    """List step results within a test run, ordered by step_no."""
+    run, err = _get_or_404(TestRun, run_id)
+    if err:
+        return err
+    results = TestStepResult.query.filter_by(run_id=run_id)\
+        .order_by(TestStepResult.step_no).all()
+    return jsonify([sr.to_dict() for sr in results])
+
+
+@testing_bp.route("/testing/runs/<int:run_id>/step-results", methods=["POST"])
+def create_step_result(run_id):
+    """Record a step-level result within a test run."""
+    run, err = _get_or_404(TestRun, run_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+
+    # step_no required (step_id optional)
+    step_no = data.get("step_no")
+    if step_no is None:
+        return jsonify({"error": "step_no is required"}), 400
+
+    sr = TestStepResult(
+        run_id=run_id,
+        step_id=data.get("step_id"),
+        step_no=step_no,
+        result=data.get("result", "not_run"),
+        actual_result=data.get("actual_result", ""),
+        notes=data.get("notes", ""),
+        screenshot_url=data.get("screenshot_url", ""),
+    )
+    if data.get("executed_at"):
+        try:
+            sr.executed_at = datetime.fromisoformat(data["executed_at"])
+        except (ValueError, TypeError):
+            pass
+    else:
+        sr.executed_at = datetime.now(timezone.utc)
+
+    db.session.add(sr)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(sr.to_dict()), 201
+
+
+@testing_bp.route("/testing/step-results/<int:sr_id>", methods=["PUT"])
+def update_step_result(sr_id):
+    """Update a step result."""
+    sr, err = _get_or_404(TestStepResult, sr_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    for field in ("result", "actual_result", "notes", "screenshot_url", "step_no"):
+        if field in data:
+            setattr(sr, field, data[field])
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(sr.to_dict())
+
+
+@testing_bp.route("/testing/step-results/<int:sr_id>", methods=["DELETE"])
+def delete_step_result(sr_id):
+    """Delete a step result."""
+    sr, err = _get_or_404(TestStepResult, sr_id)
+    if err:
+        return err
+    db.session.delete(sr)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify({"message": "Step result deleted"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DEFECT COMMENTS  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/defects/<int:defect_id>/comments", methods=["GET"])
+def list_defect_comments(defect_id):
+    """List comments on a defect, newest first."""
+    defect, err = _get_or_404(Defect, defect_id)
+    if err:
+        return err
+    comments = DefectComment.query.filter_by(defect_id=defect_id)\
+        .order_by(DefectComment.created_at).all()
+    return jsonify([c.to_dict() for c in comments])
+
+
+@testing_bp.route("/testing/defects/<int:defect_id>/comments", methods=["POST"])
+def create_defect_comment(defect_id):
+    """Add a comment to a defect."""
+    defect, err = _get_or_404(Defect, defect_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    if not data.get("author") or not data.get("body"):
+        return jsonify({"error": "author and body are required"}), 400
+
+    comment = DefectComment(
+        defect_id=defect_id,
+        author=data["author"],
+        body=data["body"],
+    )
+    db.session.add(comment)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(comment.to_dict()), 201
+
+
+@testing_bp.route("/testing/defect-comments/<int:comment_id>", methods=["DELETE"])
+def delete_defect_comment(comment_id):
+    """Delete a defect comment."""
+    comment, err = _get_or_404(DefectComment, comment_id)
+    if err:
+        return err
+    db.session.delete(comment)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify({"message": "Comment deleted"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DEFECT HISTORY  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/defects/<int:defect_id>/history", methods=["GET"])
+def list_defect_history(defect_id):
+    """Get the change audit trail for a defect, newest first."""
+    defect, err = _get_or_404(Defect, defect_id)
+    if err:
+        return err
+    history = DefectHistory.query.filter_by(defect_id=defect_id)\
+        .order_by(DefectHistory.changed_at.desc()).all()
+    return jsonify([h.to_dict() for h in history])
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DEFECT LINKS  (TS-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/defects/<int:defect_id>/links", methods=["GET"])
+def list_defect_links(defect_id):
+    """List all links for a defect (both source and target)."""
+    defect, err = _get_or_404(Defect, defect_id)
+    if err:
+        return err
+    source = DefectLink.query.filter_by(source_defect_id=defect_id).all()
+    target = DefectLink.query.filter_by(target_defect_id=defect_id).all()
+    return jsonify({
+        "outgoing": [l.to_dict() for l in source],
+        "incoming": [l.to_dict() for l in target],
+    })
+
+
+@testing_bp.route("/testing/defects/<int:defect_id>/links", methods=["POST"])
+def create_defect_link(defect_id):
+    """Create a link from this defect to another defect."""
+    defect, err = _get_or_404(Defect, defect_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    target_id = data.get("target_defect_id")
+    if not target_id:
+        return jsonify({"error": "target_defect_id is required"}), 400
+    if target_id == defect_id:
+        return jsonify({"error": "Cannot link a defect to itself"}), 400
+    target, t_err = _get_or_404(Defect, target_id)
+    if t_err:
+        return t_err
+
+    # Check duplicate
+    existing = DefectLink.query.filter_by(
+        source_defect_id=defect_id, target_defect_id=target_id).first()
+    if existing:
+        return jsonify({"error": "Link already exists"}), 409
+
+    link = DefectLink(
+        source_defect_id=defect_id,
+        target_defect_id=target_id,
+        link_type=data.get("link_type", "related"),
+        notes=data.get("notes", ""),
+    )
+    db.session.add(link)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(link.to_dict()), 201
+
+
+@testing_bp.route("/testing/defect-links/<int:link_id>", methods=["DELETE"])
+def delete_defect_link(link_id):
+    """Delete a defect link."""
+    link, err = _get_or_404(DefectLink, link_id)
+    if err:
+        return err
+    db.session.delete(link)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify({"message": "Defect link deleted"}), 200
