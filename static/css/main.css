@@ -38,7 +38,11 @@
     --header-height:      48px;
     --radius:             8px;
     --shadow:             0 1px 4px rgba(0,0,0,0.08);
+    --shadow-sm:          0 1px 4px rgba(0,0,0,0.08);
     --shadow-md:          0 4px 16px rgba(0,0,0,0.10);
+
+    /* Accent (alias for primary blue) */
+    --sap-accent:         #0070f2;
 
     /* Transitions */
     --transition:         0.2s ease;
@@ -333,6 +337,27 @@ tr.clickable-row:hover {
     background: var(--sap-blue-light) !important;
 }
 
+/* Generic .table class (used by raid detail modals) */
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.table th,
+.table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--sap-border);
+}
+.table th {
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--sap-text-secondary);
+}
+.table td strong {
+    color: var(--sap-text-primary);
+}
+
 /* ── Buttons ───────────────────────────────────────────────────────────── */
 .btn {
     display: inline-flex;
@@ -378,17 +403,21 @@ tr.clickable-row:hover {
 }
 .btn-icon:hover { background: #e8f0fe; }
 
-.form-input {
+.form-input,
+.form-control {
     width: 100%;
-    padding: 8px 10px;
-    border: 1px solid #d1d5db;
+    padding: 8px 12px;
+    border: 1px solid var(--sap-border);
     border-radius: 6px;
-    font-size: 14px;
+    font-size: 13px;
+    font-family: inherit;
+    transition: border var(--transition);
 }
-.form-input:focus {
+.form-input:focus,
+.form-control:focus {
     outline: none;
-    border-color: #2563eb;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    border-color: var(--sap-blue);
+    box-shadow: 0 0 0 2px rgba(0,112,242,0.15);
 }
 
 /* ── Status Badge ──────────────────────────────────────────────────────── */
@@ -415,7 +444,7 @@ tr.clickable-row:hover {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 200;
+    z-index: 1000;
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--transition);
@@ -437,6 +466,10 @@ tr.clickable-row:hover {
     padding: 24px;
 }
 
+/* Wide modal (for detail views like integration, defect) */
+.modal--wide { max-width: 900px; }
+.modal--lg   { max-width: 800px; }
+
 .modal-header {
     display: flex;
     align-items: center;
@@ -452,7 +485,21 @@ tr.clickable-row:hover {
     font-size: 22px;
     cursor: pointer;
     color: var(--sap-text-secondary);
+    padding: 4px;
+    line-height: 1;
+    border-radius: 4px;
+    transition: background var(--transition), color var(--transition);
 }
+.modal-close:hover {
+    background: #f0f1f2;
+    color: var(--sap-text-primary);
+}
+
+/* BEM-style modal aliases (used by integration, raid views) */
+.modal__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.modal__header h2, .modal__header h3 { font-size: 18px; margin: 0; }
+.modal__body   { padding: 12px 0; }
+.modal__footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 16px; border-top: 1px solid var(--sap-border); margin-top: 16px; }
 
 .modal-body {
     padding: 16px 0;
@@ -518,7 +565,7 @@ tr.clickable-row:hover {
     position: fixed;
     top: 60px;
     right: 20px;
-    z-index: 300;
+    z-index: 1100;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -1617,7 +1664,7 @@ tr.clickable-row:hover {
     border: 1px solid var(--sap-border);
     border-radius: 8px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-    z-index: 1000;
+    z-index: 1050;
     overflow: hidden;
 }
 .notif-dropdown__header {
@@ -1900,7 +1947,7 @@ tr.clickable-row:hover {
     border: 1px solid var(--sap-border);
     border-radius: 10px;
     box-shadow: 0 12px 32px rgba(0,0,0,0.14), 0 2px 6px rgba(0,0,0,0.06);
-    z-index: 1000;
+    z-index: 1050;
     overflow: hidden;
 }
 
@@ -2626,7 +2673,7 @@ button[disabled].btn--perm-blocked {
     border-radius: var(--radius);
     box-shadow: var(--shadow-md);
     width: 220px;
-    z-index: 1000;
+    z-index: 1050;
     display: none;
     overflow: hidden;
 }

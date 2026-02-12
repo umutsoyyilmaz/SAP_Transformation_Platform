@@ -1,0 +1,25 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Docker ignore — exclude dev/test artifacts from build context
+# ═══════════════════════════════════════════════════════════════════════════
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.github/
+.gitignore
+.env
+.env.*
+instance/
+tests/
+e2e/
+docs/
+*.md
+*.log
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+test-results/
+playwright-report/
+node_modules/

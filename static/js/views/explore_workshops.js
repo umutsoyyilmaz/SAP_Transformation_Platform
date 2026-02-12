@@ -387,8 +387,12 @@ const ExploreWorkshopHubView = (() => {
                 </div>
                 <div class="exp-inline-form__row">
                     <div class="exp-inline-form__field"><label>Wave</label><input id="wsWave" type="number" min="1" max="10" placeholder="1"></div>
-                    <div class="exp-inline-form__field"><label>L3 Scope Item</label>
-                        <select id="wsL3"><option value="">—</option>${l3Options.map(o => `<option value="${o.id}">${esc(o.label)}</option>`).join('')}</select>
+                    <div class="exp-inline-form__field"><label>L3 Scope Items</label>
+                        <div class="exp-multiselect" id="wsL3Multiselect">
+                            <div class="exp-multiselect__trigger" onclick="ExploreWorkshopHubView._toggleL3Dropdown(event)">
+                                <span class="exp-multiselect__placeholder">Select L3 scope items…</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="exp-inline-form__row">
@@ -401,11 +405,128 @@ const ExploreWorkshopHubView = (() => {
             </div>
         </div>`;
         App.openModal(html);
+        // Initialize L3 multi-select dropdown
+        _l3MultiSelectOptions = l3Options;
+        _l3MultiSelectedIds = new Set();
+        _l3DropdownOpen = false;
+        // Close dropdown when clicking outside
+        setTimeout(() => {
+            document.addEventListener('click', _closeL3DropdownOutside);
+        }, 0);
+    }
+
+    // ── L3 Multi-Select State & Helpers ───────────────────────────────
+    let _l3MultiSelectOptions = [];
+    let _l3MultiSelectedIds = new Set();
+    let _l3DropdownOpen = false;
+
+    function _closeL3DropdownOutside(e) {
+        const container = document.getElementById('wsL3Multiselect');
+        if (container && !container.contains(e.target)) {
+            _l3DropdownOpen = false;
+            _renderL3Multiselect();
+        }
+    }
+
+    function _toggleL3Dropdown(e) {
+        e.stopPropagation();
+        _l3DropdownOpen = !_l3DropdownOpen;
+        _renderL3Multiselect();
+        if (_l3DropdownOpen) {
+            setTimeout(() => {
+                const searchInput = document.getElementById('wsL3Search');
+                if (searchInput) searchInput.focus();
+            }, 50);
+        }
+    }
+
+    function _toggleL3Option(id, e) {
+        if (e) e.stopPropagation();
+        if (_l3MultiSelectedIds.has(id)) {
+            _l3MultiSelectedIds.delete(id);
+        } else {
+            _l3MultiSelectedIds.add(id);
+        }
+        _renderL3Multiselect();
+    }
+
+    function _removeL3Chip(id, e) {
+        if (e) { e.stopPropagation(); e.preventDefault(); }
+        _l3MultiSelectedIds.delete(id);
+        _renderL3Multiselect();
+    }
+
+    function _clearL3Selection(e) {
+        if (e) e.stopPropagation();
+        _l3MultiSelectedIds.clear();
+        _renderL3Multiselect();
+    }
+
+    function _filterL3Options(e) {
+        e.stopPropagation();
+        _renderL3Multiselect(e.target.value);
+        // Restore focus & cursor
+        setTimeout(() => {
+            const input = document.getElementById('wsL3Search');
+            if (input) { input.focus(); input.value = e.target.value; }
+        }, 0);
+    }
+
+    function _renderL3Multiselect(searchTerm) {
+        const container = document.getElementById('wsL3Multiselect');
+        if (!container) return;
+        const selected = _l3MultiSelectOptions.filter(o => _l3MultiSelectedIds.has(o.id));
+        const filterTerm = (searchTerm || '').toLowerCase();
+        const filtered = _l3MultiSelectOptions.filter(o => !filterTerm || o.label.toLowerCase().includes(filterTerm));
+
+        // Chips in trigger
+        const chipsHtml = selected.length
+            ? selected.map(o => {
+                const parts = o.label.match(/^(\S+)\s+(.*)$/);
+                const displayLabel = parts ? parts[2] : o.label;
+                const code = parts ? parts[1] : '';
+                return `<span class="exp-multiselect__chip" title="${esc(o.label)}">
+                    ${code ? `<span style="opacity:.7;margin-right:2px">${esc(code)}</span>` : ''}${esc(displayLabel)}
+                    <button class="exp-multiselect__chip-remove" onclick="ExploreWorkshopHubView._removeL3Chip('${o.id}',event)">&times;</button>
+                </span>`;
+            }).join('')
+            : '<span class="exp-multiselect__placeholder">Select L3 scope items…</span>';
+
+        // Dropdown list
+        const listHtml = filtered.length
+            ? filtered.map(o => {
+                const isSel = _l3MultiSelectedIds.has(o.id);
+                const parts = o.label.match(/^(\S+)\s+(.*)$/);
+                return `<div class="exp-multiselect__option${isSel ? ' exp-multiselect__option--selected' : ''}" onclick="ExploreWorkshopHubView._toggleL3Option('${o.id}',event)">
+                    <span class="exp-multiselect__checkbox"></span>
+                    ${parts ? `<span class="exp-multiselect__option-code">${esc(parts[1])}</span>` : ''}
+                    <span class="exp-multiselect__option-label">${esc(parts ? parts[2] : o.label)}</span>
+                </div>`;
+            }).join('')
+            : '<div class="exp-multiselect__empty">No matching items</div>';
+
+        const dropdownHtml = _l3DropdownOpen ? `
+            <div class="exp-multiselect__dropdown">
+                <div class="exp-multiselect__search">
+                    <input id="wsL3Search" type="text" placeholder="Search L3 items…" oninput="ExploreWorkshopHubView._filterL3Options(event)" onclick="event.stopPropagation()" value="${esc(filterTerm)}">
+                </div>
+                <div class="exp-multiselect__list">${listHtml}</div>
+                ${selected.length ? `<div class="exp-multiselect__footer">
+                    <span class="exp-multiselect__counter">${selected.length} selected</span>
+                    <button class="exp-multiselect__clear-btn" onclick="ExploreWorkshopHubView._clearL3Selection(event)">Clear all</button>
+                </div>` : ''}
+            </div>` : '';
+
+        container.innerHTML = `
+            <div class="exp-multiselect__trigger${_l3DropdownOpen ? ' exp-multiselect__trigger--open' : ''}" onclick="ExploreWorkshopHubView._toggleL3Dropdown(event)">
+                ${chipsHtml}
+            </div>
+            ${dropdownHtml}`;
     }
 
     async function submitCreate() {
         try {
-            const scopeItemId = document.getElementById('wsL3')?.value || null;
+            const scopeItemIds = Array.from(_l3MultiSelectedIds);
             const name = document.getElementById('wsName')?.value?.trim();
             const area = document.getElementById('wsArea')?.value || null;
             const waveRaw = document.getElementById('wsWave')?.value;
@@ -429,10 +550,11 @@ const ExploreWorkshopHubView = (() => {
                 facilitator_id: document.getElementById('wsFacilitator')?.value || null,
                 process_area: area,
                 wave: waveVal,
-                scope_item_ids: scopeItemId ? [scopeItemId] : [],
+                scope_item_ids: scopeItemIds,
                 notes: document.getElementById('wsDesc')?.value || null,
             };
             await ExploreAPI.workshops.create(_pid, data);
+            document.removeEventListener('click', _closeL3DropdownOutside);
             App.closeModal();
             App.toast('Workshop created', 'success');
             await fetchAll();
@@ -523,5 +645,6 @@ const ExploreWorkshopHubView = (() => {
     return {
         render, setViewMode, setFilter, onFilterBarChange, setGroupBy, sort,
         openWorkshop, createWorkshop, submitCreate,
+        _toggleL3Dropdown, _toggleL3Option, _removeL3Chip, _clearL3Selection, _filterL3Options,
     };
 })();

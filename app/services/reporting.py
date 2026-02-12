@@ -1,5 +1,6 @@
 from datetime import date, datetime, timezone
 
+from app.models import db
 from app.models.program import Program, Phase
 from app.models.explore import (
     ExploreWorkshop as Workshop,
@@ -137,7 +138,7 @@ def compute_program_health(program_id: int) -> dict:
         overall_rag = "green"
 
     # ── 7. Phase/Timeline Info ────────────────────────────────────────
-    program = Program.query.get(pid)
+    program = db.session.get(Program, pid)
     phases = Phase.query.filter_by(program_id=pid).order_by(Phase.order).all()
     current_phase = next((p for p in phases if p.status == "active"), None)
 

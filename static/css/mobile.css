@@ -1,0 +1,504 @@
+/* ============================================
+   SAP Transformation Platform — Mobile PWA
+   Sprint 23: Progressive Web App Responsive Styles
+   ============================================ */
+
+/* ── PWA Install Banner ────────────────────────────────────────────────── */
+.pwa-install-banner {
+    position: fixed;
+    bottom: -80px;
+    left: 0;
+    right: 0;
+    background: var(--sidebar-bg, #1d2d3e);
+    color: #fff;
+    z-index: 1100;
+    transition: bottom 0.35s ease;
+    box-shadow: 0 -4px 20px rgba(0,0,0,.2);
+}
+.pwa-install-banner.visible {
+    bottom: 0;
+}
+.pwa-install-banner__content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    max-width: 600px;
+    margin: 0 auto;
+}
+.pwa-install-banner__icon {
+    font-size: 24px;
+}
+.pwa-install-banner__text {
+    flex: 1;
+    font-size: 14px;
+}
+.pwa-install-banner__btn {
+    background: var(--sap-blue, #0070f2);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 20px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.pwa-install-banner__close {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.6);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
+/* ── Offline Indicator ─────────────────────────────────────────────────── */
+.offline-indicator {
+    position: fixed;
+    top: -44px;
+    left: 0;
+    right: 0;
+    background: var(--sap-warning, #e76500);
+    color: #fff;
+    text-align: center;
+    padding: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    z-index: 1200;
+    transition: top 0.35s ease;
+}
+.offline-indicator.visible {
+    top: 0;
+}
+body.is-offline .shell-header {
+    top: 44px;
+}
+body.is-offline .sidebar {
+    top: calc(var(--header-height, 48px) + 44px);
+}
+body.is-offline .main-content {
+    margin-top: calc(var(--header-height, 48px) + 44px);
+}
+
+/* ── Hamburger Button ──────────────────────────────────────────────────── */
+.hamburger-btn {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--sap-shell-text, #fff);
+    font-size: 22px;
+    cursor: pointer;
+    padding: 8px;
+    margin-right: 4px;
+    border-radius: 6px;
+    transition: background 0.2s;
+    line-height: 1;
+    -webkit-tap-highlight-color: transparent;
+}
+.hamburger-btn:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+/* ── Sidebar Mobile Overlay ────────────────────────────────────────────── */
+.sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+    z-index: 89;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+.sidebar-backdrop.visible {
+    display: block;
+    opacity: 1;
+}
+
+/* ── Bottom Tab Bar ────────────────────────────────────────────────────── */
+.bottom-nav {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    background: var(--sap-card-bg, #fff);
+    border-top: 1px solid var(--sap-border, #d9d9d9);
+    z-index: 100;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.bottom-nav__items {
+    display: flex;
+    height: 56px;
+    align-items: stretch;
+}
+.bottom-nav__item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    text-decoration: none;
+    color: var(--sap-text-secondary, #6a6d70);
+    font-size: 10px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.2s;
+    -webkit-tap-highlight-color: transparent;
+    border: none;
+    background: none;
+    padding: 0;
+}
+.bottom-nav__item.active {
+    color: var(--sap-blue, #0070f2);
+}
+.bottom-nav__item-icon {
+    font-size: 20px;
+    line-height: 1;
+}
+.bottom-nav__item-label {
+    font-size: 10px;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+/* ── Pull-to-Refresh Indicator ─────────────────────────────────────────── */
+.pull-refresh {
+    display: none;
+    text-align: center;
+    padding: 12px;
+    color: var(--sap-text-secondary, #6a6d70);
+    font-size: 12px;
+    font-weight: 600;
+}
+.pull-refresh.active {
+    display: block;
+}
+
+/* ── Touch Utilities ───────────────────────────────────────────────────── */
+.touch-target {
+    min-height: 44px;
+    min-width: 44px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Tablet (≤ 1024px) ─────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+    .scenario-grid, .card-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    .cockpit-area-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* ── Small Tablet / Large Phone (≤ 768px) ──────────────────────────────── */
+@media (max-width: 768px) {
+    /* Show hamburger */
+    .hamburger-btn {
+        display: flex;
+        align-items: center;
+    }
+
+    /* Sidebar becomes slide-out drawer */
+    .sidebar {
+        transform: translateX(-100%);
+        width: var(--sidebar-width, 260px);
+        z-index: 95;
+        transition: transform 0.3s ease;
+    }
+    .sidebar.open {
+        transform: translateX(0);
+    }
+    .sidebar.open + .sidebar-backdrop,
+    .sidebar-backdrop.visible {
+        display: block;
+        opacity: 1;
+    }
+
+    /* Full-width main content */
+    .main-content {
+        margin-left: 0 !important;
+        padding: 16px;
+        padding-bottom: 80px; /* space for bottom nav */
+    }
+
+    /* Show bottom navigation */
+    .bottom-nav {
+        display: block;
+    }
+
+    /* Smaller header elements */
+    .shell-header__logo span {
+        display: none;
+    }
+    .shell-header__logo {
+        font-size: 16px;
+    }
+    .shell-header__program-badge {
+        max-width: 160px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 12px;
+    }
+    .shell-header__program-switch {
+        display: none;
+    }
+
+    /* Cards/grids go single-column */
+    .scenario-grid,
+    .cockpit-area-grid,
+    .dashboard-grid,
+    .detail-grid,
+    .form-row,
+    .card-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* KPI row: 2 columns on tablet */
+    .kpi-row {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    /* Page header stacks */
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    .page-header h1 {
+        font-size: 18px;
+    }
+
+    /* Tabs scrollable */
+    .tabs, .exp-tabs, .ah-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .tabs::-webkit-scrollbar,
+    .exp-tabs::-webkit-scrollbar,
+    .ah-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* Buttons: touch-friendly */
+    .btn {
+        min-height: 40px;
+        padding: 8px 16px;
+        font-size: 13px;
+    }
+
+    /* Modal full-width */
+    .modal {
+        width: 95vw !important;
+        max-width: 95vw !important;
+        max-height: 85vh;
+        margin: auto;
+    }
+
+    /* Table responsive */
+    .data-table, table {
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+/* ── Phone (≤ 480px) ──────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+    /* Stack KPIs single column */
+    .kpi-row {
+        grid-template-columns: 1fr !important;
+    }
+    .cockpit-kpi-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    /* Reduce padding */
+    .main-content {
+        padding: 12px;
+        padding-bottom: 80px;
+    }
+    .card {
+        padding: 14px;
+        margin-bottom: 12px;
+    }
+
+    /* Smaller typography */
+    .page-header h1 {
+        font-size: 16px;
+    }
+    .card-header h2 {
+        font-size: 14px;
+    }
+
+    /* Tab sizing */
+    .tab-btn, .exp-tab, .ah-tab {
+        padding: 8px 12px;
+        font-size: 11px;
+    }
+
+    /* Full-width buttons on small screens */
+    .page-header .btn,
+    .card-header .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Hide user label on very small screens */
+    #userSwitcherLabel {
+        display: none;
+    }
+
+    /* Compact shell header */
+    .shell-header {
+        padding: 0 10px;
+    }
+    .shell-header__program-badge {
+        display: none;
+    }
+
+    /* Modal: near-full-screen */
+    .modal {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        max-height: 95vh;
+        border-radius: 12px 12px 0 0;
+    }
+    .modal-overlay {
+        align-items: flex-end;
+    }
+
+    /* Forms */
+    .form-group label {
+        font-size: 12px;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        font-size: 16px; /* prevents iOS zoom */
+        padding: 10px 12px;
+    }
+
+    /* AI panel compact */
+    .ai-assistant-section {
+        padding: 10px;
+    }
+    .ai-assistant-header {
+        font-size: 12px;
+    }
+}
+
+/* ── Safe Area (notch/island devices) ──────────────────────────────────── */
+@supports (padding: env(safe-area-inset-top)) {
+    .shell-header {
+        padding-top: env(safe-area-inset-top);
+    }
+    .bottom-nav {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+    .sidebar {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+}
+
+/* ── Touch Optimizations ───────────────────────────────────────────────── */
+@media (pointer: coarse) {
+    /* Larger tap targets for touch */
+    .sidebar__item {
+        padding: 14px 20px;
+        min-height: 44px;
+    }
+    .btn {
+        min-height: 44px;
+    }
+    .tab-btn, .exp-tab, .ah-tab {
+        min-height: 44px;
+    }
+    .shell-header__icon-btn {
+        padding: 10px;
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    /* Disable hover effects on touch */
+    .btn:hover {
+        transform: none;
+        box-shadow: none;
+    }
+    .sidebar__item:hover {
+        background: transparent;
+    }
+    .sidebar__item.active:hover {
+        background: rgba(0, 112, 242, 0.15);
+    }
+
+    /* Active state for touch feedback */
+    .btn:active {
+        opacity: 0.8;
+    }
+    .sidebar__item:active {
+        background: var(--sidebar-hover, #2c3e50);
+    }
+}
+
+/* ── Standalone (installed PWA) ────────────────────────────────────────── */
+@media (display-mode: standalone) {
+    .pwa-install-banner {
+        display: none !important;
+    }
+}
+
+/* ── Dark Mode Support (follows OS preference) ─────────────────────────── */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --sap-bg:             #1a1a2e;
+        --sap-card-bg:        #242440;
+        --sap-border:         #3a3a5c;
+        --sap-text-primary:   #e0e0e0;
+        --sap-text-secondary: #a0a0b0;
+    }
+    .bottom-nav {
+        background: #242440;
+        border-top-color: #3a3a5c;
+    }
+    .offline-indicator {
+        background: #c55800;
+    }
+}
+
+/* ── Reduced Motion ────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+    .sidebar,
+    .pwa-install-banner,
+    .offline-indicator,
+    .sidebar-backdrop,
+    .main-content > * {
+        transition: none !important;
+        animation: none !important;
+    }
+}
+
+/* ── Print Optimization ────────────────────────────────────────────────── */
+@media print {
+    .sidebar,
+    .shell-header,
+    .bottom-nav,
+    .pwa-install-banner,
+    .offline-indicator,
+    .hamburger-btn,
+    .sidebar-backdrop {
+        display: none !important;
+    }
+    .main-content {
+        margin-left: 0 !important;
+        margin-top: 0 !important;
+        padding: 0 !important;
+    }
+}

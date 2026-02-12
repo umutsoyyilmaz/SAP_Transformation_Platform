@@ -108,7 +108,7 @@ def push_requirement_to_alm(
     Returns:
         {"requirement_id", "code", "alm_id", "sync_status", "payload"}
     """
-    req = ExploreRequirement.query.get(requirement_id)
+    req = db.session.get(ExploreRequirement, requirement_id)
     if not req:
         raise ValueError(f"Requirement not found: {requirement_id}")
 
@@ -235,7 +235,7 @@ def bulk_sync_to_alm(
 
 def get_sync_status(requirement_id: str) -> dict:
     """Get sync status and recent logs for a requirement."""
-    req = ExploreRequirement.query.get(requirement_id)
+    req = db.session.get(ExploreRequirement, requirement_id)
     if not req:
         raise ValueError(f"Requirement not found: {requirement_id}")
 

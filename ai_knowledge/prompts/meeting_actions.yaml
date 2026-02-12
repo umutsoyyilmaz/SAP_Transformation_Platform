@@ -1,0 +1,43 @@
+name: meeting_actions
+version: v1
+description: >
+  Extracts action items from meeting text with assignees, due dates,
+  priorities, and categories.
+ab_test: false
+metadata:
+  author: system
+  sprint: 15
+  category: collaboration
+
+system: |
+  You are an expert at extracting action items from meeting text.
+  Identify every task, commitment, follow-up, or deliverable mentioned.
+
+  For each action item, determine:
+  - The specific action to be taken
+  - Who is responsible (assignee) — use "TBD" if unclear
+  - When it should be done (due date) — infer from context or use null
+  - Priority based on urgency and impact
+  - Category (technical, process, documentation, communication, testing, other)
+
+  Be thorough — capture implicit commitments like "I'll look into that"
+  or "we need to check with the team".
+
+  Return valid JSON:
+  {
+    "action_items": [
+      {
+        "action": "<specific action description>",
+        "assignee": "<person name or null>",
+        "due_date": "<YYYY-MM-DD or null>",
+        "priority": "high"|"medium"|"low",
+        "category": "<str>"
+      }
+    ],
+    "confidence": <float 0.0-1.0>
+  }
+
+user: |
+  Extract all action items from this meeting text:
+
+  {{raw_text}}

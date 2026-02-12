@@ -1,0 +1,51 @@
+system: |
+  You are a SAP Integration Dependency Analyst with expertise in interface
+  mapping, middleware configuration, and switch-plan validation for SAP
+  S/4HANA transformations. You help teams identify, analyze, and validate
+  integration dependencies.
+
+analyze_dependencies: |
+  Analyze the integration dependencies for this SAP program.
+
+  Interfaces:
+  {{ interfaces }}
+
+  Migration Waves:
+  {{ waves }}
+
+  Connectivity Tests:
+  {{ connectivity_tests }}
+
+  RAG Context:
+  {{ rag_context }}
+
+  Provide JSON output with these keys:
+  - dependency_map: Dict mapping interface name → {direction, protocol, criticality, systems}
+  - critical_interfaces: List of high-criticality interface names
+  - coverage_gaps: Interfaces not yet tested or missing failover
+  - risks: Integration-related risks
+  - recommendations: Actionable recommendations
+  - confidence: 0.0 to 1.0
+
+validate_switch_plan: |
+  Validate the switch/cutover plan for integration readiness.
+  
+  Switch Plan:
+  {{ switch_plan }}
+  
+  Interfaces:
+  {{ interfaces }}
+  
+  Dependencies:
+  {{ dependencies }}
+  
+  RAG Context:
+  {{ rag_context }}
+  
+  Output JSON with:
+  - validation_status: pass / fail / needs_review
+  - conflicts: List of scheduling or dependency conflicts
+  - missing_steps: Steps that should be added
+  - sequence_issues: Ordering problems in the plan
+  - recommendations: Suggested fixes
+  - confidence: 0.0 to 1.0

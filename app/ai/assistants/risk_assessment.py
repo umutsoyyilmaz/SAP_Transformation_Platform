@@ -16,6 +16,7 @@ import json
 import logging
 from typing import Any
 
+from app.models import db
 from app.models.program import Program
 from app.models.raid import Risk, Action, Issue
 from app.models.testing import TestCase, Defect
@@ -88,7 +89,7 @@ class RiskAssessment:
                 result["error"] = "risk_assessment prompt template not found"
                 return result
 
-            program = Program.query.get(program_id)
+            program = db.session.get(Program, program_id)
             program_context = ""
             if program:
                 program_context = (
@@ -211,7 +212,7 @@ class RiskAssessment:
             "critical_issues": critical_issues,
         }
 
-        program = Program.query.get(pid)
+        program = db.session.get(Program, pid)
         if program and program.go_live_date:
             days_to_golive = (program.go_live_date - date.today()).days
             signals["timeline"] = {"days_to_go_live": days_to_golive}

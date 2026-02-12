@@ -148,21 +148,18 @@ const ExploreWorkshopDetailView = (() => {
         const grouped = {};
         for (const step of s) {
             const l3Key = step.parent_id || 'ungrouped';
-            const l3Name = step.process_area_code
-                ? `${step.process_area_code} — ${step.name || ''}`
-                : step.name || 'Process Step';
+            // Use L3 parent fields from backend (Bug C fix), fallback to process_area_code
+            const l3Name = step.l3_parent_code
+                ? `${step.l3_parent_process_area_code || ''} — ${step.l3_parent_name || ''}`.replace(/^\s*—\s*/, '')
+                : step.process_area_code
+                    ? `${step.process_area_code} — ${step.name || ''}`
+                    : step.name || 'Process Step';
             if (!grouped[l3Key]) grouped[l3Key] = { name: l3Name, steps: [] };
             grouped[l3Key].steps.push(step);
         }
 
-        // If all steps belong to same group, skip grouping header
+        // Always show L3 group headers (Bug A fix)
         const groups = Object.values(grouped);
-        if (groups.length <= 1) {
-            return `<div style="display:flex;flex-direction:column;gap:var(--exp-space-sm)">
-                ${s.map(step => renderProcessStepCard(step)).join('')}
-            </div>`;
-        }
-
         return groups.map(g => `
             <div style="margin-bottom:var(--exp-space-lg)">
                 <div style="font-weight:600;font-size:14px;color:var(--exp-l3);margin-bottom:8px;padding-left:4px">

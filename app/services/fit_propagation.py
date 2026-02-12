@@ -59,7 +59,7 @@ def propagate_fit_from_step(process_step: ProcessStep, *, is_final_session: bool
         return result
 
     # Update L4 process_level.fit_status
-    l4 = ProcessLevel.query.get(process_step.process_level_id)
+    l4 = db.session.get(ProcessLevel, process_step.process_level_id)
     if not l4 or l4.level != 4:
         return result
 
@@ -71,13 +71,13 @@ def propagate_fit_from_step(process_step: ProcessStep, *, is_final_session: bool
         return result
 
     # Find L3 parent and recalculate
-    l3 = ProcessLevel.query.get(l4.parent_id) if l4.parent_id else None
+    l3 = db.session.get(ProcessLevel, l4.parent_id) if l4.parent_id else None
     if l3 and l3.level == 3:
         recalculate_l3_consolidated(l3)
         result["l3_recalculated"] = True
 
         # Find L2 parent and recalculate readiness
-        l2 = ProcessLevel.query.get(l3.parent_id) if l3.parent_id else None
+        l2 = db.session.get(ProcessLevel, l3.parent_id) if l3.parent_id else None
         if l2 and l2.level == 2:
             recalculate_l2_readiness(l2)
             result["l2_recalculated"] = True
@@ -259,16 +259,29 @@ def workshop_completion_propagation(workshop: ExploreWorkshop) -> dict:
 
     steps = ProcessStep.query.filter_by(workshop_id=workshop.id).all()
 
+    # Pre-load all referenced ProcessLevels to avoid N+1 queries
+    level_ids = {s.process_level_id for s in steps if s.process_level_id}
+    levels_cache: dict[int, ProcessLevel] = {
+        pl.id: pl
+        for pl in ProcessLevel.query.filter(ProcessLevel.id.in_(level_ids)).all()
+    } if level_ids else {}
+    # Also pre-fetch parent levels (L3)
+    parent_ids = {pl.parent_id for pl in levels_cache.values() if pl.parent_id}
+    parent_cache: dict[int, ProcessLevel] = {
+        pl.id: pl
+        for pl in ProcessLevel.query.filter(ProcessLevel.id.in_(parent_ids)).all()
+    } if parent_ids else {}
+
     for step in steps:
         if step.fit_decision:
             result = propagate_fit_from_step(step, is_final_session=is_final)
             if result["l4_updated"]:
                 stats["steps_propagated"] += 1
             if result["l3_recalculated"]:
-                l4 = ProcessLevel.query.get(step.process_level_id)
+                l4 = levels_cache.get(step.process_level_id)
                 if l4:
                     stats["l3_recalculated"].add(l4.parent_id)
-                    l3 = ProcessLevel.query.get(l4.parent_id)
+                    l3 = parent_cache.get(l4.parent_id)
                     if l3 and l3.parent_id:
                         stats["l2_recalculated"].add(l3.parent_id)
 

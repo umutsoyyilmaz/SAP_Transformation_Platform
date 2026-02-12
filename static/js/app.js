@@ -31,7 +31,7 @@ const App = (() => {
         'defect-management':  () => DefectManagementView.render(),
         integration:  () => IntegrationView.render(),
         'data-factory': () => DataFactoryView.render(),
-        cutover:      () => placeholder('Cutover Hub', 'Sprint 13'),
+        cutover:      () => CutoverView.render(),
         raid:         () => RaidView.render(),
         reports:      () => ReportsView.render(),
         'project-setup': () => ProjectSetupView.render(),

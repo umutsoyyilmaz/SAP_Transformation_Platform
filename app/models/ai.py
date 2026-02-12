@@ -1,6 +1,6 @@
 """
 SAP Transformation Management Platform
-AI domain models — Sprint 7 + 9.5 KB Versioning.
+AI domain models — Sprint 7 + 9.5 KB Versioning + S19 Multi-turn + S20 Perf + S21 Final.
 
 Models:
     - AIUsageLog: Token/cost tracking per LLM call
@@ -8,6 +8,12 @@ Models:
     - AISuggestion: AI recommendation queue (approve/reject workflow)
     - AIAuditLog: Full audit trail for every AI invocation
     - KBVersion: Knowledge Base version tracking
+    - AIConversation: Multi-turn conversation session (Sprint 19)
+    - AIConversationMessage: Individual messages within a conversation (Sprint 19)
+    - AIResponseCache: LLM response cache with TTL (Sprint 20)
+    - AITokenBudget: Per-program/user token budget tracking (Sprint 20)
+    - AIFeedbackMetric: Per-assistant accuracy & feedback tracking (Sprint 21)
+    - AITask: Async AI task tracking with progress (Sprint 21)
 """
 
 import hashlib
@@ -30,7 +36,48 @@ SUGGESTION_TYPES = {
     "fit_gap_classification", "requirement_analysis", "defect_triage",
     "risk_assessment", "test_case_generation", "scope_recommendation",
     "change_impact",
+    "steering_pack", "wricef_spec", "data_quality",   # S19 Doc Gen
+    "conversation",                                     # S19 Multi-turn
     "general",
+}
+
+# S19 — conversation & assistant constants
+CONVERSATION_STATUSES = {"active", "closed", "archived"}
+ASSISTANT_TYPES = {
+    "nl_query", "requirement_analyst", "defect_triage",
+    "risk_assessment", "test_case_generator", "change_impact",
+    "cutover_optimizer", "meeting_minutes",
+    "steering_pack", "wricef_spec", "data_quality",   # S19
+    "general",
+}
+DOC_GEN_TYPES = {"steering_pack", "wricef_spec", "data_quality"}
+
+# S20 — performance & model routing constants
+BUDGET_PERIODS = {"daily", "monthly"}
+MODEL_TIERS = {
+    "fast": ["gemini-2.5-flash", "gpt-4o-mini", "claude-3-5-haiku-20241022"],
+    "balanced": ["gemini-2.5-flash", "gpt-4o-mini", "claude-3-5-sonnet-20241022"],
+    "strong": ["gemini-2.5-pro", "gpt-4o", "claude-3-5-sonnet-20241022"],
+}
+# Purpose → recommended model tier mapping
+PURPOSE_MODEL_MAP = {
+    "defect_triage": "fast",
+    "requirement_analyst": "fast",
+    "risk_assessment": "fast",
+    "test_case_generator": "fast",
+    "change_impact": "balanced",
+    "nl_query": "balanced",
+    "meeting_minutes": "balanced",
+    "steering_pack": "strong",
+    "wricef_spec": "strong",
+    "data_quality": "balanced",
+    "cutover_optimizer": "strong",
+    "conversation": "balanced",
+    # Sprint 21
+    "data_migration": "balanced",
+    "integration_analyst": "balanced",
+    "feedback": "fast",
+    "orchestrator": "strong",
 }
 
 # Token costs per 1M tokens (input/output) — Feb 2026 pricing
@@ -85,6 +132,10 @@ class AIUsageLog(db.Model):
     success = db.Column(db.Boolean, default=True)
     error_message = db.Column(db.Text, nullable=True)
 
+    # S20 — performance tracking
+    cache_hit = db.Column(db.Boolean, default=False, comment="Whether response served from cache")
+    fallback_provider = db.Column(db.String(30), nullable=True, comment="Provider used if primary failed")
+
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     def to_dict(self):
@@ -102,6 +153,8 @@ class AIUsageLog(db.Model):
             "program_id": self.program_id,
             "success": self.success,
             "error_message": self.error_message,
+            "cache_hit": self.cache_hit,
+            "fallback_provider": self.fallback_provider,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -361,6 +414,10 @@ class AIAuditLog(db.Model):
     error_message = db.Column(db.Text, nullable=True)
     metadata_json = db.Column(db.Text, default="{}")
 
+    # S20 — performance tracking
+    cache_hit = db.Column(db.Boolean, default=False)
+    fallback_used = db.Column(db.Boolean, default=False)
+
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     def to_dict(self):
@@ -378,5 +435,341 @@ class AIAuditLog(db.Model):
             "response_summary": self.response_summary,
             "success": self.success,
             "error_message": self.error_message,
+            "cache_hit": self.cache_hit,
+            "fallback_used": self.fallback_used,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+# ── AIResponseCache (Sprint 20 — Performance) ────────────────────────────────
+
+class AIResponseCache(db.Model):
+    """
+    LLM response cache with TTL-based expiration.
+    Keyed by SHA-256 hash of serialized prompt messages.
+    """
+
+    __tablename__ = "ai_response_cache"
+
+    id = db.Column(db.Integer, primary_key=True)
+    prompt_hash = db.Column(db.String(64), nullable=False, unique=True, index=True,
+                            comment="SHA-256 of JSON-serialized messages")
+    model = db.Column(db.String(80), nullable=False)
+    purpose = db.Column(db.String(100), default="")
+
+    # Cached response
+    response_json = db.Column(db.Text, nullable=False, comment="Full LLM response as JSON")
+    prompt_tokens = db.Column(db.Integer, default=0)
+    completion_tokens = db.Column(db.Integer, default=0)
+
+    # TTL management
+    hit_count = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    last_hit_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    def is_expired(self):
+        return datetime.now(timezone.utc) > self.expires_at
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "prompt_hash": self.prompt_hash,
+            "model": self.model,
+            "purpose": self.purpose,
+            "hit_count": self.hit_count,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "last_hit_at": self.last_hit_at.isoformat() if self.last_hit_at else None,
+        }
+
+
+# ── AITokenBudget (Sprint 20 — Cost Control) ─────────────────────────────────
+
+class AITokenBudget(db.Model):
+    """
+    Per-program token/cost budget enforcement.
+    Gateway checks budget before making LLM calls.
+    """
+
+    __tablename__ = "ai_token_budgets"
+
+    id = db.Column(db.Integer, primary_key=True)
+    program_id = db.Column(db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+                           nullable=True, index=True)
+    user = db.Column(db.String(150), nullable=True, comment="Optional user-level budget")
+    period = db.Column(db.String(20), nullable=False, default="daily",
+                       comment="daily | monthly")
+
+    # Limits
+    token_limit = db.Column(db.Integer, nullable=False, default=1_000_000,
+                            comment="Max tokens per period")
+    cost_limit_usd = db.Column(db.Float, nullable=False, default=10.0,
+                               comment="Max USD cost per period")
+
+    # Current usage
+    tokens_used = db.Column(db.Integer, default=0)
+    cost_used_usd = db.Column(db.Float, default=0.0)
+    request_count = db.Column(db.Integer, default=0)
+
+    # Period tracking
+    period_start = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    reset_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "period IN ('daily','monthly')",
+            name="ck_ai_budget_period",
+        ),
+    )
+
+    def is_exceeded(self):
+        """Check if budget is exceeded."""
+        return self.tokens_used >= self.token_limit or self.cost_used_usd >= self.cost_limit_usd
+
+    def remaining_tokens(self):
+        return max(0, self.token_limit - self.tokens_used)
+
+    def remaining_cost(self):
+        return max(0.0, self.cost_limit_usd - self.cost_used_usd)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "program_id": self.program_id,
+            "user": self.user,
+            "period": self.period,
+            "token_limit": self.token_limit,
+            "cost_limit_usd": self.cost_limit_usd,
+            "tokens_used": self.tokens_used,
+            "cost_used_usd": round(self.cost_used_usd, 6),
+            "request_count": self.request_count,
+            "is_exceeded": self.is_exceeded(),
+            "remaining_tokens": self.remaining_tokens(),
+            "remaining_cost_usd": round(self.remaining_cost(), 6),
+            "period_start": self.period_start.isoformat() if self.period_start else None,
+            "reset_at": self.reset_at.isoformat() if self.reset_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<AITokenBudget prog={self.program_id} {self.period} {self.tokens_used}/{self.token_limit}>"
+
+
+# ── AIConversation (Sprint 19 — Multi-turn) ──────────────────────────────────
+
+class AIConversation(db.Model):
+    """
+    Multi-turn conversation session.
+    Supports any assistant type — users can continue interacting with context.
+    """
+
+    __tablename__ = "ai_conversations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(300), default="")
+    assistant_type = db.Column(db.String(50), nullable=False, default="general")
+    status = db.Column(db.String(20), default="active")
+
+    # Context
+    program_id = db.Column(db.Integer, db.ForeignKey("programs.id", ondelete="SET NULL"), nullable=True)
+    user = db.Column(db.String(150), default="system")
+    context_json = db.Column(db.Text, default="{}", comment="Extra context: entity_id, entity_type, etc.")
+
+    # Stats
+    message_count = db.Column(db.Integer, default=0)
+    total_tokens = db.Column(db.Integer, default=0)
+    total_cost_usd = db.Column(db.Float, default=0.0)
+
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+                           onupdate=lambda: datetime.now(timezone.utc))
+
+    messages = db.relationship("AIConversationMessage", backref="conversation",
+                               cascade="all, delete-orphan", order_by="AIConversationMessage.seq",
+                               lazy="dynamic")
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('active','closed','archived')",
+            name="ck_ai_conv_status",
+        ),
+    )
+
+    def to_dict(self, include_messages=False):
+        d = {
+            "id": self.id,
+            "title": self.title,
+            "assistant_type": self.assistant_type,
+            "status": self.status,
+            "program_id": self.program_id,
+            "user": self.user,
+            "message_count": self.message_count,
+            "total_tokens": self.total_tokens,
+            "total_cost_usd": round(self.total_cost_usd or 0, 6),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_messages:
+            d["messages"] = [m.to_dict() for m in self.messages.all()]
+        return d
+
+    def __repr__(self):
+        return f"<AIConversation {self.id} [{self.assistant_type}] msgs={self.message_count}>"
+
+
+class AIConversationMessage(db.Model):
+    """Individual message within a multi-turn conversation."""
+
+    __tablename__ = "ai_conversation_messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("ai_conversations.id", ondelete="CASCADE"),
+                                nullable=False, index=True)
+    seq = db.Column(db.Integer, nullable=False, comment="Message sequence number (1-based)")
+    role = db.Column(db.String(20), nullable=False, comment="user | assistant | system")
+    content = db.Column(db.Text, nullable=False)
+
+    # LLM response metadata (only for assistant messages)
+    model = db.Column(db.String(80), nullable=True)
+    prompt_tokens = db.Column(db.Integer, default=0)
+    completion_tokens = db.Column(db.Integer, default=0)
+    cost_usd = db.Column(db.Float, default=0.0)
+    latency_ms = db.Column(db.Integer, default=0)
+
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "role IN ('user','assistant','system')",
+            name="ck_ai_msg_role",
+        ),
+        db.UniqueConstraint("conversation_id", "seq", name="uq_conv_msg_seq"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "conversation_id": self.conversation_id,
+            "seq": self.seq,
+            "role": self.role,
+            "content": self.content,
+            "model": self.model,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "cost_usd": round(self.cost_usd or 0, 6),
+            "latency_ms": self.latency_ms,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<AIConversationMessage conv={self.conversation_id} seq={self.seq} role={self.role}>"
+
+
+# ── S21 Models ─────────────────────────────────────────────────────────────
+
+# Task statuses for async AI tasks
+AI_TASK_STATUSES = {"pending", "running", "completed", "failed", "cancelled"}
+
+# Feedback metric types
+FEEDBACK_METRIC_TYPES = {"accuracy", "relevance", "completeness", "hallucination"}
+
+
+class AIFeedbackMetric(db.Model):
+    """Per-assistant feedback accuracy tracking (Sprint 21)."""
+    __tablename__ = "ai_feedback_metrics"
+
+    id = db.Column(db.Integer, primary_key=True)
+    assistant_type = db.Column(db.String(60), nullable=False, index=True)
+    period_start = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    period_end = db.Column(db.DateTime, nullable=True)
+
+    total_suggestions = db.Column(db.Integer, default=0)
+    approved_count = db.Column(db.Integer, default=0)
+    rejected_count = db.Column(db.Integer, default=0)
+    modified_count = db.Column(db.Integer, default=0)
+
+    accuracy_score = db.Column(db.Float, default=0.0)       # approve rate
+    avg_confidence = db.Column(db.Float, default=0.0)
+    common_rejection_reasons = db.Column(db.Text, nullable=True)  # JSON array
+    prompt_improvement_hints = db.Column(db.Text, nullable=True)  # JSON array
+
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    def to_dict(self):
+        import json as _json
+        return {
+            "id": self.id,
+            "assistant_type": self.assistant_type,
+            "period_start": self.period_start.isoformat() if self.period_start else None,
+            "period_end": self.period_end.isoformat() if self.period_end else None,
+            "total_suggestions": self.total_suggestions,
+            "approved_count": self.approved_count,
+            "rejected_count": self.rejected_count,
+            "modified_count": self.modified_count,
+            "accuracy_score": round(self.accuracy_score or 0, 4),
+            "avg_confidence": round(self.avg_confidence or 0, 4),
+            "common_rejection_reasons": _json.loads(self.common_rejection_reasons) if self.common_rejection_reasons else [],
+            "prompt_improvement_hints": _json.loads(self.prompt_improvement_hints) if self.prompt_improvement_hints else [],
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<AIFeedbackMetric assistant={self.assistant_type} acc={self.accuracy_score:.2f}>"
+
+
+class AITask(db.Model):
+    """Async AI task tracking with progress (Sprint 21)."""
+    __tablename__ = "ai_tasks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_type = db.Column(db.String(60), nullable=False, index=True)
+    status = db.Column(db.String(20), nullable=False, default="pending")
+    progress_pct = db.Column(db.Integer, default=0)
+
+    # Input / output
+    input_json = db.Column(db.Text, nullable=True)
+    result_json = db.Column(db.Text, nullable=True)
+    error_message = db.Column(db.Text, nullable=True)
+
+    # Context
+    user = db.Column(db.String(100), nullable=True)
+    program_id = db.Column(db.Integer, db.ForeignKey("programs.id"), nullable=True)
+    workflow_name = db.Column(db.String(100), nullable=True)
+
+    # Timing
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    started_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('pending','running','completed','failed','cancelled')",
+            name="ck_ai_task_status",
+        ),
+    )
+
+    def to_dict(self):
+        import json as _json
+        return {
+            "id": self.id,
+            "task_type": self.task_type,
+            "status": self.status,
+            "progress_pct": self.progress_pct,
+            "input": _json.loads(self.input_json) if self.input_json else None,
+            "result": _json.loads(self.result_json) if self.result_json else None,
+            "error": self.error_message,
+            "user": self.user,
+            "program_id": self.program_id,
+            "workflow_name": self.workflow_name,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+        }
+
+    def __repr__(self):
+        return f"<AITask id={self.id} type={self.task_type} status={self.status}>"

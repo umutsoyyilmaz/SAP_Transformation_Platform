@@ -14,6 +14,129 @@ Format: [Conventional Commits](https://www.conventionalcommits.org/) uyumlu.
 
 ## [Unreleased]
 
+### Sprint S24 — Final Polish & Platform v1.0 (Tamamlandı)
+- **Query.get() Migration**: All 27 deprecated `Model.query.get()` calls across 9 files migrated to `db.session.get()` (app + test files)
+- **Error Handlers**: Flask 404/500/405/429 error handlers with API (JSON) vs browser (SPA fallback) differentiation
+- **Rate Limiter Fix**: `storage_uri` now reads `REDIS_URL` env var; falls back to `memory://` in dev
+- **skip_permission Documentation**: TODO removed, annotated with rationale (API key auth enforced)
+- **Boolean Filter Fix**: `== False` → `.is_(False)` in `ai_bp.py` (SQLAlchemy best practice)
+- **N+1 Query Fix**: Pre-loaded `levels_cache` / `parent_cache` in `fit_propagation.propagate_from_workshop()` eliminates per-step DB queries
+- **JS Error Handler** (`static/js/error-handler.js`): `window.onerror` + `unhandledrejection` → toast notification + console.error + optional beacon to `/api/v1/client-errors`
+- **error-handler.js linked** in `index.html` before all other scripts
+- **LICENSE**: MIT License (Copyright 2026 Umut Soyyilmaz)
+- **.env.example**: Enhanced with REQUIRED markers and descriptions
+- **Docker Production Compose** (`docker/docker-compose.prod.yml`): No source mount, enforced env vars, resource limits (2CPU/2G app, 1CPU/1G pg, 0.5CPU/256M redis), json-file logging
+- **DB Backup Script** (`scripts/backup_db.sh`): pg_dump with gzip, timestamp naming, auto-cleanup (keeps last 10)
+- **README v2**: English Quick Start section, Docker instructions, updated metrics (103 tables, ~450 routes, 1593+ tests, 17 modules, 13 AI assistants), module list refreshed to 17, current status table updated through S24, LICENSE reference added
+- **GitHub Actions CI**: Confirmed existing from S14 (175 lines, lint → test → build → deploy)
+- 31 yeni test (`tests/test_final_polish.py`) — toplam: 1593+ test ✅
+
+### Sprint S23 — Mobile PWA: Progressive Web App (Tamamlandı)
+- **PWA Manifest** (`static/manifest.json`): name, short_name, display:standalone, theme_color:#354a5f, 8 icon sizes (72-512px), 3 shortcuts (Dashboard, AI, Backlog), orientation:any
+- **Service Worker** (`static/sw.js`): Cache-first for static, network-first for API, pre-cache 12 URLs, offline fallback to `/offline`, skip-waiting + clients-claim, version-based cache invalidation
+- **PWA Icons** (`static/icons/icon-{72-512}.png`): 8 PNG icons auto-generated via `scripts/gen_icons.py`
+- **Mobile CSS** (`static/css/mobile.css`, ~350 LOC): PWA install banner, offline indicator, hamburger button, sidebar mobile overlay with backdrop, bottom tab bar (56px, 5 items), pull-to-refresh indicator, touch-target 44px utility, breakpoints at 1024px/768px/480px, safe-area inset support, touch pointer optimizations, dark mode support, reduced motion, print optimization, standalone display-mode detection
+- **PWA Manager** (`static/js/pwa.js`, ~130 LOC): SW registration with update detection, beforeinstallprompt install banner, online/offline indicator with body class toggle, public API (promptInstall, dismissInstall, isOnline, isInstalled)
+- **Mobile Touch Components** (`static/js/mobile.js`, ~220 LOC): hamburger toggle for sidebar (ARIA-aware), sidebar backdrop overlay, bottom navigation bar (Dashboard, Build, Testing, AI, More), pull-to-refresh with touch events, swipe-to-navigate (left-edge swipe → open sidebar), resize handler (auto-close sidebar > 768px), onViewChange hook
+- **PWA Blueprint** (`app/blueprints/pwa_bp.py`): `/offline` fallback page, `/api/pwa/status` (feature flags), `/api/pwa/manifest` (inspect), `/api/pwa/cache-info` (list cacheable static assets)
+- **index.html updates**: manifest link, theme-color meta, apple-touch-icon, apple-mobile-web-app-capable, mobile.css, pwa.js, mobile.js scripts
+- 75 yeni test (10 sınıf) — toplam: 1562 test ✅ (103 tablo, 13 AI asistan, 17 blueprint)
+
+### Sprint S21 — AI Phase 5: Final AI Capabilities (Tamamlandı)
+- **AIFeedbackMetric** modeli: assistant_type (indexed), period_start/end, total_suggestions, approved/rejected/modified_count, accuracy_score, avg_confidence, common_rejection_reasons (JSON), prompt_improvement_hints (JSON)
+- **AITask** modeli: task_type (indexed), status (CheckConstraint: pending/running/completed/failed/cancelled), progress_pct, input_json, result_json, error_message, user, program_id FK, workflow_name, started_at, completed_at
+- **DataMigrationAdvisor** assistant (~270 LOC): analyze (full migration strategy), optimize_waves (parallel wave sequencing), reconciliation_check (data reconciliation checklist), _gather_context (DataObject+MigrationWave+LoadCycle+RAG)
+- **IntegrationAnalyst** assistant (~220 LOC): analyze_dependencies (interface dependency mapping), validate_switch_plan (cutover switch plan validation), _gather_context (Interface+Wave+ConnectivityTest+RAG)
+- **FeedbackPipeline** service (~145 LOC): compute_accuracy_scores (per-assistant approve/reject ratios), save_metrics (persist to DB), get_feedback_stats, generate_prompt_recommendations (low-accuracy detection)
+- **TaskRunner** service (~160 LOC): submit (create AITask, optional background thread execution), get_status, cancel, list_tasks, update_progress, _execute_in_background (Flask app context aware)
+- **AIDocExporter** service (~170 LOC): export_markdown (9 doc types w/ custom renderers), export_json, list_exportable_types
+- **AIOrchestrator** service (~230 LOC): 4 predefined workflows (requirement_to_spec, risk_to_mitigation, migration_full_analysis, integration_validation), execute (sync chain), execute_async (via TaskRunner), JSON path output mapping
+- **RAG genişletme**: 3 yeni entity extractor (interface, data_object, migration_wave) — toplam 11 extractor
+- **PURPOSE_MODEL_MAP** +4 giriş: data_migration (balanced), integration_analyst (balanced), feedback (fast), orchestrator (strong)
+- **LocalStub** +2 pattern: migration/wave/reconciliation + integration/dependency/switch stubs
+- 2 yeni prompt YAML: data_migration.yaml, integration_analyst.yaml
+- 26 yeni API endpoint: migration (3), integration (2), feedback (4), tasks (4), export (2), workflows (3) + budget/perf (existing)
+- 81 yeni test (10 sınıf) — toplam: 1487 test ✅ (103 tablo, 13 AI asistan)
+
+### Sprint S20 — AI Perf + Polish: Performance Optimization (Tamamlandı)
+- **AIResponseCache** modeli: prompt_hash (unique indexed), model, purpose, response_json, prompt_tokens, completion_tokens, hit_count, expires_at, last_hit_at, is_expired(), to_dict()
+- **AITokenBudget** modeli: program_id FK, user, period (daily/monthly CheckConstraint), token_limit (1M default), cost_limit_usd ($10 default), tokens_used, cost_used_usd, request_count, period_start, reset_at, is_exceeded(), remaining_tokens(), remaining_cost()
+- **AIUsageLog** +2 alan: cache_hit (Boolean), fallback_provider (String)
+- **AIAuditLog** +2 alan: cache_hit (Boolean), fallback_used (Boolean)
+- **MODEL_TIERS** constant: fast/balanced/strong × 3 model (9 toplam)
+- **PURPOSE_MODEL_MAP** constant: 12 assistant purpose → tier mapping
+- **ResponseCacheService** (~200 LOC): Two-tier cache (in-memory TTLCache + DB), compute_hash, get/set/invalidate/cleanup_expired, stats, memory eviction (MAX=500)
+- **ModelSelector** (~130 LOC): Purpose→tier→model routing, fallback chain builder, provider availability check
+- **TokenBudgetService** (~170 LOC): check_budget, record_usage, create_or_update, reset, list, delete, auto-reset on period expiry
+- **LLMGateway** S20 entegrasyonu: cache lookup/store, smart model selection, budget enforcement, fallback chain on provider failure
+- 10 yeni API endpoint: performance/dashboard, performance/by-assistant, cache/stats, cache/clear, budgets CRUD+reset+status
+- 67 yeni test (9 sınıf) — toplam: 1407 test ✅ (101 tablo)
+
+### Sprint S19 — AI Phase 4: Doc Gen + Multi-turn Conversations (Tamamlandı)
+- **AIConversation** modeli: title, assistant_type (12 tip), status (active/closed/archived), program_id FK, user, context_json, message_count, total_tokens, total_cost_usd
+- **AIConversationMessage** modeli: conversation_id FK, seq (unique pair), role (user/assistant/system), content, model, prompt_tokens, completion_tokens, cost_usd, latency_ms
+- **ConversationManager** service (~210 LOC): create_session, send_message (multi-turn w/ history), close_session, list_sessions (filterable), get_session
+  - MAX_HISTORY_MESSAGES = 20, system message always retained
+- **SteeringPackGenerator** assistant (~230 LOC): executive_summary, workstream_status, kpi_highlights, risk_escalations, decisions_needed, next_steps
+- **WRICEFSpecDrafter** assistant (~210 LOC): overview, functional_requirements, technical_details, integration_points, data_mapping, test_approach
+- **DataQualityGuardian** assistant (~210 LOC): quality_score, completeness_pct, issues, recommendations, cleansing_actions, migration_readiness
+- 3 yeni prompt YAML: steering_pack.yaml, wricef_spec.yaml, data_quality.yaml
+- LocalStub extended: steering/wricef/data_quality pattern match stubs
+- 8 yeni API endpoint: doc-gen/steering-pack, doc-gen/wricef-spec, doc-gen/data-quality, conversations CRUD (create/list/get/send/close)
+- RATELIMIT_ENABLED = False for TestingConfig
+- Toplam 11 AI asistanı, 99 tablo, 1340 test
+
+### 🚫 S22a/S22b — Dış Entegrasyonlar İPTAL EDİLDİ
+- **S22a** (Jira + Cloud ALM, 36h) ve **S22b** (ServiceNow + Teams, 20h) iptal edildi
+- Toplam 56 saat kapsam dışı bırakıldı — platform kendi başına yeterli, dış entegrasyon ihtiyacı ileri tarihe ertelendi
+- S23 bağımlılığı S22b → S17'ye güncellendi
+- Proje planı v2.5'e güncellendi
+
+### Sprint S17 — Run/Sustain: Hypercare Exit & BAU Handover (Tamamlandı)
+- **KnowledgeTransfer** modeli: cutover_plan FK, title, topic_area (6 alan), format (6 format), trainer, audience, duration, status (planned→completed), materials_url
+- **HandoverItem** modeli: cutover_plan FK, title, category (8 alan), responsible, reviewer, status (pending→completed), priority (high/medium/low), target_date
+- **StabilizationMetric** modeli: cutover_plan FK, metric_name, metric_type (system/business/process/user_adoption), target/current/baseline values, trend, is_within_target
+- **run_sustain_service** (~310 LOC): compute_kt_progress, compute_handover_readiness, compute_stabilization_dashboard, evaluate_hypercare_exit (5 SAP kriterleri), generate_weekly_report, compute_support_summary, seed_handover_items (10 standart madde)
+- **run_sustain_bp** blueprint (~330 LOC): ~24 endpoint — KT CRUD + progress, Handover CRUD + seed + readiness, Stabilization CRUD + dashboard, combined dashboard, exit-readiness, weekly-report, support-summary
+- **SLA compliance job düzeltme**: 5 alan uyumsuzluğu giderildi (severity_level→severity, response_time_hours→response_target_min, acknowledged_at→response_time_min, incident_number→code, is_active kaldırıldı), resolution SLA breach kontrolü eklendi
+- **Cockpit Chart.js CSP düzeltme**: CDN whitelist (cdn.jsdelivr.net, fonts.googleapis.com, fonts.gstatic.com), Chart undefined guard'ları
+- 69 yeni test (10 sınıf) — toplam: 1252 test ✅ (97 tablo)
+
+### Sprint S16 — Notification + Scheduling (Tamamlandı)
+- **NotificationPreference** modeli: user_id, category, channel (in_app/email/both), digest_frequency, unique constraint
+- **ScheduledJob** modeli: job_name, schedule_type (cron/interval/once), schedule_config (JSON), run stats tracking
+- **EmailLog** modeli: email gönderim audit trail (recipient, template, status, error)
+- **EmailService** (~280 LOC): 4 HTML template (notification_alert, daily_digest, weekly_digest, overdue_alert), SMTP + dev-mode logging
+- **SchedulerService** (~210 LOC): decorator-based `@register_job`, DB persistence, thread execution
+- **6 Scheduled Jobs** (~300 LOC): overdue_scanner, escalation_check, daily_digest, weekly_digest, stale_notification_cleanup, sla_compliance_check
+- **notification_bp** blueprint (~330 LOC): ~19 endpoint — notification CRUD, broadcast, preferences, scheduler management, email logs
+- 81 yeni test (12 sınıf) — toplam: 1183 test ✅
+- Release 4 Gate: ✅ GEÇTİ
+
+### Sprint S15 — AI Phase 3: Cutover AI + Meeting Minutes (Tamamlandı)
+- **CutoverOptimizer** asistanı: `optimize_runbook()` + `assess_go_nogo()` (~470 LOC)
+- **MeetingMinutesAssistant** asistanı: `generate_minutes()` + `extract_actions()` (~290 LOC)
+- 4 yeni prompt YAML: cutover_optimizer, cutover_gonogo, meeting_minutes, meeting_actions
+- 4 yeni AI endpoint (ai_bp.py): cutover/optimize, cutover/go-nogo, meeting-minutes/generate, meeting-minutes/extract-actions
+- 56 yeni test (8 sınıf) — toplam: 1102 test ✅
+- Toplam AI asistan: 8 (was 6)
+
+### Sprint S14 — CI/CD + Security Hardening (Tamamlandı)
+- **GitHub Actions CI:** `.github/workflows/ci.yml` — 4-job pipeline (lint → test → Docker build → deploy)
+- **Docker:** Multi-stage optimized Dockerfile
+- **Security Headers:** `app/middleware/security_headers.py` — CSP, HSTS, X-Frame-Options
+- **Rate Limiter:** `app/middleware/rate_limiter.py` — per-blueprint limits (disabled in TESTING)
+- **Deploy:** `scripts/deploy.sh` + `Procfile` + `ruff.toml`
+- Toplam: 1046 test, 0 regresyon
+
+### Sprint S13 — Cutover Hub + Hypercare (Tamamlandı)
+- **8 yeni model:** CutoverPlan, CutoverScopeItem, RunbookTask, TaskDependency, Rehearsal, GoNoGoItem, HypercareIncident, HypercareSLA
+- **~45 endpoint** cutover_bp.py: Plan CRUD, lifecycle, scope items, runbook tasks, dependencies, rehearsals, Go/No-Go, hypercare
+- **cutover_service.py:** Code gen, runbook metrics, Go/No-Go aggregation, dependency validation
+- **Frontend:** 5-tab SPA (Plans, Runbook, Rehearsals, Go/No-Go, Hypercare)
+- **79 test** — toplam: 1046 test ✅
+- **71 seed kaydı** (scripts/seed_data/cutover.py)
+
 ### UI-Sprint — Arayüz Standardizasyonu (Tamamlandı)
 - **Prompt T:** Inter font + type scale (--fs-xs..3xl) + 44 rem→var() + 18 JS rem→px
 - **Prompt F-REV:** KPI standardization — emoji removal, metricBar component, max 5 primary KPIs, flex-nowrap

@@ -140,19 +140,19 @@ const DataFactoryView = (() => {
 
         c.innerHTML = `
             <div class="kpi-row" style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap">
-                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--sap-bg-card);border-radius:8px;padding:16px;box-shadow:var(--sap-shadow-sm)">
+                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--sap-card-bg, #fff);border-radius:8px;padding:16px;box-shadow:var(--sap-shadow-sm)">
                     <div style="font-size:13px;color:var(--sap-text-secondary)">Data Objects</div>
                     <div style="font-size:28px;font-weight:700;color:var(--sap-accent)">${total}</div>
                 </div>
-                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--sap-bg-card);border-radius:8px;padding:16px;box-shadow:var(--sap-shadow-sm)">
+                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--sap-card-bg, #fff);border-radius:8px;padding:16px;box-shadow:var(--sap-shadow-sm)">
                     <div style="font-size:13px;color:var(--sap-text-secondary)">Avg Quality</div>
                     <div style="font-size:28px;font-weight:700;color:${parseFloat(avgScore) >= 85 ? '#30914c' : '#e76500'}">${avgScore}%</div>
                 </div>
-                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--sap-bg-card);border-radius:8px;padding:16px;box-shadow:var(--sap-shadow-sm)">
+                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--sap-card-bg, #fff);border-radius:8px;padding:16px;box-shadow:var(--sap-shadow-sm)">
                     <div style="font-size:13px;color:var(--sap-text-secondary)">Total Records</div>
                     <div style="font-size:28px;font-weight:700;color:var(--sap-accent)">${fmtNum(totalRecs)}</div>
                 </div>
-                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--sap-bg-card);border-radius:8px;padding:16px;box-shadow:var(--sap-shadow-sm)">
+                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--sap-card-bg, #fff);border-radius:8px;padding:16px;box-shadow:var(--sap-shadow-sm)">
                     <div style="font-size:13px;color:var(--sap-text-secondary)">Ready / Migrated</div>
                     <div style="font-size:28px;font-weight:700;color:#30914c">${readyCount} / ${total}</div>
                 </div>
@@ -592,24 +592,20 @@ const DataFactoryView = (() => {
     // ══════════════════════════════════════════════════════════════════════
 
     function _modal(title, body) {
-        // Remove any existing modal
+        // Remove any leftover custom modal
         const existing = document.getElementById('dfModal');
         if (existing) existing.remove();
 
-        const overlay = document.createElement('div');
-        overlay.id = 'dfModal';
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center';
-        overlay.innerHTML = `
-            <div style="background:var(--sap-bg-card);border-radius:12px;padding:24px;max-width:640px;width:95%;max-height:80vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,.2)">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                    <h3 style="margin:0">${title}</h3>
-                    <button class="btn btn-sm" onclick="document.getElementById('dfModal').remove()" style="font-size:18px">✕</button>
-                </div>
-                <div>${body}</div>
+        // Use standard App.openModal system for consistency (ESC, backdrop-click, z-index)
+        App.openModal(`
+            <div class="modal-header">
+                <h2>${title}</h2>
+                <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button>
             </div>
-        `;
-        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-        document.body.appendChild(overlay);
+            <div class="modal-body" style="max-height:65vh;overflow-y:auto">
+                ${body}
+            </div>
+        `);
     }
 
     function showCreateObject() {
@@ -624,7 +620,7 @@ const DataFactoryView = (() => {
                     <div><label>Description</label><textarea class="form-control" id="df_obj_desc" rows="2"></textarea></div>
                 </div>
                 <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
-                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('dfModal').remove()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
                     <button type="submit" class="btn btn-primary">Create</button>
                 </div>
             </form>
@@ -643,7 +639,7 @@ const DataFactoryView = (() => {
                 owner: document.getElementById('df_obj_owner').value || null,
                 description: document.getElementById('df_obj_desc').value || null,
             });
-            document.getElementById('dfModal').remove();
+            App.closeModal();
             App.toast('Data object created', 'success');
             await loadAll();
         } catch (e) { App.toast(e.message, 'error'); }
@@ -662,7 +658,7 @@ const DataFactoryView = (() => {
                     </div>
                 </div>
                 <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
-                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('dfModal').remove()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
                     <button type="submit" class="btn btn-primary">Create</button>
                 </div>
             </form>
@@ -680,7 +676,7 @@ const DataFactoryView = (() => {
                 planned_start: document.getElementById('df_wave_start').value || null,
                 planned_end: document.getElementById('df_wave_end').value || null,
             });
-            document.getElementById('dfModal').remove();
+            App.closeModal();
             App.toast('Migration wave created', 'success');
             await loadAll();
         } catch (e) { App.toast(e.message, 'error'); }
@@ -719,7 +715,7 @@ const DataFactoryView = (() => {
     async function updateObjectStatus(objId, status) {
         try {
             await API.put(`/data-factory/objects/${objId}`, { status });
-            document.getElementById('dfModal').remove();
+            App.closeModal();
             App.toast('Status updated', 'success');
             await loadAll();
         } catch (e) { App.toast(e.message, 'error'); }
@@ -754,7 +750,7 @@ const DataFactoryView = (() => {
     async function updateWaveStatus(waveId, status) {
         try {
             await API.put(`/data-factory/waves/${waveId}`, { status });
-            document.getElementById('dfModal').remove();
+            App.closeModal();
             App.toast('Wave status updated', 'success');
             await loadAll();
         } catch (e) { App.toast(e.message, 'error'); }
@@ -780,7 +776,7 @@ const DataFactoryView = (() => {
                     <div><label>Description</label><input class="form-control" id="df_task_desc"></div>
                 </div>
                 <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
-                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('dfModal').remove()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
                     <button type="submit" class="btn btn-primary">Create</button>
                 </div>
             </form>
@@ -795,7 +791,7 @@ const DataFactoryView = (() => {
                 rule_expression: document.getElementById('df_task_expr').value,
                 description: document.getElementById('df_task_desc').value || null,
             });
-            document.getElementById('dfModal').remove();
+            App.closeModal();
             App.toast('Cleansing rule created', 'success');
             await loadCleansingTasks(_selectedObjectId);
         } catch (e) { App.toast(e.message, 'error'); }
@@ -833,7 +829,7 @@ const DataFactoryView = (() => {
                     </div>
                 </div>
                 <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
-                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('dfModal').remove()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
                     <button type="submit" class="btn btn-primary">Create</button>
                 </div>
             </form>
@@ -849,7 +845,7 @@ const DataFactoryView = (() => {
                 load_type: document.getElementById('df_load_type').value,
                 wave_id: waveVal ? parseInt(waveVal) : null,
             });
-            document.getElementById('dfModal').remove();
+            App.closeModal();
             App.toast('Load cycle created', 'success');
             await loadLoadCycles(_selectedObjectId);
         } catch (e) { App.toast(e.message, 'error'); }
@@ -893,7 +889,7 @@ const DataFactoryView = (() => {
                     <div><label>Error Log (if any)</label><textarea class="form-control" id="df_comp_error" rows="2"></textarea></div>
                 </div>
                 <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
-                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('dfModal').remove()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
                     <button type="submit" class="btn btn-primary">Complete</button>
                 </div>
             </form>
@@ -908,7 +904,7 @@ const DataFactoryView = (() => {
                 records_failed: parseInt(document.getElementById('df_comp_failed').value) || 0,
                 error_log: document.getElementById('df_comp_error').value || null,
             });
-            document.getElementById('dfModal').remove();
+            App.closeModal();
             App.toast('Load cycle completed', 'success');
             await loadLoadCycles(_selectedObjectId);
         } catch (e) { App.toast(e.message, 'error'); }
@@ -966,7 +962,7 @@ const DataFactoryView = (() => {
     }
 
     async function createRecon(lcId) {
-        document.getElementById('dfModal').remove();
+        App.closeModal();
         _modal('🔎 New Reconciliation', `
             <form onsubmit="DataFactoryView.submitCreateRecon(event, ${lcId})">
                 <div style="display:grid;gap:12px">
@@ -975,7 +971,7 @@ const DataFactoryView = (() => {
                     <div><label>Match Count</label><input type="number" class="form-control" id="df_recon_match" value="0" min="0"></div>
                 </div>
                 <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
-                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('dfModal').remove()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
                     <button type="submit" class="btn btn-primary">Create & Calculate</button>
                 </div>
             </form>
@@ -992,7 +988,7 @@ const DataFactoryView = (() => {
             });
             // Auto-calculate
             await API.post(`/data-factory/recons/${created.id}/calculate`, {});
-            document.getElementById('dfModal').remove();
+            App.closeModal();
             App.toast('Reconciliation created & calculated', 'success');
             showReconciliations(lcId);
         } catch (e) { App.toast(e.message, 'error'); }
@@ -1002,7 +998,7 @@ const DataFactoryView = (() => {
         try {
             await API.post(`/data-factory/recons/${reconId}/calculate`, {});
             App.toast('Reconciliation calculated', 'success');
-            document.getElementById('dfModal').remove();
+            App.closeModal();
             showReconciliations(lcId);
         } catch (e) { App.toast(e.message, 'error'); }
     }

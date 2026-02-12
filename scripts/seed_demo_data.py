@@ -50,6 +50,10 @@ from app.models.explore import (
     ExploreRequirement, RequirementOpenItemLink,
     RequirementDependency, OpenItemComment,
 )
+from app.models.cutover import (
+    CutoverPlan, CutoverScopeItem, RunbookTask, TaskDependency,
+    Rehearsal, GoNoGoItem, HypercareIncident, HypercareSLA,
+)
 
 # ── Modular data imports ─────────────────────────────────────────────────
 from scripts.seed_data.scenarios import SCENARIOS
@@ -74,6 +78,12 @@ from scripts.seed_data.explore import (
     PROCESS_STEPS as EXPLORE_STEPS, DECISIONS as EXPLORE_DECISIONS,
     OPEN_ITEMS as EXPLORE_OI, REQUIREMENTS as EXPLORE_REQS,
     REQUIREMENT_OI_LINKS, REQUIREMENT_DEPENDENCIES, OPEN_ITEM_COMMENTS,
+)
+from scripts.seed_data.cutover import (
+    CUTOVER_PLANS, SCOPE_ITEMS as CUT_SCOPE_ITEMS,
+    RUNBOOK_TASKS, TASK_DEPENDENCIES,
+    REHEARSALS, GO_NO_GO_ITEMS,
+    HYPERCARE_INCIDENTS, SLA_TARGETS,
 )
 
 
@@ -242,7 +252,10 @@ def seed_all(app, append=False, verbose=False):
     with app.app_context():
         if not append:
             print("🗑️  Clearing existing data...")
-            for model in [InterfaceChecklist, SwitchPlan, ConnectivityTest, Interface, IntWave,
+            for model in [HypercareSLA, HypercareIncident, GoNoGoItem,
+                          TaskDependency, RunbookTask, CutoverScopeItem,
+                          Rehearsal, CutoverPlan,
+                          InterfaceChecklist, SwitchPlan, ConnectivityTest, Interface, IntWave,
                           Notification, Decision, Issue, Action, Risk,
                           DefectLink, DefectHistory, DefectComment,
                           TestStepResult, TestRun,
@@ -1240,6 +1253,100 @@ def seed_all(app, append=False, verbose=False):
 
         print(f"   ✅ {audit_count} audit log entries")
 
+        # ── Cutover Hub ──────────────────────────────────────────────────
+        print("\n🚀 Creating cutover hub data...")
+        cut_plan_map = {}  # _key → CutoverPlan
+        for cp_data in CUTOVER_PLANS:
+            key = cp_data.pop("_key")
+            plan = CutoverPlan(program_id=pid, **cp_data)
+            db.session.add(plan)
+            db.session.flush()
+            cut_plan_map[key] = plan
+            cp_data["_key"] = key  # restore
+            _p(f"   📋 Plan: {plan.code} — {plan.name} [{plan.status}]", verbose)
+        print(f"   ✅ {len(CUTOVER_PLANS)} cutover plans")
+
+        cut_si_map = {}  # _key → CutoverScopeItem
+        for si_data in CUT_SCOPE_ITEMS:
+            plan_key = si_data.pop("_plan")
+            si_key = si_data.pop("_key")
+            si = CutoverScopeItem(cutover_plan_id=cut_plan_map[plan_key].id, **si_data)
+            db.session.add(si)
+            db.session.flush()
+            cut_si_map[si_key] = si
+            si_data["_plan"] = plan_key
+            si_data["_key"] = si_key
+            _p(f"   📦 Scope Item: {si.name} [{si.category}]", verbose)
+        print(f"   ✅ {len(CUT_SCOPE_ITEMS)} scope items")
+
+        cut_task_map = {}  # _key → RunbookTask
+        for t_data in RUNBOOK_TASKS:
+            scope_key = t_data.pop("_scope")
+            t_key = t_data.pop("_key")
+            task = RunbookTask(scope_item_id=cut_si_map[scope_key].id, **t_data)
+            db.session.add(task)
+            db.session.flush()
+            cut_task_map[t_key] = task
+            t_data["_scope"] = scope_key
+            t_data["_key"] = t_key
+            _p(f"   🔧 Task: [{task.sequence:03d}] {task.title[:50]} [{task.status}]", verbose)
+        print(f"   ✅ {len(RUNBOOK_TASKS)} runbook tasks")
+
+        dep_count = 0
+        for d_data in TASK_DEPENDENCIES:
+            pred_key = d_data.pop("_pred")
+            succ_key = d_data.pop("_succ")
+            dep = TaskDependency(
+                predecessor_id=cut_task_map[pred_key].id,
+                successor_id=cut_task_map[succ_key].id,
+                **d_data,
+            )
+            db.session.add(dep)
+            dep_count += 1
+            d_data["_pred"] = pred_key
+            d_data["_succ"] = succ_key
+        db.session.flush()
+        print(f"   ✅ {dep_count} task dependencies")
+
+        for r_data in REHEARSALS:
+            plan_key = r_data.pop("_plan")
+            r = Rehearsal(cutover_plan_id=cut_plan_map[plan_key].id, **r_data)
+            db.session.add(r)
+            r_data["_plan"] = plan_key
+            _p(f"   🔄 Rehearsal: {r.name} [{r.status}]", verbose)
+        db.session.flush()
+        print(f"   ✅ {len(REHEARSALS)} rehearsals")
+
+        for g_data in GO_NO_GO_ITEMS:
+            plan_key = g_data.pop("_plan")
+            g = GoNoGoItem(cutover_plan_id=cut_plan_map[plan_key].id, **g_data)
+            db.session.add(g)
+            g_data["_plan"] = plan_key
+        db.session.flush()
+        print(f"   ✅ {len(GO_NO_GO_ITEMS)} go/no-go items")
+
+        for inc_data in HYPERCARE_INCIDENTS:
+            plan_key = inc_data.pop("_plan")
+            inc = HypercareIncident(cutover_plan_id=cut_plan_map[plan_key].id, **inc_data)
+            db.session.add(inc)
+            inc_data["_plan"] = plan_key
+            _p(f"   🏥 Incident: {inc.code} [{inc.severity}] {inc.title[:40]}", verbose)
+        db.session.flush()
+        print(f"   ✅ {len(HYPERCARE_INCIDENTS)} hypercare incidents")
+
+        for sla_data in SLA_TARGETS:
+            plan_key = sla_data.pop("_plan")
+            sla = HypercareSLA(cutover_plan_id=cut_plan_map[plan_key].id, **sla_data)
+            db.session.add(sla)
+            sla_data["_plan"] = plan_key
+        db.session.flush()
+        print(f"   ✅ {len(SLA_TARGETS)} SLA targets")
+
+        cutover_total = (len(CUTOVER_PLANS) + len(CUT_SCOPE_ITEMS) + len(RUNBOOK_TASKS)
+                         + dep_count + len(REHEARSALS) + len(GO_NO_GO_ITEMS)
+                         + len(HYPERCARE_INCIDENTS) + len(SLA_TARGETS))
+        print(f"   🚀 Cutover Hub total: {cutover_total} records")
+
         # ── Commit ───────────────────────────────────────────────────────
         db.session.commit()
 
@@ -1262,7 +1369,8 @@ def seed_all(app, append=False, verbose=False):
                  + len(DATA_OBJECTS) + len(MIGRATION_WAVES)
                  + ct_count + len(lc_objs) + rc_count
                  + len(INT_WAVES) + len(INT_INTERFACES)
-                 + audit_count)
+                 + audit_count
+                 + cutover_total)
         print(f"\n{'='*60}")
         print(f"🎉 DEMO DATA SEED COMPLETE — {total} records")
         print(f"{'='*60}\n")

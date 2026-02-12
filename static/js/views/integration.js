@@ -335,12 +335,13 @@ const IntegrationView = (() => {
                 </tr>`).join('') || '<tr><td colspan="7" class="text-muted">No switch plan entries</td></tr>';
 
             App.openModal(`
-                <div class="modal" style="max-width:900px;max-height:90vh;overflow-y:auto">
+                <div class="modal modal--wide" style="max-height:90vh;overflow-y:auto">
                     <div class="modal__header" style="display:flex;justify-content:space-between;align-items:center">
                         <h2>${DIR_ICONS[i.direction]||''} ${esc(i.code||'')} ${esc(i.name)}</h2>
-                        <div>
-                            <button class="btn btn-secondary btn-sm" onclick="IntegrationView.editInterface(${i.id})">✏️ Edit</button>
-                            <button class="btn btn-danger btn-sm" onclick="IntegrationView.deleteInterface(${i.id})">🗑️ Delete</button>
+                        <div style="display:flex;align-items:center;gap:8px">
+                            <button class="btn btn-secondary btn-sm" onclick="IntegrationView.editInterface(${i.id})">Edit</button>
+                            <button class="btn btn-danger btn-sm" onclick="IntegrationView.deleteInterface(${i.id})">Delete</button>
+                            <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button>
                         </div>
                     </div>
                     <div class="modal__body">
@@ -425,7 +426,8 @@ const IntegrationView = (() => {
 
         App.openModal(`
             <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto">
-                <div class="modal__header"><h2>${title}</h2></div>
+                <div class="modal__header" style="display:flex;justify-content:space-between;align-items:center"><h2>${title}</h2>
+                    <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button></div>
                 <div class="modal__body">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                         <div class="form-group"><label>Name *</label><input id="ifName" class="form-control" value="${esc(iface?.name||'')}"></div>
@@ -540,7 +542,8 @@ const IntegrationView = (() => {
         const isEdit = !!wave;
         App.openModal(`
             <div class="modal" style="max-width:500px">
-                <div class="modal__header"><h2>${isEdit ? 'Edit Wave' : 'New Wave'}</h2></div>
+                <div class="modal__header" style="display:flex;justify-content:space-between;align-items:center"><h2>${isEdit ? 'Edit Wave' : 'New Wave'}</h2>
+                    <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button></div>
                 <div class="modal__body">
                     <div class="form-group"><label>Name *</label><input id="wvName" class="form-control" value="${esc(wave?.name||'')}"></div>
                     <div class="form-group"><label>Description</label><textarea id="wvDesc" class="form-control" rows="2">${esc(wave?.description||'')}</textarea></div>
@@ -620,7 +623,8 @@ const IntegrationView = (() => {
 
             App.openModal(`
                 <div class="modal" style="max-width:750px">
-                    <div class="modal__header"><h2>🔗 Connectivity Tests — ${esc(iface?.code||iface?.name||'')}</h2></div>
+                    <div class="modal__header" style="display:flex;justify-content:space-between;align-items:center"><h2>🔗 Connectivity Tests — ${esc(iface?.code||iface?.name||'')}</h2>
+                        <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button></div>
                     <div class="modal__body">
                         <table class="data-table">
                             <thead><tr><th>Result</th><th>Env</th><th>Response</th><th>Tester</th><th>Date</th><th>Error</th></tr></thead>
@@ -638,7 +642,8 @@ const IntegrationView = (() => {
     function addConnTest(ifaceId) {
         App.openModal(`
             <div class="modal" style="max-width:450px">
-                <div class="modal__header"><h2>Record Connectivity Test</h2></div>
+                <div class="modal__header" style="display:flex;justify-content:space-between;align-items:center"><h2>Record Connectivity Test</h2>
+                    <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button></div>
                 <div class="modal__body">
                     <div class="form-group"><label>Environment</label>
                         <select id="ctEnv" class="form-control">
@@ -683,7 +688,8 @@ const IntegrationView = (() => {
     function addSwitchPlan(ifaceId) {
         App.openModal(`
             <div class="modal" style="max-width:450px">
-                <div class="modal__header"><h2>Add Switch Plan Step</h2></div>
+                <div class="modal__header" style="display:flex;justify-content:space-between;align-items:center"><h2>Add Switch Plan Step</h2>
+                    <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button></div>
                 <div class="modal__body">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                         <div class="form-group"><label>Sequence #</label><input id="spSeq" type="number" class="form-control" value="1"></div>

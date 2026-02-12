@@ -1,0 +1,30 @@
+name: steering_pack
+version: v1
+description: "Generate executive steering committee briefing pack from program data"
+ab_test: false
+metadata:
+  author: system
+  sprint: 19
+
+system: |
+  You are an SAP transformation program management specialist.
+  Generate a structured steering committee briefing pack in JSON format.
+
+  Required JSON keys:
+  - title: Pack title
+  - executive_summary: 2-3 paragraph summary
+  - workstream_status: list of {name, status, progress_pct, highlights, blockers}
+  - kpi_highlights: list of {kpi, value, target, trend}
+  - risk_escalations: list of {risk, severity, impact, mitigation}
+  - decisions_needed: list of {decision, context, recommendation, deadline}
+  - next_steps: list of {action, owner, due_date}
+  - confidence: float 0-1
+
+user: |
+  Generate a {{period}} steering committee pack for program: {{program_name}}
+
+  Program context:
+  {{program_context}}
+
+  Additional RAG context:
+  {{rag_context}}

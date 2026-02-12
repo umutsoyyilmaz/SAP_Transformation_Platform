@@ -554,6 +554,7 @@ class ProcessStep(db.Model):
 
     def to_dict(self, include_children=False):
         pl = self.process_level  # L4 ProcessLevel
+        l3 = pl.parent if pl else None  # L3 parent ProcessLevel
         d = {
             "id": self.id,
             "workshop_id": self.workshop_id,
@@ -576,6 +577,10 @@ class ProcessStep(db.Model):
             "parent_id": pl.parent_id if pl else None,
             "scope_status": pl.scope_status if pl else None,
             "description": pl.description if pl else None,
+            # L3 parent ProcessLevel fields for grouping headers
+            "l3_parent_name": l3.name if l3 else None,
+            "l3_parent_code": l3.code if l3 else None,
+            "l3_parent_process_area_code": l3.process_area_code if l3 else None,
         }
         if include_children:
             d["decisions"] = [dec.to_dict() for dec in self.decisions]
@@ -731,6 +736,9 @@ class ExploreOpenItem(db.Model):
     )
 
     # ── Relationships ────────────────────────────────────────────────────
+    workshop = db.relationship(
+        "ExploreWorkshop", foreign_keys=[workshop_id], uselist=False,
+    )
     comments = db.relationship(
         "OpenItemComment", backref="open_item", lazy="dynamic",
         cascade="all, delete-orphan",
@@ -754,6 +762,22 @@ class ExploreOpenItem(db.Model):
         return 0
 
     def to_dict(self):
+        # Resolve workshop code
+        ws = self.workshop
+        workshop_code = ws.code if ws else None
+
+        # Resolve L4 code via process_step → process_level
+        ps = self.process_step
+        l4_code = None
+        if ps and ps.process_level:
+            l4_code = ps.process_level.code
+
+        # Linked requirements (via N:M bridge)
+        linked_reqs = [
+            {"id": link.requirement_id, "link_type": link.link_type}
+            for link in self.requirement_links
+        ]
+
         return {
             "id": self.id,
             "project_id": self.project_id,
@@ -779,6 +803,10 @@ class ExploreOpenItem(db.Model):
             "days_overdue": self.days_overdue,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            # Resolved detail fields
+            "workshop_code": workshop_code,
+            "l4_code": l4_code,
+            "linked_requirements": linked_reqs,
         }
 
     def __repr__(self):
@@ -972,8 +1000,36 @@ class ExploreRequirement(db.Model):
     process_level = db.relationship(
         "ProcessLevel", foreign_keys=[process_level_id], uselist=False,
     )
+    # Workshop relationship
+    workshop = db.relationship(
+        "ExploreWorkshop", foreign_keys=[workshop_id], uselist=False,
+    )
 
     def to_dict(self, include_links=False):
+        # Resolve workshop code
+        ws = self.workshop
+        workshop_code = ws.code if ws else None
+
+        # Resolve scope item (L3) name/code
+        si = self.scope_item
+        scope_item_name = si.name if si else None
+        scope_item_code = si.code if si else None
+
+        # Resolve L4 code via process_level
+        pl = self.process_level
+        l4_code = pl.code if pl else None
+
+        # Linked open items (via N:M bridge) — always include
+        linked_ois = [
+            {"id": link.open_item_id, "link_type": link.link_type}
+            for link in self.open_item_links
+        ]
+        # Dependencies — always include
+        deps = [
+            {"id": dep.depends_on_id, "type": dep.dependency_type}
+            for dep in self.dependencies_from
+        ]
+
         d = {
             "id": self.id,
             "project_id": self.project_id,
@@ -1014,10 +1070,16 @@ class ExploreRequirement(db.Model):
             "rejection_reason": self.rejection_reason,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            # Resolved detail fields
+            "workshop_code": workshop_code,
+            "scope_item_name": scope_item_name,
+            "scope_item_code": scope_item_code,
+            "l4_code": l4_code,
+            "linked_open_items": linked_ois,
+            "dependencies": deps,
         }
         if include_links:
             d["open_item_links"] = [l.to_dict() for l in self.open_item_links]
-            d["dependencies"] = [dep.to_dict() for dep in self.dependencies_from]
         return d
 
     def __repr__(self):

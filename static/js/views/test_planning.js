@@ -870,12 +870,12 @@ const TestPlanningView = (() => {
                     ${suite.module ? `<span><strong>Module:</strong> ${esc(suite.module)}</span>` : ''}
                     ${suite.owner ? `<span><strong>Owner:</strong> ${esc(suite.owner)}</span>` : ''}
                 </div>
-                ${suite.description ? `<p style="color:#666;margin-bottom:12px">${esc(suite.description)}</p>` : ''}
-                ${suite.tags ? `<p style="font-size:12px;color:#999">Tags: ${esc(suite.tags)}</p>` : ''}
+                ${suite.description ? `<p style="color:var(--sap-text-secondary);margin-bottom:12px">${esc(suite.description)}</p>` : ''}
+                ${suite.tags ? `<p style="font-size:12px;color:var(--sap-text-secondary)">Tags: ${esc(suite.tags)}</p>` : ''}
                 <hr style="margin:12px 0">
                 <h3 style="margin-bottom:8px">Test Cases (${cases.length})</h3>
                 ${cases.length === 0
-                    ? '<p style="color:#999">No test cases assigned to this suite. Assign cases from the Catalog tab.</p>'
+                    ? '<p style="color:var(--sap-text-secondary)">No test cases assigned to this suite. Assign cases from the Catalog tab.</p>'
                     : `<table class="data-table">
                         <thead><tr><th>Code</th><th>Title</th><th>Layer</th><th>Status</th><th>Priority</th></tr></thead>
                         <tbody>
@@ -890,10 +890,10 @@ const TestPlanningView = (() => {
                     </table>`}
             </div>
             <div class="modal-footer">
-                <button class="btn btn-sm" style="background:#6a4fa0;color:#fff" onclick="TestPlanningView.showGenerateWricefModal(${suite.id})">⚙ Generate from WRICEF</button>
-                <button class="btn btn-sm" style="background:#0070f3;color:#fff" onclick="TestPlanningView.showGenerateProcessModal(${suite.id})">🔄 Generate from Process</button>
-                <button class="btn" onclick="App.closeModal()">Close</button>
-                <button class="btn btn-primary" onclick="TestPlanningView.editSuite(${suite.id});App.closeModal()">✏️ Edit</button>
+                <button class="btn btn-sm btn-secondary" onclick="TestPlanningView.showGenerateWricefModal(${suite.id})">Generate from WRICEF</button>
+                <button class="btn btn-sm btn-secondary" onclick="TestPlanningView.showGenerateProcessModal(${suite.id})">Generate from Process</button>
+                <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
+                <button class="btn btn-primary" onclick="TestPlanningView.editSuite(${suite.id});App.closeModal()">Edit</button>
             </div>
         `;
         document.getElementById('modalOverlay').classList.add('open');

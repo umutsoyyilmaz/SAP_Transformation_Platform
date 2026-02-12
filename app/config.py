@@ -37,6 +37,14 @@ class Config:
     # CORS
     CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
 
+    # Email / SMTP (optional — dev mode logs without sending)
+    MAIL_SERVER = os.getenv("MAIL_SERVER")
+    MAIL_PORT = int(os.getenv("MAIL_PORT", "587"))
+    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "true").lower() == "true"
+    MAIL_USERNAME = os.getenv("MAIL_USERNAME")
+    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
+    MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", "noreply@sap-platform.local")
+
 
 class DevelopmentConfig(Config):
     """Development environment configuration."""
@@ -54,6 +62,7 @@ class TestingConfig(Config):
     SQLALCHEMY_DATABASE_URI = os.getenv("TEST_DATABASE_URL", _SQLITE_TEST)
     # Auth disabled in test environment
     API_AUTH_ENABLED = "false"
+    RATELIMIT_ENABLED = False
 
 
 class ProductionConfig(Config):

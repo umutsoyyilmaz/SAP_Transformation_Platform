@@ -1,13 +1,17 @@
 """
 SAP Transformation Management Platform
-LLM Gateway — Sprint 7.
+LLM Gateway — Sprint 7 / S20 Performance Enhancements.
 
 Provider-agnostic LLM router with:
-    - Multi-provider support (Anthropic Claude, OpenAI, local stub)
+    - Multi-provider support (Anthropic Claude, OpenAI, Gemini, local stub)
     - Auto-retry with exponential backoff
     - Token tracking & cost logging
     - Rate-limit handling
     - Audit logging
+    - S20: Response caching (two-tier: memory + DB)
+    - S20: Smart model selector (purpose → tier routing)
+    - S20: Provider fallback chain on failure
+    - S20: Token budget enforcement (per-program/user)
 
 Usage:
     from app.ai.gateway import LLMGateway
@@ -325,6 +329,119 @@ class LocalStubProvider(LLMProvider):
                 "confidence": 0.80,
             })
 
+        # S19 — Doc Gen stubs
+        if "steering" in lower or "committee" in lower or "briefing" in lower:
+            return json.dumps({
+                "title": "Steering Committee Pack — Weekly Update",
+                "executive_summary": "Program is on track with 85% backlog completion. "
+                                     "Two medium risks require attention.",
+                "workstream_status": [
+                    {"name": "FI/CO", "status": "on_track", "progress_pct": 90,
+                     "highlights": "Month-end close tested", "blockers": "None"},
+                ],
+                "kpi_highlights": [
+                    {"kpi": "Backlog Completion", "value": "85%", "target": "80%", "trend": "improving"},
+                ],
+                "risk_escalations": [
+                    {"risk": "Resource availability", "severity": "medium",
+                     "impact": "Potential 1-week delay", "mitigation": "Cross-training plan"},
+                ],
+                "decisions_needed": [
+                    {"decision": "Go-live date confirmation", "context": "All gates passed",
+                     "recommendation": "Proceed as planned", "deadline": "Next week"},
+                ],
+                "next_steps": [
+                    {"action": "Complete UAT sign-off", "owner": "Test Lead", "due_date": "2026-02-20"},
+                ],
+                "confidence": 0.82,
+            })
+
+        if "wricef" in lower or "specification" in lower or "spec" in lower:
+            return json.dumps({
+                "title": "WRICEF Functional Specification",
+                "overview": "Custom enhancement for vendor payment processing "
+                            "with local regulatory compliance.",
+                "functional_requirements": [
+                    {"id": "FR-001", "description": "Auto-calculate withholding tax",
+                     "priority": "high", "acceptance_criteria": "Tax calculated per local rules"},
+                ],
+                "technical_details": "BADI implementation in ME21N with custom logic.",
+                "integration_points": [
+                    {"system": "SAP FI", "direction": "outbound",
+                     "protocol": "RFC", "description": "Post accounting document"},
+                ],
+                "data_mapping": [
+                    {"source_field": "LIFNR", "target_field": "vendor_id",
+                     "transformation": "direct", "notes": "1:1 mapping"},
+                ],
+                "test_approach": "Unit test BADI logic, integration test with FI posting.",
+                "assumptions": ["SAP ECC 6.0 EHP8", "Local tax rates configured"],
+                "confidence": 0.78,
+            })
+
+        if "data quality" in lower or "completeness" in lower or "cleansing" in lower:
+            return json.dumps({
+                "quality_score": 72.5,
+                "completeness_pct": 85.0,
+                "issues": [
+                    {"category": "missing_data", "description": "15% vendor records lack tax ID",
+                     "severity": "high", "affected_records": 1250},
+                ],
+                "recommendations": [
+                    {"action": "Enrich vendor master tax IDs", "priority": "high",
+                     "estimated_effort": "3 days"},
+                ],
+                "cleansing_actions": [
+                    {"rule": "Remove duplicate vendors", "description": "Merge by tax ID + name",
+                     "auto_fixable": True},
+                ],
+                "migration_readiness": "needs_cleansing",
+                "confidence": 0.75,
+            })
+
+        # S21 — Data Migration stubs
+        if "migration" in lower or "wave" in lower or "reconcil" in lower:
+            return json.dumps({
+                "strategy": "Big-bang migration with 3 parallel waves",
+                "wave_sequence": [
+                    {"wave": 1, "objects": ["Vendor Master", "Customer Master"], "parallel": True},
+                    {"wave": 2, "objects": ["Open PO", "Open SO"], "parallel": True},
+                    {"wave": 3, "objects": ["GL Balances", "Asset Master"], "parallel": False},
+                ],
+                "data_objects": ["Vendor Master", "Customer Master", "Open PO",
+                                 "Open SO", "GL Balances", "Asset Master"],
+                "risk_areas": [
+                    "Data volume exceeds 100M records",
+                    "Currency conversion for legacy data",
+                ],
+                "recommendations": [
+                    "Run trial migration 2 weeks before cutover",
+                    "Validate reconciliation totals per wave",
+                ],
+                "estimated_duration_hours": 48,
+                "confidence": 0.76,
+            })
+
+        # S21 — Integration Analyst stubs
+        if "integration" in lower or "dependency" in lower or "switch" in lower or "interface" in lower:
+            return json.dumps({
+                "dependency_map": {
+                    "SAP_to_Bank": {"direction": "outbound", "protocol": "SFTP",
+                                    "criticality": "high"},
+                    "EDI_Supplier": {"direction": "inbound", "protocol": "IDOC",
+                                     "criticality": "medium"},
+                },
+                "critical_interfaces": ["SAP_to_Bank", "EDI_Supplier"],
+                "coverage_gaps": ["No failover for bank interface"],
+                "risks": ["Single point of failure on bank SFTP"],
+                "recommendations": [
+                    "Add redundant SFTP endpoint",
+                    "Test IDOC retry logic",
+                ],
+                "validation_status": "needs_review",
+                "confidence": 0.74,
+            })
+
         return json.dumps({
             "response": "Analysis complete. Based on the SAP transformation context, "
                         "the recommended approach aligns with SAP Activate best practices.",
@@ -384,6 +501,36 @@ class LLMGateway:
         self._app = app
         self._init_providers()
 
+        # S20 performance services — lazily initialised
+        self._cache = None
+        self._model_selector = None
+        self._budget_service = None
+        self._init_perf_services()
+
+    # ── S20 Performance Service Initialisation ────────────────────────────
+
+    def _init_perf_services(self):
+        """Set up cache, model-selector, and budget service."""
+        try:
+            from app.ai.cache import ResponseCacheService
+            self._cache = ResponseCacheService()
+        except Exception as e:
+            logger.debug("ResponseCacheService not available: %s", e)
+
+        try:
+            from app.ai.model_selector import ModelSelector
+            self._model_selector = ModelSelector(
+                available_providers=set(self._providers.keys()),
+            )
+        except Exception as e:
+            logger.debug("ModelSelector not available: %s", e)
+
+        try:
+            from app.ai.budget import TokenBudgetService
+            self._budget_service = TokenBudgetService()
+        except Exception as e:
+            logger.debug("TokenBudgetService not available: %s", e)
+
     def _init_providers(self):
         """Initialize available providers based on environment."""
         # Always register local stub
@@ -423,42 +570,142 @@ class LLMGateway:
         user: str = "system",
         program_id: int | None = None,
         max_retries: int = 3,
+        skip_cache: bool = False,
+        skip_budget: bool = False,
         **kwargs,
     ) -> dict:
         """
-        Send a chat completion request with retry and logging.
+        Send a chat completion request with retry, caching, budget & fallback.
+
+        S20 enhancements:
+            - Cache lookup/store (two-tier)
+            - Budget enforcement (token + cost limits)
+            - Smart model selection by purpose
+            - Fallback chain on provider failure
 
         Args:
             messages: Chat messages.
-            model: Model identifier (defaults to DEFAULT_CHAT_MODEL).
+            model: Model identifier (defaults selected by purpose or DEFAULT_CHAT_MODEL).
             purpose: What the call is for (e.g. "requirement_analyst").
             user: Who triggered the call.
             program_id: Associated program.
             max_retries: Number of retries on failure.
+            skip_cache: Bypass cache even for cacheable purposes.
+            skip_budget: Bypass budget enforcement.
             **kwargs: temperature, max_tokens passed to provider.
 
         Returns:
-            dict: {content, prompt_tokens, completion_tokens, model, cost_usd, latency_ms}
+            dict: {content, prompt_tokens, completion_tokens, model, cost_usd, latency_ms,
+                   provider, cache_hit, fallback_provider}
         """
+        # ── S20: Smart model selection ────────────────────────────────────
+        if model is None and self._model_selector:
+            model = self._model_selector.select(purpose=purpose)
         if model is None:
             model = self.DEFAULT_CHAT_MODEL
 
+        # ── S20: Cache lookup ─────────────────────────────────────────────
+        cache_hit = False
+        if (not skip_cache
+                and self._cache
+                and self._cache.should_cache(purpose)):
+            prompt_hash_cache = self._cache.compute_hash(messages, model)
+            cached = self._cache.get(prompt_hash_cache)
+            if cached is not None:
+                cache_hit = True
+                # cached is the raw response value (str or dict) stored via set()
+                if isinstance(cached, dict):
+                    content = cached.get("content", str(cached))
+                    p_tok = cached.get("prompt_tokens", 0)
+                    c_tok = cached.get("completion_tokens", 0)
+                    c_model = cached.get("model", model)
+                else:
+                    content = str(cached)
+                    p_tok = 0
+                    c_tok = 0
+                    c_model = model
+                result = {
+                    "content": content,
+                    "prompt_tokens": p_tok,
+                    "completion_tokens": c_tok,
+                    "model": c_model,
+                    "cost_usd": 0.0,
+                    "latency_ms": 0,
+                    "provider": "cache",
+                    "cache_hit": True,
+                    "fallback_provider": None,
+                }
+                self._log_usage(
+                    provider="cache", model=model,
+                    prompt_tokens=0, completion_tokens=0,
+                    cost_usd=0.0, latency_ms=0,
+                    user=user, purpose=purpose, program_id=program_id,
+                    success=True, cache_hit=True,
+                )
+                return result
+
+        # ── S20: Budget check ─────────────────────────────────────────────
+        if not skip_budget and self._budget_service:
+            budget_check = self._budget_service.check_budget(
+                program_id=program_id, user=user,
+            )
+            if not budget_check["allowed"]:
+                raise RuntimeError(f"Budget exceeded: {budget_check['reason']}")
+
+        # ── Build provider chain (primary + fallbacks) ────────────────────
         provider, provider_name = self._get_provider(model)
         prompt_hash = hashlib.sha256(json.dumps(messages).encode()).hexdigest()
         prompt_summary = messages[-1]["content"][:500] if messages else ""
 
+        fallback_chain: list[tuple[str, str]] = []  # (model, provider_name)
+        if self._model_selector:
+            for fb_model in self._model_selector.get_fallback_chain(model):
+                fb_prov = self.PROVIDER_MAP.get(fb_model, "local")
+                if fb_prov in self._providers:
+                    fallback_chain.append((fb_model, fb_prov))
+
+        # ── Primary attempt with retries ──────────────────────────────────
         last_error = None
+        fallback_provider_used = None
+
         for attempt in range(1, max_retries + 1):
             start_time = time.time()
             try:
                 result = provider.chat(messages, model, **kwargs)
                 latency_ms = int((time.time() - start_time) * 1000)
 
-                # Calculate cost
                 cost = calculate_cost(model, result["prompt_tokens"], result["completion_tokens"])
                 result["cost_usd"] = cost
                 result["latency_ms"] = latency_ms
                 result["provider"] = provider_name
+                result["cache_hit"] = False
+                result["fallback_provider"] = fallback_provider_used
+
+                # S20: Store in cache
+                if (not skip_cache
+                        and self._cache
+                        and self._cache.should_cache(purpose)):
+                    self._cache.set(
+                        prompt_hash=self._cache.compute_hash(messages, model),
+                        response={
+                            "content": result["content"],
+                            "model": model,
+                            "prompt_tokens": result["prompt_tokens"],
+                            "completion_tokens": result["completion_tokens"],
+                        },
+                        model=model,
+                        purpose=purpose,
+                        prompt_tokens=result["prompt_tokens"],
+                        completion_tokens=result["completion_tokens"],
+                    )
+
+                # S20: Record budget usage
+                if not skip_budget and self._budget_service:
+                    total_tokens = result["prompt_tokens"] + result["completion_tokens"]
+                    self._budget_service.record_usage(
+                        program_id=program_id, user=user,
+                        tokens=total_tokens, cost_usd=cost,
+                    )
 
                 # Log usage + audit
                 self._log_usage(
@@ -467,7 +714,8 @@ class LLMGateway:
                     completion_tokens=result["completion_tokens"],
                     cost_usd=cost, latency_ms=latency_ms,
                     user=user, purpose=purpose, program_id=program_id,
-                    success=True,
+                    success=True, cache_hit=False,
+                    fallback_provider=fallback_provider_used,
                 )
                 self._log_audit(
                     action="llm_call", provider=provider_name, model=model,
@@ -476,7 +724,8 @@ class LLMGateway:
                     tokens_used=result["prompt_tokens"] + result["completion_tokens"],
                     cost_usd=cost, latency_ms=latency_ms,
                     response_summary=result["content"][:500],
-                    success=True,
+                    success=True, cache_hit=False,
+                    fallback_used=fallback_provider_used is not None,
                 )
 
                 return result
@@ -487,17 +736,86 @@ class LLMGateway:
                 logger.warning("LLM call attempt %d/%d failed: %s", attempt, max_retries, e)
 
                 if attempt < max_retries:
-                    backoff = min(2 ** (attempt - 1), 4)  # 1s, 2s, 4s cap
+                    backoff = min(2 ** (attempt - 1), 4)
                     import threading as _threading
-                    _threading.Event().wait(backoff)  # non-blocking sleep alternative
+                    _threading.Event().wait(backoff)
 
-        # All retries exhausted
+        # ── S20: Fallback chain after primary exhausted ───────────────────
+        for fb_model, fb_prov_name in fallback_chain:
+            fb_provider = self._providers[fb_prov_name]
+            logger.info("Trying fallback: model=%s provider=%s", fb_model, fb_prov_name)
+            start_time = time.time()
+            try:
+                result = fb_provider.chat(messages, fb_model, **kwargs)
+                latency_ms = int((time.time() - start_time) * 1000)
+                cost = calculate_cost(fb_model, result["prompt_tokens"], result["completion_tokens"])
+
+                fallback_provider_used = fb_prov_name
+                result["cost_usd"] = cost
+                result["latency_ms"] = latency_ms
+                result["provider"] = fb_prov_name
+                result["cache_hit"] = False
+                result["fallback_provider"] = fallback_provider_used
+
+                # Cache the fallback result too
+                if (not skip_cache
+                        and self._cache
+                        and self._cache.should_cache(purpose)):
+                    self._cache.set(
+                        prompt_hash=self._cache.compute_hash(messages, model),
+                        response={
+                            "content": result["content"],
+                            "model": fb_model,
+                            "prompt_tokens": result["prompt_tokens"],
+                            "completion_tokens": result["completion_tokens"],
+                        },
+                        model=fb_model,
+                        purpose=purpose,
+                        prompt_tokens=result["prompt_tokens"],
+                        completion_tokens=result["completion_tokens"],
+                    )
+
+                # Budget recording
+                if not skip_budget and self._budget_service:
+                    total_tokens = result["prompt_tokens"] + result["completion_tokens"]
+                    self._budget_service.record_usage(
+                        program_id=program_id, user=user,
+                        tokens=total_tokens, cost_usd=cost,
+                    )
+
+                self._log_usage(
+                    provider=fb_prov_name, model=fb_model,
+                    prompt_tokens=result["prompt_tokens"],
+                    completion_tokens=result["completion_tokens"],
+                    cost_usd=cost, latency_ms=latency_ms,
+                    user=user, purpose=purpose, program_id=program_id,
+                    success=True, cache_hit=False,
+                    fallback_provider=fallback_provider_used,
+                )
+                self._log_audit(
+                    action="llm_call", provider=fb_prov_name, model=fb_model,
+                    user=user, program_id=program_id,
+                    prompt_hash=prompt_hash, prompt_summary=prompt_summary,
+                    tokens_used=result["prompt_tokens"] + result["completion_tokens"],
+                    cost_usd=cost, latency_ms=latency_ms,
+                    response_summary=result["content"][:500],
+                    success=True, cache_hit=False, fallback_used=True,
+                )
+
+                return result
+
+            except Exception as fb_err:
+                logger.warning("Fallback %s/%s failed: %s", fb_prov_name, fb_model, fb_err)
+                last_error = fb_err
+
+        # All retries + fallbacks exhausted
         self._log_usage(
             provider=provider_name, model=model,
             prompt_tokens=0, completion_tokens=0,
             cost_usd=0.0, latency_ms=0,
             user=user, purpose=purpose, program_id=program_id,
             success=False, error_message=str(last_error),
+            cache_hit=False, fallback_provider=None,
         )
         self._log_audit(
             action="llm_call", provider=provider_name, model=model,
@@ -505,6 +823,7 @@ class LLMGateway:
             prompt_hash=prompt_hash, prompt_summary=prompt_summary,
             tokens_used=0, cost_usd=0.0, latency_ms=0,
             response_summary="", success=False, error_message=str(last_error),
+            cache_hit=False, fallback_used=len(fallback_chain) > 0,
         )
         raise RuntimeError(f"LLM call failed after {max_retries} retries: {last_error}")
 
@@ -575,7 +894,8 @@ class LLMGateway:
     @staticmethod
     def _log_usage(*, provider, model, prompt_tokens, completion_tokens,
                    cost_usd, latency_ms, user, purpose, program_id,
-                   success, error_message=None):
+                   success, error_message=None,
+                   cache_hit=False, fallback_provider=None):
         """Persist a usage log record using a savepoint to avoid interfering with caller's transaction."""
         try:
             log = AIUsageLog(
@@ -586,6 +906,8 @@ class LLMGateway:
                 cost_usd=cost_usd, latency_ms=latency_ms,
                 user=user, purpose=purpose, program_id=program_id,
                 success=success, error_message=error_message,
+                cache_hit=cache_hit,
+                fallback_provider=fallback_provider,
             )
             db.session.add(log)
             # Use nested transaction (savepoint) so we don't commit/rollback the caller's work
@@ -600,7 +922,8 @@ class LLMGateway:
     @staticmethod
     def _log_audit(*, action, provider, model, user, program_id,
                    prompt_hash, prompt_summary, tokens_used, cost_usd,
-                   latency_ms, response_summary, success, error_message=None):
+                   latency_ms, response_summary, success, error_message=None,
+                   cache_hit=False, fallback_used=False):
         """Persist an audit log record using flush (savepoint-safe)."""
         try:
             log = AIAuditLog(
@@ -610,6 +933,8 @@ class LLMGateway:
                 tokens_used=tokens_used, cost_usd=cost_usd,
                 latency_ms=latency_ms, response_summary=response_summary,
                 success=success, error_message=error_message,
+                cache_hit=cache_hit,
+                fallback_used=fallback_used,
             )
             db.session.add(log)
             # Use flush instead of commit to avoid interfering with caller's transaction

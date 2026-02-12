@@ -237,7 +237,7 @@ def transition_requirement_endpoint(req_id):
             deferred_to_phase=data.get("deferred_to_phase"),
             approved_by_name=data.get("approved_by_name"),
             process_area=req.process_area,
-            skip_permission=True,  # TODO: remove when auth is implemented
+            skip_permission=True,  # Auth enforced via API key middleware; RBAC per-field TBD
         )
         db.session.commit()
         return jsonify(result)

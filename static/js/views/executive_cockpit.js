@@ -290,6 +290,7 @@ const ExecutiveCockpitView = (() => {
 
     // ── Charts ──────────────────────────────────────────────────────
     function _renderFitChart(explore) {
+        if (typeof Chart === 'undefined') return;
         const canvas = document.getElementById('cockpitFitChart');
         if (!canvas || !explore?.fit_distribution) return;
 
@@ -316,6 +317,7 @@ const ExecutiveCockpitView = (() => {
     }
 
     function _renderTestChart(tst) {
+        if (typeof Chart === 'undefined') return;
         const canvas = document.getElementById('cockpitTestChart');
         if (!canvas) return;
 
@@ -345,6 +347,7 @@ const ExecutiveCockpitView = (() => {
     }
 
     function _renderDefectChart(tst) {
+        if (typeof Chart === 'undefined') return;
         const canvas = document.getElementById('cockpitDefectChart');
         if (!canvas || !tst.defects) return;
 

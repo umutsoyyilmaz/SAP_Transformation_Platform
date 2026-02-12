@@ -39,6 +39,46 @@ Endpoints:
                    /api/v1/ai/generate/test-cases/batch      POST (Sprint 12)
 
     CHANGE IMPACT  /api/v1/ai/analyze/change-impact          POST (Sprint 12)
+
+    CUTOVER AI     /api/v1/ai/cutover/optimize/<plan_id>     POST (Sprint 15)
+                   /api/v1/ai/cutover/go-nogo/<plan_id>      POST (Sprint 15)
+
+    MEETING MINS   /api/v1/ai/meeting-minutes/generate       POST (Sprint 15)
+                   /api/v1/ai/meeting-minutes/extract-actions POST (Sprint 15)
+
+    PERFORMANCE    /api/v1/ai/performance/dashboard          GET  (Sprint 20)
+                   /api/v1/ai/performance/by-assistant       GET  (Sprint 20)
+
+    CACHE          /api/v1/ai/cache/stats                    GET  (Sprint 20)
+                   /api/v1/ai/cache/clear                    POST (Sprint 20)
+
+    BUDGETS        /api/v1/ai/budgets                        GET, POST (Sprint 20)
+                   /api/v1/ai/budgets/<id>                   DELETE    (Sprint 20)
+                   /api/v1/ai/budgets/<id>/reset             POST      (Sprint 20)
+                   /api/v1/ai/budgets/status                 GET       (Sprint 20)
+
+    DATA MIGRATION /api/v1/ai/migration/analyze              POST (Sprint 21)
+                   /api/v1/ai/migration/optimize-waves       POST (Sprint 21)
+                   /api/v1/ai/migration/reconciliation       POST (Sprint 21)
+
+    INTEGRATION    /api/v1/ai/integration/dependencies       POST (Sprint 21)
+                   /api/v1/ai/integration/validate-switch    POST (Sprint 21)
+
+    FEEDBACK       /api/v1/ai/feedback/stats                 GET  (Sprint 21)
+                   /api/v1/ai/feedback/accuracy              GET  (Sprint 21)
+                   /api/v1/ai/feedback/recommendations       GET  (Sprint 21)
+                   /api/v1/ai/feedback/compute               POST (Sprint 21)
+
+    TASKS          /api/v1/ai/tasks                          GET, POST (Sprint 21)
+                   /api/v1/ai/tasks/<id>                     GET       (Sprint 21)
+                   /api/v1/ai/tasks/<id>/cancel              POST      (Sprint 21)
+
+    EXPORT         /api/v1/ai/export/formats                 GET  (Sprint 21)
+                   /api/v1/ai/export/<format>                POST (Sprint 21)
+
+    ORCHESTRATOR   /api/v1/ai/workflows                      GET  (Sprint 21)
+                   /api/v1/ai/workflows/<name>/execute       POST (Sprint 21)
+                   /api/v1/ai/workflows/tasks/<id>           GET  (Sprint 21)
 """
 
 from datetime import datetime, timezone
@@ -49,13 +89,18 @@ from app.auth import require_role
 from app.models import db
 from app.models.ai import (
     AIUsageLog, AIAuditLog, AISuggestion, AIEmbedding,
+    AIResponseCache, AITokenBudget, AIFeedbackMetric, AITask,
     calculate_cost,
 )
 from app.ai.suggestion_queue import SuggestionQueue
 from app.ai.rag import RAGPipeline
 from app.ai.prompt_registry import PromptRegistry
 from app.ai.gateway import LLMGateway
-from app.ai.assistants import NLQueryAssistant, RequirementAnalyst, DefectTriage, validate_sql, sanitize_sql
+from app.ai.assistants import (
+    NLQueryAssistant, RequirementAnalyst, DefectTriage,
+    DataMigrationAdvisor, IntegrationAnalyst,
+    validate_sql, sanitize_sql,
+)
 
 ai_bp = Blueprint("ai", __name__, url_prefix="/api/v1/ai")
 
@@ -119,6 +164,69 @@ def _get_defect_triage():
             prompt_registry=_get_prompt_registry(),
         )
     return current_app._ai_defect_triage
+
+
+def _get_data_migration():
+    from flask import current_app
+    if not hasattr(current_app, "_ai_data_migration"):
+        current_app._ai_data_migration = DataMigrationAdvisor(
+            gateway=_get_gateway(),
+            rag=_get_rag(),
+            prompt_registry=_get_prompt_registry(),
+            suggestion_queue=SuggestionQueue,
+        )
+    return current_app._ai_data_migration
+
+
+def _get_integration_analyst():
+    from flask import current_app
+    if not hasattr(current_app, "_ai_integration_analyst"):
+        current_app._ai_integration_analyst = IntegrationAnalyst(
+            gateway=_get_gateway(),
+            rag=_get_rag(),
+            prompt_registry=_get_prompt_registry(),
+            suggestion_queue=SuggestionQueue,
+        )
+    return current_app._ai_integration_analyst
+
+
+def _get_feedback_pipeline():
+    from flask import current_app
+    if not hasattr(current_app, "_ai_feedback_pipeline"):
+        from app.ai.feedback import FeedbackPipeline
+        current_app._ai_feedback_pipeline = FeedbackPipeline()
+    return current_app._ai_feedback_pipeline
+
+
+def _get_task_runner():
+    from flask import current_app
+    if not hasattr(current_app, "_ai_task_runner"):
+        from app.ai.task_runner import TaskRunner
+        current_app._ai_task_runner = TaskRunner()
+    return current_app._ai_task_runner
+
+
+def _get_doc_exporter():
+    from flask import current_app
+    if not hasattr(current_app, "_ai_doc_exporter"):
+        from app.ai.export import AIDocExporter
+        current_app._ai_doc_exporter = AIDocExporter()
+    return current_app._ai_doc_exporter
+
+
+def _get_orchestrator():
+    from flask import current_app
+    if not hasattr(current_app, "_ai_orchestrator"):
+        from app.ai.orchestrator import AIOrchestrator
+        assistants = {
+            "data_migration": _get_data_migration(),
+            "integration_analyst": _get_integration_analyst(),
+        }
+        current_app._ai_orchestrator = AIOrchestrator(
+            assistants=assistants,
+            task_runner=_get_task_runner(),
+        )
+    return current_app._ai_orchestrator
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -441,7 +549,7 @@ def admin_dashboard():
     total_tokens = db.session.query(db.func.sum(AIUsageLog.total_tokens)).scalar() or 0
     total_cost = db.session.query(db.func.sum(AIUsageLog.cost_usd)).scalar() or 0.0
     avg_latency = db.session.query(db.func.avg(AIUsageLog.latency_ms)).scalar() or 0.0
-    error_count = AIUsageLog.query.filter(AIUsageLog.success == False).count()  # noqa: E712
+    error_count = AIUsageLog.query.filter(AIUsageLog.success.is_(False)).count()
 
     # Suggestion stats
     suggestion_stats = SuggestionQueue.get_stats(program_id=pid)
@@ -788,6 +896,103 @@ def analyze_change_impact():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# CUTOVER AI (Sprint 15)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@ai_bp.route("/cutover/optimize/<int:plan_id>", methods=["POST"])
+@_ai_generate_limit
+def cutover_optimize(plan_id):
+    """
+    POST /api/v1/ai/cutover/optimize/<plan_id>
+    Analyze runbook tasks and suggest optimizations.
+    """
+    from app.ai.assistants.cutover_optimizer import CutoverOptimizer
+
+    assistant = CutoverOptimizer(
+        gateway=_get_gateway(),
+        rag=_get_rag(),
+        prompt_registry=_get_prompt_registry(),
+        suggestion_queue=SuggestionQueue(),
+    )
+    result = assistant.optimize_runbook(plan_id)
+    status = 200 if not result.get("error") else 500
+    return jsonify(result), status
+
+
+@ai_bp.route("/cutover/go-nogo/<int:plan_id>", methods=["POST"])
+@_ai_generate_limit
+def cutover_go_nogo(plan_id):
+    """
+    POST /api/v1/ai/cutover/go-nogo/<plan_id>
+    AI-driven go/no-go readiness assessment.
+    """
+    from app.ai.assistants.cutover_optimizer import CutoverOptimizer
+
+    assistant = CutoverOptimizer(
+        gateway=_get_gateway(),
+        rag=_get_rag(),
+        prompt_registry=_get_prompt_registry(),
+        suggestion_queue=SuggestionQueue(),
+    )
+    result = assistant.assess_go_nogo(plan_id)
+    status = 200 if not result.get("error") else 500
+    return jsonify(result), status
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MEETING MINUTES (Sprint 15)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@ai_bp.route("/meeting-minutes/generate", methods=["POST"])
+@_ai_generate_limit
+def generate_meeting_minutes():
+    """
+    POST /api/v1/ai/meeting-minutes/generate
+    Body: { raw_text: str, program_id?: int, meeting_type?: str }
+    """
+    from app.ai.assistants.meeting_minutes import MeetingMinutesAssistant
+
+    data = request.get_json(silent=True) or {}
+    assistant = MeetingMinutesAssistant(
+        gateway=_get_gateway(),
+        rag=_get_rag(),
+        prompt_registry=_get_prompt_registry(),
+        suggestion_queue=SuggestionQueue(),
+    )
+    result = assistant.generate_minutes(
+        raw_text=data.get("raw_text", ""),
+        program_id=data.get("program_id"),
+        meeting_type=data.get("meeting_type", "general"),
+    )
+    status = 200 if not result.get("error") else 500
+    return jsonify(result), status
+
+
+@ai_bp.route("/meeting-minutes/extract-actions", methods=["POST"])
+@_ai_generate_limit
+def extract_meeting_actions():
+    """
+    POST /api/v1/ai/meeting-minutes/extract-actions
+    Body: { raw_text: str, program_id?: int }
+    """
+    from app.ai.assistants.meeting_minutes import MeetingMinutesAssistant
+
+    data = request.get_json(silent=True) or {}
+    assistant = MeetingMinutesAssistant(
+        gateway=_get_gateway(),
+        rag=_get_rag(),
+        prompt_registry=_get_prompt_registry(),
+        suggestion_queue=SuggestionQueue(),
+    )
+    result = assistant.extract_actions(
+        raw_text=data.get("raw_text", ""),
+        program_id=data.get("program_id"),
+    )
+    status = 200 if not result.get("error") else 500
+    return jsonify(result), status
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # KB VERSIONING (Sprint 9.5 — P9)
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -949,3 +1154,675 @@ def diff_kb_versions(version_a, version_b):
             "unchanged_count": len(common) - len(changed),
         },
     })
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SPRINT 19 — DOC GEN ENDPOINTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _get_steering_pack():
+    from flask import current_app
+    if not hasattr(current_app, "_ai_steering_pack"):
+        from app.ai.assistants.steering_pack import SteeringPackGenerator
+        current_app._ai_steering_pack = SteeringPackGenerator(
+            gateway=_get_gateway(),
+            rag=_get_rag(),
+            prompt_registry=_get_prompt_registry(),
+            suggestion_queue=SuggestionQueue(),
+        )
+    return current_app._ai_steering_pack
+
+
+def _get_wricef_spec():
+    from flask import current_app
+    if not hasattr(current_app, "_ai_wricef_spec"):
+        from app.ai.assistants.wricef_spec import WRICEFSpecDrafter
+        current_app._ai_wricef_spec = WRICEFSpecDrafter(
+            gateway=_get_gateway(),
+            rag=_get_rag(),
+            prompt_registry=_get_prompt_registry(),
+            suggestion_queue=SuggestionQueue(),
+        )
+    return current_app._ai_wricef_spec
+
+
+def _get_data_quality():
+    from flask import current_app
+    if not hasattr(current_app, "_ai_data_quality"):
+        from app.ai.assistants.data_quality import DataQualityGuardian
+        current_app._ai_data_quality = DataQualityGuardian(
+            gateway=_get_gateway(),
+            rag=_get_rag(),
+            prompt_registry=_get_prompt_registry(),
+            suggestion_queue=SuggestionQueue(),
+        )
+    return current_app._ai_data_quality
+
+
+@ai_bp.route("/doc-gen/steering-pack", methods=["POST"])
+@_ai_generate_limit
+def generate_steering_pack():
+    """Generate a steering committee briefing pack."""
+    data = request.get_json(silent=True) or {}
+    program_id = data.get("program_id")
+    if not program_id:
+        return jsonify({"error": "program_id is required"}), 400
+
+    period = data.get("period", "weekly")
+    result = _get_steering_pack().generate(
+        program_id=program_id,
+        period=period,
+        create_suggestion=data.get("create_suggestion", True),
+    )
+
+    if result.get("error"):
+        return jsonify(result), 400 if "not found" in result["error"] else 200
+    return jsonify(result)
+
+
+@ai_bp.route("/doc-gen/wricef-spec", methods=["POST"])
+@_ai_generate_limit
+def generate_wricef_spec():
+    """Generate a WRICEF functional specification."""
+    data = request.get_json(silent=True) or {}
+    backlog_item_id = data.get("backlog_item_id")
+    if not backlog_item_id:
+        return jsonify({"error": "backlog_item_id is required"}), 400
+
+    spec_type = data.get("spec_type", "functional")
+    result = _get_wricef_spec().generate(
+        backlog_item_id=backlog_item_id,
+        spec_type=spec_type,
+        create_suggestion=data.get("create_suggestion", True),
+    )
+
+    if result.get("error"):
+        return jsonify(result), 400 if "not found" in result["error"] else 200
+    return jsonify(result)
+
+
+@ai_bp.route("/doc-gen/data-quality", methods=["POST"])
+@_ai_generate_limit
+def analyze_data_quality():
+    """Analyze data quality for a data object."""
+    data = request.get_json(silent=True) or {}
+    data_object_id = data.get("data_object_id")
+    if not data_object_id:
+        return jsonify({"error": "data_object_id is required"}), 400
+
+    analysis_type = data.get("analysis_type", "completeness")
+    result = _get_data_quality().analyze(
+        data_object_id=data_object_id,
+        analysis_type=analysis_type,
+        create_suggestion=data.get("create_suggestion", True),
+    )
+
+    if result.get("error"):
+        return jsonify(result), 400 if "not found" in result["error"] else 200
+    return jsonify(result)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SPRINT 19 — MULTI-TURN CONVERSATION ENDPOINTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _get_conversation_manager():
+    from flask import current_app
+    if not hasattr(current_app, "_ai_conversation_mgr"):
+        from app.ai.conversation import ConversationManager
+        current_app._ai_conversation_mgr = ConversationManager(
+            gateway=_get_gateway(),
+            prompt_registry=_get_prompt_registry(),
+        )
+    return current_app._ai_conversation_mgr
+
+
+@ai_bp.route("/conversations", methods=["POST"])
+@_ai_generate_limit
+def create_conversation():
+    """Create a new multi-turn conversation session."""
+    data = request.get_json(silent=True) or {}
+    result = _get_conversation_manager().create_session(
+        assistant_type=data.get("assistant_type", "general"),
+        title=data.get("title", ""),
+        program_id=data.get("program_id"),
+        user=data.get("user", "system"),
+        context=data.get("context"),
+        system_prompt=data.get("system_prompt"),
+    )
+    if result.get("error"):
+        return jsonify(result), 400
+    return jsonify(result), 201
+
+
+@ai_bp.route("/conversations", methods=["GET"])
+def list_conversations():
+    """List conversation sessions with optional filters."""
+    conversations = _get_conversation_manager().list_sessions(
+        program_id=request.args.get("program_id", type=int),
+        assistant_type=request.args.get("assistant_type"),
+        status=request.args.get("status"),
+        user=request.args.get("user"),
+        limit=request.args.get("limit", 50, type=int),
+    )
+    return jsonify(conversations)
+
+
+@ai_bp.route("/conversations/<int:conv_id>", methods=["GET"])
+def get_conversation(conv_id):
+    """Get a conversation with all messages."""
+    include_messages = request.args.get("messages", "true").lower() != "false"
+    result = _get_conversation_manager().get_session(conv_id, include_messages=include_messages)
+    if not result:
+        return jsonify({"error": "Conversation not found"}), 404
+    return jsonify(result)
+
+
+@ai_bp.route("/conversations/<int:conv_id>/messages", methods=["POST"])
+@_ai_generate_limit
+def send_conversation_message(conv_id):
+    """Send a message in an existing conversation and get AI response."""
+    data = request.get_json(silent=True) or {}
+    message = data.get("message", "").strip()
+    if not message:
+        return jsonify({"error": "message is required"}), 400
+
+    result = _get_conversation_manager().send_message(
+        conversation_id=conv_id,
+        user_message=message,
+        model=data.get("model"),
+    )
+    if result.get("error"):
+        code = 404 if "not found" in result["error"] else 400
+        return jsonify(result), code
+    return jsonify(result), 201
+
+
+@ai_bp.route("/conversations/<int:conv_id>/close", methods=["POST"])
+def close_conversation(conv_id):
+    """Close a conversation session."""
+    result = _get_conversation_manager().close_session(conv_id)
+    if result.get("error"):
+        return jsonify(result), 404
+    return jsonify(result)
+
+
+# ── S20: Performance Dashboard ───────────────────────────────────────────────
+
+@ai_bp.route("/performance/dashboard", methods=["GET"])
+def performance_dashboard():
+    """
+    Aggregated AI performance metrics: latency, cost, cache stats, top models.
+    Query params: days (int, default 7), program_id (int, optional).
+    """
+    from sqlalchemy import func as sqla_func
+    days = request.args.get("days", 7, type=int)
+    program_id = request.args.get("program_id", type=int)
+    cutoff = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0,
+    )
+    from datetime import timedelta
+    cutoff = cutoff - timedelta(days=days)
+
+    q = AIUsageLog.query.filter(AIUsageLog.created_at >= cutoff)
+    if program_id:
+        q = q.filter_by(program_id=program_id)
+
+    logs = q.all()
+    if not logs:
+        return jsonify({
+            "period_days": days,
+            "total_requests": 0,
+            "avg_latency_ms": 0,
+            "total_cost_usd": 0.0,
+            "cache_hit_rate_pct": 0.0,
+            "success_rate_pct": 0.0,
+            "by_model": {},
+            "by_purpose": {},
+        })
+
+    total = len(logs)
+    successes = sum(1 for l in logs if l.success)
+    cache_hits = sum(1 for l in logs if l.cache_hit)
+    total_cost = sum(l.cost_usd or 0 for l in logs)
+    latencies = [l.latency_ms for l in logs if l.latency_ms and l.success]
+    avg_latency = int(sum(latencies) / len(latencies)) if latencies else 0
+
+    by_model: dict[str, dict] = {}
+    by_purpose: dict[str, dict] = {}
+    for l in logs:
+        m = l.model or "unknown"
+        by_model.setdefault(m, {"count": 0, "cost": 0.0, "tokens": 0})
+        by_model[m]["count"] += 1
+        by_model[m]["cost"] += l.cost_usd or 0
+        by_model[m]["tokens"] += l.total_tokens or 0
+
+        p = l.purpose or "other"
+        by_purpose.setdefault(p, {"count": 0, "cost": 0.0, "avg_latency": 0, "_latencies": []})
+        by_purpose[p]["count"] += 1
+        by_purpose[p]["cost"] += l.cost_usd or 0
+        if l.latency_ms:
+            by_purpose[p]["_latencies"].append(l.latency_ms)
+
+    for v in by_purpose.values():
+        lats = v.pop("_latencies")
+        v["avg_latency"] = int(sum(lats) / len(lats)) if lats else 0
+
+    return jsonify({
+        "period_days": days,
+        "total_requests": total,
+        "total_successes": successes,
+        "avg_latency_ms": avg_latency,
+        "total_cost_usd": round(total_cost, 6),
+        "cache_hit_rate_pct": round(cache_hits / total * 100, 1) if total else 0.0,
+        "success_rate_pct": round(successes / total * 100, 1) if total else 0.0,
+        "by_model": by_model,
+        "by_purpose": by_purpose,
+    })
+
+
+@ai_bp.route("/performance/by-assistant", methods=["GET"])
+def performance_by_assistant():
+    """Per-assistant-type aggregated performance metrics."""
+    days = request.args.get("days", 7, type=int)
+    from datetime import timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    logs = AIUsageLog.query.filter(
+        AIUsageLog.created_at >= cutoff,
+        AIUsageLog.purpose.isnot(None),
+        AIUsageLog.purpose != "",
+    ).all()
+
+    assistants: dict[str, dict] = {}
+    for l in logs:
+        key = l.purpose
+        a = assistants.setdefault(key, {
+            "requests": 0, "successes": 0, "failures": 0,
+            "total_tokens": 0, "total_cost": 0.0,
+            "latencies": [], "cache_hits": 0,
+        })
+        a["requests"] += 1
+        if l.success:
+            a["successes"] += 1
+        else:
+            a["failures"] += 1
+        a["total_tokens"] += l.total_tokens or 0
+        a["total_cost"] += l.cost_usd or 0
+        if l.latency_ms:
+            a["latencies"].append(l.latency_ms)
+        if l.cache_hit:
+            a["cache_hits"] += 1
+
+    result = {}
+    for key, a in assistants.items():
+        lats = a.pop("latencies")
+        result[key] = {
+            **a,
+            "total_cost": round(a["total_cost"], 6),
+            "avg_latency_ms": int(sum(lats) / len(lats)) if lats else 0,
+            "p95_latency_ms": int(sorted(lats)[int(len(lats) * 0.95)]) if len(lats) > 1 else (lats[0] if lats else 0),
+            "cache_hit_rate_pct": round(a["cache_hits"] / a["requests"] * 100, 1) if a["requests"] else 0.0,
+        }
+
+    return jsonify({"period_days": days, "assistants": result})
+
+
+# ── S20: Cache Management ────────────────────────────────────────────────────
+
+@ai_bp.route("/cache/stats", methods=["GET"])
+def cache_stats():
+    """In-memory + DB cache statistics."""
+    gw = _get_gateway()
+    if gw._cache:
+        stats = gw._cache.get_stats()
+    else:
+        stats = {"enabled": False}
+    return jsonify(stats)
+
+
+@ai_bp.route("/cache/clear", methods=["POST"])
+def cache_clear():
+    """Invalidate all cached responses."""
+    gw = _get_gateway()
+    if gw._cache:
+        gw._cache.invalidate()
+        return jsonify({"cleared": True})
+    return jsonify({"cleared": False, "reason": "cache not enabled"})
+
+
+# ── S20: Token Budget Management ─────────────────────────────────────────────
+
+def _get_budget_service():
+    from app.ai.budget import TokenBudgetService
+    return TokenBudgetService()
+
+
+@ai_bp.route("/budgets", methods=["GET"])
+def list_budgets():
+    """List all token budgets, optionally filtered by program_id."""
+    program_id = request.args.get("program_id", type=int)
+    svc = _get_budget_service()
+    budgets = svc.list_budgets(program_id=program_id)
+    return jsonify(budgets)
+
+
+@ai_bp.route("/budgets", methods=["POST"])
+def create_budget():
+    """Create or update a token budget."""
+    data = request.get_json(silent=True) or {}
+    svc = _get_budget_service()
+    budget = svc.create_or_update(
+        program_id=data.get("program_id"),
+        user=data.get("user"),
+        period=data.get("period", "daily"),
+        token_limit=data.get("token_limit", 1_000_000),
+        cost_limit_usd=data.get("cost_limit_usd", 10.0),
+    )
+    db.session.commit()
+    return jsonify(budget.to_dict()), 201
+
+
+@ai_bp.route("/budgets/<int:budget_id>", methods=["DELETE"])
+def delete_budget(budget_id):
+    """Delete a token budget."""
+    svc = _get_budget_service()
+    if svc.delete_budget(budget_id):
+        db.session.commit()
+        return jsonify({"deleted": True})
+    return jsonify({"error": "Budget not found"}), 404
+
+
+@ai_bp.route("/budgets/<int:budget_id>/reset", methods=["POST"])
+def reset_budget(budget_id):
+    """Manually reset a budget's usage counters."""
+    svc = _get_budget_service()
+    budget = svc.reset_budget(budget_id)
+    if not budget:
+        return jsonify({"error": "Budget not found"}), 404
+    db.session.commit()
+    return jsonify(budget.to_dict())
+
+
+@ai_bp.route("/budgets/status", methods=["GET"])
+def budget_status():
+    """Check budget status for a program/user."""
+    program_id = request.args.get("program_id", type=int)
+    user = request.args.get("user")
+    svc = _get_budget_service()
+    result = svc.check_budget(program_id=program_id, user=user)
+    return jsonify(result)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DATA MIGRATION (Sprint 21)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@ai_bp.route("/migration/analyze", methods=["POST"])
+@_ai_generate_limit
+def migration_analyze():
+    """Analyze data migration strategy for a program."""
+    data = request.get_json(silent=True) or {}
+    program_id = data.get("program_id")
+    if not program_id:
+        return jsonify({"error": "program_id is required"}), 400
+
+    advisor = _get_data_migration()
+    result = advisor.analyze(
+        program_id=program_id,
+        scope=data.get("scope", "full"),
+        create_suggestion=data.get("create_suggestion", True),
+    )
+    return jsonify(result)
+
+
+@ai_bp.route("/migration/optimize-waves", methods=["POST"])
+@_ai_generate_limit
+def migration_optimize_waves():
+    """Optimize migration wave sequencing."""
+    data = request.get_json(silent=True) or {}
+    program_id = data.get("program_id")
+    if not program_id:
+        return jsonify({"error": "program_id is required"}), 400
+
+    advisor = _get_data_migration()
+    result = advisor.optimize_waves(
+        program_id=program_id,
+        max_parallel=data.get("max_parallel", 3),
+    )
+    return jsonify(result)
+
+
+@ai_bp.route("/migration/reconciliation", methods=["POST"])
+@_ai_generate_limit
+def migration_reconciliation():
+    """Generate data reconciliation checklist."""
+    data = request.get_json(silent=True) or {}
+    program_id = data.get("program_id")
+    if not program_id:
+        return jsonify({"error": "program_id is required"}), 400
+
+    advisor = _get_data_migration()
+    result = advisor.reconciliation_check(
+        program_id=program_id,
+        data_object=data.get("data_object", ""),
+    )
+    return jsonify(result)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# INTEGRATION ANALYST (Sprint 21)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@ai_bp.route("/integration/dependencies", methods=["POST"])
+@_ai_generate_limit
+def integration_dependencies():
+    """Analyze integration dependencies for a program."""
+    data = request.get_json(silent=True) or {}
+    program_id = data.get("program_id")
+    if not program_id:
+        return jsonify({"error": "program_id is required"}), 400
+
+    analyst = _get_integration_analyst()
+    result = analyst.analyze_dependencies(
+        program_id=program_id,
+        create_suggestion=data.get("create_suggestion", True),
+    )
+    return jsonify(result)
+
+
+@ai_bp.route("/integration/validate-switch", methods=["POST"])
+@_ai_generate_limit
+def integration_validate_switch():
+    """Validate a switch/cutover plan for integration readiness."""
+    data = request.get_json(silent=True) or {}
+    program_id = data.get("program_id")
+    if not program_id:
+        return jsonify({"error": "program_id is required"}), 400
+
+    analyst = _get_integration_analyst()
+    result = analyst.validate_switch_plan(
+        program_id=program_id,
+        switch_plan_id=data.get("switch_plan_id"),
+    )
+    return jsonify(result)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FEEDBACK (Sprint 21)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@ai_bp.route("/feedback/stats", methods=["GET"])
+def feedback_stats():
+    """Get feedback statistics for an assistant type."""
+    assistant_type = request.args.get("assistant_type")
+    pipeline = _get_feedback_pipeline()
+    result = pipeline.get_feedback_stats(assistant_type)
+    return jsonify(result)
+
+
+@ai_bp.route("/feedback/accuracy", methods=["GET"])
+def feedback_accuracy():
+    """Compute current accuracy scores across all assistants."""
+    days = request.args.get("days", 30, type=int)
+    pipeline = _get_feedback_pipeline()
+    result = pipeline.compute_accuracy_scores(days=days)
+    return jsonify(result)
+
+
+@ai_bp.route("/feedback/recommendations", methods=["GET"])
+def feedback_recommendations():
+    """Get prompt improvement recommendations."""
+    days = request.args.get("days", 30, type=int)
+    pipeline = _get_feedback_pipeline()
+    result = pipeline.generate_prompt_recommendations(days=days)
+    return jsonify(result)
+
+
+@ai_bp.route("/feedback/compute", methods=["POST"])
+def feedback_compute():
+    """Compute and persist feedback metrics."""
+    data = request.get_json(silent=True) or {}
+    days = data.get("days", 30)
+    pipeline = _get_feedback_pipeline()
+    result = pipeline.save_metrics(days=days)
+    db.session.commit()
+    return jsonify(result)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ASYNC TASKS (Sprint 21)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@ai_bp.route("/tasks", methods=["GET"])
+def list_tasks():
+    """List AI tasks with optional filters."""
+    runner = _get_task_runner()
+    result = runner.list_tasks(
+        user=request.args.get("user"),
+        status=request.args.get("status"),
+        limit=request.args.get("limit", 50, type=int),
+    )
+    return jsonify(result)
+
+
+@ai_bp.route("/tasks", methods=["POST"])
+@_ai_generate_limit
+def create_task():
+    """Submit a new AI task."""
+    data = request.get_json(silent=True) or {}
+    task_type = data.get("task_type")
+    if not task_type:
+        return jsonify({"error": "task_type is required"}), 400
+
+    runner = _get_task_runner()
+    result = runner.submit(
+        task_type=task_type,
+        input_data=data.get("input", {}),
+        user=data.get("user", getattr(g, "user", "system")),
+        program_id=data.get("program_id"),
+        workflow_name=data.get("workflow_name"),
+    )
+    return jsonify(result), 201
+
+
+@ai_bp.route("/tasks/<int:task_id>", methods=["GET"])
+def get_task(task_id):
+    """Get task status and result."""
+    runner = _get_task_runner()
+    result = runner.get_status(task_id)
+    if not result:
+        return jsonify({"error": "Task not found"}), 404
+    return jsonify(result)
+
+
+@ai_bp.route("/tasks/<int:task_id>/cancel", methods=["POST"])
+def cancel_task(task_id):
+    """Cancel a pending or running task."""
+    runner = _get_task_runner()
+    result = runner.cancel(task_id)
+    return jsonify(result)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# EXPORT (Sprint 21)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@ai_bp.route("/export/formats", methods=["GET"])
+def export_formats():
+    """List supported export formats and document types."""
+    exporter = _get_doc_exporter()
+    return jsonify({
+        "formats": ["markdown", "json"],
+        "document_types": exporter.list_exportable_types(),
+    })
+
+
+@ai_bp.route("/export/<fmt>", methods=["POST"])
+@_ai_generate_limit
+def export_document(fmt):
+    """Export AI-generated content to a specific format."""
+    if fmt not in ("markdown", "json"):
+        return jsonify({"error": f"Unsupported format: {fmt}. Use 'markdown' or 'json'."}), 400
+
+    data = request.get_json(silent=True) or {}
+    doc_type = data.get("doc_type")
+    content = data.get("content", {})
+    title = data.get("title", "")
+
+    if not doc_type:
+        return jsonify({"error": "doc_type is required"}), 400
+
+    exporter = _get_doc_exporter()
+    if fmt == "markdown":
+        result = exporter.export_markdown(doc_type, content, title)
+        return jsonify({"format": "markdown", "content": result})
+    else:
+        result = exporter.export_json(doc_type, content, title)
+        return jsonify({"format": "json", "content": result})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ORCHESTRATOR / WORKFLOWS (Sprint 21)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@ai_bp.route("/workflows", methods=["GET"])
+def list_workflows():
+    """List available AI workflows."""
+    orchestrator = _get_orchestrator()
+    return jsonify(orchestrator.list_workflows())
+
+
+@ai_bp.route("/workflows/<workflow_name>/execute", methods=["POST"])
+@_ai_generate_limit
+def execute_workflow(workflow_name):
+    """Execute an AI workflow (sync or async)."""
+    data = request.get_json(silent=True) or {}
+    orchestrator = _get_orchestrator()
+
+    is_async = data.get("async", False)
+    if is_async:
+        result = orchestrator.execute_async(
+            workflow_name=workflow_name,
+            initial_input=data.get("input", {}),
+            program_id=data.get("program_id", 0),
+            user=data.get("user", getattr(g, "user", "system")),
+        )
+    else:
+        result = orchestrator.execute(
+            workflow_name=workflow_name,
+            initial_input=data.get("input", {}),
+            program_id=data.get("program_id", 0),
+            user=data.get("user", getattr(g, "user", "system")),
+        )
+    return jsonify(result)
+
+
+@ai_bp.route("/workflows/tasks/<int:task_id>", methods=["GET"])
+def workflow_task_status(task_id):
+    """Get workflow task status (delegates to TaskRunner)."""
+    runner = _get_task_runner()
+    result = runner.get_status(task_id)
+    if not result:
+        return jsonify({"error": "Workflow task not found"}), 404
+    return jsonify(result)

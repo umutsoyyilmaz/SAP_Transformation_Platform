@@ -229,6 +229,53 @@ def _extract_generic(data: dict) -> str:
     return "\n".join(parts) or str(data)[:1000]
 
 
+# ── Sprint 21 Entity Extractors ────────────────────────────────────────────
+
+def _extract_interface(data: dict) -> str:
+    parts = [
+        f"Interface: {data.get('name', '')}",
+        f"Code: {data.get('code', '')}",
+        f"Direction: {data.get('direction', '')}",
+        f"Protocol: {data.get('protocol', '')}",
+        f"Source System: {data.get('source_system', '')}",
+        f"Target System: {data.get('target_system', '')}",
+        f"Frequency: {data.get('frequency', '')}",
+        f"Status: {data.get('status', '')}",
+        f"Criticality: {data.get('criticality', '')}",
+        f"Description: {data.get('description', '')}",
+    ]
+    return "\n".join(p for p in parts if not p.endswith(": "))
+
+
+def _extract_data_object(data: dict) -> str:
+    parts = [
+        f"Data Object: {data.get('name', '')}",
+        f"Code: {data.get('code', '')}",
+        f"Object Type: {data.get('object_type', '')}",
+        f"Source System: {data.get('source_system', '')}",
+        f"Record Count: {data.get('record_count', '')}",
+        f"Migration Strategy: {data.get('migration_strategy', '')}",
+        f"Priority: {data.get('priority', '')}",
+        f"Status: {data.get('status', '')}",
+        f"Description: {data.get('description', '')}",
+    ]
+    return "\n".join(p for p in parts if not p.endswith(": "))
+
+
+def _extract_migration_wave(data: dict) -> str:
+    parts = [
+        f"Migration Wave: {data.get('name', '')}",
+        f"Wave Number: {data.get('wave_number', '')}",
+        f"Status: {data.get('status', '')}",
+        f"Planned Start: {data.get('planned_start', '')}",
+        f"Planned End: {data.get('planned_end', '')}",
+        f"Strategy: {data.get('strategy', '')}",
+        f"Objects Count: {data.get('objects_count', '')}",
+        f"Description: {data.get('description', '')}",
+    ]
+    return "\n".join(p for p in parts if not p.endswith(": "))
+
+
 # Entity type → extractor function mapping
 ENTITY_EXTRACTORS = {
     "requirement": _extract_requirement,
@@ -239,6 +286,10 @@ ENTITY_EXTRACTORS = {
     "config_item": _extract_config_item,
     "scenario": _extract_scenario,
     "process": _extract_process,
+    # Sprint 21 additions
+    "interface": _extract_interface,
+    "data_object": _extract_data_object,
+    "migration_wave": _extract_migration_wave,
 }
 
 

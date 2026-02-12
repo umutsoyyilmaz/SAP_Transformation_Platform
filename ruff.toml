@@ -1,0 +1,33 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Ruff — Python linter & formatter configuration
+# Sprint 14: CI/CD + Security Hardening
+# ═══════════════════════════════════════════════════════════════════════════
+
+target-version = "py311"
+line-length = 120
+
+[lint]
+# Enable common rule sets
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort (import sorting)
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+]
+ignore = [
+    "E501",   # line too long — let formatter handle it
+    "B008",   # function call in default argument (Flask patterns)
+    "B905",   # zip without strict= (Python 3.10+)
+    "UP007",  # Optional[X] vs X | None — keep for readability
+]
+
+[lint.per-file-ignores]
+"migrations/*" = ["E", "W", "F", "I"]   # auto-generated Alembic
+"scripts/*" = ["E402"]                    # sys.path manipulation
+"tests/*" = ["B", "E501"]                # test files are more relaxed
+
+[format]
+quote-style = "double"
+indent-style = "space"

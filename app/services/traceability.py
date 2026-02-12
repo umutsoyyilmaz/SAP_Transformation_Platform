@@ -605,7 +605,7 @@ def trace_explore_requirement(requirement_id: str) -> dict:
 
     Raises ``ValueError`` if the requirement does not exist.
     """
-    req = ExploreRequirement.query.get(requirement_id)
+    req = db.session.get(ExploreRequirement, requirement_id)
     if not req:
         raise ValueError(f"Explore requirement not found: {requirement_id}")
 

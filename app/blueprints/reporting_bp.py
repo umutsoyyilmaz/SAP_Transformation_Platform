@@ -2,6 +2,7 @@ from datetime import datetime
 
 from flask import Blueprint, jsonify, send_file
 
+from app.models import db
 from app.models.program import Program
 from app.services.reporting import compute_program_health
 from app.services.metrics import ExploreMetrics
@@ -19,7 +20,7 @@ def program_health(pid):
     GET /api/v1/reports/program-health/<pid>
     Returns full program health snapshot with RAG per area.
     """
-    program = Program.query.get(pid)
+    program = db.session.get(Program, pid)
     if not program:
         return jsonify({"error": "Program not found"}), 404
     return jsonify(compute_program_health(pid)), 200
@@ -31,8 +32,8 @@ def program_explore_health(pid):
     GET /api/v1/reports/program/<pid>/health
     Returns Explore-only health metrics with governance thresholds.
     """
-    from app.models.program import Program
-    program = Program.query.get(pid)
+    from app.models.program import Program as _Prog
+    program = db.session.get(_Prog, pid)
     if not program:
         return jsonify({"error": "Program not found"}), 404
     return jsonify(ExploreMetrics.program_health(pid)), 200
@@ -46,7 +47,7 @@ def weekly_report(pid):
     For now, just returns current health. Historical snapshots will be
     added when we implement snapshot storage.
     """
-    program = Program.query.get(pid)
+    program = db.session.get(Program, pid)
     if not program:
         return jsonify({"error": "Program not found"}), 404
 
@@ -58,7 +59,7 @@ def weekly_report(pid):
 @reporting_bp.route("/export/xlsx/<int:pid>", methods=["GET"])
 def export_xlsx(pid):
     """GET /api/v1/reports/export/xlsx/<pid> — Download Excel report."""
-    program = Program.query.get(pid)
+    program = db.session.get(Program, pid)
     if not program:
         return jsonify({"error": "Program not found"}), 404
     health = compute_program_health(pid)
@@ -74,7 +75,7 @@ def export_xlsx(pid):
 @reporting_bp.route("/export/pdf/<int:pid>", methods=["GET"])
 def export_pdf(pid):
     """GET /api/v1/reports/export/pdf/<pid> — Download HTML report (print-ready)."""
-    program = Program.query.get(pid)
+    program = db.session.get(Program, pid)
     if not program:
         return jsonify({"error": "Program not found"}), 404
     health = compute_program_health(pid)

@@ -164,7 +164,7 @@ const RaidView = (() => {
     function showHeatmapCell(risks) {
         const html = `<div class="modal">
             <div class="modal__header"><h3>Risks in Cell</h3>
-                <button class="btn btn-sm" onclick="App.closeModal()">✕</button>
+                <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button>
             </div>
             <div class="modal__body">
                 <table class="table"><thead><tr><th>Code</th><th>Title</th><th>RAG</th></tr></thead>
@@ -499,7 +499,7 @@ const RaidView = (() => {
                 <div class="modal">
                     <div class="modal__header">
                         <h3>${item.code} — ${item.title}</h3>
-                        <button class="btn btn-sm" onclick="App.closeModal()">✕</button>
+                        <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button>
                     </div>
                     <div class="modal__body">
                         <table class="table">${fields}</table>
@@ -521,7 +521,7 @@ const RaidView = (() => {
         App.openModal(`
             <div class="modal">
                 <div class="modal__header"><h3>New ${title}</h3>
-                    <button class="btn btn-sm" onclick="App.closeModal()">✕</button>
+                    <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button>
                 </div>
                 <div class="modal__body">
                     ${_getForm(type, {})}
@@ -541,7 +541,7 @@ const RaidView = (() => {
             App.openModal(`
                 <div class="modal">
                     <div class="modal__header"><h3>Edit ${item.code}</h3>
-                        <button class="btn btn-sm" onclick="App.closeModal()">✕</button>
+                        <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button>
                     </div>
                     <div class="modal__body">
                         ${_getForm(singular, item)}

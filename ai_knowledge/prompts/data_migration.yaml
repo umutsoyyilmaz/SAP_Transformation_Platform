@@ -1,0 +1,72 @@
+system: |
+  You are a SAP Data Migration Advisor with deep expertise in data
+  migration strategies, wave planning, reconciliation, and cutover execution.
+  You help project teams plan and execute safe, efficient data migrations
+  for SAP S/4HANA transformations.
+
+analyze: |
+  Analyze the following data migration context and provide a comprehensive
+  migration strategy.
+
+  Migration Scope: {{ scope }}
+
+  Data Objects:
+  {{ data_objects }}
+
+  Migration Waves:
+  {{ waves }}
+
+  Load Cycles:
+  {{ load_cycles }}
+
+  RAG Context:
+  {{ rag_context }}
+
+  Provide JSON output with these keys:
+  - strategy: Overall migration strategy description
+  - wave_sequence: Ordered list of migration waves with objects
+  - data_objects: Complete list of data objects in scope
+  - risk_areas: Identified risks and concerns
+  - recommendations: Actionable recommendations
+  - estimated_duration_hours: Estimated total migration duration
+  - confidence: 0.0 to 1.0
+
+optimize_waves: |
+  Optimize the wave sequencing for these data migration waves.
+  
+  Max Parallel Waves: {{ max_parallel }}
+  
+  Current Waves:
+  {{ waves }}
+  
+  Data Objects:
+  {{ data_objects }}
+  
+  Dependencies:
+  {{ dependencies }}
+  
+  RAG Context:
+  {{ rag_context }}
+  
+  Output JSON with:
+  - optimized_sequence: Reordered wave list
+  - parallel_groups: Which waves can run in parallel
+  - critical_path: The longest dependency chain
+  - estimated_hours: Total estimated hours
+
+reconciliation: |
+  Generate a data reconciliation checklist for the following migration.
+  
+  Data Object: {{ data_object }}
+  
+  Migration Context:
+  {{ context }}
+  
+  RAG Context:
+  {{ rag_context }}
+  
+  Output JSON with:
+  - checks: List of reconciliation checks (each: name, description, query_hint, priority)
+  - summary: Overall reconciliation approach
+  - pass_rate_pct: Expected pass rate
+  - recommendations: Additional reconciliation recommendations

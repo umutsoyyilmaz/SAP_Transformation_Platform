@@ -113,7 +113,7 @@ def _check_unblocked_requirements(open_item_id: str) -> list[dict]:
     )
 
     for link in links:
-        req = ExploreRequirement.query.get(link.requirement_id)
+        req = db.session.get(ExploreRequirement, link.requirement_id)
         if not req:
             continue
 
@@ -126,7 +126,7 @@ def _check_unblocked_requirements(open_item_id: str) -> list[dict]:
 
         all_resolved = True
         for bl in blocking_links:
-            oi = ExploreOpenItem.query.get(bl.open_item_id)
+            oi = db.session.get(ExploreOpenItem, bl.open_item_id)
             if oi and oi.status in ("open", "in_progress", "blocked"):
                 all_resolved = False
                 break
@@ -173,7 +173,7 @@ def transition_open_item(
     Raises:
         OITransitionError, PermissionDenied
     """
-    oi = ExploreOpenItem.query.get(open_item_id)
+    oi = db.session.get(ExploreOpenItem, open_item_id)
     if not oi:
         raise ValueError(f"Open item not found: {open_item_id}")
 
@@ -268,7 +268,7 @@ def reassign_open_item(
     skip_permission: bool = False,
 ) -> dict:
     """Reassign an open item and create activity log."""
-    oi = ExploreOpenItem.query.get(open_item_id)
+    oi = db.session.get(ExploreOpenItem, open_item_id)
     if not oi:
         raise ValueError(f"Open item not found: {open_item_id}")
 

@@ -46,7 +46,7 @@ def check_signoff_readiness(l3_id: str) -> dict:
             }
         }
     """
-    l3 = ProcessLevel.query.get(l3_id)
+    l3 = db.session.get(ProcessLevel, l3_id)
     if not l3 or l3.level != 3:
         raise ValueError(f"Not a valid L3 process level: {l3_id}")
 
@@ -151,7 +151,7 @@ def signoff_l3(
     Returns:
         {"l3_id", "fit_decision", "is_override", "l2_readiness_updated"}
     """
-    l3 = ProcessLevel.query.get(l3_id)
+    l3 = db.session.get(ProcessLevel, l3_id)
     if not l3 or l3.level != 3:
         raise ValueError(f"Not a valid L3 process level: {l3_id}")
 
@@ -184,7 +184,7 @@ def signoff_l3(
 
     # Recalculate L2 readiness
     l2_updated = False
-    l2 = ProcessLevel.query.get(l3.parent_id) if l3.parent_id else None
+    l2 = db.session.get(ProcessLevel, l3.parent_id) if l3.parent_id else None
     if l2 and l2.level == 2:
         recalculate_l2_readiness(l2)
         l2_updated = True
@@ -204,7 +204,7 @@ def override_l3_fit(
     rationale: str,
 ) -> dict:
     """Override L3 consolidated fit status with business justification."""
-    l3 = ProcessLevel.query.get(l3_id)
+    l3 = db.session.get(ProcessLevel, l3_id)
     if not l3 or l3.level != 3:
         raise ValueError(f"Not a valid L3 process level: {l3_id}")
 
@@ -238,7 +238,7 @@ def get_consolidated_view(l3_id: str) -> dict:
     Returns:
         L4 breakdown, blocking items, sign-off status, signoff_ready flag
     """
-    l3 = ProcessLevel.query.get(l3_id)
+    l3 = db.session.get(ProcessLevel, l3_id)
     if not l3 or l3.level != 3:
         raise ValueError(f"Not a valid L3 process level: {l3_id}")
 

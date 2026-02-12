@@ -1,6 +1,6 @@
 # SAP Transformation Platform — Pilot Onboarding Runbook
 
-> **Version:** 1.0 | **Son Güncelleme:** 2025-07-14 | **Hedef:** Yeni müşteri/pilot ortamını 30 dakikada ayağa kaldırmak
+> **Version:** 1.0 | **Son Güncelleme:** 2026-02-13 | **Hedef:** Yeni müşteri/pilot ortamını 30 dakikada ayağa kaldırmak
 
 ---
 
@@ -252,4 +252,4 @@ docker compose -f docker/docker-compose.tenant.yml up -d
 
 ---
 
-*Bu doküman SAP Transformation Platform v3.5 için geçerlidir.*
+*Bu doküman SAP Transformation Platform v1.0 için geçerlidir.*

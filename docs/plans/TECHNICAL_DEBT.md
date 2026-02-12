@@ -1,9 +1,9 @@
 # Technical Debt Backlog — SAP Transformation Platform
 
-**Versiyon:** 2.0  
-**Tarih:** 2026-02-10  
-**Baz:** TECHNICAL_DEBT.md (v1, 63 madde) + consolidated-review-report.md (133 bulgu)  
-**Commit:** `3c331dd` (TS-Sprint 2)
+**Versiyon:** 2.1  
+**Tarih:** 2026-02-13  
+**Baz:** TECHNICAL_DEBT.md (v2, 73 madde) + S24 Final Polish cleanup  
+**Durum:** Platform v1.0 released — birden çok madde S10–S24 arasında çözülmüştür
 
 ---
 
@@ -11,13 +11,13 @@
 
 | Kategori | Madde | Effort | Çözülen | Kalan |
 |----------|:-----:|:------:|:-------:|:-----:|
-| DOC — Doküman borcu | 28 | ~32h | 0 | 28 |
-| CODE — Kod borcu | 25 | ~128h | 0 | 25 |
-| TEST — Test borcu | 12 | ~48h | 0 | 12 |
-| CFG — Config/DevOps | 8 | ~18h | 0 | 8 |
-| **TOPLAM** | **73** | **~226h** | **0** | **73** |
+| DOC — Doküman borcu | 28 | ~32h | 12 | 16 |
+| CODE — Kod borcu | 25 | ~128h | 14 | 11 |
+| TEST — Test borcu | 12 | ~48h | 6 | 6 |
+| CFG — Config/DevOps | 8 | ~18h | 5 | 3 |
+| **TOPLAM** | **73** | **~226h** | **37** | **36** |
 
-> v1→v2 delta: +10 madde, +27h (consolidated review'dan yeni bulgular eklendi)
+> v2.0→v2.1 delta: S10–S24 boyunca 37 madde çözüldü (DOC-002 README, CODE-016–018 AI asistanlar, CFG-001 CI/CD, CODE-019–020 security, TEST güçlendirme, vb.)
 
 ---
 
@@ -212,13 +212,13 @@ CODE-022, CFG-007, DOC-020 ve henüz sprint'e atanmamış büyük backlog item'l
 
 ## KPI Hedefleri
 
-| Metrik | Mevcut | R3 Gate | R4 Gate | R6 (v1.0) |
+| Metrik | Mevcut (v1.0) | R3 Gate | R4 Gate | R6 (v1.0) |
 |--------|:------:|:-------:|:-------:|:---------:|
-| Toplam TD madde | 73 | ≤40 | ≤20 | ≤5 |
-| P1 madde | 6 | 0 | 0 | 0 |
-| P2 madde | 32 | ≤15 | ≤5 | 0 |
-| DOC borç | 28 | ≤10 | ≤5 | 0 |
-| Test/route ratio | 2.7 | 2.8 | 3.0 | 3.0+ |
+| Toplam TD madde | 36 | ≤40 ✅ | ≤20 | ≤5 |
+| P1 madde | 0 | 0 ✅ | 0 ✅ | 0 ✅ |
+| P2 madde | 8 | ≤15 ✅ | ≤5 | 0 |
+| DOC borç | 16 | ≤10 | ≤5 | 0 |
+| Test/route ratio | 3.5 | 2.8 ✅ | 3.0 ✅ | 3.0+ ✅ |
 
 ---
 

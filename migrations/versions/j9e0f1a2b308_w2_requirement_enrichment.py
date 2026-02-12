@@ -28,7 +28,7 @@ def upgrade():
         sa.Column("business_criticality", sa.String(20), nullable=True,
                    comment="business_critical | important | nice_to_have"),
         sa.Column("wricef_candidate", sa.Boolean(), nullable=False,
-                   server_default=sa.text("0"),
+                   server_default=sa.text("FALSE"),
                    comment="Should become WRICEF backlog item?"),
     ]
 

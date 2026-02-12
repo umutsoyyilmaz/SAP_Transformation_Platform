@@ -1,18 +1,18 @@
-# SAP Transformation Management Platform — Proje Uygulama Planı v2.2
+# SAP Transformation Management Platform — Proje Uygulama Planı v2.3
 
-**Versiyon:** 2.2  
+**Versiyon:** 2.3  
 **Tarih:** 12 Şubat 2026  
-**Baz Versiyon:** v2.1 → v2.2 delta: Hybrid Rebuild Plan + Sprint 0-4 Governance Roadmap entegre edilmiştir  
+**Baz Versiyon:** v2.2 → v2.3 delta: S13 Cutover Hub + Hypercare, S14 CI/CD + Security, S15 AI Phase 3 tamamlandı  
 **Hazırlayan:** Umut Soyyılmaz  
-**Son Commit:** WR-0 tamamlandı (12 Şubat 2026)
+**Son Commit:** S15 tamamlandı
 
-> **📌 v2.2 Güncelleme Notları:**
-> - **YENİ RELEASE eklendi:** Release 3.5 — "Workshop Stabilization + Governance + Productization" (Sprint WR-0 → WR-4)
-> - Hybrid Rebuild Plan (Copilot backend split + Claude frontend rebuild) Sprint WR-0 olarak entegre edildi
-> - Governance, Metrics, Escalation katmanı Sprint WR-1 olarak planlandı
-> - Claude revize önerileri uygulandı: DB-per-tenant WR-4'e taşındı, traceability servis tabanlı yapıldı, metrics scope daraltıldı
-> - Mevcut Release 4-6 sprint'leri bağımlılıklar güncellenerek korundu
-> - Toplam effort: 635h → **~755h** (+120h Workshop Rebuild + Governance + Productization)
+> **📌 v2.3 Güncelleme Notları:**
+> - v2.2 → v2.3 delta: S13, S14, S15 tamamlandı
+> - **S13 Cutover Hub + Hypercare:** 8 model, ~45 endpoint, 79 test, 5-tab SPA, 71 seed kaydı
+> - **S14 CI/CD + Security Hardening:** GitHub Actions 4-job CI, multi-stage Docker, CSP/HSTS headers, rate limiting
+> - **S15 AI Phase 3:** 2 yeni AI asistan (CutoverOptimizer, MeetingMinutesAssistant), 4 prompt YAML, 4 endpoint, 56 test
+> - Toplam: 1102 test, 91 tablo, 8 AI asistan, ~370+ route
+> - Sonraki: S16 (Notification + Scheduling) veya S19 (AI Phase 4)
 
 ---
 
@@ -53,27 +53,27 @@ TAMAMLANAN
 ✅ FE-Sprint: Frontend Cleanup & Hardening
 ✅ TD-Sprint 1: Teknik Borç Temizliği (Doküman Odaklı)
 
-DEVAM EDEN (ŞİMDİ)                                 YAPILACAK
-──────────────────                                  ─────────
-✅ Workshop Module Rebuild (WR-0) — 12 Şub 2026     ❌ Cutover Hub (S13)
-✅ Governance + Metrics Engine (WR-1) — 924 test     ❌ Security Module — JWT (S14)
-✅ Audit + Traceability Layer (WR-2) — 948 test      ❌ Run/Sustain (S17)
-✅ Demo Flow UI (WR-3) — 969 test                    ❌ AI Phase 3-5 (S15→S21)
-                                                    ❌ AI Phase 3-5 (S15→S21)
-                                                    ❌ Dış Entegrasyonlar (S22a/S22b)
-                                                    ❌ Mobile PWA (S23)
+TAMAMLANDI (Release 3.5 + Release 4 kısmi)           YAPILACAK
+──────────────────────────────────────────           ─────────
+✅ Workshop Module Rebuild (WR-0) — 12 Şub 2026     ❌ Notification + Scheduling (S16)
+✅ Governance + Metrics Engine (WR-1) — 924 test     ❌ Run/Sustain (S17)
+✅ Audit + Traceability Layer (WR-2) — 948 test      ❌ AI Phase 4-5 (S19→S21)
+✅ Demo Flow UI (WR-3) — 969 test                    ❌ Dış Entegrasyonlar (S22a/S22b)
+✅ Cutover Hub + Hypercare (S13) — 1046 test         ❌ Mobile PWA (S23)
+✅ CI/CD + Security Hardening (S14) — 1046 test      ❌ Final Polish (S24)
+✅ AI Phase 3: Cutover AI + Minutes (S15) — 1102 test
 ```
 
 ### 📊 İlerleme Metrikleri
 
 ```
-DB Tabloları:    █████████████████████░░░  78/80+   (%98)
-API Route:       ███████████████████████░  340/200+ (%170 — hedef aşıldı!)
-AI Asistanlar:   ██████░░░░░░░░░░░░░░░░░  6/14     (%43)
-Modüller:        ████████████████░░░░░░░░  8/12     (%67)
-Testler:         969 passed, 2 pre-existing fail, 2 skipped, 11 deselected, 1 xfail
+DB Tabloları:    ██████████████████████░░  91/95+   (%96)
+API Route:       █████████████████████████ 370+/200+ (%185 — hedef aşıldı!)
+AI Asistanlar:   ████████████░░░░░░░░░░░  8/14     (%57)
+Modüller:        ██████████████████░░░░░░  10/12    (%83)
+Testler:         1102 passed, 2 skipped, 15 deselected, 1 xfail
 Smoke Test:      66 passed, 0 failed (Explore E2E)
-Test/Route:      2.8 ortalama (hedef: 3.0)
+Test/Route:      3.0 ortalama (hedef: 3.0) ✅
 ```
 
 ---
@@ -395,51 +395,135 @@ WR-4 bitti → Pilot onboard + Investor pitch ready ✅
 
 ### Release 4: GoLive Readiness (S13-S16)
 
-| Sprint | Açıklama | Est. | Bağımlılık |
-|--------|----------|:----:|------------|
-| S13: Cutover Hub | Cutover plan, rehearsal, go-live checklist | 20h | **WR-4** (was: S12a) |
-| S14: Security + CI | JWT/RBAC, row-level security, GitHub Actions | 25h | S13 |
-| S15: AI Phase 3 | Sprint Planner, Scope Advisor, Meeting Minutes | 20h | S14 |
-| S16: AI Risk Sentinel | ML-based risk scoring | 25h | S15 |
-
-### Release 5: Operations (S17-S20)
-
-| Sprint | Açıklama | Est. | Bağımlılık |
-|--------|----------|:----:|------------|
-| S17: Run/Sustain | Hypercare, incident management | 18h | S16 |
-| S18: Notification + Celery | Async tasks, email, scheduled jobs | 16h | S14 |
-| S19: AI Phase 4 | Advanced assistants | 22h | S18 |
-| S20: AI Perf + Polish | Performance optimization | 20h | S19 |
-
-### Release 6: Advanced (S21-S24)
-
-| Sprint | Açıklama | Est. | Bağımlılık |
-|--------|----------|:----:|------------|
-| S21: AI Phase 5 | Final AI capabilities | 41h | S20 |
-| S22a: Ext Integrations P1 | Jira + Cloud ALM | 36h | S14 |
-| S22b: Ext Integrations P2 | ServiceNow + Teams | 20h | S22a |
-| S23: Mobile PWA | Progressive web app | 18h | S22b |
-| S24: Final Polish | Platform v1.0 release | 20h | All |
+| Sprint | Açıklama | Est. | Bağımlılık | Durum |
+|--------|----------|:----:|------------|:-----:|
+| **S13: Cutover Hub + Hypercare** | 8 model, ~45 endpoint, 79 test, 5-tab SPA, 71 seed | 20h | WR-4 | ✅ |
+| **S14: CI/CD + Security Hardening** | GitHub Actions, Docker, CSP/HSTS, rate limiting | 25h | S13 | ✅ |
+| **S15: AI Phase 3** | CutoverOptimizer, MeetingMinutesAssistant, 4 prompt YAML, 56 test | 20h | S14 | ✅ |
+| S16: Notification + Scheduling | Async tasks, email, scheduled jobs | 16h | S14 | ❌ |
 
 ---
 
-## 6. Bağımlılık Zinciri (Critical Path — Güncellenmiş)
+#### S13: Cutover Hub + Hypercare — ✅ TAMAMLANDI
+
+> **Amaç:** SAP Go-Live sürecini yöneten Cutover Hub + Hypercare modülü
+> **Gerçekleşen:** 8 model, ~45 endpoint, 79 test, 5-tab SPA, 71 seed kaydı
+
+**Domain Modeli (8 tablo):**
+
+| Model | Tablo | Kolon | Açıklama |
+|-------|-------|:-----:|----------|
+| `CutoverPlan` | `cutover_plans` | 16 | Program-scoped plan. Lifecycle: draft→approved→rehearsal→ready→executing→completed→rolled_back |
+| `CutoverScopeItem` | `cutover_scope_items` | 8 | Kategori bazlı gruplama. Status: computed from children |
+| `RunbookTask` | `runbook_tasks` | 22 | Runbook satırı — sequence, timing, RACI, rollback, cross-domain link |
+| `TaskDependency` | `task_dependencies` | 5 | Predecessor→Successor + lag. Cycle detection via DFS |
+| `Rehearsal` | `rehearsals` | 18 | Dry-run kayıtları — timing variance, findings |
+| `GoNoGoItem` | `go_no_go_items` | 10 | Readiness checklist (7 standart item auto-seed) |
+| `HypercareIncident` | `hypercare_incidents` | 14 | Post-go-live incident tracking — severity, SLA, resolution |
+| `HypercareSLA` | `hypercare_slas` | 12 | SLA definition + compliance tracking |
+
+**Teslim Edilen Dosyalar:**
+```
+app/models/cutover.py              # 8 model, ~1200 LOC
+app/blueprints/cutover_bp.py       # ~45 endpoint, ~1400 LOC
+app/services/cutover_service.py    # Code gen, metrics, Go/No-Go aggregation, ~500 LOC
+static/js/views/cutover.js         # 5-tab SPA (Plans, Runbook, Rehearsals, Go/No-Go, Hypercare)
+tests/test_api_cutover.py          # 79 test (CRUD, lifecycle, deps, cycle detect, rehearsal, Go/No-Go, hypercare)
+scripts/seed_data/cutover.py       # 71 demo records
+```
+
+**DoD:** ✅ 1046 test passed (79 new + 967 existing), 0 regresyon
+
+---
+
+#### S14: CI/CD + Security Hardening — ✅ TAMAMLANDI
+
+> **Amaç:** Production-grade CI/CD pipeline ve güvenlik katmanı
+> **Gerçekleşen:** GitHub Actions 4-job CI, multi-stage Docker, security headers, rate limiting
+
+**Teslim Edilen Dosyalar:**
+```
+.github/workflows/ci.yml           # 4-job pipeline: lint → test → Docker build → deploy
+docker/Dockerfile                   # Multi-stage optimized build
+app/middleware/security_headers.py  # CSP, HSTS, X-Frame-Options, X-Content-Type-Options
+app/middleware/rate_limiter.py      # Per-blueprint rate limits (disabled in TESTING)
+scripts/deploy.sh                   # Production deployment script
+Procfile                            # Heroku/Railway deployment
+ruff.toml                           # Linter configuration
+```
+
+**DoD:** ✅ 1046 test passed, 0 regresyon, CI pipeline functional
+
+---
+
+#### S15: AI Phase 3 — Cutover AI + Meeting Minutes — ✅ TAMAMLANDI
+
+> **Amaç:** Cutover optimizasyonu ve toplantı tutanağı AI asistanları
+> **Gerçekleşen:** 2 yeni asistan, 4 prompt YAML, 4 endpoint, 56 test
+
+**Yeni AI Asistanlar:**
+
+| Asistan | Dosya | Metotlar | Açıklama |
+|---------|-------|----------|----------|
+| `CutoverOptimizer` | `app/ai/assistants/cutover_optimizer.py` (~470 LOC) | `optimize_runbook()`, `assess_go_nogo()` | Critical path analizi, bottleneck tespiti, Go/No-Go readiness |
+| `MeetingMinutesAssistant` | `app/ai/assistants/meeting_minutes.py` (~290 LOC) | `generate_minutes()`, `extract_actions()` | Yapılandırılmış toplantı tutanağı, aksiyon çıkarma |
+
+**Yeni Prompt YAML'lar:**
+```
+ai_knowledge/prompts/cutover_optimizer.yaml   # Runbook optimization prompt
+ai_knowledge/prompts/cutover_gonogo.yaml      # Go/No-Go readiness assessment
+ai_knowledge/prompts/meeting_minutes.yaml     # Meeting minutes generation
+ai_knowledge/prompts/meeting_actions.yaml     # Action item extraction
+```
+
+**Yeni Endpoint'ler (ai_bp.py):**
+- `POST /api/v1/ai/cutover/optimize/<plan_id>` — Runbook optimization
+- `POST /api/v1/ai/cutover/go-nogo/<plan_id>` — Go/No-Go assessment
+- `POST /api/v1/ai/meeting-minutes/generate` — Meeting minutes generation
+- `POST /api/v1/ai/meeting-minutes/extract-actions` — Action item extraction
+
+**Test:** `tests/test_ai_phase3.py` — 56 test (8 sınıf)
+
+**DoD:** ✅ 1102 test passed (56 new + 1046 existing), 0 regresyon, 8 AI asistan toplam
+
+### Release 5: Operations (S17-S20)
+
+| Sprint | Açıklama | Est. | Bağımlılık | Durum |
+|--------|----------|:----:|------------|:-----:|
+| S16: Notification + Scheduling | Async tasks, email, scheduled jobs | 16h | S14 | ❌ |
+| S17: Run/Sustain | Hypercare, incident management | 18h | S16 | ❌ |
+| S19: AI Phase 4 | Doc Gen + Multi-turn | 22h | S15 | ❌ |
+| S20: AI Perf + Polish | Performance optimization | 20h | S19 | ❌ |
+
+### Release 6: Advanced (S21-S24)
+
+| Sprint | Açıklama | Est. | Bağımlılık | Durum |
+|--------|----------|:----:|------------|:-----:|
+| S21: AI Phase 5 | Final AI capabilities | 41h | S20 | ❌ |
+| S22a: Ext Integrations P1 | Jira + Cloud ALM | 36h | S14 | ❌ |
+| S22b: Ext Integrations P2 | ServiceNow + Teams | 20h | S22a | ❌ |
+| S23: Mobile PWA | Progressive web app | 18h | S22b | ❌ |
+| S24: Final Polish | Platform v1.0 release | 20h | All | ❌ |
+
+---
+
+## 6. Bağımlılık Zinciri (Critical Path — v2.3 Güncellenmiş)
 
 ```
-COMPLETED                     RELEASE 3.5 (YENİ)                    RELEASE 4+
+COMPLETED                     RELEASE 3.5 (✅)                       RELEASE 4+
 ─────────                     ─────────────────                      ──────────
 
-R1-R3 ──→ WR-0 (Rebuild) ──→ WR-1 (Governance) ──→ WR-2 (Audit) ──→ S13 (Cutover)
+R1-R3 ──→ WR-0 (Rebuild) ──→ WR-1 (Governance) ──→ WR-2 (Audit) ──→ S13 (Cutover) ✅
           ✅ COMPLETED         │                      │                │
-                               ├─→ WR-3 (Demo UI) ←──┘                ├──→ S14 (JWT) ──→ S18 (Celery) ──→ S22a
+                               ├─→ WR-3 (Demo UI) ←──┘                ├──→ S14 (CI/CD) ✅ ──→ S16 (Notif) ──→ S17 ──→ S22a
                                │                                      │
-                               └─→ WR-4 (Product) ←── WR-3            └──→ S15 (AI P3) ──→ S16 ──→ ...
+                               └─→ WR-4 (Product) ←── WR-3            └──→ S15 (AI P3) ✅ ──→ S19 (AI P4) ──→ S20 ──→ S21
                                     │
-                                    └──→ RELEASE 3.5 GATE ✅ ──→ S13
+                                    └──→ RELEASE 3.5 GATE ✅ ──→ S13 ✅
 ```
 
-> **Critical Path:** WR-0 → WR-1 → WR-2 → WR-3 → WR-4 → S13 → S14 → S18 → S22a
-> **Risk:** WR-0 gecikmesi → tüm downstream kayar. WR-0 en riskli sprint (backend split + frontend rebuild).
+> **Critical Path:** ~~WR-0 → ... → S13~~ → ✅ → S16 → S17 → S22a (platform track) | S19 → S20 → S21 (AI track)
+> **Sonraki Adım:** S16 (Notification + Scheduling) — S14'e bağımlı, S14 tamamlandı ✅
 
 ---
 
@@ -504,20 +588,18 @@ JUL           AUG           SEP           OCT           NOV           DEC
 
 ---
 
-## 9. Başarı Metrikleri (v2.2)
+## 9. Başarı Metrikleri (v2.3)
 
-| Metrik | R3 Gerçek | R3.5 Hedef | R4 Hedef | R6 Hedef |
-|--------|:---------:|:----------:|:--------:|:--------:|
-| API route | 336 | 345+ | 400+ | 500+ |
-| DB tablo | 77 | 78+ (AuditLog) | 85+ | 80+ (net) |
-| Pytest | 916 | 990+ | 1100+ | 1300+ |
-| AI asistan | 6 | 6 (unchanged) | 11 | 14 |
-| Test/route | 2.7 | 2.9 | 2.8 | 3.0+ |
-| Governance | ❌ | ✅ Rules + Metrics | ✅ | ✅ |
-| Audit trail | ❌ | ✅ AuditLog | ✅ | ✅ |
-| Traceability | v1 (FK only) | v2 (API endpoint) | v2 | v3 (UI) |
-| Demo flow | 🔴 Broken | ✅ 10 dk kesintisiz | ✅ | ✅ |
-| Pilot ready | ❌ | ✅ Onboarding runbook | ✅ | ✅ |
+| Metrik | R3 Gerçek | R3.5 Gerçek | R4 Gerçek (S13-S15) | R4 Kalan | R6 Hedef |
+|--------|:---------:|:----------:|:-------------------:|:--------:|:--------:|
+| API route | 336 | 345+ | 370+ | 400+ | 500+ |
+| DB tablo | 77 | 78+ | 91 | 93+ | 95+ |
+| Pytest | 916 | 969 | 1102 | 1200+ | 1300+ |
+| AI asistan | 6 | 6 | 8 | 11 | 14 |
+| Test/route | 2.7 | 2.8 | 3.0 ✅ | 3.0 | 3.0+ |
+| CI/CD | ❌ | ❌ | ✅ GitHub Actions | ✅ | ✅ |
+| Security | ❌ | ❌ | ✅ CSP/HSTS/Rate | ✅ | ✅ |
+| Cutover Hub | ❌ | ❌ | ✅ 8 model, 5-tab | ✅ | ✅ |
 
 ---
 
@@ -590,7 +672,7 @@ Sprint WR-4,WR-4.7,R3.5 Gate Check,Tüm test + demo + doküman,QA,Yüksek,3h,All
 
 ---
 
-**Dosya:** `SAP_Platform_Project_Plan_v2.2.md`  
-**v2.1 → v2.2 delta:** Release 3.5 eklendi (WR-0→WR-4, 5 sprint, 39 task, ~177h), Claude revize önerileri uygulandı (DB-per-tenant WR-4'e, traceability servis tabanlı, metrics scope daraltıldı), bağımlılık zinciri güncellendi  
+**Dosya:** `SAP_Platform_Project_Plan_v2.3.md`  
+**v2.2 → v2.3 delta:** S13 Cutover Hub + Hypercare (8 model, 79 test), S14 CI/CD + Security (GitHub Actions, Docker, rate limiting), S15 AI Phase 3 (2 asistan, 56 test) tamamlandı. Toplam: 1102 test, 91 tablo, 8 AI asistan  
 **Oluşturan:** Claude Opus 4.6  
-**Tarih:** 2026-02-12
+**Tarih:** 2026-02-13

@@ -84,7 +84,7 @@ def get_blocking_open_items(requirement_id: str) -> list[ExploreOpenItem]:
     )
     blocking = []
     for link in links:
-        oi = ExploreOpenItem.query.get(link.open_item_id)
+        oi = db.session.get(ExploreOpenItem, link.open_item_id)
         if oi and oi.status in ("open", "in_progress", "blocked"):
             blocking.append(oi)
     return blocking
@@ -143,7 +143,7 @@ def transition_requirement(
     Raises:
         TransitionError, BlockedByOpenItemsError, PermissionDenied
     """
-    req = ExploreRequirement.query.get(requirement_id)
+    req = db.session.get(ExploreRequirement, requirement_id)
     if not req:
         raise ValueError(f"Requirement not found: {requirement_id}")
 

@@ -1,0 +1,1127 @@
+"""
+SAP Transformation Management Platform
+Cutover Hub domain models — Sprint 13 + Hypercare extension.
+
+Models:
+    - CutoverPlan:        top-level cutover plan for a program (one active plan per go-live)
+    - CutoverScopeItem:   category-based grouping of runbook tasks
+    - RunbookTask:        individual executable step within a scope item
+    - TaskDependency:     predecessor → successor relationship between runbook tasks
+    - Rehearsal:          dry-run execution record with findings and timing comparison
+    - GoNoGoItem:         readiness checklist item for go/no-go decision
+    - HypercareIncident:  post-go-live incident tracker with SLA tracking
+    - HypercareSLA:       SLA response / resolution targets per severity level
+
+Architecture:
+    Program ──1:N──▶ CutoverPlan ──1:N──▶ CutoverScopeItem ──1:N──▶ RunbookTask
+    RunbookTask ──N:M──▶ RunbookTask  (via TaskDependency)
+    CutoverPlan ──1:N──▶ Rehearsal
+    CutoverPlan ──1:N──▶ GoNoGoItem
+    CutoverPlan ──1:N──▶ HypercareIncident
+    CutoverPlan ──1:N──▶ HypercareSLA
+
+Lifecycle states:
+    CutoverPlan:        draft → approved → rehearsal → ready → executing → completed
+                        → hypercare → closed  |  executing → rolled_back
+    RunbookTask:        not_started → in_progress → completed → failed → skipped → rolled_back
+    Rehearsal:          planned → in_progress → completed → cancelled
+    GoNoGoItem:         pending → go → no_go → waived
+    HypercareIncident:  open → investigating → resolved → closed
+"""
+
+from datetime import datetime, timezone
+
+from app.models import db
+
+
+# ── Constants ────────────────────────────────────────────────────────────────
+
+CUTOVER_PLAN_STATUSES = {
+    "draft", "approved", "rehearsal", "ready",
+    "executing", "completed", "rolled_back",
+    "hypercare", "closed",
+}
+
+SCOPE_CATEGORIES = {
+    "data_load", "interface", "authorization",
+    "job_scheduling", "reconciliation", "custom",
+}
+
+RUNBOOK_TASK_STATUSES = {
+    "not_started", "in_progress", "completed",
+    "failed", "skipped", "rolled_back",
+}
+
+REHEARSAL_STATUSES = {
+    "planned", "in_progress", "completed", "cancelled",
+}
+
+GO_NO_GO_VERDICTS = {"pending", "go", "no_go", "waived"}
+
+GO_NO_GO_SOURCES = {
+    "test_management", "data_factory", "integration_factory",
+    "security", "training", "cutover_rehearsal",
+    "steering_signoff", "custom",
+}
+
+LINKED_ENTITY_TYPES = {
+    "backlog_item", "interface", "data_object",
+    "config_item", "test_case",
+}
+
+# ── Hypercare Incident Constants ─────────────────────────────────────────────
+
+INCIDENT_SEVERITIES = {"P1", "P2", "P3", "P4"}
+
+INCIDENT_STATUSES = {"open", "investigating", "resolved", "closed"}
+
+INCIDENT_CATEGORIES = {
+    "functional", "technical", "data",
+    "authorization", "performance", "other",
+}
+
+INCIDENT_TRANSITIONS = {
+    "open":          ["investigating", "resolved", "closed"],
+    "investigating": ["resolved", "closed"],
+    "resolved":      ["closed", "open"],   # re-open if regression found
+    "closed":        ["open"],             # re-open edge case
+}
+
+
+# ── Lifecycle Transition Guards ──────────────────────────────────────────────
+
+PLAN_TRANSITIONS = {
+    "draft":       ["approved"],
+    "approved":    ["rehearsal", "ready"],
+    "rehearsal":   ["approved", "ready"],
+    "ready":       ["executing", "approved"],
+    "executing":   ["completed", "rolled_back"],
+    "completed":   ["hypercare"],
+    "hypercare":   ["closed"],
+    "closed":      [],
+    "rolled_back": ["draft"],
+}
+
+TASK_TRANSITIONS = {
+    "not_started":  ["in_progress", "skipped"],
+    "in_progress":  ["completed", "failed", "rolled_back"],
+    "completed":    ["rolled_back"],
+    "failed":       ["in_progress", "rolled_back", "skipped"],
+    "skipped":      ["not_started"],
+    "rolled_back":  ["not_started"],
+}
+
+REHEARSAL_TRANSITIONS = {
+    "planned":     ["in_progress", "cancelled"],
+    "in_progress": ["completed", "cancelled"],
+    "completed":   [],
+    "cancelled":   ["planned"],
+}
+
+
+def validate_plan_transition(old_status, new_status):
+    """Return True if CutoverPlan status transition is valid."""
+    return new_status in PLAN_TRANSITIONS.get(old_status, [])
+
+
+def validate_task_transition(old_status, new_status):
+    """Return True if RunbookTask status transition is valid."""
+    return new_status in TASK_TRANSITIONS.get(old_status, [])
+
+
+def validate_rehearsal_transition(old_status, new_status):
+    """Return True if Rehearsal status transition is valid."""
+    return new_status in REHEARSAL_TRANSITIONS.get(old_status, [])
+
+
+def validate_incident_transition(old_status, new_status):
+    """Return True if HypercareIncident status transition is valid."""
+    return new_status in INCIDENT_TRANSITIONS.get(old_status, [])
+
+
+# ── Cycle Detection ──────────────────────────────────────────────────────────
+
+
+def validate_no_cycle(session, task_id, new_predecessor_id):
+    """
+    Check that adding new_predecessor_id → task_id does not create a cycle.
+
+    Uses iterative DFS from new_predecessor_id, walking backwards through
+    existing predecessor chains.  Returns True if safe, False if cycle found.
+    """
+    if task_id == new_predecessor_id:
+        return False
+
+    visited = set()
+    stack = [new_predecessor_id]
+
+    while stack:
+        current = stack.pop()
+        if current == task_id:
+            return False
+        if current in visited:
+            continue
+        visited.add(current)
+
+        deps = (
+            session.query(TaskDependency.predecessor_id)
+            .filter(TaskDependency.successor_id == current)
+            .all()
+        )
+        for (pred_id,) in deps:
+            stack.append(pred_id)
+
+    return True
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 1. CutoverPlan
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class CutoverPlan(db.Model):
+    """
+    Top-level cutover plan for a program.
+    One program may have multiple plans (e.g. per wave / go-live event).
+    Code format: CUT-001 (program-scoped, auto-generated in service layer).
+    """
+
+    __tablename__ = "cutover_plans"
+
+    id = db.Column(db.Integer, primary_key=True)
+    program_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    code = db.Column(
+        db.String(30), unique=True, nullable=True,
+        comment="Auto-generated: CUT-001 (program-scoped)",
+    )
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, default="")
+    status = db.Column(
+        db.String(30), default="draft",
+        comment="draft | approved | rehearsal | ready | executing | completed | rolled_back",
+    )
+    version = db.Column(
+        db.Integer, default=1,
+        comment="Plan version — increments after each rehearsal revision",
+    )
+
+    # Timeline
+    planned_start = db.Column(
+        db.DateTime(timezone=True), nullable=True,
+        comment="Cutover window start (e.g. Friday 22:00)",
+    )
+    planned_end = db.Column(
+        db.DateTime(timezone=True), nullable=True,
+        comment="Cutover window end (e.g. Monday 06:00)",
+    )
+    actual_start = db.Column(db.DateTime(timezone=True), nullable=True)
+    actual_end = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    # Ownership
+    cutover_manager = db.Column(db.String(100), default="")
+    environment = db.Column(
+        db.String(30), default="PRD",
+        comment="Target environment: PRD | QAS | Sandbox",
+    )
+
+    # Rollback
+    rollback_deadline = db.Column(
+        db.DateTime(timezone=True), nullable=True,
+        comment="Point-of-no-return — after this, rollback is no longer feasible",
+    )
+    rollback_decision_by = db.Column(
+        db.String(100), default="",
+        comment="Person authorized to trigger rollback",
+    )
+
+    # Hypercare
+    hypercare_start = db.Column(
+        db.DateTime(timezone=True), nullable=True,
+        comment="Hypercare period start — usually = actual_end (go-live date)",
+    )
+    hypercare_end = db.Column(
+        db.DateTime(timezone=True), nullable=True,
+        comment="Hypercare period end",
+    )
+    hypercare_duration_weeks = db.Column(
+        db.Integer, default=4,
+        comment="SAP standard 4-6 weeks hypercare window",
+    )
+    hypercare_manager = db.Column(
+        db.String(100), default="",
+        comment="Hypercare period manager / support lead",
+    )
+
+    # Metadata
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # ── Constraints ──────────────────────────────────────────────────────
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('draft','approved','rehearsal','ready',"
+            "'executing','completed','rolled_back','hypercare','closed')",
+            name="ck_cutover_plan_status",
+        ),
+    )
+
+    # ── Relationships ────────────────────────────────────────────────────
+    scope_items = db.relationship(
+        "CutoverScopeItem", backref="cutover_plan", lazy="dynamic",
+        cascade="all, delete-orphan", order_by="CutoverScopeItem.order",
+    )
+    rehearsals = db.relationship(
+        "Rehearsal", backref="cutover_plan", lazy="dynamic",
+        cascade="all, delete-orphan", order_by="Rehearsal.rehearsal_number",
+    )
+    go_no_go_items = db.relationship(
+        "GoNoGoItem", backref="cutover_plan", lazy="dynamic",
+        cascade="all, delete-orphan", order_by="GoNoGoItem.source_domain",
+    )
+    incidents = db.relationship(
+        "HypercareIncident", backref="cutover_plan", lazy="dynamic",
+        cascade="all, delete-orphan", order_by="HypercareIncident.reported_at.desc()",
+    )
+    sla_targets = db.relationship(
+        "HypercareSLA", backref="cutover_plan", lazy="dynamic",
+        cascade="all, delete-orphan", order_by="HypercareSLA.severity",
+    )
+
+    def to_dict(self, include_children=False):
+        result = {
+            "id": self.id,
+            "program_id": self.program_id,
+            "code": self.code,
+            "name": self.name,
+            "description": self.description,
+            "status": self.status,
+            "version": self.version,
+            "planned_start": self.planned_start.isoformat() if self.planned_start else None,
+            "planned_end": self.planned_end.isoformat() if self.planned_end else None,
+            "actual_start": self.actual_start.isoformat() if self.actual_start else None,
+            "actual_end": self.actual_end.isoformat() if self.actual_end else None,
+            "cutover_manager": self.cutover_manager,
+            "environment": self.environment,
+            "rollback_deadline": (
+                self.rollback_deadline.isoformat() if self.rollback_deadline else None
+            ),
+            "rollback_decision_by": self.rollback_decision_by,
+            "hypercare_start": self.hypercare_start.isoformat() if self.hypercare_start else None,
+            "hypercare_end": self.hypercare_end.isoformat() if self.hypercare_end else None,
+            "hypercare_duration_weeks": self.hypercare_duration_weeks,
+            "hypercare_manager": self.hypercare_manager,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            # Aggregated stats
+            "scope_item_count": self.scope_items.count(),
+            "rehearsal_count": self.rehearsals.count(),
+            "go_no_go_count": self.go_no_go_items.count(),
+            "incident_count": self.incidents.count(),
+            "sla_target_count": self.sla_targets.count(),
+        }
+        if include_children:
+            result["scope_items"] = [si.to_dict(include_children=True) for si in self.scope_items]
+            result["rehearsals"] = [r.to_dict() for r in self.rehearsals]
+            result["go_no_go_items"] = [g.to_dict() for g in self.go_no_go_items]
+        return result
+
+    def __repr__(self):
+        return f"<CutoverPlan {self.id}: {self.name} [{self.status}]>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 2. CutoverScopeItem
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class CutoverScopeItem(db.Model):
+    """
+    Category-based grouping of runbook tasks within a cutover plan.
+    Categories: data_load, interface, authorization, job_scheduling, reconciliation, custom.
+    Status is computed from child task statuses (not stored).
+    """
+
+    __tablename__ = "cutover_scope_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cutover_plan_id = db.Column(
+        db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    name = db.Column(db.String(200), nullable=False)
+    category = db.Column(
+        db.String(30), default="custom",
+        comment="data_load | interface | authorization | job_scheduling | reconciliation | custom",
+    )
+    description = db.Column(db.Text, default="")
+    owner = db.Column(db.String(100), default="")
+    order = db.Column(
+        db.Integer, default=0,
+        comment="Display order within the plan",
+    )
+
+    # Metadata
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # ── Constraints ──────────────────────────────────────────────────────
+    __table_args__ = (
+        db.CheckConstraint(
+            "category IN ('data_load','interface','authorization',"
+            "'job_scheduling','reconciliation','custom')",
+            name="ck_scope_item_category",
+        ),
+    )
+
+    # ── Relationships ────────────────────────────────────────────────────
+    runbook_tasks = db.relationship(
+        "RunbookTask", backref="scope_item", lazy="dynamic",
+        cascade="all, delete-orphan", order_by="RunbookTask.sequence",
+    )
+
+    def _compute_status(self):
+        """Derive status from child task statuses."""
+        tasks = self.runbook_tasks.all()
+        if not tasks:
+            return "not_started"
+        statuses = {t.status for t in tasks}
+        if statuses == {"completed"}:
+            return "completed"
+        if "failed" in statuses:
+            return "failed"
+        if statuses & {"in_progress", "completed"}:
+            return "in_progress"
+        return "not_started"
+
+    def to_dict(self, include_children=False):
+        task_count = self.runbook_tasks.count()
+        result = {
+            "id": self.id,
+            "cutover_plan_id": self.cutover_plan_id,
+            "name": self.name,
+            "category": self.category,
+            "description": self.description,
+            "owner": self.owner,
+            "order": self.order,
+            "status": self._compute_status(),
+            "task_count": task_count,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_children:
+            result["runbook_tasks"] = [t.to_dict() for t in self.runbook_tasks]
+        return result
+
+    def __repr__(self):
+        return f"<CutoverScopeItem {self.id}: {self.name} [{self.category}]>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 3. RunbookTask
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class RunbookTask(db.Model):
+    """
+    Individual executable step within a cutover scope item.
+    Code format: CUT-001-T047 (plan-scoped, auto-generated in service layer).
+    """
+
+    __tablename__ = "runbook_tasks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    scope_item_id = db.Column(
+        db.Integer, db.ForeignKey("cutover_scope_items.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    code = db.Column(
+        db.String(30), nullable=True,
+        comment="Auto-generated: CUT-001-T047 (plan-scoped)",
+    )
+    sequence = db.Column(
+        db.Integer, default=0,
+        comment="Execution order — plan-wide",
+    )
+    title = db.Column(db.String(300), nullable=False)
+    description = db.Column(db.Text, default="")
+
+    # Timing
+    planned_start = db.Column(db.DateTime(timezone=True), nullable=True)
+    planned_end = db.Column(db.DateTime(timezone=True), nullable=True)
+    planned_duration_min = db.Column(db.Integer, nullable=True)
+    actual_start = db.Column(db.DateTime(timezone=True), nullable=True)
+    actual_end = db.Column(db.DateTime(timezone=True), nullable=True)
+    actual_duration_min = db.Column(db.Integer, nullable=True)
+
+    # Responsibility (RACI)
+    responsible = db.Column(db.String(100), default="", comment="R — does the work")
+    accountable = db.Column(db.String(100), default="", comment="A — signs off")
+
+    # Execution
+    status = db.Column(
+        db.String(30), default="not_started",
+        comment="not_started | in_progress | completed | failed | skipped | rolled_back",
+    )
+    environment = db.Column(db.String(30), default="PRD")
+    executed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    executed_by = db.Column(db.String(100), default="")
+
+    # Rollback
+    rollback_action = db.Column(db.Text, default="")
+    rollback_decision_point = db.Column(db.String(300), default="")
+
+    # Cross-domain linkage
+    linked_entity_type = db.Column(
+        db.String(30), nullable=True,
+        comment="backlog_item | interface | data_object | config_item | test_case",
+    )
+    linked_entity_id = db.Column(db.Integer, nullable=True)
+
+    notes = db.Column(db.Text, default="")
+
+    # Metadata
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # ── Constraints ──────────────────────────────────────────────────────
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('not_started','in_progress','completed',"
+            "'failed','skipped','rolled_back')",
+            name="ck_runbook_task_status",
+        ),
+    )
+
+    # ── Relationships ────────────────────────────────────────────────────
+    predecessors = db.relationship(
+        "TaskDependency",
+        foreign_keys="TaskDependency.successor_id",
+        backref="successor_task",
+        lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    successors = db.relationship(
+        "TaskDependency",
+        foreign_keys="TaskDependency.predecessor_id",
+        backref="predecessor_task",
+        lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+
+    def to_dict(self, include_dependencies=False):
+        result = {
+            "id": self.id,
+            "scope_item_id": self.scope_item_id,
+            "code": self.code,
+            "sequence": self.sequence,
+            "title": self.title,
+            "description": self.description,
+            "planned_start": self.planned_start.isoformat() if self.planned_start else None,
+            "planned_end": self.planned_end.isoformat() if self.planned_end else None,
+            "planned_duration_min": self.planned_duration_min,
+            "actual_start": self.actual_start.isoformat() if self.actual_start else None,
+            "actual_end": self.actual_end.isoformat() if self.actual_end else None,
+            "actual_duration_min": self.actual_duration_min,
+            "responsible": self.responsible,
+            "accountable": self.accountable,
+            "status": self.status,
+            "environment": self.environment,
+            "executed_at": self.executed_at.isoformat() if self.executed_at else None,
+            "executed_by": self.executed_by,
+            "rollback_action": self.rollback_action,
+            "rollback_decision_point": self.rollback_decision_point,
+            "linked_entity_type": self.linked_entity_type,
+            "linked_entity_id": self.linked_entity_id,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_dependencies:
+            result["predecessor_ids"] = [
+                d.predecessor_id for d in self.predecessors
+            ]
+            result["successor_ids"] = [
+                d.successor_id for d in self.successors
+            ]
+        return result
+
+    def __repr__(self):
+        return f"<RunbookTask {self.id}: {self.code or '#'}{self.sequence} {self.title[:40]}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 4. TaskDependency
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class TaskDependency(db.Model):
+    """
+    Predecessor → Successor dependency between runbook tasks.
+    Dependency types: finish_to_start (default), start_to_start, finish_to_finish.
+    Supports optional lag time.
+    """
+
+    __tablename__ = "task_dependencies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    predecessor_id = db.Column(
+        db.Integer, db.ForeignKey("runbook_tasks.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    successor_id = db.Column(
+        db.Integer, db.ForeignKey("runbook_tasks.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    dependency_type = db.Column(
+        db.String(30), default="finish_to_start",
+        comment="finish_to_start | start_to_start | finish_to_finish",
+    )
+    lag_minutes = db.Column(db.Integer, default=0)
+
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    # ── Constraints ──────────────────────────────────────────────────────
+    __table_args__ = (
+        db.UniqueConstraint(
+            "predecessor_id", "successor_id",
+            name="uq_task_dep",
+        ),
+        db.CheckConstraint(
+            "predecessor_id != successor_id",
+            name="ck_dep_no_self_loop",
+        ),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "predecessor_id": self.predecessor_id,
+            "successor_id": self.successor_id,
+            "dependency_type": self.dependency_type,
+            "lag_minutes": self.lag_minutes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<TaskDependency {self.predecessor_id} → {self.successor_id}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 5. Rehearsal
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class Rehearsal(db.Model):
+    """
+    Cutover rehearsal (dry-run) execution record.
+    SAP best practice: at least 2-3 rehearsals before go-live.
+    """
+
+    __tablename__ = "rehearsals"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cutover_plan_id = db.Column(
+        db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    rehearsal_number = db.Column(
+        db.Integer, nullable=False,
+        comment="Sequential within plan: 1, 2, 3, ...",
+    )
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, default="")
+    status = db.Column(
+        db.String(30), default="planned",
+        comment="planned | in_progress | completed | cancelled",
+    )
+    environment = db.Column(db.String(30), default="QAS")
+
+    # Timing
+    planned_start = db.Column(db.DateTime(timezone=True), nullable=True)
+    planned_end = db.Column(db.DateTime(timezone=True), nullable=True)
+    planned_duration_min = db.Column(db.Integer, nullable=True)
+    actual_start = db.Column(db.DateTime(timezone=True), nullable=True)
+    actual_end = db.Column(db.DateTime(timezone=True), nullable=True)
+    actual_duration_min = db.Column(db.Integer, nullable=True)
+
+    # Outcome
+    total_tasks = db.Column(db.Integer, default=0)
+    completed_tasks = db.Column(db.Integer, default=0)
+    failed_tasks = db.Column(db.Integer, default=0)
+    skipped_tasks = db.Column(db.Integer, default=0)
+    duration_variance_pct = db.Column(
+        db.Float, nullable=True,
+        comment="(actual - planned) / planned × 100",
+    )
+    runbook_revision_needed = db.Column(db.Boolean, default=False)
+
+    # Findings
+    findings_summary = db.Column(db.Text, default="")
+
+    # Metadata
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # ── Constraints ──────────────────────────────────────────────────────
+    __table_args__ = (
+        db.UniqueConstraint(
+            "cutover_plan_id", "rehearsal_number",
+            name="uq_plan_rehearsal_no",
+        ),
+        db.CheckConstraint(
+            "status IN ('planned','in_progress','completed','cancelled')",
+            name="ck_rehearsal_status",
+        ),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "cutover_plan_id": self.cutover_plan_id,
+            "rehearsal_number": self.rehearsal_number,
+            "name": self.name,
+            "description": self.description,
+            "status": self.status,
+            "environment": self.environment,
+            "planned_start": self.planned_start.isoformat() if self.planned_start else None,
+            "planned_end": self.planned_end.isoformat() if self.planned_end else None,
+            "planned_duration_min": self.planned_duration_min,
+            "actual_start": self.actual_start.isoformat() if self.actual_start else None,
+            "actual_end": self.actual_end.isoformat() if self.actual_end else None,
+            "actual_duration_min": self.actual_duration_min,
+            "total_tasks": self.total_tasks,
+            "completed_tasks": self.completed_tasks,
+            "failed_tasks": self.failed_tasks,
+            "skipped_tasks": self.skipped_tasks,
+            "duration_variance_pct": self.duration_variance_pct,
+            "runbook_revision_needed": self.runbook_revision_needed,
+            "findings_summary": self.findings_summary,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self):
+        return f"<Rehearsal {self.id}: #{self.rehearsal_number} [{self.status}]>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 6. GoNoGoItem
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class GoNoGoItem(db.Model):
+    """
+    Readiness checklist item for the Go/No-Go decision pack.
+    Aggregated from all platform domains — each row is one readiness criterion.
+    """
+
+    __tablename__ = "go_no_go_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cutover_plan_id = db.Column(
+        db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    source_domain = db.Column(
+        db.String(30), default="custom",
+        comment="test_management | data_factory | integration_factory | "
+                "security | training | cutover_rehearsal | steering_signoff | custom",
+    )
+    criterion = db.Column(db.String(300), nullable=False)
+    description = db.Column(db.Text, default="")
+    verdict = db.Column(
+        db.String(20), default="pending",
+        comment="pending | go | no_go | waived",
+    )
+    evidence = db.Column(db.Text, default="")
+    evaluated_by = db.Column(db.String(100), default="")
+    evaluated_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    notes = db.Column(db.Text, default="")
+
+    # Metadata
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # ── Constraints ──────────────────────────────────────────────────────
+    __table_args__ = (
+        db.CheckConstraint(
+            "verdict IN ('pending','go','no_go','waived')",
+            name="ck_go_no_go_verdict",
+        ),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "cutover_plan_id": self.cutover_plan_id,
+            "source_domain": self.source_domain,
+            "criterion": self.criterion,
+            "description": self.description,
+            "verdict": self.verdict,
+            "evidence": self.evidence,
+            "evaluated_by": self.evaluated_by,
+            "evaluated_at": self.evaluated_at.isoformat() if self.evaluated_at else None,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self):
+        return f"<GoNoGoItem {self.id}: {self.criterion[:40]} [{self.verdict}]>"
+
+
+# ── Seed Helpers ─────────────────────────────────────────────────────────────
+
+
+def seed_default_go_no_go(cutover_plan_id):
+    """
+    Create the standard 7-item Go/No-Go checklist for a new cutover plan.
+    """
+    defaults = [
+        {
+            "source_domain": "test_management",
+            "criterion": "Open P1/P2 Defects = 0",
+            "description": "No critical or high-severity defects remain open in Test Management",
+        },
+        {
+            "source_domain": "data_factory",
+            "criterion": "Data Load Reconciliation Passed",
+            "description": "All data objects reconciled — loaded count matches source with <0.1% variance",
+        },
+        {
+            "source_domain": "integration_factory",
+            "criterion": "Interface Connectivity Verified",
+            "description": "All production interfaces tested end-to-end with successful connectivity",
+        },
+        {
+            "source_domain": "security",
+            "criterion": "Authorization Readiness Complete",
+            "description": "All roles provisioned, SOD conflicts resolved, UAM sign-off obtained",
+        },
+        {
+            "source_domain": "training",
+            "criterion": "Training Completion ≥ 90%",
+            "description": "End-user training completion rate meets minimum threshold",
+        },
+        {
+            "source_domain": "cutover_rehearsal",
+            "criterion": "Cutover Rehearsal Within Tolerance",
+            "description": "Latest rehearsal completed within ±15% of planned duration, no P1 issues",
+        },
+        {
+            "source_domain": "steering_signoff",
+            "criterion": "Steering Committee Sign-off",
+            "description": "Formal go-live approval from steering committee / project sponsor",
+        },
+    ]
+
+    items = []
+    for d in defaults:
+        items.append(GoNoGoItem(cutover_plan_id=cutover_plan_id, **d))
+    db.session.add_all(items)
+    db.session.flush()
+    return items
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 7. HypercareIncident
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class HypercareIncident(db.Model):
+    """
+    Post-go-live incident tracker within the hypercare window.
+    Code format: INC-001 (plan-scoped, auto-generated in service layer).
+    Tracks severity, SLA response / resolution times, and cross-domain linkage.
+    """
+
+    __tablename__ = "hypercare_incidents"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cutover_plan_id = db.Column(
+        db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    code = db.Column(
+        db.String(30), nullable=True,
+        comment="Auto-generated: INC-001 (plan-scoped)",
+    )
+    title = db.Column(db.String(300), nullable=False)
+    description = db.Column(db.Text, default="")
+    severity = db.Column(
+        db.String(10), nullable=False, default="P3",
+        comment="P1 | P2 | P3 | P4",
+    )
+    category = db.Column(
+        db.String(30), default="other",
+        comment="functional | technical | data | authorization | performance | other",
+    )
+    status = db.Column(
+        db.String(20), default="open",
+        comment="open | investigating | resolved | closed",
+    )
+
+    # People
+    reported_by = db.Column(db.String(100), default="")
+    reported_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    assigned_to = db.Column(db.String(100), default="")
+
+    # Resolution
+    resolution = db.Column(db.Text, default="")
+    resolved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    resolved_by = db.Column(db.String(100), default="")
+
+    # SLA tracking (minutes)
+    response_time_min = db.Column(
+        db.Integer, nullable=True,
+        comment="Actual response time in minutes (first action after report)",
+    )
+    resolution_time_min = db.Column(
+        db.Integer, nullable=True,
+        comment="Actual resolution time in minutes (reported → resolved)",
+    )
+
+    # Cross-domain linkage
+    linked_entity_type = db.Column(
+        db.String(30), nullable=True,
+        comment="backlog_item | interface | data_object | config_item | test_case",
+    )
+    linked_entity_id = db.Column(db.Integer, nullable=True)
+
+    notes = db.Column(db.Text, default="")
+
+    # Metadata
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # ── Constraints ──────────────────────────────────────────────────────
+    __table_args__ = (
+        db.CheckConstraint(
+            "severity IN ('P1','P2','P3','P4')",
+            name="ck_incident_severity",
+        ),
+        db.CheckConstraint(
+            "status IN ('open','investigating','resolved','closed')",
+            name="ck_incident_status",
+        ),
+        db.CheckConstraint(
+            "category IN ('functional','technical','data',"
+            "'authorization','performance','other')",
+            name="ck_incident_category",
+        ),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "cutover_plan_id": self.cutover_plan_id,
+            "code": self.code,
+            "title": self.title,
+            "description": self.description,
+            "severity": self.severity,
+            "category": self.category,
+            "status": self.status,
+            "reported_by": self.reported_by,
+            "reported_at": self.reported_at.isoformat() if self.reported_at else None,
+            "assigned_to": self.assigned_to,
+            "resolution": self.resolution,
+            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "resolved_by": self.resolved_by,
+            "response_time_min": self.response_time_min,
+            "resolution_time_min": self.resolution_time_min,
+            "linked_entity_type": self.linked_entity_type,
+            "linked_entity_id": self.linked_entity_id,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self):
+        return f"<HypercareIncident {self.id}: {self.code or '#'} [{self.severity}] {self.title[:40]}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 8. HypercareSLA
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class HypercareSLA(db.Model):
+    """
+    SLA targets per severity level for hypercare incidents.
+    SAP standard: P1 = 15 min response / 4hr resolution, P4 = 8hr / 5 days.
+    """
+
+    __tablename__ = "hypercare_sla_targets"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cutover_plan_id = db.Column(
+        db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    severity = db.Column(
+        db.String(10), nullable=False,
+        comment="P1 | P2 | P3 | P4",
+    )
+    response_target_min = db.Column(
+        db.Integer, nullable=False,
+        comment="Maximum response time in minutes",
+    )
+    resolution_target_min = db.Column(
+        db.Integer, nullable=False,
+        comment="Maximum resolution time in minutes",
+    )
+    escalation_after_min = db.Column(
+        db.Integer, nullable=True,
+        comment="Auto-escalation trigger after N minutes without response",
+    )
+    escalation_to = db.Column(
+        db.String(100), default="",
+        comment="Escalation contact (role or person)",
+    )
+    notes = db.Column(db.Text, default="")
+
+    # Metadata
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    # ── Constraints ──────────────────────────────────────────────────────
+    __table_args__ = (
+        db.UniqueConstraint(
+            "cutover_plan_id", "severity",
+            name="uq_sla_plan_severity",
+        ),
+        db.CheckConstraint(
+            "severity IN ('P1','P2','P3','P4')",
+            name="ck_sla_severity",
+        ),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "cutover_plan_id": self.cutover_plan_id,
+            "severity": self.severity,
+            "response_target_min": self.response_target_min,
+            "resolution_target_min": self.resolution_target_min,
+            "escalation_after_min": self.escalation_after_min,
+            "escalation_to": self.escalation_to,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<HypercareSLA {self.id}: {self.severity} resp={self.response_target_min}m res={self.resolution_target_min}m>"
+
+
+# ── Hypercare Seed Helper ────────────────────────────────────────────────────
+
+
+def seed_default_sla_targets(cutover_plan_id):
+    """
+    Create SAP-standard SLA targets for P1–P4 severity levels.
+    P1: 15 min response, 4 hr resolution
+    P2: 30 min response, 8 hr resolution
+    P3: 4 hr response, 3 business-day resolution
+    P4: 8 hr response, 5 business-day resolution
+    """
+    defaults = [
+        {
+            "severity": "P1",
+            "response_target_min": 15,
+            "resolution_target_min": 240,
+            "escalation_after_min": 10,
+            "escalation_to": "Hypercare Manager",
+            "notes": "Critical — system down or data loss risk",
+        },
+        {
+            "severity": "P2",
+            "response_target_min": 30,
+            "resolution_target_min": 480,
+            "escalation_after_min": 20,
+            "escalation_to": "Hypercare Manager",
+            "notes": "High — major function impaired, workaround possible",
+        },
+        {
+            "severity": "P3",
+            "response_target_min": 240,
+            "resolution_target_min": 1440,
+            "escalation_after_min": 120,
+            "escalation_to": "Module Lead",
+            "notes": "Medium — minor function impaired",
+        },
+        {
+            "severity": "P4",
+            "response_target_min": 480,
+            "resolution_target_min": 2400,
+            "escalation_after_min": 240,
+            "escalation_to": "Module Lead",
+            "notes": "Low — cosmetic or enhancement request",
+        },
+    ]
+
+    items = []
+    for d in defaults:
+        items.append(HypercareSLA(cutover_plan_id=cutover_plan_id, **d))
+    db.session.add_all(items)
+    db.session.flush()
+    return items

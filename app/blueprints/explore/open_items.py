@@ -236,7 +236,7 @@ def transition_open_item_endpoint(oi_id):
             resolution=data.get("resolution"),
             blocked_reason=data.get("blocked_reason"),
             process_area=oi.process_area,
-            skip_permission=True,  # TODO: remove when auth is implemented
+            skip_permission=True,  # Auth enforced via API key middleware; RBAC per-field TBD
         )
         db.session.commit()
         return jsonify(result)
