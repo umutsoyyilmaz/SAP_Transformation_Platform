@@ -23,6 +23,9 @@ from app.tenant import init_tenant_support
 from app.middleware.logging_config import configure_logging
 from app.middleware.timing import init_request_timing
 from app.middleware.diagnostics import run_startup_diagnostics
+from app.middleware.security_headers import init_security_headers
+from app.middleware.basic_auth import init_basic_auth
+from app.middleware.rate_limiter import init_rate_limits
 
 # ── SQLite FK enforcement (global engine event) ─────────────────────────
 from sqlalchemy import event as _sa_event, engine as _sa_engine
@@ -40,7 +43,7 @@ migrate = Migrate()
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=[],                     # no global limit — apply per-blueprint
-    storage_uri="memory://",               # use Redis URI in production
+    storage_uri=os.getenv("REDIS_URL", "memory://"),  # Redis in production, memory for dev
 )
 
 
@@ -83,6 +86,10 @@ def create_app(config_name=None):
     # ── Authentication & CSRF middleware ──────────────────────────────────
     init_auth(app)
 
+    # ── Security headers (CSP, HSTS, X-Frame-Options, etc.) ─────────────
+    init_security_headers(app)
+    init_basic_auth(app)
+
     # ── Request timing middleware ────────────────────────────────────────
     init_request_timing(app)
 
@@ -119,6 +126,9 @@ def create_app(config_name=None):
     from app.models import explore as _explore_models       # noqa: F401
     from app.models import data_factory as _data_factory_models  # noqa: F401
     from app.models import audit as _audit_models           # noqa: F401
+    from app.models import cutover as _cutover_models       # noqa: F401
+    from app.models import scheduling as _scheduling_models   # noqa: F401
+    from app.models import run_sustain as _run_sustain_models  # noqa: F401
 
     # ── Blueprints ───────────────────────────────────────────────────────
     from app.blueprints.program_bp import program_bp
@@ -133,6 +143,10 @@ def create_app(config_name=None):
     from app.blueprints.data_factory_bp import data_factory_bp
     from app.blueprints.reporting_bp import reporting_bp
     from app.blueprints.audit_bp import audit_bp
+    from app.blueprints.cutover_bp import cutover_bp
+    from app.blueprints.notification_bp import notification_bp
+    from app.blueprints.run_sustain_bp import run_sustain_bp
+    from app.blueprints.pwa_bp import pwa_bp
 
     app.register_blueprint(program_bp)
     app.register_blueprint(backlog_bp)
@@ -146,6 +160,10 @@ def create_app(config_name=None):
     app.register_blueprint(data_factory_bp)
     app.register_blueprint(reporting_bp)
     app.register_blueprint(audit_bp)
+    app.register_blueprint(cutover_bp)
+    app.register_blueprint(notification_bp)
+    app.register_blueprint(run_sustain_bp)
+    app.register_blueprint(pwa_bp)
 
     # ── SPA catch-all ────────────────────────────────────────────────────
     @app.route("/")
@@ -157,7 +175,41 @@ def create_app(config_name=None):
     def health():
         return {"status": "ok", "app": "SAP Transformation Platform"}
 
+    # ── Error handlers (S24: Final Polish) ───────────────────────────────
+    @app.errorhandler(404)
+    def not_found(e):
+        from flask import request
+        if request.path.startswith("/api/"):
+            return {"error": "Not found", "path": request.path}, 404
+        return send_from_directory(app.template_folder, "index.html")
+
+    @app.errorhandler(500)
+    def server_error(e):
+        from flask import request
+        import logging
+        logging.getLogger(__name__).error(f"500 error: {e}", exc_info=True)
+        if request.path.startswith("/api/"):
+            return {"error": "Internal server error"}, 500
+        return "<h1>500 — Internal Server Error</h1><p>An unexpected error occurred.</p>", 500
+
+    @app.errorhandler(405)
+    def method_not_allowed(e):
+        return {"error": "Method not allowed"}, 405
+
+    @app.errorhandler(429)
+    def rate_limited(e):
+        return {"error": "Too many requests", "retry_after": e.description}, 429
+
     # ── Startup diagnostics ──────────────────────────────────────────────
     run_startup_diagnostics(app)
+
+    # ── Rate limiting (after blueprints registered) ──────────────────────
+    init_rate_limits(app, limiter)
+
+    # ── Scheduler initialization (import jobs to register them) ──────────
+    import importlib
+    importlib.import_module("app.services.scheduled_jobs")  # registers @register_job handlers
+    from app.services.scheduler_service import SchedulerService as _SchedulerSvc
+    _SchedulerSvc.init_app(app)
 
     return app
