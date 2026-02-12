@@ -1,0 +1,6 @@
+{
+  "default": {
+    "db_name": "sap_platform_dev",
+    "display_name": "Development (Default)"
+  }
+}

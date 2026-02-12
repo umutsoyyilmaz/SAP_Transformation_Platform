@@ -1,0 +1,67 @@
+# SAP Transformation Management Platform
+# Docker Compose — Multi-Tenant Production
+# Each tenant gets an isolated PostgreSQL database.
+#
+# Usage:
+#   docker compose -f docker/docker-compose.tenant.yml up --build
+#
+# Tenant onboarding:
+#   docker compose exec app python scripts/manage_tenants.py create acme --name "Acme Corp"
+#   docker compose exec app python scripts/manage_tenants.py init acme
+#   docker compose exec app python scripts/manage_tenants.py seed acme
+#
+# Tenant DB'leri aynı PostgreSQL instance üzerinde farklı database olarak oluşturulur.
+# Her tenant için ayrı PostgreSQL instance GEREKMEZ — tek pg, çoklu database.
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://sap_user:sap_pass@postgres:5432/sap_platform_dev}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set}
+      # Tenant mode: resolver checks X-Tenant-ID header
+      TENANT_MODE: "multi"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ../tenants.json:/app/tenants.json:ro
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: sap_user
+      POSTGRES_PASSWORD: sap_pass
+      POSTGRES_DB: sap_platform_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_tenant:/var/lib/postgresql/data
+      - ./init-tenant-dbs.sh:/docker-entrypoint-initdb.d/init-tenant-dbs.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sap_user -d sap_platform_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata_tenant:/data
+    restart: unless-stopped
+
+volumes:
+  pgdata_tenant:
+  redisdata_tenant:
