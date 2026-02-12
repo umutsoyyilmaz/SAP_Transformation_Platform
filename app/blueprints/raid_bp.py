@@ -136,6 +136,8 @@ def create_risk(pid):
         trigger_event=data.get("trigger_event", ""),
         workstream_id=data.get("workstream_id"),
         phase_id=data.get("phase_id"),
+        explore_requirement_id=data.get("explore_requirement_id"),
+        workshop_id=data.get("workshop_id"),
     )
     db.session.add(risk)
     try:
@@ -190,6 +192,10 @@ def update_risk(rid):
         risk.workstream_id = data["workstream_id"]
     if "phase_id" in data:
         risk.phase_id = data["phase_id"]
+    if "explore_requirement_id" in data:
+        risk.explore_requirement_id = data["explore_requirement_id"]
+    if "workshop_id" in data:
+        risk.workshop_id = data["workshop_id"]
 
     try:
         db.session.commit()
@@ -430,6 +436,8 @@ def create_issue(pid):
         resolution_date=_parse_date(data.get("resolution_date")),
         workstream_id=data.get("workstream_id"),
         phase_id=data.get("phase_id"),
+        explore_requirement_id=data.get("explore_requirement_id"),
+        workshop_id=data.get("workshop_id"),
     )
     db.session.add(issue)
     try:
@@ -473,6 +481,10 @@ def update_issue(iid):
         issue.workstream_id = data["workstream_id"]
     if "phase_id" in data:
         issue.phase_id = data["phase_id"]
+    if "explore_requirement_id" in data:
+        issue.explore_requirement_id = data["explore_requirement_id"]
+    if "workshop_id" in data:
+        issue.workshop_id = data["workshop_id"]
 
     # Auto-set resolution_date on resolve
     if data.get("status") in ("resolved", "closed") and not issue.resolution_date:

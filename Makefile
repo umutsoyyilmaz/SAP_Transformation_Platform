@@ -19,8 +19,9 @@ PYTEST   := .venv/bin/python -m pytest
 DB_FILE  := instance/sap_platform_dev.db
 PORT     := 5001
 
-.PHONY: help setup venv deps db-init db-migrate db-upgrade seed seed-verbose \
-        run test test-verbose reset clean deploy status
+.PHONY: help setup venv deps db-init db-migrate db-upgrade seed seed-verbose seed-demo \
+	run test test-verbose lint format reset clean deploy status \
+	tenant-list tenant-create tenant-init tenant-seed tenant-status
 
 # ── Default ──────────────────────────────────────────────────────────────
 help:
@@ -35,6 +36,8 @@ help:
 	@echo "    make run            Uygulamayı başlat (http://localhost:$(PORT))"
 	@echo "    make test           Tüm testleri çalıştır"
 	@echo "    make test-verbose   Detaylı test çıktısı"
+	@echo "    make lint           Kod kalite kontrolü (ruff)"
+	@echo "    make format         Kod formatlama (ruff format)"
 	@echo "    make seed           Demo verileri yükle (mevcut veriyi temizler)"
 	@echo "    make seed-verbose   Demo verileri yükle (detaylı çıktı)"
 	@echo ""
@@ -42,6 +45,16 @@ help:
 	@echo "    make deploy         Sprint deploy: migrate → seed → test → run"
 	@echo "    make reset          DB sıfırla + yeniden oluştur + seed"
 	@echo "    make status         Proje durumunu göster"
+	@echo ""
+	@echo "  Demo:"
+	@echo "    make seed-demo      Hızlı demo environment (reset + seed, 3 dk)"
+	@echo ""
+	@echo "  Tenant Yönetimi:"
+	@echo "    make tenant-list    Kayıtlı tenant'ları listele"
+	@echo "    make tenant-status  Tenant DB durumlarını göster"
+	@echo "    make tenant-create ID=acme NAME='Acme Corp'  Yeni tenant oluştur"
+	@echo "    make tenant-init ID=acme    Tenant DB tablolarını oluştur"
+	@echo "    make tenant-seed ID=acme    Tenant'a demo veri yükle"
 	@echo ""
 	@echo "  Bakım:"
 	@echo "    make db-migrate     Yeni migration oluştur"
@@ -119,6 +132,17 @@ test-verbose: deps
 	@GEMINI_API_KEY= $(PYTEST) tests/ -v --tb=long -s
 	@echo ""
 
+# ── Lint & Format ───────────────────────────────────────────────────────
+lint: deps
+	@$(PYTHON) -m ruff --version >/dev/null 2>&1 || (echo "⚠️  ruff yüklü değil. 'pip install ruff' ile kurun."; exit 1)
+	@echo "🔍 ruff ile lint çalışıyor..."
+	@$(PYTHON) -m ruff check .
+
+format: deps
+	@$(PYTHON) -m ruff --version >/dev/null 2>&1 || (echo "⚠️  ruff yüklü değil. 'pip install ruff' ile kurun."; exit 1)
+	@echo "✨ ruff format çalışıyor..."
+	@$(PYTHON) -m ruff format .
+
 # ── Full Setup (first time) ────────────────────────────────────────────
 setup: deps db-init seed
 	@echo ""
@@ -185,3 +209,37 @@ status:
 		$(PYTHON) scripts/db_status.py; \
 	fi
 	@echo ""
+
+# ── Demo Environment ────────────────────────────────────────────────────
+seed-demo: deps
+	@echo ""
+	@$(PYTHON) scripts/seed_quick_demo.py
+	@echo ""
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo "  ✅ DEMO ENVIRONMENT HAZIR!"
+	@echo "═══════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "  Uygulamayı başlatmak için:"
+	@echo "    make run"
+	@echo ""
+	@echo "  Tarayıcıda açın: http://localhost:$(PORT)"
+	@echo ""
+
+# ── Tenant Management ──────────────────────────────────────────────────
+tenant-list: deps
+	@$(PYTHON) scripts/manage_tenants.py list
+
+tenant-status: deps
+	@$(PYTHON) scripts/manage_tenants.py status
+
+tenant-create: deps
+	@if [ -z "$(ID)" ]; then echo "  ❌ Kullanım: make tenant-create ID=acme NAME='Acme Corp'"; exit 1; fi
+	@$(PYTHON) scripts/manage_tenants.py create $(ID) --name "$(NAME)"
+
+tenant-init: deps
+	@if [ -z "$(ID)" ]; then echo "  ❌ Kullanım: make tenant-init ID=acme"; exit 1; fi
+	@$(PYTHON) scripts/manage_tenants.py init $(ID)
+
+tenant-seed: deps
+	@if [ -z "$(ID)" ]; then echo "  ❌ Kullanım: make tenant-seed ID=acme"; exit 1; fi
+	@$(PYTHON) scripts/manage_tenants.py seed $(ID)

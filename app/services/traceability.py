@@ -572,3 +572,161 @@ def _program_interface_summary(program_id):
             "by_status": {w.status: sum(1 for ww in waves if ww.status == w.status) for w in waves},
         },
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# WR-2.4 — Explore Requirement FK-chain traceability (NO new table)
+# Chain: ExploreRequirement → BacklogItem / ConfigItem → TestCase → Defect
+#                           ↔ ExploreOpenItem (via RequirementOpenItemLink)
+# ══════════════════════════════════════════════════════════════════════════════
+
+from app.models.explore import (
+    ExploreOpenItem,
+    ExploreRequirement,
+    RequirementOpenItemLink,
+)
+
+
+def trace_explore_requirement(requirement_id: str) -> dict:
+    """
+    Build a full traceability graph for a single *ExploreRequirement*.
+
+    Returns:
+        {
+            "requirement": {id, code, title, status, priority, type},
+            "backlog_items": [...],
+            "config_items": [...],
+            "test_cases": [...],
+            "defects": [...],
+            "open_items": [...],
+            "coverage": {backlog, config, test, defect, open_item},
+            "chain_depth": int,     # max downstream depth reached
+        }
+
+    Raises ``ValueError`` if the requirement does not exist.
+    """
+    req = ExploreRequirement.query.get(requirement_id)
+    if not req:
+        raise ValueError(f"Explore requirement not found: {requirement_id}")
+
+    # ── 1. Backlog items (WRICEF) ────────────────────────────────────────
+    backlog_items = BacklogItem.query.filter_by(
+        explore_requirement_id=requirement_id,
+    ).all()
+
+    # ── 2. Config items ──────────────────────────────────────────────────
+    config_items = ConfigItem.query.filter_by(
+        explore_requirement_id=requirement_id,
+    ).all()
+
+    # ── 3. Test cases (via backlog_item_id OR direct explore_req FK) ─────
+    backlog_ids = [b.id for b in backlog_items]
+
+    tc_via_backlog: list[TestCase] = []
+    if backlog_ids:
+        tc_via_backlog = TestCase.query.filter(
+            TestCase.backlog_item_id.in_(backlog_ids),
+        ).all()
+
+    tc_via_direct = TestCase.query.filter_by(
+        explore_requirement_id=requirement_id,
+    ).all()
+
+    tc_map: dict[int, TestCase] = {}
+    for tc in tc_via_backlog + tc_via_direct:
+        tc_map[tc.id] = tc
+    test_cases = list(tc_map.values())
+
+    # ── 4. Defects (via test_case_id OR direct explore_req FK) ───────────
+    tc_ids = [tc.id for tc in test_cases]
+
+    d_via_tc: list[Defect] = []
+    if tc_ids:
+        d_via_tc = Defect.query.filter(
+            Defect.test_case_id.in_(tc_ids),
+        ).all()
+
+    d_via_direct = Defect.query.filter_by(
+        explore_requirement_id=requirement_id,
+    ).all()
+
+    d_map: dict[int, Defect] = {}
+    for d in d_via_tc + d_via_direct:
+        d_map[d.id] = d
+    defects = list(d_map.values())
+
+    # ── 5. Open items (M:N via RequirementOpenItemLink) ──────────────────
+    links = RequirementOpenItemLink.query.filter_by(
+        requirement_id=requirement_id,
+    ).all()
+    oi_ids = [lnk.open_item_id for lnk in links]
+    open_items: list[ExploreOpenItem] = []
+    if oi_ids:
+        open_items = ExploreOpenItem.query.filter(
+            ExploreOpenItem.id.in_(oi_ids),
+        ).all()
+
+    # ── 6. Coverage & depth ──────────────────────────────────────────────
+    coverage = {
+        "backlog": len(backlog_items),
+        "config": len(config_items),
+        "test": len(test_cases),
+        "defect": len(defects),
+        "open_item": len(open_items),
+    }
+
+    depth = 1  # requirement itself
+    if backlog_items or config_items:
+        depth = 2
+    if test_cases:
+        depth = 3
+    if defects:
+        depth = 4
+
+    return {
+        "requirement": {
+            "id": req.id,
+            "code": req.code,
+            "title": req.title,
+            "status": req.status,
+            "priority": req.priority,
+            "type": req.type,
+        },
+        "backlog_items": [
+            {"id": b.id, "code": getattr(b, "code", ""), "title": b.title,
+             "status": b.status, "type": getattr(b, "wricef_type", "")}
+            for b in backlog_items
+        ],
+        "config_items": [
+            {"id": c.id, "code": c.code, "title": c.title, "status": c.status}
+            for c in config_items
+        ],
+        "test_cases": [
+            {"id": tc.id, "code": getattr(tc, "code", ""), "title": tc.title,
+             "status": tc.status, "result": getattr(tc, "result", None)}
+            for tc in test_cases
+        ],
+        "defects": [
+            {"id": d.id, "code": getattr(d, "code", ""), "title": d.title,
+             "status": d.status, "severity": getattr(d, "severity", "")}
+            for d in defects
+        ],
+        "open_items": [
+            {"id": oi.id, "code": oi.code, "title": oi.title,
+             "status": oi.status, "priority": oi.priority}
+            for oi in open_items
+        ],
+        "coverage": coverage,
+        "chain_depth": depth,
+    }
+
+
+def trace_explore_batch(requirement_ids: list[str]) -> list[dict]:
+    """Trace multiple explore requirements in one call."""
+    results = []
+    for rid in requirement_ids:
+        try:
+            results.append(trace_explore_requirement(rid))
+        except ValueError:
+            results.append({"requirement_id": rid, "error": "not_found"})
+    return results

@@ -31,6 +31,14 @@ Endpoints:
 
     DEFECT TRIAGE /api/v1/ai/triage/defect/<id>             POST  (Sprint 8)
                   /api/v1/ai/triage/defect/batch            POST  (Sprint 8)
+
+    RISK ASSESSMENT /api/v1/ai/assess/risk/<pid>             POST (Sprint 12)
+                    /api/v1/ai/assess/risk/<pid>/signals      GET  (Sprint 12)
+
+    TEST CASES     /api/v1/ai/generate/test-cases            POST (Sprint 12)
+                   /api/v1/ai/generate/test-cases/batch      POST (Sprint 12)
+
+    CHANGE IMPACT  /api/v1/ai/analyze/change-impact          POST (Sprint 12)
 """
 
 from datetime import datetime, timezone
@@ -655,6 +663,128 @@ def triage_defects_batch():
         create_suggestion=data.get("create_suggestion", True),
     )
     return jsonify({"results": results, "total": len(results)})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# RISK ASSESSMENT (Sprint 12)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@ai_bp.route("/assess/risk/<int:program_id>", methods=["POST"])
+@_ai_generate_limit
+def assess_risk(program_id):
+    """POST /api/v1/ai/assess/risk/<pid> - Run AI risk assessment."""
+    from app.ai.assistants.risk_assessment import RiskAssessment
+
+    assistant = RiskAssessment(
+        gateway=_get_gateway(),
+        rag=_get_rag(),
+        prompt_registry=_get_prompt_registry(),
+        suggestion_queue=SuggestionQueue(),
+    )
+    result = assistant.assess(program_id)
+    status = 200 if not result.get("error") else 500
+    return jsonify(result), status
+
+
+@ai_bp.route("/assess/risk/<int:program_id>/signals", methods=["GET"])
+def risk_signals(program_id):
+    """GET /api/v1/ai/assess/risk/<pid>/signals - Get raw project signals."""
+    from app.ai.assistants.risk_assessment import RiskAssessment
+
+    assistant = RiskAssessment()
+    signals = assistant._gather_signals(program_id)
+    return jsonify(signals), 200
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TEST CASE GENERATOR (Sprint 12)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@ai_bp.route("/generate/test-cases", methods=["POST"])
+@_ai_generate_limit
+def generate_test_cases():
+    """
+    POST /api/v1/ai/generate/test-cases
+    Body: { requirement_id: int?, process_step: str?, module: str, test_layer: str }
+    """
+    from app.ai.assistants.test_case_generator import TestCaseGenerator
+
+    data = request.get_json(silent=True) or {}
+    assistant = TestCaseGenerator(
+        gateway=_get_gateway(),
+        rag=_get_rag(),
+        prompt_registry=_get_prompt_registry(),
+        suggestion_queue=SuggestionQueue(),
+    )
+    result = assistant.generate(
+        requirement_id=data.get("requirement_id"),
+        process_step=data.get("process_step"),
+        module=data.get("module", "FI"),
+        test_layer=data.get("test_layer", "sit"),
+    )
+    status = 200 if not result.get("error") else 500
+    return jsonify(result), status
+
+
+@ai_bp.route("/generate/test-cases/batch", methods=["POST"])
+@_ai_generate_limit
+def generate_test_cases_batch():
+    """
+    POST /api/v1/ai/generate/test-cases/batch
+    Body: { requirement_ids: [int], module: str, test_layer: str }
+    """
+    from app.ai.assistants.test_case_generator import TestCaseGenerator
+
+    data = request.get_json(silent=True) or {}
+    ids = data.get("requirement_ids", [])
+    if not ids:
+        return jsonify({"error": "requirement_ids array is required"}), 400
+
+    assistant = TestCaseGenerator(
+        gateway=_get_gateway(),
+        rag=_get_rag(),
+        prompt_registry=_get_prompt_registry(),
+        suggestion_queue=SuggestionQueue(),
+    )
+    results = [
+        assistant.generate(
+            requirement_id=req_id,
+            module=data.get("module", "FI"),
+            test_layer=data.get("test_layer", "sit"),
+        )
+        for req_id in ids
+    ]
+    return jsonify({"results": results, "total": len(results)})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CHANGE IMPACT ANALYZER (Sprint 12)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@ai_bp.route("/analyze/change-impact", methods=["POST"])
+@_ai_generate_limit
+def analyze_change_impact():
+    """
+    POST /api/v1/ai/analyze/change-impact
+    Body: { change_description: str, program_id: int, entity_type?: str, entity_id?: int }
+    """
+    from app.ai.assistants.change_impact import ChangeImpactAnalyzer
+
+    data = request.get_json(silent=True) or {}
+    assistant = ChangeImpactAnalyzer(
+        gateway=_get_gateway(),
+        rag=_get_rag(),
+        prompt_registry=_get_prompt_registry(),
+        suggestion_queue=SuggestionQueue(),
+    )
+    result = assistant.analyze(
+        change_description=data.get("change_description", ""),
+        program_id=data.get("program_id"),
+        entity_type=data.get("entity_type"),
+        entity_id=data.get("entity_id"),
+    )
+    status = 200 if not result.get("error") else 500
+    return jsonify(result), status
 
 
 # ══════════════════════════════════════════════════════════════════════════════

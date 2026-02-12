@@ -32,6 +32,8 @@ from app.models.requirement import Requirement
 from app.models.testing import (
     TestPlan, TestCycle, TestCase, TestExecution, Defect,
     TestSuite, TestStep, TestCaseDependency, TestCycleSuite,
+    UATSignOff, PerfTestResult, TestDailySnapshot,
+    VALID_TRANSITIONS, validate_defect_transition,
 )
 
 
@@ -81,9 +83,20 @@ def _create_program(client, name="Test Program"):
 def _create_requirement(client, pid, **overrides):
     payload = {"title": "Test Requirement", "code": "REQ-001", "priority": "must"}
     payload.update(overrides)
-    res = client.post(f"/api/v1/programs/{pid}/requirements", json=payload)
-    assert res.status_code == 201
-    return res.get_json()
+    req = Requirement(
+        program_id=pid,
+        title=payload["title"],
+        code=payload.get("code", ""),
+        priority=payload.get("priority", "medium"),
+        req_type=payload.get("req_type", "functional"),
+        status=payload.get("status", "draft"),
+        module=payload.get("module", ""),
+        process_id=payload.get("process_id"),
+        workshop_id=payload.get("workshop_id"),
+    )
+    _db.session.add(req)
+    _db.session.commit()
+    return req.to_dict()
 
 
 def _create_plan(client, pid, **overrides):
@@ -119,7 +132,7 @@ def _create_execution(client, cycle_id, case_id, **overrides):
 
 
 def _create_defect(client, pid, **overrides):
-    payload = {"title": "FI posting fails for cross-company", "severity": "P2", "module": "FI"}
+    payload = {"title": "FI posting fails for cross-company", "severity": "S2", "module": "FI"}
     payload.update(overrides)
     res = client.post(f"/api/v1/programs/{pid}/testing/defects", json=payload)
     assert res.status_code == 201
@@ -432,13 +445,13 @@ class TestDefects:
         p = _create_program(client)
         d = _create_defect(client, p["id"])
         assert d["title"] == "FI posting fails for cross-company"
-        assert d["severity"] == "P2"
+        assert d["severity"] == "S2"
         assert d["status"] == "new"
         assert d["code"].startswith("DEF-")
 
     def test_create_defect_no_title(self, client):
         p = _create_program(client)
-        res = client.post(f"/api/v1/programs/{p['id']}/testing/defects", json={"severity": "P1"})
+        res = client.post(f"/api/v1/programs/{p['id']}/testing/defects", json={"severity": "S1"})
         assert res.status_code == 400
 
     def test_list_defects(self, client):
@@ -450,9 +463,9 @@ class TestDefects:
 
     def test_filter_by_severity(self, client):
         p = _create_program(client)
-        _create_defect(client, p["id"], title="P1 defect", severity="P1")
-        _create_defect(client, p["id"], title="P3 defect", severity="P3")
-        res = client.get(f"/api/v1/programs/{p['id']}/testing/defects?severity=P1")
+        _create_defect(client, p["id"], title="S1 defect", severity="S1")
+        _create_defect(client, p["id"], title="S3 defect", severity="S3")
+        res = client.get(f"/api/v1/programs/{p['id']}/testing/defects?severity=S1")
         assert len(res.get_json()["items"]) == 1
 
     def test_filter_by_status(self, client):
@@ -478,8 +491,13 @@ class TestDefects:
     def test_update_defect(self, client):
         p = _create_program(client)
         d = _create_defect(client, p["id"])
+        # new → assigned (valid transition)
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={
+            "status": "assigned", "assigned_to": "mehmet.ozturk",
+        })
+        # assigned → in_progress
         res = client.put(f"/api/v1/testing/defects/{d['id']}", json={
-            "status": "in_progress", "assigned_to": "mehmet.ozturk",
+            "status": "in_progress",
         })
         data = res.get_json()
         assert data["status"] == "in_progress"
@@ -488,8 +506,12 @@ class TestDefects:
     def test_defect_reopen_increments_count(self, client):
         p = _create_program(client)
         d = _create_defect(client, p["id"])
-        # Move to fixed then reopen
-        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "fixed"})
+        # Follow valid transitions: new → assigned → in_progress → resolved → retest → closed → reopened
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "assigned"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "in_progress"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "resolved"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "retest"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "closed"})
         res = client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "reopened"})
         data = res.get_json()
         assert data["reopen_count"] == 1
@@ -498,6 +520,11 @@ class TestDefects:
     def test_defect_close_sets_resolved_at(self, client):
         p = _create_program(client)
         d = _create_defect(client, p["id"])
+        # Follow valid path: new → assigned → in_progress → resolved → retest → closed
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "assigned"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "in_progress"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "resolved"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "retest"})
         res = client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "closed"})
         data = res.get_json()
         assert data["resolved_at"] is not None
@@ -606,8 +633,8 @@ class TestDashboard:
         tc2 = _create_case(client, p["id"], title="TC2")
         _create_execution(client, cycle["id"], tc1["id"], result="pass")
         _create_execution(client, cycle["id"], tc2["id"], result="fail")
-        _create_defect(client, p["id"], title="Bug 1", severity="P1")
-        _create_defect(client, p["id"], title="Bug 2", severity="P3")
+        _create_defect(client, p["id"], title="Bug 1", severity="S1")
+        _create_defect(client, p["id"], title="Bug 2", severity="S3")
 
         res = client.get(f"/api/v1/programs/{p['id']}/testing/dashboard")
         data = res.get_json()
@@ -616,8 +643,8 @@ class TestDashboard:
         assert data["total_passed"] == 1
         assert data["pass_rate"] == 50.0
         assert data["total_defects"] == 2
-        assert data["severity_distribution"]["P1"] == 1
-        assert data["severity_distribution"]["P3"] == 1
+        assert data["severity_distribution"]["S1"] == 1
+        assert data["severity_distribution"]["S3"] == 1
 
     def test_dashboard_coverage(self, client):
         p = _create_program(client)
@@ -641,8 +668,8 @@ class TestDashboard:
 
     def test_dashboard_defect_velocity(self, client):
         p = _create_program(client)
-        _create_defect(client, p["id"], title="Bug A", severity="P1")
-        _create_defect(client, p["id"], title="Bug B", severity="P2")
+        _create_defect(client, p["id"], title="Bug A", severity="S1")
+        _create_defect(client, p["id"], title="Bug B", severity="S2")
         res = client.get(f"/api/v1/programs/{p['id']}/testing/dashboard")
         data = res.get_json()
         assert "defect_velocity" in data
@@ -1282,22 +1309,23 @@ class TestDefectHistory:
     def test_history_auto_on_status_change(self, client):
         p = _create_program(client)
         defect = _create_defect(client, p["id"])
+        # new → assigned (valid transition)
         client.put(f"/api/v1/testing/defects/{defect['id']}",
-                   json={"status": "in_progress", "changed_by": "Dev A"})
+                   json={"status": "assigned", "changed_by": "Dev A"})
         res = client.get(f"/api/v1/testing/defects/{defect['id']}/history")
         assert res.status_code == 200
         entries = res.get_json()
         assert len(entries) >= 1
         status_entry = [e for e in entries if e["field"] == "status"]
         assert len(status_entry) == 1
-        assert status_entry[0]["new_value"] == "in_progress"
+        assert status_entry[0]["new_value"] == "assigned"
         assert status_entry[0]["changed_by"] == "Dev A"
 
     def test_history_multi_field_change(self, client):
         p = _create_program(client)
         defect = _create_defect(client, p["id"])
         client.put(f"/api/v1/testing/defects/{defect['id']}",
-                   json={"severity": "P1", "assigned_to": "Elif Kara",
+                   json={"severity": "S1", "assigned_to": "Elif Kara",
                          "changed_by": "PM"})
         res = client.get(f"/api/v1/testing/defects/{defect['id']}/history")
         entries = res.get_json()
@@ -1311,7 +1339,7 @@ class TestDefectHistory:
         defect = _create_defect(client, p["id"])
         # Update with same severity
         client.put(f"/api/v1/testing/defects/{defect['id']}",
-                   json={"severity": "P2"})
+                   json={"severity": "S2"})
         res = client.get(f"/api/v1/testing/defects/{defect['id']}/history")
         entries = res.get_json()
         sev_entries = [e for e in entries if e["field"] == "severity"]
@@ -1324,6 +1352,12 @@ class TestDefectHistory:
     def test_history_reopen_creates_entry(self, client):
         p = _create_program(client)
         defect = _create_defect(client, p["id"])
+        # Follow valid path to closed, then reopen
+        client.put(f"/api/v1/testing/defects/{defect['id']}", json={"status": "assigned"})
+        client.put(f"/api/v1/testing/defects/{defect['id']}", json={"status": "in_progress"})
+        client.put(f"/api/v1/testing/defects/{defect['id']}", json={"status": "resolved"})
+        client.put(f"/api/v1/testing/defects/{defect['id']}", json={"status": "retest"})
+        client.put(f"/api/v1/testing/defects/{defect['id']}", json={"status": "closed"})
         client.put(f"/api/v1/testing/defects/{defect['id']}",
                    json={"status": "reopened", "changed_by": "QA"})
         # Reopen should increment reopen_count
@@ -1436,3 +1470,652 @@ class TestDefectLinks:
         data = res.get_json()
         assert data["comment_count"] == 1
         assert data["link_count"] >= 1
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# DEFECT 9-STATUS LIFECYCLE  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestDefect9StatusLifecycle:
+    def test_valid_transition_new_to_assigned(self, client):
+        p = _create_program(client)
+        d = _create_defect(client, p["id"])
+        res = client.put(f"/api/v1/testing/defects/{d['id']}",
+                         json={"status": "assigned", "changed_by": "PM"})
+        assert res.status_code == 200
+        assert res.get_json()["status"] == "assigned"
+
+    def test_valid_transition_assigned_to_in_progress(self, client):
+        p = _create_program(client)
+        d = _create_defect(client, p["id"])
+        client.put(f"/api/v1/testing/defects/{d['id']}",
+                   json={"status": "assigned"})
+        res = client.put(f"/api/v1/testing/defects/{d['id']}",
+                         json={"status": "in_progress"})
+        assert res.status_code == 200
+        assert res.get_json()["status"] == "in_progress"
+
+    def test_valid_transition_in_progress_to_resolved(self, client):
+        p = _create_program(client)
+        d = _create_defect(client, p["id"])
+        client.put(f"/api/v1/testing/defects/{d['id']}",
+                   json={"status": "assigned"})
+        client.put(f"/api/v1/testing/defects/{d['id']}",
+                   json={"status": "in_progress"})
+        res = client.put(f"/api/v1/testing/defects/{d['id']}",
+                         json={"status": "resolved"})
+        assert res.status_code == 200
+        assert res.get_json()["status"] == "resolved"
+
+    def test_valid_transition_resolved_to_retest(self, client):
+        p = _create_program(client)
+        d = _create_defect(client, p["id"])
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "assigned"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "in_progress"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "resolved"})
+        res = client.put(f"/api/v1/testing/defects/{d['id']}",
+                         json={"status": "retest"})
+        assert res.status_code == 200
+
+    def test_valid_transition_retest_to_closed(self, client):
+        p = _create_program(client)
+        d = _create_defect(client, p["id"])
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "assigned"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "in_progress"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "resolved"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "retest"})
+        res = client.put(f"/api/v1/testing/defects/{d['id']}",
+                         json={"status": "closed"})
+        assert res.status_code == 200
+        assert res.get_json()["status"] == "closed"
+
+    def test_valid_transition_to_deferred(self, client):
+        p = _create_program(client)
+        d = _create_defect(client, p["id"])
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "assigned"})
+        res = client.put(f"/api/v1/testing/defects/{d['id']}",
+                         json={"status": "deferred"})
+        assert res.status_code == 200
+        assert res.get_json()["status"] == "deferred"
+
+    def test_valid_transition_deferred_to_assigned(self, client):
+        p = _create_program(client)
+        d = _create_defect(client, p["id"])
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "assigned"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "deferred"})
+        res = client.put(f"/api/v1/testing/defects/{d['id']}",
+                         json={"status": "assigned"})
+        assert res.status_code == 200
+        assert res.get_json()["status"] == "assigned"
+
+    def test_invalid_transition_new_to_closed(self, client):
+        p = _create_program(client)
+        d = _create_defect(client, p["id"])
+        res = client.put(f"/api/v1/testing/defects/{d['id']}",
+                         json={"status": "closed"})
+        assert res.status_code == 400
+        assert "Invalid status transition" in res.get_json()["error"]
+
+    def test_invalid_transition_new_to_in_progress(self, client):
+        p = _create_program(client)
+        d = _create_defect(client, p["id"])
+        res = client.put(f"/api/v1/testing/defects/{d['id']}",
+                         json={"status": "in_progress"})
+        assert res.status_code == 400
+
+    def test_invalid_transition_rejected_to_anything(self, client):
+        p = _create_program(client)
+        d = _create_defect(client, p["id"])
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "rejected"})
+        res = client.put(f"/api/v1/testing/defects/{d['id']}",
+                         json={"status": "assigned"})
+        assert res.status_code == 400
+
+    def test_reopen_from_closed(self, client):
+        p = _create_program(client)
+        d = _create_defect(client, p["id"])
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "assigned"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "in_progress"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "resolved"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "retest"})
+        client.put(f"/api/v1/testing/defects/{d['id']}", json={"status": "closed"})
+        res = client.put(f"/api/v1/testing/defects/{d['id']}",
+                         json={"status": "reopened"})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["status"] == "reopened"
+        assert data["reopen_count"] == 1
+
+    def test_validate_defect_transition_function(self):
+        assert validate_defect_transition("new", "assigned") is True
+        assert validate_defect_transition("new", "closed") is False
+        assert validate_defect_transition("rejected", "assigned") is False
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# SEVERITY S1-S4 + PRIORITY  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestSeverityPriority:
+    def test_create_defect_with_s1_severity(self, client):
+        p = _create_program(client)
+        d = _create_defect(client, p["id"], severity="S1")
+        assert d["severity"] == "S1"
+
+    def test_create_defect_with_priority(self, client):
+        p = _create_program(client)
+        res = client.post(f"/api/v1/programs/{p['id']}/testing/defects",
+                          json={"title": "Test", "severity": "S2", "priority": "P1"})
+        assert res.status_code == 201
+        data = res.get_json()
+        assert data["severity"] == "S2"
+        assert data["priority"] == "P1"
+
+    def test_defect_has_sla_due_date(self, client):
+        p = _create_program(client)
+        res = client.post(f"/api/v1/programs/{p['id']}/testing/defects",
+                          json={"title": "SLA Test", "severity": "S1", "priority": "P1"})
+        data = res.get_json()
+        assert data["sla_due_date"] is not None
+
+    def test_defect_sla_status_field(self, client):
+        p = _create_program(client)
+        res = client.post(f"/api/v1/programs/{p['id']}/testing/defects",
+                          json={"title": "SLA Status", "severity": "S1", "priority": "P1"})
+        data = res.get_json()
+        assert data["sla_status"] in ("on_track", "warning", "breached", None)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# SLA ENDPOINT  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestSLAEndpoint:
+    def test_get_sla(self, client):
+        p = _create_program(client)
+        d = _create_defect(client, p["id"], severity="S1")
+        res = client.get(f"/api/v1/testing/defects/{d['id']}/sla")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert "severity" in data
+        assert "sla_status" in data
+        assert "sla_config" in data
+
+    def test_get_sla_not_found(self, client):
+        res = client.get("/api/v1/testing/defects/99999/sla")
+        assert res.status_code == 404
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# UAT SIGN-OFF  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _create_uat_signoff(client, cycle_id, **overrides):
+    payload = {
+        "process_area": "Finance",
+        "signed_off_by": "PM User",
+        "role": "PM",
+    }
+    payload.update(overrides)
+    res = client.post(f"/api/v1/testing/cycles/{cycle_id}/uat-signoffs", json=payload)
+    assert res.status_code == 201
+    return res.get_json()
+
+
+class TestUATSignOff:
+    def test_create_signoff(self, client):
+        p = _create_program(client)
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"], test_layer="uat")
+        signoff = _create_uat_signoff(client, cycle["id"])
+        assert signoff["process_area"] == "Finance"
+        assert signoff["status"] == "pending"
+        assert signoff["role"] == "PM"
+
+    def test_create_signoff_invalid_role(self, client):
+        p = _create_program(client)
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"])
+        res = client.post(f"/api/v1/testing/cycles/{cycle['id']}/uat-signoffs",
+                          json={"process_area": "FI", "signed_off_by": "Dev",
+                                "role": "Developer"})
+        assert res.status_code == 400
+
+    def test_create_signoff_missing_fields(self, client):
+        p = _create_program(client)
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"])
+        res = client.post(f"/api/v1/testing/cycles/{cycle['id']}/uat-signoffs",
+                          json={})
+        assert res.status_code == 400
+
+    def test_list_signoffs(self, client):
+        p = _create_program(client)
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"])
+        _create_uat_signoff(client, cycle["id"])
+        _create_uat_signoff(client, cycle["id"], process_area="Logistics",
+                            signed_off_by="BPO User", role="BPO")
+        res = client.get(f"/api/v1/testing/cycles/{cycle['id']}/uat-signoffs")
+        assert res.status_code == 200
+        assert len(res.get_json()) == 2
+
+    def test_update_signoff_approve(self, client):
+        p = _create_program(client)
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"])
+        signoff = _create_uat_signoff(client, cycle["id"])
+        res = client.put(f"/api/v1/testing/uat-signoffs/{signoff['id']}",
+                         json={"status": "approved"})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["status"] == "approved"
+        assert data["sign_off_date"] is not None
+
+    def test_delete_signoff(self, client):
+        p = _create_program(client)
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"])
+        signoff = _create_uat_signoff(client, cycle["id"])
+        res = client.delete(f"/api/v1/testing/uat-signoffs/{signoff['id']}")
+        assert res.status_code == 200
+
+    def test_get_signoff(self, client):
+        p = _create_program(client)
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"])
+        signoff = _create_uat_signoff(client, cycle["id"])
+        res = client.get(f"/api/v1/testing/uat-signoffs/{signoff['id']}")
+        assert res.status_code == 200
+
+    def test_signoff_not_found(self, client):
+        res = client.get("/api/v1/testing/uat-signoffs/99999")
+        assert res.status_code == 404
+
+    def test_cycle_not_found(self, client):
+        res = client.get("/api/v1/testing/cycles/99999/uat-signoffs")
+        assert res.status_code == 404
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PERFORMANCE TEST RESULTS  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestPerfTestResults:
+    def test_create_perf_result(self, client):
+        p = _create_program(client)
+        tc = _create_case(client, p["id"])
+        res = client.post(f"/api/v1/testing/catalog/{tc['id']}/perf-results",
+                          json={"response_time_ms": 500, "target_response_ms": 1000,
+                                "concurrent_users": 50})
+        assert res.status_code == 201
+        data = res.get_json()
+        assert data["pass_fail"] is True
+        assert data["response_time_ms"] == 500
+
+    def test_create_perf_result_fail(self, client):
+        p = _create_program(client)
+        tc = _create_case(client, p["id"])
+        res = client.post(f"/api/v1/testing/catalog/{tc['id']}/perf-results",
+                          json={"response_time_ms": 2000, "target_response_ms": 1000})
+        assert res.status_code == 201
+        assert res.get_json()["pass_fail"] is False
+
+    def test_create_perf_result_missing_fields(self, client):
+        p = _create_program(client)
+        tc = _create_case(client, p["id"])
+        res = client.post(f"/api/v1/testing/catalog/{tc['id']}/perf-results",
+                          json={"response_time_ms": 500})
+        assert res.status_code == 400
+
+    def test_list_perf_results(self, client):
+        p = _create_program(client)
+        tc = _create_case(client, p["id"])
+        client.post(f"/api/v1/testing/catalog/{tc['id']}/perf-results",
+                    json={"response_time_ms": 500, "target_response_ms": 1000})
+        client.post(f"/api/v1/testing/catalog/{tc['id']}/perf-results",
+                    json={"response_time_ms": 1500, "target_response_ms": 1000})
+        res = client.get(f"/api/v1/testing/catalog/{tc['id']}/perf-results")
+        assert res.status_code == 200
+        assert len(res.get_json()) == 2
+
+    def test_delete_perf_result(self, client):
+        p = _create_program(client)
+        tc = _create_case(client, p["id"])
+        cr = client.post(f"/api/v1/testing/catalog/{tc['id']}/perf-results",
+                         json={"response_time_ms": 500, "target_response_ms": 1000})
+        rid = cr.get_json()["id"]
+        res = client.delete(f"/api/v1/testing/perf-results/{rid}")
+        assert res.status_code == 200
+
+    def test_perf_result_case_not_found(self, client):
+        res = client.post("/api/v1/testing/catalog/99999/perf-results",
+                          json={"response_time_ms": 500, "target_response_ms": 1000})
+        assert res.status_code == 404
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST DAILY SNAPSHOTS  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestDailySnapshots:
+    def test_create_snapshot(self, client):
+        p = _create_program(client)
+        res = client.post(f"/api/v1/programs/{p['id']}/testing/snapshots",
+                          json={"snapshot_date": "2026-03-10", "total_cases": 20,
+                                "passed": 15, "failed": 3, "blocked": 1, "not_run": 1})
+        assert res.status_code == 201
+        data = res.get_json()
+        assert data["total_cases"] == 20
+        assert data["pass_rate"] > 0
+
+    def test_create_snapshot_auto_compute(self, client):
+        p = _create_program(client)
+        res = client.post(f"/api/v1/programs/{p['id']}/testing/snapshots", json={})
+        assert res.status_code == 201
+
+    def test_list_snapshots(self, client):
+        p = _create_program(client)
+        client.post(f"/api/v1/programs/{p['id']}/testing/snapshots",
+                    json={"snapshot_date": "2026-03-10"})
+        client.post(f"/api/v1/programs/{p['id']}/testing/snapshots",
+                    json={"snapshot_date": "2026-03-11"})
+        res = client.get(f"/api/v1/programs/{p['id']}/testing/snapshots")
+        assert res.status_code == 200
+        assert len(res.get_json()) == 2
+
+    def test_snapshot_program_not_found(self, client):
+        res = client.get("/api/v1/programs/99999/testing/snapshots")
+        assert res.status_code == 404
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# GO/NO-GO SCORECARD  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestGoNoGoScorecard:
+    def test_scorecard_empty_program(self, client):
+        p = _create_program(client)
+        res = client.get(f"/api/v1/programs/{p['id']}/testing/dashboard/go-no-go")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert "scorecard" in data
+        assert "overall" in data
+        assert len(data["scorecard"]) == 10
+        assert data["green_count"] + data["red_count"] + data["yellow_count"] == 10
+
+    def test_scorecard_with_data(self, client):
+        p = _create_program(client)
+        # Create test data
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"], test_layer="sit")
+        tc = _create_case(client, p["id"])
+        _create_execution(client, cycle["id"], tc["id"], result="pass")
+        res = client.get(f"/api/v1/programs/{p['id']}/testing/dashboard/go-no-go")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["overall"] in ("go", "no_go")
+
+    def test_scorecard_program_not_found(self, client):
+        res = client.get("/api/v1/programs/99999/testing/dashboard/go-no-go")
+        assert res.status_code == 404
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ENTRY/EXIT CRITERIA  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestEntryCriteria:
+    def test_validate_entry_all_met(self, client):
+        p = _create_program(client)
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"])
+        # Set entry criteria as all met
+        client.put(f"/api/v1/testing/cycles/{cycle['id']}",
+                   json={"entry_criteria": [
+                       {"criterion": "Test data ready", "met": True},
+                       {"criterion": "Config complete", "met": True},
+                   ]})
+        res = client.post(f"/api/v1/testing/cycles/{cycle['id']}/validate-entry",
+                          json={})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["valid"] is True
+
+    def test_validate_entry_unmet_no_force(self, client):
+        p = _create_program(client)
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"])
+        client.put(f"/api/v1/testing/cycles/{cycle['id']}",
+                   json={"entry_criteria": [
+                       {"criterion": "Test data ready", "met": True},
+                       {"criterion": "Config complete", "met": False},
+                   ]})
+        res = client.post(f"/api/v1/testing/cycles/{cycle['id']}/validate-entry",
+                          json={})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["valid"] is False
+        assert len(data["unmet_criteria"]) == 1
+
+    def test_validate_entry_unmet_with_force(self, client):
+        p = _create_program(client)
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"])
+        client.put(f"/api/v1/testing/cycles/{cycle['id']}",
+                   json={"entry_criteria": [
+                       {"criterion": "Config complete", "met": False},
+                   ]})
+        res = client.post(f"/api/v1/testing/cycles/{cycle['id']}/validate-entry",
+                          json={"force": True})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["valid"] is True
+        assert "overridden_criteria" in data
+
+    def test_validate_entry_starts_cycle(self, client):
+        p = _create_program(client)
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"])
+        client.put(f"/api/v1/testing/cycles/{cycle['id']}",
+                   json={"entry_criteria": [
+                       {"criterion": "Ready", "met": True},
+                   ]})
+        client.post(f"/api/v1/testing/cycles/{cycle['id']}/validate-entry",
+                    json={})
+        res = client.get(f"/api/v1/testing/cycles/{cycle['id']}")
+        assert res.get_json()["status"] == "in_progress"
+
+
+class TestExitCriteria:
+    def test_validate_exit_all_met(self, client):
+        p = _create_program(client)
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"])
+        # Move to in_progress first
+        client.put(f"/api/v1/testing/cycles/{cycle['id']}",
+                   json={"status": "in_progress",
+                         "exit_criteria": [
+                             {"criterion": "All tests pass", "met": True},
+                         ]})
+        res = client.post(f"/api/v1/testing/cycles/{cycle['id']}/validate-exit",
+                          json={})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["valid"] is True
+
+    def test_validate_exit_unmet(self, client):
+        p = _create_program(client)
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"])
+        client.put(f"/api/v1/testing/cycles/{cycle['id']}",
+                   json={"status": "in_progress",
+                         "exit_criteria": [
+                             {"criterion": "All tests pass", "met": False},
+                         ]})
+        res = client.post(f"/api/v1/testing/cycles/{cycle['id']}/validate-exit",
+                          json={})
+        data = res.get_json()
+        assert data["valid"] is False
+
+    def test_validate_exit_force(self, client):
+        p = _create_program(client)
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"])
+        client.put(f"/api/v1/testing/cycles/{cycle['id']}",
+                   json={"status": "in_progress",
+                         "exit_criteria": [
+                             {"criterion": "All P1 closed", "met": False},
+                         ]})
+        res = client.post(f"/api/v1/testing/cycles/{cycle['id']}/validate-exit",
+                          json={"force": True})
+        data = res.get_json()
+        assert data["valid"] is True
+        assert "overridden_criteria" in data
+
+    def test_validate_exit_not_found(self, client):
+        res = client.post("/api/v1/testing/cycles/99999/validate-exit", json={})
+        assert res.status_code == 404
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# GENERATE FROM WRICEF  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _create_gen_suite(client, pid, **overrides):
+    payload = {"name": "Gen-Test Suite", "suite_type": "SIT"}
+    payload.update(overrides)
+    res = client.post(f"/api/v1/programs/{pid}/testing/suites", json=payload)
+    assert res.status_code == 201
+    return res.get_json()
+
+
+class TestGenerateFromWricef:
+    def test_generate_from_wricef(self, client, app):
+        from app.models.backlog import BacklogItem
+        p = _create_program(client)
+        suite = _create_gen_suite(client, p["id"])
+
+        # Create backlog items directly
+        with app.app_context():
+            from app.models import db as _db2
+            bi = BacklogItem(
+                program_id=p["id"], code="WF-MM-001",
+                title="Satınalma Onay WF", wricef_type="workflow",
+                module="MM", technical_notes="Step 1: Create PO\nStep 2: Approve",
+            )
+            _db2.session.add(bi)
+            _db2.session.commit()
+            bi_id = bi.id
+
+        res = client.post(f"/api/v1/testing/suites/{suite['id']}/generate-from-wricef",
+                          json={"wricef_item_ids": [bi_id]})
+        assert res.status_code == 201
+        data = res.get_json()
+        assert data["count"] == 1
+        assert len(data["test_case_ids"]) == 1
+
+    def test_generate_from_wricef_empty(self, client):
+        p = _create_program(client)
+        suite = _create_gen_suite(client, p["id"])
+        res = client.post(f"/api/v1/testing/suites/{suite['id']}/generate-from-wricef",
+                          json={"wricef_item_ids": [99999]})
+        assert res.status_code == 404
+
+    def test_generate_from_wricef_suite_not_found(self, client):
+        res = client.post("/api/v1/testing/suites/99999/generate-from-wricef",
+                          json={"wricef_item_ids": [1]})
+        assert res.status_code == 404
+
+    def test_generate_from_wricef_with_steps(self, client, app):
+        from app.models.backlog import BacklogItem
+        p = _create_program(client)
+        suite = _create_gen_suite(client, p["id"])
+        with app.app_context():
+            from app.models import db as _db2
+            bi = BacklogItem(
+                program_id=p["id"], code="ENH-FI-001",
+                title="Tax BAdI", wricef_type="enhancement",
+                module="FI",
+                technical_notes="Create BAdI impl\nTest tax calc\nVerify output",
+            )
+            _db2.session.add(bi)
+            _db2.session.commit()
+            bi_id = bi.id
+
+        res = client.post(f"/api/v1/testing/suites/{suite['id']}/generate-from-wricef",
+                          json={"wricef_item_ids": [bi_id]})
+        assert res.status_code == 201
+        # Verify test steps were created
+        tc_id = res.get_json()["test_case_ids"][0]
+        steps_res = client.get(f"/api/v1/testing/catalog/{tc_id}/steps")
+        assert len(steps_res.get_json()) == 3
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# GENERATE FROM PROCESS  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestGenerateFromProcess:
+    def test_generate_from_process(self, client, app):
+        from app.models.explore import ProcessLevel, ProcessStep, ExploreWorkshop
+        p = _create_program(client)
+        suite = _create_gen_suite(client, p["id"])
+
+        with app.app_context():
+            from app.models import db as _db2
+            import uuid
+            l3_id = str(uuid.uuid4())
+            l4_id = str(uuid.uuid4())
+            ws_id = str(uuid.uuid4())
+            l3 = ProcessLevel(
+                id=l3_id, project_id=p["id"], level=3,
+                code="J58", name="Order to Cash", scope_item_code="J58",
+                process_area_code="SD",
+            )
+            _db2.session.add(l3)
+            l4 = ProcessLevel(
+                id=l4_id, project_id=p["id"], parent_id=l3_id, level=4,
+                code="J58.01", name="Create Sales Order",
+                process_area_code="SD",
+            )
+            _db2.session.add(l4)
+            # Create a workshop (FK for ProcessStep)
+            ws = ExploreWorkshop(
+                id=ws_id, project_id=p["id"], code="WS-SD-01",
+                name="SD Workshop", process_area="SD",
+            )
+            _db2.session.add(ws)
+            _db2.session.flush()
+            ps = ProcessStep(
+                workshop_id=ws_id,
+                process_level_id=l4_id,
+                sort_order=1, fit_decision="fit",
+            )
+            _db2.session.add(ps)
+            _db2.session.commit()
+
+        res = client.post(f"/api/v1/testing/suites/{suite['id']}/generate-from-process",
+                          json={"scope_item_ids": [l3_id], "test_level": "sit"})
+        assert res.status_code == 201
+        data = res.get_json()
+        assert data["count"] == 1
+
+    def test_generate_from_process_missing_scope(self, client):
+        p = _create_program(client)
+        suite = _create_gen_suite(client, p["id"])
+        res = client.post(f"/api/v1/testing/suites/{suite['id']}/generate-from-process",
+                          json={})
+        assert res.status_code == 400
+
+    def test_generate_from_process_not_found(self, client):
+        p = _create_program(client)
+        suite = _create_gen_suite(client, p["id"])
+        res = client.post(f"/api/v1/testing/suites/{suite['id']}/generate-from-process",
+                          json={"scope_item_ids": ["nonexistent"]})
+        assert res.status_code == 404
+
+    def test_generate_from_process_suite_not_found(self, client):
+        res = client.post("/api/v1/testing/suites/99999/generate-from-process",
+                          json={"scope_item_ids": ["abc"]})
+        assert res.status_code == 404

@@ -13,8 +13,8 @@ from datetime import datetime, timezone
 from app.models import db
 from app.models.explore import (
     ExploreWorkshop, WorkshopAttendee, WorkshopAgendaItem,
-    ProcessStep, ExploreDecision, ExploreOpenItem, ExploreRequirement,
-    ExploreWorkshopDocument,
+    ProcessStep, ProcessLevel, ExploreDecision, ExploreOpenItem,
+    ExploreRequirement, ExploreWorkshopDocument,
 )
 
 
@@ -46,12 +46,11 @@ class MinutesGeneratorService:
         attendees = WorkshopAttendee.query.filter_by(workshop_id=workshop_id).all()
         agenda = (WorkshopAgendaItem.query
                   .filter_by(workshop_id=workshop_id)
-                  .order_by(WorkshopAgendaItem.order_index)
+                  .order_by(WorkshopAgendaItem.sort_order)
                   .all())
         steps_q = ProcessStep.query.filter_by(workshop_id=workshop_id)
-        if session_number is not None:
-            steps_q = steps_q.filter_by(session_number=session_number)
-        steps = steps_q.order_by(ProcessStep.order_index).all()
+        # session_number lives on ExploreWorkshop, not ProcessStep
+        steps = steps_q.order_by(ProcessStep.sort_order).all()
         step_ids = [s.id for s in steps]
 
         decisions = ExploreDecision.query.filter(
@@ -108,8 +107,8 @@ class MinutesGeneratorService:
         _a(f"**Status:** {ws.status}")
         _a(f"**Process Area:** {ws.process_area or '—'}")
         _a(f"**Wave:** {ws.wave or '—'}")
-        if ws.scheduled_date:
-            _a(f"**Date:** {ws.scheduled_date}")
+        if ws.date:
+            _a(f"**Date:** {ws.date}")
         _a("")
 
         # Attendees
@@ -119,7 +118,7 @@ class MinutesGeneratorService:
             _a("| Name | Role | Present |")
             _a("|------|------|---------|")
             for a in attendees:
-                present = "✅" if a.attended else "❌"
+                present = "✅" if a.attendance_status in ("present", "confirmed") else "❌"
                 _a(f"| {a.name or '—'} | {a.role or '—'} | {present} |")
             _a("")
 
@@ -128,9 +127,8 @@ class MinutesGeneratorService:
             _a("## Agenda")
             _a("")
             for item in agenda:
-                status = "✅" if item.status == "completed" else "⬜"
                 duration = f" ({item.duration_minutes}min)" if item.duration_minutes else ""
-                _a(f"- {status} {item.title or '—'}{duration}")
+                _a(f"- {item.title or '—'}{duration}")
             _a("")
 
         # Process Steps & Decisions
@@ -142,7 +140,9 @@ class MinutesGeneratorService:
             for i, s in enumerate(steps, 1):
                 fit = s.fit_decision or "—"
                 notes = (s.notes or "")[:80]
-                _a(f"| {i} | {s.l4_code or '—'} | **{fit}** | {notes} |")
+                pl = db.session.get(ProcessLevel, s.process_level_id)
+                l4_code = pl.code if pl else "—"
+                _a(f"| {i} | {l4_code} | **{fit}** | {notes} |")
             _a("")
 
         # Decisions
@@ -151,7 +151,7 @@ class MinutesGeneratorService:
             _a("")
             for d in decisions:
                 _a(f"### {d.code or 'DEC'}")
-                _a(f"- **Decision:** {d.decision_text or '—'}")
+                _a(f"- **Decision:** {d.text or '—'}")
                 _a(f"- **Rationale:** {d.rationale or '—'}")
                 _a(f"- **Owner:** {d.decided_by or '—'}")
                 _a("")
@@ -174,7 +174,7 @@ class MinutesGeneratorService:
             _a("| Code | Title | Type | Priority | Status |")
             _a("|------|-------|------|----------|--------|")
             for r in requirements:
-                _a(f"| {r.code or '—'} | {r.title or '—'} | {r.requirement_type or '—'} "
+                _a(f"| {r.code or '—'} | {r.title or '—'} | {r.type or '—'} "
                    f"| {r.priority or '—'} | {r.status or '—'} |")
             _a("")
 
@@ -216,7 +216,10 @@ class MinutesGeneratorService:
             "open_items_count": len(open_items),
             "open_items_open": sum(1 for o in open_items if o.status in ("open", "in_progress")),
             "requirements_count": len(requirements),
-            "key_gaps": [s.l4_code for s in steps if s.fit_decision == "gap"][:10],
+            "key_gaps": [
+                (lambda pl: pl.code if pl else "??")(db.session.get(ProcessLevel, s.process_level_id))
+                for s in steps if s.fit_decision == "gap"
+            ][:10],
         }
 
         content = json.dumps(summary, indent=2)

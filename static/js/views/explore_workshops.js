@@ -17,6 +17,7 @@ const ExploreWorkshopHubView = (() => {
     let _viewMode = 'table';         // table | kanban | capacity
     let _workshops = [];
     let _stats = {};
+    let _l3Items = [];
     let _filters = { status: '', wave: '', area: '', facilitator: '', search: '' };
     let _groupBy = 'none';           // none | wave | area | facilitator | status | date
     let _sortKey = 'code';
@@ -26,12 +27,14 @@ const ExploreWorkshopHubView = (() => {
 
     // ── API ──────────────────────────────────────────────────────────
     async function fetchAll() {
-        const [workshops, stats] = await Promise.all([
+        const [workshops, stats, l3Items] = await Promise.all([
             ExploreAPI.workshops.list(_pid),
             ExploreAPI.workshops.stats(_pid).catch(() => ({})),
+            ExploreAPI.levels.listL3(_pid).catch(() => []),
         ]);
         _workshops = workshops || [];
         _stats = stats || {};
+        _l3Items = l3Items || [];
     }
 
     // ── Filtering & Sorting ──────────────────────────────────────────
@@ -39,8 +42,8 @@ const ExploreWorkshopHubView = (() => {
         let list = [..._workshops];
         if (_filters.status) list = list.filter(w => w.status === _filters.status);
         if (_filters.wave) list = list.filter(w => String(w.wave) === _filters.wave);
-        if (_filters.area) list = list.filter(w => (w.area || w.area_code) === _filters.area);
-        if (_filters.facilitator) list = list.filter(w => (w.facilitator || '') === _filters.facilitator);
+        if (_filters.area) list = list.filter(w => (w.process_area || w.area || w.area_code) === _filters.area);
+        if (_filters.facilitator) list = list.filter(w => (w.facilitator || w.facilitator_id || '') === _filters.facilitator);
         if (_filters.search) {
             const q = _filters.search.toLowerCase();
             list = list.filter(w =>
@@ -81,62 +84,88 @@ const ExploreWorkshopHubView = (() => {
         const completed = _workshops.filter(w => w.status === 'completed').length;
         const pct = total ? Math.round(completed / total * 100) : 0;
 
-        const totalOI = _stats.total_open_items || _workshops.reduce((s, w) => s + (w.open_item_count || 0), 0);
+        const totalOI = _stats.total_open_items || _workshops.reduce((s, w) => s + (w.oi_count || w.open_item_count || 0), 0);
         const totalGaps = _stats.total_gaps || _workshops.reduce((s, w) => s + (w.gap_count || 0), 0);
-        const totalReq = _stats.total_requirements || _workshops.reduce((s, w) => s + (w.requirement_count || 0), 0);
-
         return `<div class="exp-kpi-strip">
-            ${ExpUI.kpiBlock({ value: total, label: 'Total Workshops', icon: '📋' })}
-            ${ExpUI.kpiBlock({ value: `${pct}%`, label: 'Progress', accent: 'var(--exp-fit)', icon: '📈' })}
-            ${ExpUI.kpiBlock({ value: active, label: 'Active', accent: 'var(--exp-partial)', icon: '▶️' })}
-            ${ExpUI.kpiBlock({ value: scheduled, label: 'Scheduled', accent: 'var(--exp-requirement)', icon: '📅' })}
-            ${ExpUI.kpiBlock({ value: draft, label: 'Draft', icon: '📝' })}
-            ${ExpUI.kpiBlock({ value: totalOI, label: 'Open Items', accent: 'var(--exp-open-item)', icon: '⚠️' })}
-            ${ExpUI.kpiBlock({ value: totalGaps, label: 'Gaps', accent: 'var(--exp-gap)', icon: '🔴' })}
-            ${ExpUI.kpiBlock({ value: totalReq, label: 'Requirements', accent: 'var(--exp-requirement)', icon: '📝' })}
-        </div>`;
+            ${ExpUI.kpiBlock({ value: total, label: 'Workshops', accent: 'var(--exp-l2, #3b82f6)' })}
+            ${ExpUI.kpiBlock({ value: pct, suffix: '%', label: 'Progress', accent: pct >= 80 ? 'var(--exp-fit)' : pct >= 50 ? '#f59e0b' : 'var(--exp-gap)' })}
+            ${ExpUI.kpiBlock({ value: active, label: 'Active', accent: '#3b82f6' })}
+            ${ExpUI.kpiBlock({ value: totalOI, label: 'Open Items', accent: 'var(--exp-open-item)' })}
+            ${ExpUI.kpiBlock({ value: totalGaps, label: 'Gaps', accent: 'var(--exp-gap)' })}
+        </div>
+        ${ExpUI.metricBar({
+            label: 'Workshop Status',
+            total: total || 1,
+            segments: [
+                {value: completed || 0, label: 'Completed', color: 'var(--exp-fit)'},
+                {value: active || 0, label: 'Active', color: '#3b82f6'},
+                {value: scheduled || 0, label: 'Scheduled', color: '#f59e0b'},
+                {value: draft || 0, label: 'Draft', color: '#94a3b8'},
+            ],
+        })}`;
     }
 
     // ── Filter Bar (F-015) ───────────────────────────────────────────
     function renderFilterBar() {
-        const statusOpts = [
-            { value: '', label: 'All' },
-            { value: 'draft', label: 'Draft' },
-            { value: 'scheduled', label: 'Scheduled' },
-            { value: 'in_progress', label: 'In Progress' },
-            { value: 'completed', label: 'Completed' },
-        ];
-        const areas = [...new Set(_workshops.map(w => w.area || w.area_code).filter(Boolean))].sort();
-        const areaOpts = [{ value: '', label: 'All' }, ...areas.map(a => ({ value: a, label: a }))];
+        const areas = [...new Set(_workshops.map(w => w.process_area || w.area || w.area_code).filter(Boolean))].sort();
         const waves = [...new Set(_workshops.map(w => w.wave).filter(Boolean))].sort();
-        const waveOpts = [{ value: '', label: 'All' }, ...waves.map(w => ({ value: String(w), label: `Wave ${w}` }))];
-        const facilitators = [...new Set(_workshops.map(w => w.facilitator).filter(Boolean))].sort();
-        const facOpts = [{ value: '', label: 'All' }, ...facilitators.map(f => ({ value: f, label: f }))];
+        const facilitators = [...new Set(_workshops.map(w => w.facilitator || w.facilitator_id).filter(Boolean))].sort();
 
         const groupByOpts = ['none','wave','area','facilitator','status'].map(g =>
             `<option value="${g}"${_groupBy === g ? ' selected' : ''}>${g === 'none' ? 'No Grouping' : g.charAt(0).toUpperCase() + g.slice(1)}</option>`
         ).join('');
 
-        return `<div class="exp-toolbar" style="margin-bottom:var(--exp-space-md)">
-            <div class="exp-search" style="min-width:200px;max-width:280px">
-                <span class="exp-search__icon">🔍</span>
-                <input class="exp-search__input" type="text" placeholder="Search workshops…"
-                       value="${esc(_filters.search)}" oninput="ExploreWorkshopHubView.setFilter('search',this.value)">
-            </div>
-            ${ExpUI.filterGroup({ id: 'status', label: 'Status', options: statusOpts, selected: _filters.status, onChange: 'ExploreWorkshopHubView.setFilter' })}
-            ${ExpUI.filterGroup({ id: 'area', label: 'Area', options: areaOpts, selected: _filters.area, onChange: 'ExploreWorkshopHubView.setFilter' })}
-            ${ExpUI.filterGroup({ id: 'wave', label: 'Wave', options: waveOpts, selected: _filters.wave, onChange: 'ExploreWorkshopHubView.setFilter' })}
-            <select style="padding:4px 8px;border:1px solid #d1d5db;border-radius:var(--exp-radius-md);font-size:12px" onchange="ExploreWorkshopHubView.setGroupBy(this.value)">
-                ${groupByOpts}
-            </select>
-            <div class="exp-toolbar__spacer"></div>
-            <div class="exp-toolbar__group">
-                ${ExpUI.actionButton({ label: '📊', variant: _viewMode === 'table' ? 'primary' : 'secondary', size: 'sm', onclick: `ExploreWorkshopHubView.setViewMode('table')`, title: 'Table view' })}
-                ${ExpUI.actionButton({ label: '📋', variant: _viewMode === 'kanban' ? 'primary' : 'secondary', size: 'sm', onclick: `ExploreWorkshopHubView.setViewMode('kanban')`, title: 'Kanban view' })}
-                ${ExpUI.actionButton({ label: '👥', variant: _viewMode === 'capacity' ? 'primary' : 'secondary', size: 'sm', onclick: `ExploreWorkshopHubView.setViewMode('capacity')`, title: 'Capacity view' })}
-            </div>
-            ${ExpUI.actionButton({ label: '+ New Workshop', variant: 'primary', size: 'sm', icon: '📝', onclick: 'ExploreWorkshopHubView.createWorkshop()' })}
-        </div>`;
+        return ExpUI.filterBar({
+            id: 'workshopFB',
+            searchPlaceholder: 'Search workshops…',
+            searchValue: _filters.search,
+            onSearch: "ExploreWorkshopHubView.setFilter('search',this.value)",
+            onChange: "ExploreWorkshopHubView.onFilterBarChange",
+            filters: [
+                {
+                    id: 'status', label: 'Status', icon: '', type: 'single',
+                    color: 'var(--exp-partial)',
+                    options: [
+                        { value: 'draft', label: 'Draft' },
+                        { value: 'scheduled', label: 'Scheduled' },
+                        { value: 'in_progress', label: 'In Progress' },
+                        { value: 'completed', label: 'Completed' },
+                    ],
+                    selected: _filters.status || '',
+                },
+                {
+                    id: 'area', label: 'Area', icon: '', type: 'single',
+                    color: 'var(--exp-l2)',
+                    options: areas.map(a => ({ value: a, label: a })),
+                    selected: _filters.area || '',
+                },
+                {
+                    id: 'wave', label: 'Wave', icon: '', type: 'single',
+                    color: 'var(--exp-l4)',
+                    options: waves.map(w => ({ value: String(w), label: `Wave ${w}` })),
+                    selected: _filters.wave || '',
+                },
+                {
+                    id: 'facilitator', label: 'Facilitator', icon: '', type: 'single',
+                    color: 'var(--exp-requirement)',
+                    options: facilitators.map(f => ({ value: f, label: f })),
+                    selected: _filters.facilitator || '',
+                },
+            ],
+            actionsHtml: `
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <select style="padding:4px 8px;border:1px solid #d1d5db;border-radius:var(--exp-radius-md);font-size:12px" onchange="ExploreWorkshopHubView.setGroupBy(this.value)">
+                        ${groupByOpts}
+                    </select>
+                    <div class="exp-toolbar__group">
+                        ${ExpUI.actionButton({ label: 'Table', variant: _viewMode === 'table' ? 'primary' : 'secondary', size: 'sm', onclick: `ExploreWorkshopHubView.setViewMode('table')`, title: 'Table view' })}
+                        ${ExpUI.actionButton({ label: 'Kanban', variant: _viewMode === 'kanban' ? 'primary' : 'secondary', size: 'sm', onclick: `ExploreWorkshopHubView.setViewMode('kanban')`, title: 'Kanban view' })}
+                        ${ExpUI.actionButton({ label: 'Capacity', variant: _viewMode === 'capacity' ? 'primary' : 'secondary', size: 'sm', onclick: `ExploreWorkshopHubView.setViewMode('capacity')`, title: 'Capacity view' })}
+                    </div>
+                    ${ExpUI.actionButton({ label: '+ New Workshop', variant: 'primary', size: 'sm', onclick: 'ExploreWorkshopHubView.createWorkshop()' })}
+                </div>
+            `,
+        });
     }
 
     // ── Workshop Table (F-012) ───────────────────────────────────────
@@ -144,7 +173,7 @@ const ExploreWorkshopHubView = (() => {
         const filtered = getFiltered();
         const grouped = getGrouped(filtered);
         if (!filtered.length) {
-            return `<div class="exp-empty"><div class="exp-empty__icon">📋</div><div class="exp-empty__title">No workshops found</div><p class="exp-empty__text">Create your first workshop or adjust filters</p></div>`;
+            return `<div class="exp-empty"><div class="exp-empty__icon">-</div><div class="exp-empty__title">No workshops found</div><p class="exp-empty__text">Create your first workshop or adjust filters</p></div>`;
         }
 
         const sortIcon = (key) => _sortKey === key ? (_sortDir === 'asc' ? ' ▲' : ' ▼') : ' ⇅';
@@ -171,20 +200,20 @@ const ExploreWorkshopHubView = (() => {
                 bodyHtml += `<tr><td colspan="12" style="background:#f1f5f9;font-weight:600;font-size:13px;padding:8px 12px">${esc(group)} (${items.length})</td></tr>`;
             }
             bodyHtml += items.map(w => {
-                const fitCounts = { fit: w.fit_count || 0, gap: w.gap_count || 0, partial_fit: w.partial_fit_count || 0, pending: w.pending_count || 0 };
+                const fitCounts = { fit: w.fit_count || 0, gap: w.gap_count || 0, partial_fit: w.partial_count || w.partial_fit_count || 0, pending: w.pending_count || 0 };
                 return `<tr class="exp-expandable-row" onclick="ExploreWorkshopHubView.openWorkshop('${w.id}')" style="cursor:pointer">
                     <td><code style="font-family:var(--exp-font-mono);font-size:12px">${esc(w.code || '')}</code></td>
                     <td class="exp-truncate" style="max-width:160px">${esc(w.scope_item_name || w.scope_item_code || '')}</td>
                     <td class="exp-truncate" style="max-width:200px">${esc(w.name || '')}</td>
-                    <td>${ExpUI.areaPill(w.area || w.area_code || '')}</td>
+                    <td>${ExpUI.areaPill(w.process_area || w.area || w.area_code || '')}</td>
                     <td>${ExpUI.wavePill(w.wave)}</td>
                     <td style="font-size:12px">${w.scheduled_date ? esc(w.scheduled_date) : '—'}</td>
                     <td>${ExpUI.workshopStatusPill(w.status)}</td>
-                    <td style="font-size:12px">${esc(w.facilitator || '—')}</td>
+                    <td style="font-size:12px">${esc(w.facilitator || w.facilitator_id || '—')}</td>
                     <td>${ExpUI.fitBarMini(fitCounts, { height: 4, width: 60 })}</td>
                     <td>${ExpUI.countChip(w.decision_count || 0, { variant: 'decision' })}</td>
-                    <td>${ExpUI.countChip(w.open_item_count || 0, { variant: 'open_item' })}</td>
-                    <td>${ExpUI.countChip(w.requirement_count || 0, { variant: 'requirement' })}</td>
+                    <td>${ExpUI.countChip(w.oi_count || w.open_item_count || 0, { variant: 'open_item' })}</td>
+                    <td>${ExpUI.countChip(w.req_count || w.requirement_count || 0, { variant: 'requirement' })}</td>
                 </tr>`;
             }).join('');
         }
@@ -222,18 +251,18 @@ const ExploreWorkshopHubView = (() => {
         return `<div class="exp-kanban__card" style="border-left-color:${borderColor}" onclick="ExploreWorkshopHubView.openWorkshop('${w.id}')">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
                 <code style="font-family:var(--exp-font-mono);font-size:11px;color:var(--sap-text-secondary)">${esc(w.code || '')}</code>
-                ${ExpUI.areaPill(w.area || w.area_code || '')}
+                ${ExpUI.areaPill(w.process_area || w.area || w.area_code || '')}
             </div>
             <div style="font-weight:600;font-size:13px;margin-bottom:6px" class="exp-truncate">${esc(w.name || '')}</div>
             <div style="font-size:12px;color:var(--sap-text-secondary);margin-bottom:8px" class="exp-truncate">${esc(w.scope_item_name || '')}</div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;font-size:11px">
                 ${w.wave ? ExpUI.wavePill(w.wave) : ''}
-                ${w.facilitator ? `<span style="color:var(--sap-text-secondary)">👤 ${esc(w.facilitator)}</span>` : ''}
+                ${w.facilitator ? `<span style="color:var(--sap-text-secondary)">${esc(w.facilitator)}</span>` : ''}
             </div>
             <div style="display:flex;gap:4px;margin-top:8px">
                 ${ExpUI.countChip(w.decision_count || 0, { variant: 'decision', label: 'DEC' })}
-                ${ExpUI.countChip(w.open_item_count || 0, { variant: 'open_item', label: 'OI' })}
-                ${ExpUI.countChip(w.requirement_count || 0, { variant: 'requirement', label: 'REQ' })}
+                ${ExpUI.countChip(w.oi_count || w.open_item_count || 0, { variant: 'open_item', label: 'OI' })}
+                ${ExpUI.countChip(w.req_count || w.requirement_count || 0, { variant: 'requirement', label: 'REQ' })}
             </div>
         </div>`;
     }
@@ -242,7 +271,7 @@ const ExploreWorkshopHubView = (() => {
     function renderCapacityView() {
         const facilitators = [...new Set(_workshops.map(w => w.facilitator).filter(Boolean))].sort();
         if (!facilitators.length) {
-            return `<div class="exp-empty"><div class="exp-empty__icon">👥</div><div class="exp-empty__title">No facilitators assigned</div></div>`;
+            return `<div class="exp-empty"><div class="exp-empty__icon">-</div><div class="exp-empty__title">No facilitators assigned</div></div>`;
         }
 
         // Get unique ISO weeks
@@ -274,10 +303,10 @@ const ExploreWorkshopHubView = (() => {
                             <div class="exp-capacity-bar__fill exp-capacity-bar__fill--${loadClass}" style="width:${loadPct}%"></div>
                         </div>
                     </div>
-                    ${loadPct >= 80 ? '<div style="font-size:11px;color:var(--exp-gap);font-weight:600">⚠ Overloaded</div>' : ''}
+                    ${loadPct >= 80 ? '<div style="font-size:11px;color:var(--exp-gap);font-weight:600">Overloaded</div>' : ''}
                     <div style="display:flex;gap:4px;margin-top:8px">
-                        ${ExpUI.countChip(completed, { variant: 'fit', label: '✓' })}
-                        ${ExpUI.countChip(active, { variant: 'pending', label: '▶' })}
+                        ${ExpUI.countChip(completed, { variant: 'fit', label: 'Done' })}
+                        ${ExpUI.countChip(active, { variant: 'pending', label: 'Active' })}
                     </div>
                 </div>`;
             }).join('')}
@@ -285,18 +314,18 @@ const ExploreWorkshopHubView = (() => {
     }
 
     function getWeeks() {
-        const dates = _workshops.map(w => w.scheduled_date).filter(Boolean).sort();
+        const dates = _workshops.map(w => w.date || w.scheduled_date).filter(Boolean).sort();
         if (!dates.length) return [];
         return [...new Set(dates.map(d => d.substring(0, 10)))].sort();
     }
 
     // ── Area Milestone Tracker (F-017) ───────────────────────────────
     function renderAreaMilestoneTracker() {
-        const areas = [...new Set(_workshops.map(w => w.area || w.area_code).filter(Boolean))].sort();
+        const areas = [...new Set(_workshops.map(w => w.process_area || w.area || w.area_code).filter(Boolean))].sort();
         if (!areas.length) return '';
 
         const rows = areas.map(area => {
-            const areaWs = _workshops.filter(w => (w.area || w.area_code) === area);
+            const areaWs = _workshops.filter(w => (w.process_area || w.area || w.area_code) === area);
             const total = areaWs.length;
             const completed = areaWs.filter(w => w.status === 'completed').length;
             const l3Ready = areaWs.filter(w => w.status === 'completed' && w.l3_signed_off).length;
@@ -312,7 +341,7 @@ const ExploreWorkshopHubView = (() => {
                 <div style="width:60px">${ExpUI.areaPill(area)}</div>
                 <div style="display:flex;gap:3px;flex:1">${progressDots}</div>
                 <div style="font-size:12px;min-width:60px;text-align:center">${ExpUI.countChip(l3Ready, { variant: 'fit', label: 'L3' })}</div>
-                <div style="font-size:12px;min-width:50px;text-align:right;font-weight:600;color:${onTrack ? 'var(--exp-fit)' : 'var(--exp-gap)'}">${onTrack ? '✓ On Track' : '⚠ Behind'}</div>
+                <div style="font-size:12px;min-width:50px;text-align:right;font-weight:600;color:${onTrack ? 'var(--exp-fit)' : 'var(--exp-gap)'}">${onTrack ? 'On Track' : 'Behind'}</div>
             </div>`;
         }).join('');
 
@@ -324,6 +353,18 @@ const ExploreWorkshopHubView = (() => {
 
     // ── Create Workshop Dialog ───────────────────────────────────────
     function createWorkshop() {
+        const areas = [...new Set([
+            ..._workshops.map(w => w.process_area || w.area || w.area_code),
+            ..._l3Items.map(l3 => l3.process_area_code || l3.area_code),
+        ].filter(Boolean))].sort();
+        const facilitators = [...new Set(_workshops.map(w => w.facilitator || w.facilitator_id).filter(Boolean))].sort();
+        const l3Options = _l3Items
+            .map(l3 => ({
+                id: l3.id,
+                label: `${l3.code || l3.sap_code || ''} ${l3.name || ''}`.trim() || l3.id,
+            }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+
         const html = `<div class="modal-content" style="max-width:560px;padding:24px">
             <h2 style="margin-bottom:16px">Create Workshop</h2>
             <div class="exp-inline-form">
@@ -337,12 +378,18 @@ const ExploreWorkshopHubView = (() => {
                     <div class="exp-inline-form__field"><label>Scheduled Date</label><input id="wsDate" type="date"></div>
                 </div>
                 <div class="exp-inline-form__row">
-                    <div class="exp-inline-form__field"><label>Facilitator</label><input id="wsFacilitator" type="text" placeholder="Facilitator name"></div>
-                    <div class="exp-inline-form__field"><label>Area</label><input id="wsArea" type="text" placeholder="e.g. FI, CO, SD"></div>
+                    <div class="exp-inline-form__field"><label>Facilitator</label>
+                        <select id="wsFacilitator"><option value="">—</option>${facilitators.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</select>
+                    </div>
+                    <div class="exp-inline-form__field"><label>Area</label>
+                        <select id="wsArea"><option value="">—</option>${areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
+                    </div>
                 </div>
                 <div class="exp-inline-form__row">
-                    <div class="exp-inline-form__field"><label>Wave</label><input id="wsWave" type="number" min="1" max="4" placeholder="1"></div>
-                    <div class="exp-inline-form__field"><label>L3 Scope Item ID</label><input id="wsL3" type="text" placeholder="Scope item UUID (optional)"></div>
+                    <div class="exp-inline-form__field"><label>Wave</label><input id="wsWave" type="number" min="1" max="10" placeholder="1"></div>
+                    <div class="exp-inline-form__field"><label>L3 Scope Item</label>
+                        <select id="wsL3"><option value="">—</option>${l3Options.map(o => `<option value="${o.id}">${esc(o.label)}</option>`).join('')}</select>
+                    </div>
                 </div>
                 <div class="exp-inline-form__row">
                     <div class="exp-inline-form__field"><label>Description</label><textarea id="wsDesc" rows="2" placeholder="Optional description"></textarea></div>
@@ -358,15 +405,32 @@ const ExploreWorkshopHubView = (() => {
 
     async function submitCreate() {
         try {
+            const scopeItemId = document.getElementById('wsL3')?.value || null;
+            const name = document.getElementById('wsName')?.value?.trim();
+            const area = document.getElementById('wsArea')?.value || null;
+            const waveRaw = document.getElementById('wsWave')?.value;
+            const waveVal = waveRaw ? parseInt(waveRaw, 10) : null;
+            if (!name) {
+                App.toast('Name is required', 'error');
+                return;
+            }
+            if (!area) {
+                App.toast('Area is required', 'error');
+                return;
+            }
+            if (waveVal != null && (Number.isNaN(waveVal) || waveVal < 1 || waveVal > 10)) {
+                App.toast('Wave must be between 1 and 10', 'error');
+                return;
+            }
             const data = {
-                name: document.getElementById('wsName')?.value,
-                workshop_type: document.getElementById('wsType')?.value || 'initial',
-                scheduled_date: document.getElementById('wsDate')?.value || null,
-                facilitator: document.getElementById('wsFacilitator')?.value || null,
-                area_code: document.getElementById('wsArea')?.value || null,
-                wave: document.getElementById('wsWave')?.value ? parseInt(document.getElementById('wsWave').value) : null,
-                l3_scope_item_id: document.getElementById('wsL3')?.value || null,
-                description: document.getElementById('wsDesc')?.value || null,
+                name,
+                type: document.getElementById('wsType')?.value || 'initial',
+                date: document.getElementById('wsDate')?.value || null,
+                facilitator_id: document.getElementById('wsFacilitator')?.value || null,
+                process_area: area,
+                wave: waveVal,
+                scope_item_ids: scopeItemId ? [scopeItemId] : [],
+                notes: document.getElementById('wsDesc')?.value || null,
             };
             await ExploreAPI.workshops.create(_pid, data);
             App.closeModal();
@@ -412,6 +476,24 @@ const ExploreWorkshopHubView = (() => {
     // ── Public Actions ───────────────────────────────────────────────
     function setViewMode(m) { _viewMode = m; renderPage(); }
     function setFilter(key, val) { _filters[key] = val || ''; _page = 1; renderPage(); }
+    function onFilterBarChange(update) {
+        if (update._clearAll) {
+            _filters = { status: '', wave: '', area: '', facilitator: '', search: _filters.search || '' };
+        } else {
+            Object.keys(update).forEach(key => {
+                const val = update[key];
+                if (val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+                    _filters[key] = '';
+                } else if (Array.isArray(val)) {
+                    _filters[key] = val[0];
+                } else {
+                    _filters[key] = val;
+                }
+            });
+        }
+        _page = 1;
+        renderPage();
+    }
     function setGroupBy(g) { _groupBy = g; renderPage(); }
     function sort(key) {
         if (_sortKey === key) _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
@@ -423,23 +505,23 @@ const ExploreWorkshopHubView = (() => {
         const main = document.getElementById('mainContent');
         const prog = App.getActiveProgram();
         if (!prog) {
-            main.innerHTML = `<div class="exp-empty"><div class="exp-empty__icon">📋</div><div class="exp-empty__title">Select a program first</div></div>`;
+            main.innerHTML = `<div class="exp-empty"><div class="exp-empty__icon">-</div><div class="exp-empty__title">Select a program first</div></div>`;
             return;
         }
         _pid = prog.id;
         main.innerHTML = `<div class="explore-page" style="display:flex;align-items:center;justify-content:center;min-height:300px">
-            <div style="text-align:center;color:var(--sap-text-secondary)"><div style="font-size:28px;margin-bottom:8px">⏳</div>Loading workshops…</div>
+            <div style="text-align:center;color:var(--sap-text-secondary)"><div style="font-size:28px;margin-bottom:8px">-</div>Loading workshops…</div>
         </div>`;
         try {
             await fetchAll();
             renderPage();
         } catch (err) {
-            main.innerHTML = `<div class="exp-empty"><div class="exp-empty__icon">❌</div><div class="exp-empty__title">Error loading workshops</div><p class="exp-empty__text">${esc(err.message)}</p></div>`;
+            main.innerHTML = `<div class="exp-empty"><div class="exp-empty__icon">-</div><div class="exp-empty__title">Error loading workshops</div><p class="exp-empty__text">${esc(err.message)}</p></div>`;
         }
     }
 
     return {
-        render, setViewMode, setFilter, setGroupBy, sort,
+        render, setViewMode, setFilter, onFilterBarChange, setGroupBy, sort,
         openWorkshop, createWorkshop, submitCreate,
     };
 })();

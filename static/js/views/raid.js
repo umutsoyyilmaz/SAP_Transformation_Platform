@@ -7,6 +7,10 @@
  */
 const RaidView = (() => {
     let _programId = null;
+    let _currentTab = 'risks';
+    let _filters = {};
+    let _searchQuery = '';
+    let _allItems = [];
 
     // ── Main Render ──────────────────────────────────────────────────────
     async function render() {
@@ -25,33 +29,56 @@ const RaidView = (() => {
         }
 
         main.innerHTML = `
-            <div class="page-header">
-                <h2>⚠️ RAID Log</h2>
+            <div class="page-header" style="margin-bottom:20px">
+                <div>
+                    <h2 style="margin:0">⚠️ RAID Log</h2>
+                    <p style="color:#64748b;margin:4px 0 0;font-size:13px">Risks, Actions, Issues & Decisions</p>
+                </div>
                 <div class="page-header__actions">
-                    <button class="btn btn-primary" onclick="RaidView.openCreate('risk')">+ Risk</button>
-                    <button class="btn btn-secondary" onclick="RaidView.openCreate('action')">+ Action</button>
-                    <button class="btn btn-secondary" onclick="RaidView.openCreate('issue')">+ Issue</button>
-                    <button class="btn btn-secondary" onclick="RaidView.openCreate('decision')">+ Decision</button>
+                    <div style="position:relative;display:inline-block" id="raidNewBtnWrap">
+                        ${ExpUI.actionButton({ label: '+ New', variant: 'primary', size: 'md', onclick: 'RaidView.toggleNewMenu()' })}
+                        <div class="raid-new-menu" id="raidNewMenu" style="display:none">
+                            <div class="raid-new-menu__item" onclick="RaidView.openCreate('risk')">
+                                <span style="color:#dc2626">●</span> Risk
+                            </div>
+                            <div class="raid-new-menu__item" onclick="RaidView.openCreate('action')">
+                                <span style="color:#3b82f6">●</span> Action
+                            </div>
+                            <div class="raid-new-menu__item" onclick="RaidView.openCreate('issue')">
+                                <span style="color:#f59e0b">●</span> Issue
+                            </div>
+                            <div class="raid-new-menu__item" onclick="RaidView.openCreate('decision')">
+                                <span style="color:#8b5cf6">●</span> Decision
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Stats Cards -->
-            <div id="raidStats" class="kpi-grid" style="margin-bottom:1.5rem"></div>
-
-            <!-- Heatmap -->
-            <div class="card" style="margin-bottom:1.5rem">
-                <div class="card__header"><h3>Risk Heatmap (Probability × Impact)</h3></div>
-                <div class="card__body" id="riskHeatmap" style="overflow-x:auto"></div>
+            <div class="raid-dash-row" id="raidDashRow">
+                <div id="raidStats"></div>
+                <div class="card" style="padding:16px" id="riskHeatmapCard">
+                    <div style="font-size:13px;font-weight:600;color:#64748b;margin-bottom:8px">Risk Heatmap</div>
+                    <div id="riskHeatmap" style="overflow-x:auto"></div>
+                </div>
             </div>
 
-            <!-- Tabs -->
-            <div class="tabs" style="margin-bottom:1rem">
-                <button class="tab active" data-tab="risks" onclick="RaidView.switchTab('risks')">🔴 Risks</button>
-                <button class="tab" data-tab="actions" onclick="RaidView.switchTab('actions')">📋 Actions</button>
-                <button class="tab" data-tab="issues" onclick="RaidView.switchTab('issues')">🔥 Issues</button>
-                <button class="tab" data-tab="decisions" onclick="RaidView.switchTab('decisions')">📝 Decisions</button>
+            <div class="tabs" style="margin-bottom:12px">
+                <button class="tab-btn active" data-tab="risks" onclick="RaidView.switchTab('risks')">
+                    <span style="color:#dc2626">●</span> Risks
+                </button>
+                <button class="tab-btn" data-tab="actions" onclick="RaidView.switchTab('actions')">
+                    <span style="color:#3b82f6">●</span> Actions
+                </button>
+                <button class="tab-btn" data-tab="issues" onclick="RaidView.switchTab('issues')">
+                    <span style="color:#f59e0b">●</span> Issues
+                </button>
+                <button class="tab-btn" data-tab="decisions" onclick="RaidView.switchTab('decisions')">
+                    <span style="color:#8b5cf6">●</span> Decisions
+                </button>
             </div>
 
+            <div id="raidFilterBar"></div>
             <div id="raidListContainer"></div>
         `;
 
@@ -63,25 +90,11 @@ const RaidView = (() => {
         try {
             const s = await API.get(`/programs/${_programId}/raid/stats`);
             document.getElementById('raidStats').innerHTML = `
-                <div class="kpi-card">
-                    <div class="kpi-card__value">${s.risks.open}</div>
-                    <div class="kpi-card__label">Open Risks</div>
-                    <div class="kpi-card__sub">${s.risks.critical} critical</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-card__value">${s.actions.open}</div>
-                    <div class="kpi-card__label">Open Actions</div>
-                    <div class="kpi-card__sub">${s.actions.overdue} overdue</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-card__value">${s.issues.open}</div>
-                    <div class="kpi-card__label">Open Issues</div>
-                    <div class="kpi-card__sub">${s.issues.critical} critical</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-card__value">${s.decisions.pending}</div>
-                    <div class="kpi-card__label">Pending Decisions</div>
-                    <div class="kpi-card__sub">${s.decisions.total} total</div>
+                <div class="exp-kpi-strip">
+                    ${ExpUI.kpiBlock({ value: s.risks.open, label: 'Open Risks', accent: '#dc2626', sub: s.risks.critical > 0 ? s.risks.critical + ' critical' : '' })}
+                    ${ExpUI.kpiBlock({ value: s.actions.open, label: 'Open Actions', accent: '#3b82f6', sub: s.actions.overdue > 0 ? s.actions.overdue + ' overdue' : '' })}
+                    ${ExpUI.kpiBlock({ value: s.issues.open, label: 'Open Issues', accent: '#f59e0b', sub: s.issues.critical > 0 ? s.issues.critical + ' critical' : '' })}
+                    ${ExpUI.kpiBlock({ value: s.decisions.pending, label: 'Pending Decisions', accent: '#8b5cf6', sub: s.decisions.total + ' total' })}
                 </div>
             `;
         } catch (e) {
@@ -94,20 +107,30 @@ const RaidView = (() => {
     async function loadHeatmap() {
         try {
             const h = await API.get(`/programs/${_programId}/raid/heatmap`);
-            const ragColors = {green: '#28a745', amber: '#ffc107', orange: '#fd7e14', red: '#dc3545'};
-            let html = '<table class="heatmap-table"><thead><tr><th></th>';
-            h.labels.impact.forEach(l => { html += `<th>${l}</th>`; });
+            const impLabels = ['Neg', 'Min', 'Mod', 'Maj', 'Sev'];
+            const probLabels = ['VL', 'Low', 'Med', 'High', 'VH'];
+
+            let html = '<table class="heatmap-table heatmap-table--compact"><thead><tr><th></th>';
+            impLabels.forEach(l => { html += `<th>${l}</th>`; });
             html += '</tr></thead><tbody>';
+
             for (let p = 4; p >= 0; p--) {
-                html += `<tr><th>${h.labels.probability[p]}</th>`;
+                html += `<tr><th>${probLabels[p]}</th>`;
                 for (let i = 0; i < 5; i++) {
                     const cell = h.matrix[p][i];
                     const score = (p + 1) * (i + 1);
-                    const bg = score <= 4 ? '#d4edda' : score <= 9 ? '#fff3cd' : score <= 15 ? '#ffe0b2' : '#f8d7da';
-                    html += `<td style="background:${bg};text-align:center;min-width:60px;padding:4px;cursor:${cell.length ? 'pointer' : 'default'}"
-                              title="Score: ${score}${cell.length ? ' — ' + cell.map(r => r.code).join(', ') : ''}"
-                              ${cell.length ? `onclick="RaidView.showHeatmapCell(${JSON.stringify(cell).replace(/"/g, '&quot;')})"` : ''}>
-                        ${cell.length ? `<strong>${cell.length}</strong>` : '-'}
+                    const bg = score <= 3 ? '#dcfce7'
+                        : score <= 6 ? '#fef9c3'
+                        : score <= 12 ? '#fed7aa'
+                        : score <= 16 ? '#fecaca'
+                        : '#fca5a5';
+
+                    const hasRisks = cell.length > 0;
+                    html += `<td class="heatmap-cell${hasRisks ? ' heatmap-cell--clickable' : ''}"
+                              style="background:${bg}"
+                              title="${hasRisks ? cell.map(r => r.code + ': ' + r.title).join('\n') : 'Score: ' + score}"
+                              ${hasRisks ? `onclick="RaidView.showHeatmapCell(${JSON.stringify(cell).replace(/"/g, '&quot;')})"` : ''}>
+                        ${hasRisks ? `<span class="heatmap-cell__count">${cell.length}</span>` : ''}
                     </td>`;
                 }
                 html += '</tr>';
@@ -117,6 +140,24 @@ const RaidView = (() => {
         } catch (e) {
             document.getElementById('riskHeatmap').innerHTML =
                 `<p class="text-muted">No heatmap data</p>`;
+        }
+    }
+
+    function toggleNewMenu() {
+        const menu = document.getElementById('raidNewMenu');
+        if (!menu) return;
+        const isOpen = menu.style.display !== 'none';
+        menu.style.display = isOpen ? 'none' : 'block';
+        if (!isOpen) {
+            setTimeout(() => {
+                const handler = (e) => {
+                    if (!e.target.closest('#raidNewBtnWrap')) {
+                        menu.style.display = 'none';
+                        document.removeEventListener('click', handler);
+                    }
+                };
+                document.addEventListener('click', handler);
+            }, 10);
         }
     }
 
@@ -136,11 +177,9 @@ const RaidView = (() => {
     }
 
     // ── List Views ───────────────────────────────────────────────────────
-    let _currentTab = 'risks';
-
     function switchTab(tab) {
         _currentTab = tab;
-        document.querySelectorAll('.tabs .tab').forEach(t => {
+        document.querySelectorAll('.tabs .tab-btn').forEach(t => {
             t.classList.toggle('active', t.dataset.tab === tab);
         });
         loadList(tab);
@@ -148,6 +187,8 @@ const RaidView = (() => {
 
     async function loadList(tab) {
         const container = document.getElementById('raidListContainer');
+        _filters = {};
+        _searchQuery = '';
         try {
             let items = [];
             if (tab === 'risks') items = await API.get(`/programs/${_programId}/risks`);
@@ -155,49 +196,287 @@ const RaidView = (() => {
             else if (tab === 'issues') items = await API.get(`/programs/${_programId}/issues`);
             else if (tab === 'decisions') items = await API.get(`/programs/${_programId}/decisions`);
 
-            if (!items.length) {
-                container.innerHTML = `<div class="empty-state"><p>No ${tab} found.</p></div>`;
+            _allItems = Array.isArray(items) ? items : (items.items || []);
+            renderFilterBar(tab);
+
+            if (!_allItems.length) {
+                container.innerHTML = `<div class="empty-state" style="padding:40px"><p>No ${tab} found.</p></div>`;
                 return;
             }
-
-            container.innerHTML = renderTable(tab, items);
+            container.innerHTML = renderTable(tab, _allItems);
+            const countEl = document.getElementById('raidItemCount');
+            if (countEl) countEl.textContent = `${_allItems.length} items`;
         } catch (e) {
             container.innerHTML = `<div class="empty-state"><p>⚠️ ${e.message}</p></div>`;
         }
     }
 
-    function renderTable(tab, items) {
-        const columns = {
-            risks: ['code', 'title', 'status', 'priority', 'risk_score', 'rag_status', 'owner'],
-            actions: ['code', 'title', 'status', 'priority', 'action_type', 'due_date', 'owner'],
-            issues: ['code', 'title', 'status', 'severity', 'priority', 'owner'],
-            decisions: ['code', 'title', 'status', 'priority', 'decision_owner', 'reversible'],
+    function renderFilterBar(tab) {
+        const filterDefs = {
+            risks: [
+                { id: 'status', label: 'Status', icon: '📋', type: 'multi',
+                    options: [
+                        { value: 'identified', label: 'Identified' },
+                        { value: 'analysed', label: 'Analysed' },
+                        { value: 'mitigating', label: 'Mitigating' },
+                        { value: 'closed', label: 'Closed' },
+                        { value: 'accepted', label: 'Accepted' },
+                    ],
+                    selected: _filters.status || [], color: '#3b82f6',
+                },
+                { id: 'priority', label: 'Priority', icon: '⚡', type: 'multi',
+                    options: [
+                        { value: 'critical', label: 'Critical' },
+                        { value: 'high', label: 'High' },
+                        { value: 'medium', label: 'Medium' },
+                        { value: 'low', label: 'Low' },
+                    ],
+                    selected: _filters.priority || [], color: '#dc2626',
+                },
+                { id: 'rag_status', label: 'RAG', icon: '🚦', type: 'single',
+                    options: [
+                        { value: 'red', label: '🔴 Red' },
+                        { value: 'orange', label: '🟠 Orange' },
+                        { value: 'amber', label: '🟡 Amber' },
+                        { value: 'green', label: '🟢 Green' },
+                    ],
+                    selected: _filters.rag_status || '', color: '#f59e0b',
+                },
+            ],
+            actions: [
+                { id: 'status', label: 'Status', icon: '📋', type: 'multi',
+                    options: [
+                        { value: 'open', label: 'Open' },
+                        { value: 'in_progress', label: 'In Progress' },
+                        { value: 'completed', label: 'Completed' },
+                        { value: 'cancelled', label: 'Cancelled' },
+                    ],
+                    selected: _filters.status || [], color: '#3b82f6',
+                },
+                { id: 'priority', label: 'Priority', icon: '⚡', type: 'multi',
+                    options: [
+                        { value: 'critical', label: 'Critical' },
+                        { value: 'high', label: 'High' },
+                        { value: 'medium', label: 'Medium' },
+                        { value: 'low', label: 'Low' },
+                    ],
+                    selected: _filters.priority || [], color: '#dc2626',
+                },
+                { id: 'action_type', label: 'Type', icon: '🔧', type: 'multi',
+                    options: [
+                        { value: 'preventive', label: 'Preventive' },
+                        { value: 'corrective', label: 'Corrective' },
+                        { value: 'detective', label: 'Detective' },
+                        { value: 'improvement', label: 'Improvement' },
+                    ],
+                    selected: _filters.action_type || [], color: '#8b5cf6',
+                },
+            ],
+            issues: [
+                { id: 'status', label: 'Status', icon: '📋', type: 'multi',
+                    options: [
+                        { value: 'open', label: 'Open' },
+                        { value: 'in_progress', label: 'In Progress' },
+                        { value: 'resolved', label: 'Resolved' },
+                        { value: 'closed', label: 'Closed' },
+                    ],
+                    selected: _filters.status || [], color: '#f59e0b',
+                },
+                { id: 'severity', label: 'Severity', icon: '🔥', type: 'multi',
+                    options: [
+                        { value: 'critical', label: 'Critical' },
+                        { value: 'major', label: 'Major' },
+                        { value: 'moderate', label: 'Moderate' },
+                        { value: 'minor', label: 'Minor' },
+                    ],
+                    selected: _filters.severity || [], color: '#dc2626',
+                },
+            ],
+            decisions: [
+                { id: 'status', label: 'Status', icon: '📋', type: 'multi',
+                    options: [
+                        { value: 'pending', label: 'Pending' },
+                        { value: 'approved', label: 'Approved' },
+                        { value: 'rejected', label: 'Rejected' },
+                        { value: 'deferred', label: 'Deferred' },
+                    ],
+                    selected: _filters.status || [], color: '#8b5cf6',
+                },
+            ],
         };
-        const cols = columns[tab] || ['code', 'title', 'status'];
 
-        let html = '<table class="table table-hover"><thead><tr>';
-        cols.forEach(c => { html += `<th>${c.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</th>`; });
-        html += '<th>Actions</th></tr></thead><tbody>';
+        const fbContainer = document.getElementById('raidFilterBar');
+        if (!fbContainer) return;
+        fbContainer.innerHTML = ExpUI.filterBar({
+            id: 'raidFB',
+            searchPlaceholder: `Search ${tab}…`,
+            searchValue: _searchQuery,
+            onSearch: "RaidView.setSearch(this.value)",
+            onChange: "RaidView.onFilterBarChange",
+            filters: filterDefs[tab] || [],
+            actionsHtml: `
+                <span style="font-size:12px;color:#94a3b8" id="raidItemCount"></span>
+            `,
+        });
+    }
+
+    function setSearch(val) {
+        _searchQuery = val;
+        applyFiltersAndRender();
+    }
+
+    function onFilterBarChange(update) {
+        if (update._clearAll) {
+            _filters = {};
+        } else {
+            Object.keys(update).forEach(key => {
+                const val = update[key];
+                if (val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+                    delete _filters[key];
+                } else {
+                    _filters[key] = val;
+                }
+            });
+        }
+        renderFilterBar(_currentTab);
+        applyFiltersAndRender();
+    }
+
+    function applyFiltersAndRender() {
+        let items = [..._allItems];
+
+        if (_searchQuery) {
+            const q = _searchQuery.toLowerCase();
+            items = items.filter(it =>
+                (it.title || '').toLowerCase().includes(q) ||
+                (it.code || '').toLowerCase().includes(q) ||
+                (it.owner || '').toLowerCase().includes(q) ||
+                (it.description || '').toLowerCase().includes(q)
+            );
+        }
+
+        Object.entries(_filters).forEach(([key, val]) => {
+            if (!val) return;
+            const values = Array.isArray(val) ? val : [val];
+            if (!values.length) return;
+            items = items.filter(it => values.includes(String(it[key])));
+        });
+
+        const container = document.getElementById('raidListContainer');
+        const countEl = document.getElementById('raidItemCount');
+        if (countEl) countEl.textContent = `${items.length} of ${_allItems.length}`;
+
+        if (!items.length) {
+            container.innerHTML = `<div class="empty-state" style="padding:40px"><p>No ${_currentTab} match your filters.</p></div>`;
+            return;
+        }
+        container.innerHTML = renderTable(_currentTab, items);
+    }
+
+    function renderTable(tab, items) {
+        const ragDot = (rag) => {
+            const colors = { red: '#dc2626', orange: '#f97316', amber: '#f59e0b', green: '#22c55e' };
+            const labels = { red: 'Critical', orange: 'High', amber: 'Medium', green: 'Low' };
+            return `<span style="display:inline-flex;align-items:center;gap:4px">
+                <span style="width:8px;height:8px;border-radius:50%;background:${colors[rag] || '#94a3b8'}"></span>
+                <span style="font-size:12px">${labels[rag] || rag || '—'}</span>
+            </span>`;
+        };
+
+        const scoreBadge = (score) => {
+            if (score == null) return '—';
+            const bg = score >= 16 ? '#fee2e2' : score >= 10 ? '#fef3c7' : score >= 5 ? '#f0fdf4' : '#f8fafc';
+            const color = score >= 16 ? '#991b1b' : score >= 10 ? '#92400e' : score >= 5 ? '#166534' : '#64748b';
+            return `<span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:22px;border-radius:4px;background:${bg};color:${color};font-size:12px;font-weight:700">${score}</span>`;
+        };
+
+        const statusBadge = (status) => {
+            const map = {
+                identified: '#dbeafe', analysed: '#e0e7ff', mitigating: '#fef3c7',
+                closed: '#f1f5f9', accepted: '#d1fae5',
+                open: '#dbeafe', in_progress: '#fef3c7', completed: '#d1fae5', cancelled: '#f1f5f9',
+                resolved: '#d1fae5', pending: '#e0e7ff', approved: '#d1fae5', rejected: '#fee2e2', deferred: '#f1f5f9',
+            };
+            const textMap = {
+                identified: '#1e40af', analysed: '#3730a3', mitigating: '#92400e',
+                closed: '#475569', accepted: '#065f46',
+                open: '#1e40af', in_progress: '#92400e', completed: '#065f46', cancelled: '#475569',
+                resolved: '#065f46', pending: '#3730a3', approved: '#065f46', rejected: '#991b1b', deferred: '#475569',
+            };
+            const label = (status || '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            return `<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:${map[status] || '#f1f5f9'};color:${textMap[status] || '#475569'};white-space:nowrap">${label}</span>`;
+        };
+
+        const priorityBadge = (priority) => {
+            const colors = { critical: '#dc2626', high: '#f97316', medium: '#f59e0b', low: '#22c55e' };
+            const bg = { critical: '#fee2e2', high: '#fff7ed', medium: '#fefce8', low: '#f0fdf4' };
+            const label = (priority || '').charAt(0).toUpperCase() + (priority || '').slice(1);
+            return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:${bg[priority] || '#f1f5f9'};color:${colors[priority] || '#64748b'}">
+                <span style="width:6px;height:6px;border-radius:50%;background:${colors[priority] || '#94a3b8'}"></span>${label}
+            </span>`;
+        };
+
+        const colDefs = {
+            risks: [
+                { key: 'code', label: 'Code', width: '90px', render: v => `<code style="font-size:12px;color:#475569">${v}</code>` },
+                { key: 'title', label: 'Title', width: '', render: v => `<span style="font-weight:500">${v}</span>` },
+                { key: 'status', label: 'Status', width: '100px', render: statusBadge },
+                { key: 'priority', label: 'Priority', width: '95px', render: priorityBadge },
+                { key: 'risk_score', label: 'Score', width: '60px', render: scoreBadge },
+                { key: 'rag_status', label: 'RAG', width: '80px', render: ragDot },
+                { key: 'owner', label: 'Owner', width: '120px', render: v => `<span style="font-size:12px;color:#64748b">${v || '—'}</span>` },
+            ],
+            actions: [
+                { key: 'code', label: 'Code', width: '90px', render: v => `<code style="font-size:12px;color:#475569">${v}</code>` },
+                { key: 'title', label: 'Title', width: '', render: v => `<span style="font-weight:500">${v}</span>` },
+                { key: 'status', label: 'Status', width: '100px', render: statusBadge },
+                { key: 'priority', label: 'Priority', width: '95px', render: priorityBadge },
+                { key: 'action_type', label: 'Type', width: '90px', render: v => statusBadge(v) },
+                { key: 'due_date', label: 'Due', width: '90px', render: v => {
+                    if (!v) return '—';
+                    const d = new Date(v);
+                    const isOverdue = d < new Date();
+                    return `<span style="font-size:12px;${isOverdue ? 'color:#dc2626;font-weight:600' : 'color:#64748b'}">${v}</span>`;
+                }},
+                { key: 'owner', label: 'Owner', width: '120px', render: v => `<span style="font-size:12px;color:#64748b">${v || '—'}</span>` },
+            ],
+            issues: [
+                { key: 'code', label: 'Code', width: '90px', render: v => `<code style="font-size:12px;color:#475569">${v}</code>` },
+                { key: 'title', label: 'Title', width: '', render: v => `<span style="font-weight:500">${v}</span>` },
+                { key: 'status', label: 'Status', width: '100px', render: statusBadge },
+                { key: 'severity', label: 'Severity', width: '85px', render: priorityBadge },
+                { key: 'priority', label: 'Priority', width: '95px', render: priorityBadge },
+                { key: 'owner', label: 'Owner', width: '120px', render: v => `<span style="font-size:12px;color:#64748b">${v || '—'}</span>` },
+            ],
+            decisions: [
+                { key: 'code', label: 'Code', width: '90px', render: v => `<code style="font-size:12px;color:#475569">${v}</code>` },
+                { key: 'title', label: 'Title', width: '', render: v => `<span style="font-weight:500">${v}</span>` },
+                { key: 'status', label: 'Status', width: '100px', render: statusBadge },
+                { key: 'priority', label: 'Priority', width: '95px', render: priorityBadge },
+                { key: 'decision_owner', label: 'Owner', width: '120px', render: v => `<span style="font-size:12px;color:#64748b">${v || '—'}</span>` },
+                { key: 'reversible', label: 'Reversible', width: '75px', render: v => v ? '✅' : '❌' },
+            ],
+        };
+
+        const cols = colDefs[tab] || colDefs.risks;
+        let html = '<table class="data-table" style="font-size:13px"><thead><tr>';
+        cols.forEach(c => {
+            html += `<th style="${c.width ? 'width:' + c.width : ''}">${c.label}</th>`;
+        });
+        html += '<th style="width:70px;text-align:right"></th></tr></thead><tbody>';
 
         items.forEach(item => {
             html += `<tr style="cursor:pointer" onclick="RaidView.openDetail('${tab}', ${item.id})">`;
             cols.forEach(c => {
-                let val = item[c];
-                if (c === 'rag_status') {
-                    const colors = {green: '🟢', amber: '🟡', orange: '🟠', red: '🔴'};
-                    val = `${colors[val] || ''} ${val}`;
-                } else if (c === 'status' || c === 'priority' || c === 'severity') {
-                    val = `<span class="badge badge-${val}">${val}</span>`;
-                } else if (c === 'risk_score') {
-                    val = `<strong>${val}</strong>`;
-                } else if (c === 'reversible') {
-                    val = val ? '✅ Yes' : '❌ No';
-                }
-                html += `<td>${val ?? '-'}</td>`;
+                html += `<td>${c.render(item[c.key])}</td>`;
             });
-            html += `<td>
-                <button class="btn btn-sm" onclick="event.stopPropagation();RaidView.openEdit('${tab}', ${item.id})" title="Edit">✏️</button>
-                <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();RaidView.deleteItem('${tab}', ${item.id})" title="Delete">🗑️</button>
+            html += `<td style="text-align:right" onclick="event.stopPropagation()">
+                <button class="btn-icon" onclick="RaidView.openEdit('${tab}', ${item.id})" title="Edit">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z" stroke="currentColor" stroke-width="1.5"/></svg>
+                </button>
+                <button class="btn-icon btn-icon--danger" onclick="RaidView.deleteItem('${tab}', ${item.id})" title="Delete">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V3h4v1M5 4v9h6V4" stroke="currentColor" stroke-width="1.5"/></svg>
+                </button>
             </td></tr>`;
         });
         html += '</tbody></table>';
@@ -443,5 +722,6 @@ const RaidView = (() => {
     return {
         render, switchTab, openDetail, openCreate, openEdit,
         submitCreate, submitEdit, deleteItem, showHeatmapCell,
+        toggleNewMenu, setSearch, onFilterBarChange,
     };
 })();

@@ -82,9 +82,9 @@ const IntegrationView = (() => {
                 API.get(`/programs/${_pid}/waves`),
                 API.get(`/programs/${_pid}/interfaces/stats`),
             ]);
-            _interfaces = ifaces;
-            _waves = waves;
-            _stats = stats;
+            _interfaces = Array.isArray(ifaces) ? ifaces : (ifaces && ifaces.items) || [];
+            _waves = Array.isArray(waves) ? waves : (waves && waves.items) || [];
+            _stats = stats || {};
             renderTab();
         } catch (e) {
             document.getElementById('integrationContent').innerHTML =
@@ -158,7 +158,7 @@ const IntegrationView = (() => {
             const ifaceRows = waveIfaces.map(i => `
                 <div class="wave-iface-item" style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--sapGroup_ContentBorderColor)">
                     <span>${DIR_ICONS[i.direction]||''} <strong>${esc(i.code||i.name)}</strong> — ${esc(i.name)}</span>
-                    <span class="badge" style="background:${STATUS_COLORS[i.status]||'#a9b4be'};color:#fff;font-size:.75rem">${STATUS_LABELS[i.status]||esc(i.status)}</span>
+                    <span class="badge" style="background:${STATUS_COLORS[i.status]||'#a9b4be'};color:#fff;font-size:11px">${STATUS_LABELS[i.status]||esc(i.status)}</span>
                 </div>`).join('') || '<p class="text-muted" style="padding:8px 0">No interfaces assigned</p>';
 
             return `
@@ -171,7 +171,7 @@ const IntegrationView = (() => {
                     </div>
                 </div>
                 <div class="card__body">
-                    <div style="font-size:.85rem;color:var(--sapContent_LabelColor);margin-bottom:8px">
+                    <div style="font-size:12px;color:var(--sapContent_LabelColor);margin-bottom:8px">
                         ${w.planned_start ? `📅 ${w.planned_start}` : ''} ${w.planned_end ? `→ ${w.planned_end}` : ''}
                         · ${waveIfaces.length} interface(s) · ${esc(w.description||'')}
                     </div>
@@ -184,7 +184,7 @@ const IntegrationView = (() => {
         const unassignedRows = unassigned.map(i => `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--sapGroup_ContentBorderColor)">
                 <span>${DIR_ICONS[i.direction]||''} <strong>${esc(i.code||i.name)}</strong> — ${esc(i.name)}</span>
-                <select onchange="IntegrationView.assignWave(${i.id}, this.value)" style="font-size:.85rem;padding:2px 6px">
+                <select onchange="IntegrationView.assignWave(${i.id}, this.value)" style="font-size:12px;padding:2px 6px">
                     <option value="">— Assign to wave —</option>
                     ${_waves.map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join('')}
                 </select>
@@ -248,29 +248,29 @@ const IntegrationView = (() => {
 
         const statusBars = Object.entries(s.by_status || {}).map(([k,v]) => `
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                <span style="width:120px;font-size:.85rem">${STATUS_LABELS[k]||k}</span>
+                <span style="width:120px;font-size:12px">${STATUS_LABELS[k]||k}</span>
                 <div style="flex:1;background:#e8e8e8;border-radius:4px;height:20px">
                     <div style="width:${Math.round(v/s.total*100)}%;background:${STATUS_COLORS[k]||'#0070f2'};height:100%;border-radius:4px;min-width:2px"></div>
                 </div>
-                <span style="width:30px;text-align:right;font-size:.85rem">${v}</span>
+                <span style="width:30px;text-align:right;font-size:12px">${v}</span>
             </div>`).join('');
 
         const dirBars = Object.entries(s.by_direction || {}).map(([k,v]) => `
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                <span style="width:120px;font-size:.85rem">${DIR_ICONS[k]||''} ${k}</span>
+                <span style="width:120px;font-size:12px">${DIR_ICONS[k]||''} ${k}</span>
                 <div style="flex:1;background:#e8e8e8;border-radius:4px;height:20px">
                     <div style="width:${Math.round(v/s.total*100)}%;background:#0070f2;height:100%;border-radius:4px;min-width:2px"></div>
                 </div>
-                <span style="width:30px;text-align:right;font-size:.85rem">${v}</span>
+                <span style="width:30px;text-align:right;font-size:12px">${v}</span>
             </div>`).join('');
 
         const protoBars = Object.entries(s.by_protocol || {}).map(([k,v]) => `
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                <span style="width:120px;font-size:.85rem">${PROTO_LABELS[k]||k}</span>
+                <span style="width:120px;font-size:12px">${PROTO_LABELS[k]||k}</span>
                 <div style="flex:1;background:#e8e8e8;border-radius:4px;height:20px">
                     <div style="width:${Math.round(v/s.total*100)}%;background:#5b738b;height:100%;border-radius:4px;min-width:2px"></div>
                 </div>
-                <span style="width:30px;text-align:right;font-size:.85rem">${v}</span>
+                <span style="width:30px;text-align:right;font-size:12px">${v}</span>
             </div>`).join('');
 
         c.innerHTML = `
@@ -306,11 +306,11 @@ const IntegrationView = (() => {
                     <td style="${cl.checked ? 'text-decoration:line-through;color:var(--sapContent_LabelColor)' : ''}">
                         ${esc(cl.title)}
                     </td>
-                    <td style="font-size:.8rem;color:var(--sapContent_LabelColor)">
+                    <td style="font-size:11px;color:var(--sapContent_LabelColor)">
                         ${cl.checked_by ? `✅ ${esc(cl.checked_by)}` : ''}
                         ${cl.checked_at ? `<br>${cl.checked_at.slice(0,10)}` : ''}
                     </td>
-                    <td style="font-size:.8rem">${esc(cl.evidence || '')}</td>
+                    <td style="font-size:11px">${esc(cl.evidence || '')}</td>
                 </tr>`).join('');
 
             const connRows = (i.connectivity_tests || []).map(ct => `
@@ -319,8 +319,8 @@ const IntegrationView = (() => {
                     <td>${esc(ct.environment)}</td>
                     <td>${ct.response_time_ms != null ? ct.response_time_ms + ' ms' : '—'}</td>
                     <td>${esc(ct.tested_by||'—')}</td>
-                    <td style="font-size:.8rem">${ct.tested_at ? ct.tested_at.slice(0,16).replace('T',' ') : '—'}</td>
-                    <td style="font-size:.8rem;color:var(--sapNegativeColor)">${esc(ct.error_message||'')}</td>
+                    <td style="font-size:11px">${ct.tested_at ? ct.tested_at.slice(0,16).replace('T',' ') : '—'}</td>
+                    <td style="font-size:11px;color:var(--sapNegativeColor)">${esc(ct.error_message||'')}</td>
                 </tr>`).join('') || '<tr><td colspan="6" class="text-muted">No connectivity tests recorded</td></tr>';
 
             const switchRows = (i.switch_plans || []).map(sp => `

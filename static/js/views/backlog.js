@@ -11,6 +11,10 @@ const BacklogView = (() => {
     let currentItem = null;
     let programId = null;
     let currentTab = 'board'; // board | list | sprints | config
+    let _listSearch = '';
+    let _listFilters = {};
+    let _configSearch = '';
+    let _configFilters = {};
 
     // WRICEF type labels & icons
     const WRICEF = {
@@ -33,6 +37,28 @@ const BacklogView = (() => {
         cancelled: 'Cancelled',
     };
 
+    function _priorityBadge(p) {
+        const colors = { critical:'#dc2626', high:'#f97316', medium:'#f59e0b', low:'#22c55e' };
+        const bg = { critical:'#fee2e2', high:'#fff7ed', medium:'#fefce8', low:'#f0fdf4' };
+        const label = (p || '').charAt(0).toUpperCase() + (p || '').slice(1);
+        return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:${bg[p] || '#f1f5f9'};color:${colors[p] || '#64748b'}">
+            <span style="width:6px;height:6px;border-radius:50%;background:${colors[p] || '#94a3b8'}"></span>${label}
+        </span>`;
+    }
+
+    function _statusBadge(s) {
+        const map = {
+            new:'#dbeafe', design:'#e0e7ff', build:'#fef3c7', test:'#fce7f3',
+            deploy:'#d1fae5', closed:'#f1f5f9', blocked:'#fee2e2', cancelled:'#f1f5f9',
+        };
+        const textMap = {
+            new:'#1e40af', design:'#3730a3', build:'#92400e', test:'#9d174d',
+            deploy:'#065f46', closed:'#475569', blocked:'#991b1b', cancelled:'#475569',
+        };
+        const label = STATUS_LABELS[s] || s || '—';
+        return `<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:${map[s] || '#f1f5f9'};color:${textMap[s] || '#475569'};white-space:nowrap">${label}</span>`;
+    }
+
     // ── Main render ──────────────────────────────────────────────────────
     async function render() {
         currentItem = null;
@@ -42,28 +68,30 @@ const BacklogView = (() => {
 
         if (!programId) {
             main.innerHTML = `
-                <div class="page-header"><h1>Backlog (WRICEF)</h1></div>
                 <div class="empty-state">
                     <div class="empty-state__icon">⚙️</div>
-                    <div class="empty-state__title">Select a Program</div>
-                    <p>Go to <a href="#" onclick="App.navigate('programs');return false">Programs</a> to select one.</p>
+                    <div class="empty-state__title">Backlog</div>
+                    <p>Go to <a href="#" onclick="App.navigate('programs');return false">Programs</a> to select one first.</p>
                 </div>`;
             return;
         }
 
         main.innerHTML = `
-            <div class="page-header">
-                <h1>Backlog (WRICEF)</h1>
+            <div class="page-header" style="margin-bottom:20px">
                 <div>
-                    <button class="btn btn-secondary" onclick="BacklogView.showStats()">📈 Stats</button>
-                    <button class="btn btn-primary" onclick="BacklogView.showCreateModal()">+ New Item</button>
+                    <h2 style="margin:0">Backlog</h2>
+                    <p style="color:#64748b;margin:4px 0 0;font-size:13px">Development objects, config items, and sprint planning</p>
+                </div>
+                <div class="page-header__actions">
+                    ${ExpUI.actionButton({ label: '📈 Stats', variant: 'secondary', size: 'md', onclick: 'BacklogView.showStats()' })}
+                    ${ExpUI.actionButton({ label: '+ New Item', variant: 'primary', size: 'md', onclick: 'BacklogView.showCreateSelector()' })}
                 </div>
             </div>
-            <div class="backlog-tabs">
-                <button class="backlog-tab ${currentTab === 'board' ? 'active' : ''}" onclick="BacklogView.switchTab('board')">🗂️ Kanban Board</button>
-                <button class="backlog-tab ${currentTab === 'list' ? 'active' : ''}" onclick="BacklogView.switchTab('list')">📋 WRICEF List</button>
-                <button class="backlog-tab ${currentTab === 'config' ? 'active' : ''}" onclick="BacklogView.switchTab('config')">⚙️ Config Items</button>
-                <button class="backlog-tab ${currentTab === 'sprints' ? 'active' : ''}" onclick="BacklogView.switchTab('sprints')">🏃 Sprints</button>
+            <div class="tabs" style="margin-bottom:16px">
+                <button class="tab-btn ${currentTab === 'board' ? 'active' : ''}" data-tab="board" onclick="BacklogView.switchTab('board')">Kanban Board</button>
+                <button class="tab-btn ${currentTab === 'list' ? 'active' : ''}" data-tab="list" onclick="BacklogView.switchTab('list')">WRICEF List</button>
+                <button class="tab-btn ${currentTab === 'config' ? 'active' : ''}" data-tab="config" onclick="BacklogView.switchTab('config')">Config Items</button>
+                <button class="tab-btn ${currentTab === 'sprints' ? 'active' : ''}" data-tab="sprints" onclick="BacklogView.switchTab('sprints')">Sprints</button>
             </div>
             <div id="backlogContent">
                 <div style="text-align:center;padding:40px"><div class="spinner"></div></div>
@@ -101,9 +129,8 @@ const BacklogView = (() => {
 
     function switchTab(tab) {
         currentTab = tab;
-        document.querySelectorAll('.backlog-tab').forEach((t, idx) => {
-            const tabs = ['board', 'list', 'config', 'sprints'];
-            t.classList.toggle('active', tabs[idx] === tab);
+        document.querySelectorAll('.tabs .tab-btn').forEach(t => {
+            t.classList.toggle('active', t.dataset.tab === tab);
         });
         renderCurrentTab();
     }
@@ -118,15 +145,15 @@ const BacklogView = (() => {
     // ── Kanban Board ─────────────────────────────────────────────────────
     function renderBoard() {
         const c = document.getElementById('backlogContent');
-        const visibleColumns = ['new', 'design', 'build', 'test', 'deploy', 'closed', 'blocked'];
+        const visibleColumns = ['new', 'design', 'build', 'test', 'deploy'];
         const summary = boardData.summary;
 
         c.innerHTML = `
-            <div class="backlog-summary">
-                <div class="backlog-kpi"><span>${summary.total_items}</span> Items</div>
-                <div class="backlog-kpi"><span>${summary.total_points}</span> Points</div>
-                <div class="backlog-kpi"><span>${summary.done_points}</span> Done</div>
-                <div class="backlog-kpi"><span>${summary.completion_pct}%</span> Complete</div>
+            <div class="exp-kpi-strip" style="margin-bottom:16px">
+                ${ExpUI.kpiBlock({ value: summary.total_items, label: 'Items', accent: 'var(--exp-l2, #3b82f6)' })}
+                ${ExpUI.kpiBlock({ value: summary.total_points, label: 'Story Points', accent: '#8b5cf6' })}
+                ${ExpUI.kpiBlock({ value: summary.done_points, label: 'Done', accent: 'var(--exp-fit, #22c55e)' })}
+                ${ExpUI.kpiBlock({ value: summary.completion_pct + '%', label: 'Complete', accent: summary.completion_pct >= 80 ? 'var(--exp-fit)' : summary.completion_pct >= 50 ? '#f59e0b' : 'var(--exp-gap, #ef4444)' })}
             </div>
             <div class="kanban-board">
                 ${visibleColumns.map(status => `
@@ -170,89 +197,153 @@ const BacklogView = (() => {
         const c = document.getElementById('backlogContent');
         if (items.length === 0) {
             c.innerHTML = `
-                <div class="empty-state">
+                <div class="empty-state" style="padding:40px">
                     <div class="empty-state__icon">⚙️</div>
                     <div class="empty-state__title">No backlog items yet</div>
                     <p>Create your first WRICEF item to build the development backlog.</p><br>
-                    <button class="btn btn-primary" onclick="BacklogView.showCreateModal()">+ New Item</button>
+                    ${ExpUI.actionButton({ label: '+ New Item', variant: 'primary', size: 'md', onclick: 'BacklogView.showCreateModal()' })}
                 </div>`;
             return;
         }
 
         c.innerHTML = `
-            <div class="card" style="margin-top:12px">
-                <div class="backlog-filters">
-                    <select id="blFilterType" onchange="BacklogView.applyListFilter()" class="form-input" style="width:auto">
-                        <option value="">All Types</option>
-                        ${Object.entries(WRICEF).map(([k, v]) => `<option value="${k}">${v.icon} ${v.label}</option>`).join('')}
-                    </select>
-                    <select id="blFilterStatus" onchange="BacklogView.applyListFilter()" class="form-input" style="width:auto">
-                        <option value="">All Statuses</option>
-                        ${Object.entries(STATUS_LABELS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}
-                    </select>
-                    <select id="blFilterPriority" onchange="BacklogView.applyListFilter()" class="form-input" style="width:auto">
-                        <option value="">All Priorities</option>
-                        <option value="critical">Critical</option>
-                        <option value="high">High</option>
-                        <option value="medium">Medium</option>
-                        <option value="low">Low</option>
-                    </select>
-                </div>
-                <table class="data-table" id="backlogTable">
-                    <thead>
-                        <tr>
-                            <th>Type</th>
-                            <th>Code</th>
-                            <th>Title</th>
-                            <th>Module</th>
-                            <th>Status</th>
-                            <th>Priority</th>
-                            <th>SP</th>
-                            <th>Assigned</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="backlogTableBody">
-                        ${_renderTableRows(items)}
-                    </tbody>
-                </table>
-            </div>`;
-    }
+            <div id="blFilterBar" style="margin-bottom:8px"></div>
+            <div id="blListTable"></div>`;
 
-    function _renderTableRows(list) {
-        return list.map(i => {
-            const w = WRICEF[i.wricef_type] || WRICEF.enhancement;
-            const linkCount = (i.requirement_id ? 1 : 0) +
-                              (i.functional_spec ? 1 : 0) +
-                              (i.technical_spec ? 1 : 0);
-            return `
-                <tr>
-                    <td><span class="wricef-badge" style="background:${w.color}">${w.icon} ${w.label}</span></td>
-                    <td><strong>${escHtml(i.code || '—')}</strong></td>
-                    <td><a href="#" onclick="BacklogView.openDetail(${i.id});return false">${escHtml(i.title)}</a>
-                        ${linkCount > 0 ? `<span class="trace-badge" title="${linkCount} linked items">🔗${linkCount}</span>` : ''}
-                    </td>
-                    <td>${escHtml(i.module || '—')}</td>
-                    <td><span class="badge badge-${i.status}">${STATUS_LABELS[i.status] || i.status}</span></td>
-                    <td><span class="badge badge-${i.priority}">${i.priority}</span></td>
-                    <td>${i.story_points || '—'}</td>
-                    <td>${escHtml(i.assigned_to || '—')}</td>
-                    <td>
-                        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();BacklogView.deleteItem(${i.id})">Delete</button>
-                    </td>
-                </tr>`;
-        }).join('');
+        renderListFilterBar();
+        applyListFilter();
     }
 
     function applyListFilter() {
-        const typeF = document.getElementById('blFilterType').value;
-        const statusF = document.getElementById('blFilterStatus').value;
-        const priorityF = document.getElementById('blFilterPriority').value;
-        let filtered = items;
-        if (typeF) filtered = filtered.filter(i => i.wricef_type === typeF);
-        if (statusF) filtered = filtered.filter(i => i.status === statusF);
-        if (priorityF) filtered = filtered.filter(i => i.priority === priorityF);
-        document.getElementById('backlogTableBody').innerHTML = _renderTableRows(filtered);
+        let filtered = [...items];
+
+        if (_listSearch) {
+            const q = _listSearch.toLowerCase();
+            filtered = filtered.filter(i =>
+                (i.title || '').toLowerCase().includes(q) ||
+                (i.code || '').toLowerCase().includes(q) ||
+                (i.assigned_to || '').toLowerCase().includes(q) ||
+                (i.module || '').toLowerCase().includes(q)
+            );
+        }
+
+        Object.entries(_listFilters).forEach(([key, val]) => {
+            if (!val) return;
+            const values = Array.isArray(val) ? val : [val];
+            if (values.length === 0) return;
+            filtered = filtered.filter(i => values.includes(String(i[key])));
+        });
+
+        const countEl = document.getElementById('blItemCount');
+        if (countEl) countEl.textContent = `${filtered.length} of ${items.length}`;
+
+        const tableEl = document.getElementById('blListTable');
+        if (!tableEl) return;
+        if (filtered.length === 0) {
+            tableEl.innerHTML = '<div class="empty-state" style="padding:40px"><p>No items match your filters.</p></div>';
+            return;
+        }
+        tableEl.innerHTML = _renderListTable(filtered);
+    }
+
+    function renderListFilterBar() {
+        document.getElementById('blFilterBar').innerHTML = ExpUI.filterBar({
+            id: 'blFB',
+            searchPlaceholder: 'Search items…',
+            searchValue: _listSearch,
+            onSearch: 'BacklogView.setListSearch(this.value)',
+            onChange: 'BacklogView.onListFilterChange',
+            filters: [
+                {
+                    id: 'wricef_type', label: 'Type', type: 'multi', color: '#3b82f6',
+                    options: Object.entries(WRICEF).map(([k, v]) => ({ value: k, label: v.label })),
+                    selected: _listFilters.wricef_type || [],
+                },
+                {
+                    id: 'status', label: 'Status', type: 'multi', color: '#10b981',
+                    options: Object.entries(STATUS_LABELS).map(([k, v]) => ({ value: k, label: v })),
+                    selected: _listFilters.status || [],
+                },
+                {
+                    id: 'priority', label: 'Priority', type: 'multi', color: '#ef4444',
+                    options: ['critical','high','medium','low'].map(p => ({ value: p, label: p.charAt(0).toUpperCase() + p.slice(1) })),
+                    selected: _listFilters.priority || [],
+                },
+                {
+                    id: 'module', label: 'Module', type: 'multi', color: '#8b5cf6',
+                    options: [...new Set(items.map(i => i.module).filter(Boolean))].sort().map(m => ({ value: m, label: m })),
+                    selected: _listFilters.module || [],
+                },
+            ],
+            actionsHtml: '<span style="font-size:12px;color:#94a3b8" id="blItemCount"></span>',
+        });
+    }
+
+    function setListSearch(val) {
+        _listSearch = val;
+        applyListFilter();
+    }
+
+    function onListFilterChange(update) {
+        if (update._clearAll) {
+            _listFilters = {};
+        } else {
+            Object.keys(update).forEach(key => {
+                const val = update[key];
+                if (val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+                    delete _listFilters[key];
+                } else {
+                    _listFilters[key] = val;
+                }
+            });
+        }
+        renderListFilterBar();
+        applyListFilter();
+    }
+
+    function _renderListTable(list) {
+        let html = `<table class="data-table" style="font-size:13px">
+            <thead><tr>
+                <th style="width:90px">Type</th>
+                <th style="width:110px">Code</th>
+                <th>Title</th>
+                <th style="width:60px">Module</th>
+                <th style="width:80px">Status</th>
+                <th style="width:85px">Priority</th>
+                <th style="width:40px">SP</th>
+                <th style="width:110px">Assigned</th>
+                <th style="width:60px;text-align:right"></th>
+            </tr></thead><tbody>`;
+
+        list.forEach(i => {
+            const w = WRICEF[i.wricef_type] || WRICEF.enhancement;
+            const linkCount = (i.requirement_id ? 1 : 0) + (i.functional_spec ? 1 : 0) + (i.technical_spec ? 1 : 0);
+
+            html += `<tr style="cursor:pointer" onclick="BacklogView.openDetail(${i.id})">
+                <td><span class="wricef-badge" style="background:${w.color}">${w.icon} ${w.label[0]}</span></td>
+                <td><code style="font-size:12px;color:#475569">${escHtml(i.code || '—')}</code></td>
+                <td>
+                    <span style="font-weight:500">${escHtml(i.title)}</span>
+                    ${linkCount > 0 ? `<span style="margin-left:4px;font-size:10px;color:#94a3b8">🔗${linkCount}</span>` : ''}
+                </td>
+                <td><span style="font-size:12px;color:#64748b">${escHtml(i.module || '—')}</span></td>
+                <td>${_statusBadge(i.status)}</td>
+                <td>${_priorityBadge(i.priority)}</td>
+                <td style="text-align:center;font-weight:600;color:#64748b">${i.story_points || '—'}</td>
+                <td><span style="font-size:12px;color:#64748b">${escHtml(i.assigned_to || '—')}</span></td>
+                <td style="text-align:right" onclick="event.stopPropagation()">
+                    <button class="btn-icon" onclick="BacklogView.openDetail(${i.id})" title="View">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z" stroke="currentColor" stroke-width="1.5"/></svg>
+                    </button>
+                    <button class="btn-icon btn-icon--danger" onclick="BacklogView.deleteItem(${i.id})" title="Delete">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V3h4v1M5 4v9h6V4" stroke="currentColor" stroke-width="1.5"/></svg>
+                    </button>
+                </td>
+            </tr>`;
+        });
+
+        html += '</tbody></table>';
+        return html;
     }
 
     // ── Sprints Tab ──────────────────────────────────────────────────────
@@ -261,7 +352,7 @@ const BacklogView = (() => {
 
         c.innerHTML = `
             <div style="margin-top:12px;display:flex;justify-content:flex-end">
-                <button class="btn btn-primary" onclick="BacklogView.showCreateSprintModal()">+ New Sprint</button>
+                ${ExpUI.actionButton({ label: '+ New Sprint', variant: 'primary', size: 'sm', onclick: 'BacklogView.showCreateSprintModal()' })}
             </div>
             ${sprints.length === 0 ? `
                 <div class="empty-state" style="margin-top:20px">
@@ -281,9 +372,13 @@ const BacklogView = (() => {
                                     <span class="badge badge-${s.status}">${s.status}</span>
                                     ${s.start_date ? `<span style="color:var(--sap-text-secondary);margin-left:12px">${s.start_date} → ${s.end_date || '?'}</span>` : ''}
                                 </div>
-                                <div>
-                                    <button class="btn btn-secondary btn-sm" onclick="BacklogView.showEditSprintModal(${s.id})">Edit</button>
-                                    <button class="btn btn-danger btn-sm" onclick="BacklogView.deleteSprint(${s.id})">Delete</button>
+                                <div style="display:flex;gap:4px">
+                                    <button class="btn-icon" onclick="BacklogView.showEditSprintModal(${s.id})" title="Edit">
+                                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z" stroke="currentColor" stroke-width="1.5"/></svg>
+                                    </button>
+                                    <button class="btn-icon btn-icon--danger" onclick="BacklogView.deleteSprint(${s.id})" title="Delete">
+                                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V3h4v1M5 4v9h6V4" stroke="currentColor" stroke-width="1.5"/></svg>
+                                    </button>
                                 </div>
                             </div>
                             ${s.goal ? `<p style="margin:8px 0;color:var(--sap-text-secondary)">${escHtml(s.goal)}</p>` : ''}
@@ -291,8 +386,8 @@ const BacklogView = (() => {
                                 <span><strong>${sprintItems.length}</strong> items</span>
                                 <span><strong>${totalPts}</strong> points</span>
                                 <span><strong>${donePts}</strong> done</span>
-                                ${s.capacity_points ? `<span>Capacity: <strong>${s.capacity_points}</strong></span>` : ''}
-                                ${s.velocity != null ? `<span>Velocity: <strong>${s.velocity}</strong></span>` : ''}
+                                ${s.capacity_points ? `<span><strong>${s.capacity_points}</strong> capacity</span>` : ''}
+                                ${s.velocity != null ? `<span><strong>${s.velocity}</strong> velocity</span>` : ''}
                             </div>
                             ${sprintItems.length > 0 ? `
                                 <table class="data-table" style="margin-top:12px">
@@ -314,7 +409,7 @@ const BacklogView = (() => {
                 }).join('')}
             <!-- Unassigned backlog -->
             <div class="card" style="margin-top:16px">
-                <div class="card-header"><h3>📦 Unassigned Backlog</h3></div>
+                <div class="card-header"><h3>Unassigned Backlog</h3></div>
                 ${(() => {
                     const unassigned = items.filter(i => !i.sprint_id);
                     if (unassigned.length === 0) return '<p style="padding:12px;color:var(--sap-text-secondary)">All items are assigned to sprints.</p>';
@@ -337,39 +432,146 @@ const BacklogView = (() => {
     function renderConfigItems() {
         const c = document.getElementById('backlogContent');
         c.innerHTML = `
-            <div style="margin-top:12px;display:flex;justify-content:flex-end">
-                <button class="btn btn-primary" onclick="BacklogView.showCreateConfigModal()">+ New Config Item</button>
-            </div>
             ${configItems.length === 0 ? `
                 <div class="empty-state" style="margin-top:20px">
                     <div class="empty-state__icon">⚙️</div>
                     <div class="empty-state__title">No config items yet</div>
                     <p>Create configuration items to track SAP customizing changes.</p>
                 </div>` : `
-            <div class="card" style="margin-top:12px">
-                <table class="data-table">
-                    <thead>
-                        <tr><th>Code</th><th>Title</th><th>Module</th><th>Config Key</th><th>Status</th><th>Priority</th><th>Assigned</th><th>Actions</th></tr>
-                    </thead>
-                    <tbody>
-                        ${configItems.map(ci => `
-                            <tr onclick="BacklogView.openConfigDetail(${ci.id})" style="cursor:pointer">
-                                <td><strong>${escHtml(ci.code || '—')}</strong></td>
-                                <td>${escHtml(ci.title)}</td>
-                                <td>${escHtml(ci.module || '—')}</td>
-                                <td>${escHtml(ci.config_key || '—')}</td>
-                                <td><span class="badge badge-${ci.status}">${STATUS_LABELS[ci.status] || ci.status}</span></td>
-                                <td><span class="badge badge-${ci.priority}">${ci.priority}</span></td>
-                                <td>${escHtml(ci.assigned_to || '—')}</td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();BacklogView.showEditConfigModal(${ci.id})">Edit</button>
-                                    <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();BacklogView.deleteConfigItem(${ci.id})">Delete</button>
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            </div>`}`;
+            <div id="ciFilterBar" style="margin-bottom:8px"></div>
+            <div id="ciListTable"></div>`}`;
+
+        if (configItems.length > 0) {
+            renderConfigFilterBar();
+            applyConfigFilter();
+        }
+
+        c.insertAdjacentHTML('beforeend', `
+            <div style="margin-top:12px;display:flex;justify-content:flex-end">
+                ${ExpUI.actionButton({ label: '+ New Config Item', variant: 'primary', size: 'sm', onclick: 'BacklogView.showCreateConfigModal()' })}
+            </div>
+        `);
+    }
+
+    function renderConfigFilterBar() {
+        document.getElementById('ciFilterBar').innerHTML = ExpUI.filterBar({
+            id: 'ciFB',
+            searchPlaceholder: 'Search config items…',
+            searchValue: _configSearch,
+            onSearch: 'BacklogView.setConfigSearch(this.value)',
+            onChange: 'BacklogView.onConfigFilterChange',
+            filters: [
+                {
+                    id: 'status', label: 'Status', type: 'multi', color: '#10b981',
+                    options: Object.entries(STATUS_LABELS).map(([k, v]) => ({ value: k, label: v })),
+                    selected: _configFilters.status || [],
+                },
+                {
+                    id: 'priority', label: 'Priority', type: 'multi', color: '#ef4444',
+                    options: ['critical','high','medium','low'].map(p => ({ value: p, label: p.charAt(0).toUpperCase() + p.slice(1) })),
+                    selected: _configFilters.priority || [],
+                },
+                {
+                    id: 'module', label: 'Module', type: 'multi', color: '#8b5cf6',
+                    options: [...new Set(configItems.map(i => i.module).filter(Boolean))].sort().map(m => ({ value: m, label: m })),
+                    selected: _configFilters.module || [],
+                },
+            ],
+            actionsHtml: '<span style="font-size:12px;color:#94a3b8" id="ciItemCount"></span>',
+        });
+    }
+
+    function setConfigSearch(val) {
+        _configSearch = val;
+        applyConfigFilter();
+    }
+
+    function onConfigFilterChange(update) {
+        if (update._clearAll) {
+            _configFilters = {};
+        } else {
+            Object.keys(update).forEach(key => {
+                const val = update[key];
+                if (val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+                    delete _configFilters[key];
+                } else {
+                    _configFilters[key] = val;
+                }
+            });
+        }
+        renderConfigFilterBar();
+        applyConfigFilter();
+    }
+
+    function applyConfigFilter() {
+        let filtered = [...configItems];
+
+        if (_configSearch) {
+            const q = _configSearch.toLowerCase();
+            filtered = filtered.filter(i =>
+                (i.title || '').toLowerCase().includes(q) ||
+                (i.code || '').toLowerCase().includes(q) ||
+                (i.assigned_to || '').toLowerCase().includes(q) ||
+                (i.module || '').toLowerCase().includes(q) ||
+                (i.config_key || '').toLowerCase().includes(q)
+            );
+        }
+
+        Object.entries(_configFilters).forEach(([key, val]) => {
+            if (!val) return;
+            const values = Array.isArray(val) ? val : [val];
+            if (values.length === 0) return;
+            filtered = filtered.filter(i => values.includes(String(i[key])));
+        });
+
+        const countEl = document.getElementById('ciItemCount');
+        if (countEl) countEl.textContent = `${filtered.length} of ${configItems.length}`;
+
+        const tableEl = document.getElementById('ciListTable');
+        if (!tableEl) return;
+        if (filtered.length === 0) {
+            tableEl.innerHTML = '<div class="empty-state" style="padding:40px"><p>No items match your filters.</p></div>';
+            return;
+        }
+
+        tableEl.innerHTML = _renderConfigListTable(filtered);
+    }
+
+    function _renderConfigListTable(list) {
+        let html = `<table class="data-table" style="font-size:13px">
+            <thead><tr>
+                <th style="width:110px">Code</th>
+                <th>Title</th>
+                <th style="width:60px">Module</th>
+                <th>Config Key</th>
+                <th style="width:80px">Status</th>
+                <th style="width:85px">Priority</th>
+                <th style="width:110px">Assigned</th>
+                <th style="width:60px;text-align:right"></th>
+            </tr></thead><tbody>`;
+
+        list.forEach(ci => {
+            html += `<tr style="cursor:pointer" onclick="BacklogView.openConfigDetail(${ci.id})">
+                <td><code style="font-size:12px;color:#475569">${escHtml(ci.code || '—')}</code></td>
+                <td><span style="font-weight:500">${escHtml(ci.title)}</span></td>
+                <td><span style="font-size:12px;color:#64748b">${escHtml(ci.module || '—')}</span></td>
+                <td><span style="font-size:12px;color:#64748b">${escHtml(ci.config_key || '—')}</span></td>
+                <td>${_statusBadge(ci.status)}</td>
+                <td>${_priorityBadge(ci.priority)}</td>
+                <td><span style="font-size:12px;color:#64748b">${escHtml(ci.assigned_to || '—')}</span></td>
+                <td style="text-align:right" onclick="event.stopPropagation()">
+                    <button class="btn-icon" onclick="BacklogView.showEditConfigModal(${ci.id})" title="Edit">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z" stroke="currentColor" stroke-width="1.5"/></svg>
+                    </button>
+                    <button class="btn-icon btn-icon--danger" onclick="BacklogView.deleteConfigItem(${ci.id})" title="Delete">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V3h4v1M5 4v9h6V4" stroke="currentColor" stroke-width="1.5"/></svg>
+                    </button>
+                </td>
+            </tr>`;
+        });
+
+        html += '</tbody></table>';
+        return html;
     }
 
     function showCreateConfigModal() { _showConfigForm(null); }
@@ -761,40 +963,130 @@ const BacklogView = (() => {
     // ── Stats Modal ──────────────────────────────────────────────────────
     async function showStats() {
         try {
-            const stats = await API.get(`/programs/${programId}/backlog/stats`);
-            const typeRows = Object.entries(stats.by_wricef_type).map(([k, v]) => {
+            let stats;
+            try {
+                stats = await API.get(`/programs/${programId}/backlog/stats`);
+            } catch (err) {
+                stats = _buildBacklogStatsFallback();
+            }
+
+            const cfgStats = _buildConfigStats();
+
+            const typeRows = Object.entries(stats.by_wricef_type || {}).map(([k, v]) => {
                 const w = WRICEF[k] || WRICEF.enhancement;
                 return `<tr><td>${w.icon} ${w.label}</td><td>${v}</td></tr>`;
             }).join('');
-            const statusRows = Object.entries(stats.by_status).map(([k, v]) =>
+            const statusRows = Object.entries(stats.by_status || {}).map(([k, v]) =>
                 `<tr><td><span class="badge badge-${k}">${STATUS_LABELS[k] || k}</span></td><td>${v}</td></tr>`
+            ).join('');
+
+            const cfgStatusRows = Object.entries(cfgStats.by_status).map(([k, v]) =>
+                `<tr><td><span class="badge badge-${k}">${STATUS_LABELS[k] || k}</span></td><td>${v}</td></tr>`
+            ).join('');
+            const cfgPriorityRows = Object.entries(cfgStats.by_priority).map(([k, v]) =>
+                `<tr><td><span class="badge badge-${k}">${k}</span></td><td>${v}</td></tr>`
             ).join('');
 
             App.openModal(`
                 <h2>Backlog Statistics</h2>
                 <div class="detail-grid" style="margin-top:16px">
                     <div>
-                        <h4>By WRICEF Type</h4>
+                        <h4>WRICEF — By Type</h4>
                         <table class="data-table"><thead><tr><th>Type</th><th>Count</th></tr></thead>
                         <tbody>${typeRows || '<tr><td colspan="2">No data</td></tr>'}</tbody></table>
                     </div>
                     <div>
-                        <h4>By Status</h4>
+                        <h4>WRICEF — By Status</h4>
                         <table class="data-table"><thead><tr><th>Status</th><th>Count</th></tr></thead>
                         <tbody>${statusRows || '<tr><td colspan="2">No data</td></tr>'}</tbody></table>
                     </div>
                 </div>
                 <div style="margin-top:16px">
-                    <p><strong>Total Items:</strong> ${stats.total_items}</p>
-                    <p><strong>Total Story Points:</strong> ${stats.total_story_points}</p>
-                    <p><strong>Estimated Hours:</strong> ${stats.total_estimated_hours}</p>
-                    <p><strong>Actual Hours:</strong> ${stats.total_actual_hours}</p>
+                    <p><strong>WRICEF Total Items:</strong> ${stats.total_items || 0}</p>
+                    <p><strong>Total Story Points:</strong> ${stats.total_story_points || 0}</p>
+                    <p><strong>Estimated Hours:</strong> ${stats.total_estimated_hours || 0}</p>
+                    <p><strong>Actual Hours:</strong> ${stats.total_actual_hours || 0}</p>
+                </div>
+                <div class="detail-grid" style="margin-top:24px">
+                    <div>
+                        <h4>Config — By Status</h4>
+                        <table class="data-table"><thead><tr><th>Status</th><th>Count</th></tr></thead>
+                        <tbody>${cfgStatusRows || '<tr><td colspan="2">No data</td></tr>'}</tbody></table>
+                    </div>
+                    <div>
+                        <h4>Config — By Priority</h4>
+                        <table class="data-table"><thead><tr><th>Priority</th><th>Count</th></tr></thead>
+                        <tbody>${cfgPriorityRows || '<tr><td colspan="2">No data</td></tr>'}</tbody></table>
+                    </div>
+                </div>
+                <div style="margin-top:16px">
+                    <p><strong>Config Total Items:</strong> ${cfgStats.total}</p>
                 </div>
                 <div style="text-align:right;margin-top:20px">
                     <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
                 </div>
             `);
         } catch (err) { App.toast(err.message, 'error'); }
+    }
+
+    function _buildBacklogStatsFallback() {
+        const byType = {};
+        const byStatus = {};
+        let totalPoints = 0;
+        let totalEstimated = 0;
+        let totalActual = 0;
+
+        items.forEach(i => {
+            byType[i.wricef_type] = (byType[i.wricef_type] || 0) + 1;
+            byStatus[i.status] = (byStatus[i.status] || 0) + 1;
+            totalPoints += i.story_points || 0;
+            totalEstimated += i.estimated_hours || 0;
+            totalActual += i.actual_hours || 0;
+        });
+
+        return {
+            total_items: items.length,
+            total_story_points: totalPoints,
+            total_estimated_hours: totalEstimated,
+            total_actual_hours: totalActual,
+            by_wricef_type: byType,
+            by_status: byStatus,
+        };
+    }
+
+    function _buildConfigStats() {
+        const byStatus = {};
+        const byPriority = {};
+        configItems.forEach(ci => {
+            byStatus[ci.status] = (byStatus[ci.status] || 0) + 1;
+            byPriority[ci.priority] = (byPriority[ci.priority] || 0) + 1;
+        });
+        return {
+            total: configItems.length,
+            by_status: byStatus,
+            by_priority: byPriority,
+        };
+    }
+
+    function showCreateSelector() {
+        App.openModal(`
+            <h2>Create Item</h2>
+            <p style="color:var(--sap-text-secondary);margin-top:4px">Select what you want to create.</p>
+            <div style="display:grid;gap:10px;margin-top:16px">
+                <button class="btn btn-primary" onclick="BacklogView.createWricefFromSelector()">WRICEF Item</button>
+                <button class="btn btn-secondary" onclick="BacklogView.createConfigFromSelector()">Config Item</button>
+            </div>
+        `);
+    }
+
+    function createWricefFromSelector() {
+        App.closeModal();
+        showCreateModal();
+    }
+
+    function createConfigFromSelector() {
+        App.closeModal();
+        showCreateConfigModal();
     }
 
     // ── Create Item Modal ────────────────────────────────────────────────
@@ -1046,8 +1338,10 @@ const BacklogView = (() => {
 
     // Public API
     return {
-        render, switchTab, applyListFilter,
-        showCreateModal, showEditModal, saveItem,
+        render, switchTab, applyListFilter, setListSearch, onListFilterChange,
+        setConfigSearch, onConfigFilterChange, applyConfigFilter,
+        showCreateModal, showCreateSelector, createWricefFromSelector,
+        createConfigFromSelector, showEditModal, saveItem,
         openDetail, deleteItem, switchDetailTab,
         showMoveModal, doMove,
         showStats,

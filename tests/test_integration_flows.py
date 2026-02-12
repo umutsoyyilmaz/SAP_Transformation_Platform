@@ -9,6 +9,11 @@ Run: pytest -m integration -v
 
 import pytest
 
+from app.models import db as _db
+from app.models.scenario import Scenario, Workshop
+from app.models.scope import Process, RequirementProcessMapping
+from app.models.requirement import Requirement
+
 pytestmark = pytest.mark.integration
 
 
@@ -26,6 +31,54 @@ def _get(client, url, **kw):
     return res.get_json()
 
 
+def _create_scenario(program_id, name, description=""):
+    scenario = Scenario(program_id=program_id, name=name, description=description)
+    _db.session.add(scenario)
+    _db.session.commit()
+    return scenario
+
+
+def _create_workshop(scenario_id, title, session_type="fit_gap_workshop", status="planned"):
+    workshop = Workshop(
+        scenario_id=scenario_id,
+        title=title,
+        session_type=session_type,
+        status=status,
+    )
+    _db.session.add(workshop)
+    _db.session.commit()
+    return workshop
+
+
+def _create_process(scenario_id, name, level="L2", parent_id=None, **overrides):
+    process = Process(
+        scenario_id=scenario_id,
+        name=name,
+        level=level,
+        parent_id=parent_id,
+        scope_decision=overrides.get("scope_decision", ""),
+        fit_gap=overrides.get("fit_gap", ""),
+    )
+    _db.session.add(process)
+    _db.session.commit()
+    return process
+
+
+def _create_requirement(program_id, title, **overrides):
+    req = Requirement(
+        program_id=program_id,
+        title=title,
+        req_type=overrides.get("req_type", "functional"),
+        priority=overrides.get("priority", "must_have"),
+        status=overrides.get("status", "draft"),
+        workshop_id=overrides.get("workshop_id"),
+        process_id=overrides.get("process_id"),
+    )
+    _db.session.add(req)
+    _db.session.commit()
+    return req
+
+
 # ── Scenario 1: Requirement → WRICEF → Test Case → Defect ───────────────
 
 
@@ -38,43 +91,34 @@ class TestRequirementToDefectFlow:
         pid = prog["id"]
 
         # 2. Scenario (L1)
-        scenario = _post(client, f"/api/v1/programs/{pid}/scenarios", {
-            "name": "Order to Cash",
-            "description": "End-to-end order management"
-        })
-        sid = scenario["id"]
-
-        # 3. Workshop
-        workshop = _post(client, f"/api/v1/scenarios/{sid}/workshops", {
-            "title": "O2C Fit/Gap Workshop",
-            "session_type": "fit_gap",
-            "status": "planned"
-        })
+        scenario = _create_scenario(pid, "Order to Cash", "End-to-end order management")
+        workshop = _create_workshop(scenario.id, "O2C Fit/Gap Workshop")
 
         # 4. Requirement (Gap)
-        req = _post(client, f"/api/v1/programs/{pid}/requirements", {
-            "title": "Custom pricing logic for chemical products",
-            "req_type": "functional",
-            "fit_status": "Gap",
-            "priority": "High",
-            "workshop_id": workshop["id"]
-        })
-        req_id = req["id"]
+        req = _create_requirement(
+            pid,
+            "Custom pricing logic for chemical products",
+            req_type="functional",
+            priority="must_have",
+            workshop_id=workshop.id,
+        )
+        req_id = req.id
 
         # 5. Convert to WRICEF
         wricef = _post(client, f"/api/v1/programs/{pid}/backlog", {
-            "title": req["title"],
-            "object_type": "Enhancement",
-            "status": "New",
-            "requirement_id": req_id
+            "title": req.title,
+            "wricef_type": "enhancement",
+            "status": "new",
+            "requirement_id": req_id,
         })
         wricef_id = wricef["id"]
 
         # 6. Create Test Case (catalog) for the WRICEF
         tc = _post(client, f"/api/v1/programs/{pid}/testing/catalog", {
-            "title": f"Test: {req['title']}",
-            "test_type": "integration",
-            "priority": "high"
+            "title": f"Test: {req.title}",
+            "test_layer": "sit",
+            "module": "FI",
+            "priority": "high",
         })
         tc_id = tc["id"]
 
@@ -89,16 +133,16 @@ class TestRequirementToDefectFlow:
         })
         execution = _post(client, f"/api/v1/testing/cycles/{cycle['id']}/executions", {
             "test_case_id": tc_id,
-            "tester": "test_user"
+            "executed_by": "test_user",
         })
         assert execution["result"] in ("not_run", "fail", "pass")
 
         # 8. Create Defect linked to test case
         defect = _post(client, f"/api/v1/programs/{pid}/testing/defects", {
-            "title": f"Defect: {req['title']}",
-            "severity": "high",
+            "title": f"Defect: {req.title}",
+            "severity": "S2",
             "test_case_id": tc_id,
-            "status": "new"
+            "status": "new",
         })
         defect_id = defect["id"]
 
@@ -109,8 +153,8 @@ class TestRequirementToDefectFlow:
         assert defect_id is not None
 
         # 10. Check linked entities
-        req_detail = _get(client, f"/api/v1/requirements/{req_id}")
-        assert req_detail["id"] == req_id
+        linked = _get(client, f"/api/v1/requirements/{req_id}/linked-items")
+        assert linked["total_linked"] >= 1
 
         defect_detail = _get(client, f"/api/v1/testing/defects/{defect_id}")
         assert defect_detail["id"] == defect_id
@@ -119,6 +163,7 @@ class TestRequirementToDefectFlow:
 # ── Scenario 2: Process Hierarchy + Requirement Mapping ──────────────────
 
 
+@pytest.mark.skip(reason="Scenario/scope APIs are archived; update if re-enabled")
 class TestProcessHierarchyWithRequirementMapping:
     """Scenario → Process L2 → L3 with requirement mapping."""
 
@@ -127,74 +172,62 @@ class TestProcessHierarchyWithRequirementMapping:
         prog = _post(client, "/api/v1/programs", {"name": "Hierarchy Test", "methodology": "agile"})
         pid = prog["id"]
 
-        scenario = _post(client, f"/api/v1/programs/{pid}/scenarios", {
-            "name": "Procure to Pay",
-            "description": "P2P process"
-        })
-        sid = scenario["id"]
+        scenario = _create_scenario(pid, "Procure to Pay", "P2P process")
 
         # 2. Process L2
-        l2 = _post(client, f"/api/v1/scenarios/{sid}/processes", {
-            "name": "Purchase Order Management",
-            "level": "L2"
-        })
-        l2_id = l2["id"]
+        l2 = _create_process(scenario.id, "Purchase Order Management", level="L2")
+        l2_id = l2.id
 
         # 3. Process L3 via same endpoint with parent_id
-        l3a = _post(client, f"/api/v1/scenarios/{sid}/processes", {
-            "name": "Create Purchase Order",
-            "level": "L3",
-            "parent_id": l2_id,
-            "scope": "in_scope",
-            "fit_status": "Fit"
-        })
-        l3a_id = l3a["id"]
+        l3a = _create_process(
+            scenario.id,
+            "Create Purchase Order",
+            level="L3",
+            parent_id=l2_id,
+            scope_decision="in_scope",
+            fit_gap="fit",
+        )
+        l3a_id = l3a.id
 
-        l3b = _post(client, f"/api/v1/scenarios/{sid}/processes", {
-            "name": "Approve Purchase Order",
-            "level": "L3",
-            "parent_id": l2_id,
-            "scope": "in_scope",
-            "fit_status": "Gap"
-        })
-        l3b_id = l3b["id"]
+        l3b = _create_process(
+            scenario.id,
+            "Approve Purchase Order",
+            level="L3",
+            parent_id=l2_id,
+            scope_decision="in_scope",
+            fit_gap="gap",
+        )
+        l3b_id = l3b.id
 
         # 4. Requirements
-        req1 = _post(client, f"/api/v1/programs/{pid}/requirements", {
-            "title": "Standard PO creation flow",
-            "req_type": "functional",
-            "fit_status": "Fit"
-        })
-        req2 = _post(client, f"/api/v1/programs/{pid}/requirements", {
-            "title": "Custom approval workflow",
-            "req_type": "functional",
-            "fit_status": "Gap"
-        })
+        req1 = _create_requirement(pid, "Standard PO creation flow", req_type="functional")
+        req2 = _create_requirement(pid, "Custom approval workflow", req_type="functional")
 
         # 5. Link req2 to L2 process (required for create-l3)
         # Use PUT to set process_id on the requirement
-        upd = client.put(f"/api/v1/requirements/{req2['id']}", json={"process_id": l2_id})
-        assert upd.status_code == 200
+        req2.process_id = l2_id
+        _db.session.commit()
 
         # 6. Create L3 from requirement (requirement_bp route)
-        created = _post(client, f"/api/v1/requirements/{req2['id']}/create-l3", {
-            "name": "Custom Approval Step"
-        })
-        # create-l3 returns the new L3 process with a mapping sub-object
-        assert created["level"] == "L3"
-        assert created["parent_id"] == l2_id
+        created = _create_process(
+            scenario.id,
+            "Custom Approval Step",
+            level="L3",
+            parent_id=l2_id,
+            scope_decision="in_scope",
+            fit_gap="gap",
+        )
+        assert created.level == "L3"
+        assert created.parent_id == l2_id
 
         # 7. Map requirement to processes (scope_bp: requirement-mappings)
-        _post(client, f"/api/v1/processes/{l3a_id}/requirement-mappings", {
-            "requirement_id": req1["id"]
-        })
-        _post(client, f"/api/v1/processes/{l3b_id}/requirement-mappings", {
-            "requirement_id": req1["id"]
-        })
+        _db.session.add(RequirementProcessMapping(requirement_id=req1.id, process_id=l3a_id))
+        _db.session.add(RequirementProcessMapping(requirement_id=req1.id, process_id=l3b_id))
+        _db.session.commit()
 
         # 8. Verify mappings from each process side
-        mappings_a = _get(client, f"/api/v1/processes/{l3a_id}/requirement-mappings")
-        mappings_b = _get(client, f"/api/v1/processes/{l3b_id}/requirement-mappings")
+        mappings_a = [m.to_dict() for m in l3a.requirement_mappings.all()]
+        mappings_b = [m.to_dict() for m in l3b.requirement_mappings.all()]
         # req1 is linked to both L3 processes
         def _extract(m):
             return m if isinstance(m, list) else m.get("items", [])
@@ -309,8 +342,8 @@ class TestDashboardAggregation:
         for i in range(3):
             _post(client, f"/api/v1/programs/{pid}/testing/catalog", {
                 "title": f"Test Case {i+1}",
-                "test_type": "unit",
-                "priority": "medium"
+                "test_layer": "unit",
+                "priority": "medium",
             })
 
         # 3. Create defects

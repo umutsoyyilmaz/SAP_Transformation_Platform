@@ -1,9 +1,12 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SAP Transformation Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/main.css">
     <link rel="stylesheet" href="/static/css/explore-tokens.css">
 </head>
@@ -22,7 +25,12 @@
         </div>
         <div class="shell-header__actions">
             <button class="shell-header__icon-btn" title="Notifications">🔔</button>
-            <button class="shell-header__icon-btn" title="User">👤</button>
+            <div class="user-switcher" id="userSwitcher">
+                <button class="user-switcher__btn" id="userSwitcherBtn" title="Switch demo user">
+                    👤 <span id="userSwitcherLabel">Guest</span> ▾
+                </button>
+                <div class="user-switcher__dropdown" id="userSwitcherDropdown"></div>
+            </div>
         </div>
     </header>
 
@@ -33,27 +41,25 @@
             <span class="sidebar__item-icon">📊</span>
             <span>Dashboard</span>
         </div>
+        <div class="sidebar__item" data-view="executive-cockpit">
+            <span class="sidebar__item-icon">🎯</span>
+            <span>Executive Cockpit</span>
+        </div>
         <div class="sidebar__item" data-view="programs">
             <span class="sidebar__item-icon">📋</span>
             <span>Programs</span>
         </div>
-
-        <div class="sidebar__section-title">Scope & Requirements</div>
-        <div class="sidebar__item" data-view="scenarios">
-            <span class="sidebar__item-icon">🎯</span>
-            <span>Scenarios</span>
+        <div class="sidebar__item" data-view="project-setup">
+            <span class="sidebar__item-icon">⚙️</span>
+            <span>Project Setup</span>
         </div>
-        <div class="sidebar__item" data-view="process-hierarchy">
-            <span class="sidebar__item-icon">🗺️</span>
-            <span>Process Hierarchy</span>
+        <div class="sidebar__item" data-view="raid">
+            <span class="sidebar__item-icon">⚠️</span>
+            <span>RAID</span>
         </div>
-        <div class="sidebar__item" data-view="analysis">
-            <span class="sidebar__item-icon">🔬</span>
-            <span>Analysis Hub</span>
-        </div>
-        <div class="sidebar__item" data-view="requirements">
-            <span class="sidebar__item-icon">📝</span>
-            <span>Requirements</span>
+        <div class="sidebar__item" data-view="reports">
+            <span class="sidebar__item-icon">📈</span>
+            <span>Reports</span>
         </div>
 
         <div class="sidebar__section-title">Explore Phase</div>
@@ -77,11 +83,19 @@
         <div class="sidebar__section-title">Delivery</div>
         <div class="sidebar__item" data-view="backlog">
             <span class="sidebar__item-icon">⚙️</span>
-            <span>Backlog (WRICEF)</span>
+            <span>Build</span>
         </div>
-        <div class="sidebar__item" data-view="testing">
-            <span class="sidebar__item-icon">🧪</span>
-            <span>Test Hub</span>
+        <div class="sidebar__item" data-view="test-planning">
+            <span class="sidebar__item-icon">📋</span>
+            <span>Test Planning</span>
+        </div>
+        <div class="sidebar__item" data-view="test-execution">
+            <span class="sidebar__item-icon">▶️</span>
+            <span>Test Execution</span>
+        </div>
+        <div class="sidebar__item" data-view="defect-management">
+            <span class="sidebar__item-icon">🐛</span>
+            <span>Defect Management</span>
         </div>
         <div class="sidebar__item" data-view="integration">
             <span class="sidebar__item-icon">🔌</span>
@@ -96,14 +110,6 @@
         <div class="sidebar__item" data-view="cutover">
             <span class="sidebar__item-icon">🚀</span>
             <span>Cutover Hub</span>
-        </div>
-        <div class="sidebar__item" data-view="raid">
-            <span class="sidebar__item-icon">⚠️</span>
-            <span>RAID</span>
-        </div>
-        <div class="sidebar__item" data-view="reports">
-            <span class="sidebar__item-icon">📈</span>
-            <span>Reports</span>
         </div>
 
         <div class="sidebar__section-title">AI Assistant</div>
@@ -135,16 +141,19 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="/static/js/api.js"></script>
     <script src="/static/js/views/program.js"></script>
-    <script src="/static/js/views/scenario.js"></script>
-    <script src="/static/js/views/analysis.js"></script>
-    <script src="/static/js/views/requirement.js"></script>
     <script src="/static/js/views/backlog.js"></script>
-    <script src="/static/js/views/testing.js"></script>
+    <script src="/static/js/views/testing_shared.js"></script>
+    <script src="/static/js/views/test_planning.js"></script>
+    <script src="/static/js/views/test_execution.js"></script>
+    <script src="/static/js/views/defect_management.js"></script>
     <script src="/static/js/views/raid.js"></script>
     <script src="/static/js/views/integration.js"></script>
-    <script src="/static/js/views/process_hierarchy.js"></script>
+    <script src="/static/js/views/data_factory.js"></script>
     <script src="/static/js/components/notification.js"></script>
     <script src="/static/js/components/suggestion-badge.js"></script>
+    <script src="/static/js/components/trace-view.js"></script>
+    <script src="/static/js/components/demo-flow.js"></script>
+    <script src="/static/js/components/role-nav.js"></script>
     <script src="/static/js/components/explore-shared.js"></script>
     <script src="/static/js/explore-api.js"></script>
     <script src="/static/js/views/explore_hierarchy.js"></script>
@@ -154,6 +163,9 @@
     <script src="/static/js/views/explore_dashboard.js"></script>
     <script src="/static/js/views/ai_admin.js"></script>
     <script src="/static/js/views/ai_query.js"></script>
+    <script src="/static/js/views/executive_cockpit.js"></script>
+    <script src="/static/js/views/reports.js"></script>
+    <script src="/static/js/views/project_setup.js"></script>
     <script src="/static/js/app.js"></script>
 
 </body>

@@ -19,6 +19,7 @@ from flask_migrate import Migrate
 from app.config import config
 from app.models import db
 from app.auth import init_auth
+from app.tenant import init_tenant_support
 from app.middleware.logging_config import configure_logging
 from app.middleware.timing import init_request_timing
 from app.middleware.diagnostics import run_startup_diagnostics
@@ -85,6 +86,9 @@ def create_app(config_name=None):
     # ── Request timing middleware ────────────────────────────────────────
     init_request_timing(app)
 
+    # ── Multi-tenant support ─────────────────────────────────────────────
+    init_tenant_support(app)
+
     # ── Request guards (input length + Content-Type) ─────────────────────
     app.config.setdefault("MAX_CONTENT_LENGTH", 2 * 1024 * 1024)  # 2 MB
 
@@ -113,33 +117,35 @@ def create_app(config_name=None):
     from app.models import ai as _ai_models                 # noqa: F401
     from app.models import integration as _integration_models  # noqa: F401
     from app.models import explore as _explore_models       # noqa: F401
+    from app.models import data_factory as _data_factory_models  # noqa: F401
+    from app.models import audit as _audit_models           # noqa: F401
 
     # ── Blueprints ───────────────────────────────────────────────────────
     from app.blueprints.program_bp import program_bp
-    from app.blueprints.scenario_bp import scenario_bp
-    from app.blueprints.requirement_bp import requirement_bp
     from app.blueprints.backlog_bp import backlog_bp
     from app.blueprints.testing_bp import testing_bp
-    from app.blueprints.scope_bp import scope_bp
     from app.blueprints.raid_bp import raid_bp
     from app.blueprints.ai_bp import ai_bp
     from app.blueprints.integration_bp import integration_bp
     from app.blueprints.health_bp import health_bp
     from app.blueprints.metrics_bp import metrics_bp
-    from app.blueprints.explore_bp import explore_bp
+    from app.blueprints.explore import explore_bp
+    from app.blueprints.data_factory_bp import data_factory_bp
+    from app.blueprints.reporting_bp import reporting_bp
+    from app.blueprints.audit_bp import audit_bp
 
     app.register_blueprint(program_bp)
-    app.register_blueprint(scenario_bp)
-    app.register_blueprint(requirement_bp)
     app.register_blueprint(backlog_bp)
     app.register_blueprint(testing_bp)
-    app.register_blueprint(scope_bp)
     app.register_blueprint(raid_bp)
     app.register_blueprint(ai_bp)
     app.register_blueprint(integration_bp)
     app.register_blueprint(health_bp)
     app.register_blueprint(metrics_bp)
     app.register_blueprint(explore_bp)
+    app.register_blueprint(data_factory_bp)
+    app.register_blueprint(reporting_bp)
+    app.register_blueprint(audit_bp)
 
     # ── SPA catch-all ────────────────────────────────────────────────────
     @app.route("/")

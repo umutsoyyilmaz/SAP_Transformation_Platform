@@ -126,6 +126,12 @@ class BacklogItem(db.Model):
         db.Integer, db.ForeignKey("requirements.id", ondelete="SET NULL"),
         nullable=True, comment="Link to source requirement",
     )
+    explore_requirement_id = db.Column(
+        db.String(36),
+        db.ForeignKey("explore_requirements.id", ondelete="SET NULL", use_alter=True),
+        nullable=True,
+        comment="Link to explore-phase requirement",
+    )
     process_id = db.Column(
         db.Integer, db.ForeignKey("processes.id", ondelete="SET NULL"),
         nullable=True, comment="L3 process step that generated this WRICEF (gap)",
@@ -224,6 +230,7 @@ class BacklogItem(db.Model):
             "program_id": self.program_id,
             "sprint_id": self.sprint_id,
             "requirement_id": self.requirement_id,
+            "explore_requirement_id": self.explore_requirement_id,
             "process_id": self.process_id,
             "code": self.code,
             "title": self.title,
@@ -276,6 +283,12 @@ class ConfigItem(db.Model):
     requirement_id = db.Column(
         db.Integer, db.ForeignKey("requirements.id", ondelete="SET NULL"),
         nullable=True, comment="Link to source requirement",
+    )
+    explore_requirement_id = db.Column(
+        db.String(36),
+        db.ForeignKey("explore_requirements.id", ondelete="SET NULL", use_alter=True),
+        nullable=True,
+        comment="Link to explore-phase requirement",
     )
 
     # ── Identification
@@ -350,6 +363,7 @@ class ConfigItem(db.Model):
             "id": self.id,
             "program_id": self.program_id,
             "requirement_id": self.requirement_id,
+            "explore_requirement_id": self.explore_requirement_id,
             "code": self.code,
             "title": self.title,
             "description": self.description,

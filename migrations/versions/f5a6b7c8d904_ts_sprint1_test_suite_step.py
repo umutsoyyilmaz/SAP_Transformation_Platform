@@ -84,10 +84,13 @@ def upgrade():
     # ── Add suite_id FK to test_cases
     with op.batch_alter_table('test_cases') as batch_op:
         batch_op.add_column(
-            sa.Column('suite_id', sa.Integer(),
-                      sa.ForeignKey('test_suites.id', ondelete='SET NULL'), nullable=True)
+            sa.Column('suite_id', sa.Integer(), nullable=True)
         )
         batch_op.create_index('ix_test_cases_suite_id', ['suite_id'])
+        batch_op.create_foreign_key(
+            'fk_test_cases_suite_id', 'test_suites',
+            ['suite_id'], ['id'], ondelete='SET NULL'
+        )
 
 
 def downgrade():

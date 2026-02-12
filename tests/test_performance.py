@@ -11,6 +11,9 @@ import time
 
 import pytest
 
+from app.models import db as _db
+from app.models.explore import ExploreRequirement
+
 pytestmark = [pytest.mark.performance, pytest.mark.slow]
 
 
@@ -36,18 +39,27 @@ def _timed_get(client, url, threshold_ms=500):
 
 def _seed_bulk_data(client, pid, n_requirements=200, n_defects=100, n_test_cases=150):
     """Seed a reasonable amount of test data."""
+    reqs = []
     for i in range(n_requirements):
-        client.post(f"/api/v1/programs/{pid}/requirements", json={
-            "title": f"Requirement {i+1}",
-            "req_type": "functional" if i % 2 == 0 else "technical",
-            "priority": ["Low", "Medium", "High", "Critical"][i % 4],
-            "fit_status": ["Fit", "Partial Fit", "Gap"][i % 3],
-        })
+        reqs.append(
+            ExploreRequirement(
+                project_id=pid,
+                code=f"REQ-{i+1:03d}",
+                title=f"Requirement {i+1}",
+                priority=["P1", "P2", "P3", "P4"][i % 4],
+                type="configuration" if i % 2 == 0 else "integration",
+                fit_status=["gap", "partial_fit"][i % 2],
+                status="draft",
+                created_by_id="system",
+            )
+        )
+    _db.session.add_all(reqs)
+    _db.session.commit()
 
     for i in range(n_test_cases):
         client.post(f"/api/v1/programs/{pid}/testing/catalog", json={
             "title": f"Test Case {i+1}",
-            "test_type": "unit" if i % 3 == 0 else "integration",
+            "test_layer": "unit" if i % 3 == 0 else "sit",
             "priority": "medium",
         })
 
@@ -79,7 +91,7 @@ class TestAPIPerformance:
         """GET /requirements (paginated) should be fast."""
         data, ms = _timed_get(
             client,
-            f"/api/v1/programs/{self.pid}/requirements?limit=50&offset=0",
+            f"/api/v1/requirements?project_id={self.pid}&page=1&per_page=50",
             threshold_ms=500,
         )
         assert "items" in data
@@ -89,7 +101,7 @@ class TestAPIPerformance:
         """Second page should also be fast (offset pagination)."""
         data, ms = _timed_get(
             client,
-            f"/api/v1/programs/{self.pid}/requirements?limit=50&offset=50",
+            f"/api/v1/requirements?project_id={self.pid}&page=2&per_page=50",
             threshold_ms=500,
         )
         assert "items" in data
@@ -143,7 +155,7 @@ class TestAPIPerformance:
     def test_concurrent_api_pattern(self, client):
         """Simulate sequential API calls (proxy for concurrency)."""
         endpoints = [
-            f"/api/v1/programs/{self.pid}/requirements?limit=10",
+            f"/api/v1/requirements?project_id={self.pid}&page=1&per_page=10",
             f"/api/v1/programs/{self.pid}/testing/catalog?limit=10",
             f"/api/v1/programs/{self.pid}/testing/defects?limit=10",
             "/api/v1/health/ready",

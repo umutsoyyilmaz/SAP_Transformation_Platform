@@ -8,7 +8,7 @@ markers = [
     "slow: Tests that take > 5 seconds",
 ]
 # Default: run unit + integration only (skip performance/ai_accuracy)
-addopts = "-m 'not performance and not ai_accuracy' --tb=short -q"
+addopts = "-m 'not performance and not ai_accuracy' --tb=short -q --ignore=tests/archive"
 filterwarnings = [
     "ignore::pytest.PytestCollectionWarning",
 ]

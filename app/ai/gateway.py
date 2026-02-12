@@ -614,6 +614,26 @@ class LLMGateway:
             db.session.add(log)
             # Use flush instead of commit to avoid interfering with caller's transaction
             db.session.flush()
+
+            # WR-2.3: Also write to general audit_logs table
+            from app.models.audit import write_audit as _write_general
+            _write_general(
+                entity_type="ai_call",
+                entity_id=str(log.id),
+                action=f"ai.{action}",
+                actor=user,
+                program_id=program_id,
+                diff={
+                    "prompt_name": action,
+                    "provider": provider,
+                    "model": model,
+                    "tokens_used": tokens_used,
+                    "cost_usd": round(cost_usd, 6),
+                    "latency_ms": latency_ms,
+                    "success": success,
+                    "error": error_message,
+                },
+            )
         except Exception as e:
             logger.error("Failed to log AI audit: %s", e)
             try:

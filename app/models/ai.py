@@ -29,6 +29,7 @@ SUGGESTION_STATUSES = {"pending", "approved", "rejected", "modified", "applied",
 SUGGESTION_TYPES = {
     "fit_gap_classification", "requirement_analysis", "defect_triage",
     "risk_assessment", "test_case_generation", "scope_recommendation",
+    "change_impact",
     "general",
 }
 

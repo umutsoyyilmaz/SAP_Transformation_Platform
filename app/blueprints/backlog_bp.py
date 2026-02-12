@@ -76,6 +76,19 @@ def _parse_date(value):
         return None
 
 
+def _validate_sprint_id(program_id, sprint_id):
+    if sprint_id is None:
+        return None, None
+    try:
+        sprint_id = int(sprint_id)
+    except (ValueError, TypeError):
+        return None, (jsonify({"error": "sprint_id must be an integer"}), 400)
+    sprint = db.session.get(Sprint, sprint_id)
+    if not sprint or sprint.program_id != program_id:
+        return None, (jsonify({"error": "Sprint not found for program"}), 404)
+    return sprint_id, None
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # BACKLOG ITEMS (WRICEF)
 # ═════════════════════════════════════════════════════════════════════════════
@@ -139,9 +152,22 @@ def create_backlog_item(program_id):
             "error": f"wricef_type must be one of: {', '.join(sorted(VALID_WRICEF))}"
         }), 400
 
+    status = data.get("status", "new")
+    if status not in VALID_STATUSES:
+        return jsonify({
+            "error": f"status must be one of: {', '.join(sorted(VALID_STATUSES))}"
+        }), 400
+
+    sprint_id = data.get("sprint_id")
+    if sprint_id == "":
+        sprint_id = None
+    sprint_id, err = _validate_sprint_id(program_id, sprint_id)
+    if err:
+        return err
+
     item = BacklogItem(
         program_id=program_id,
-        sprint_id=data.get("sprint_id"),
+        sprint_id=sprint_id,
         requirement_id=data.get("requirement_id"),
         code=data.get("code", ""),
         title=title,
@@ -152,7 +178,7 @@ def create_backlog_item(program_id):
         transaction_code=data.get("transaction_code", ""),
         package=data.get("package", ""),
         transport_request=data.get("transport_request", ""),
-        status=data.get("status", "new"),
+        status=status,
         priority=data.get("priority", "medium"),
         assigned_to=data.get("assigned_to", ""),
         story_points=data.get("story_points"),
@@ -193,6 +219,11 @@ def update_backlog_item(item_id):
 
     data = request.get_json(silent=True) or {}
 
+    if "status" in data and data["status"] not in VALID_STATUSES:
+        return jsonify({
+            "error": f"status must be one of: {', '.join(sorted(VALID_STATUSES))}"
+        }), 400
+
     for field in [
         "code", "title", "description", "sub_type", "module",
         "transaction_code", "package", "transport_request",
@@ -213,7 +244,14 @@ def update_backlog_item(item_id):
 
     for nullable in ["sprint_id", "requirement_id"]:
         if nullable in data:
-            setattr(item, nullable, data[nullable])
+            value = data[nullable]
+            if nullable == "sprint_id":
+                if value == "":
+                    value = None
+                value, err = _validate_sprint_id(item.program_id, value)
+                if err:
+                    return err
+            setattr(item, nullable, value)
 
     for num in ["story_points", "estimated_hours", "actual_hours", "board_order"]:
         if num in data:
@@ -271,7 +309,13 @@ def move_backlog_item(item_id):
         item.status = new_status
 
     if "sprint_id" in data:
-        item.sprint_id = data["sprint_id"]
+        sprint_id = data["sprint_id"]
+        if sprint_id == "":
+            sprint_id = None
+        sprint_id, err = _validate_sprint_id(item.program_id, sprint_id)
+        if err:
+            return err
+        item.sprint_id = sprint_id
 
     if "board_order" in data:
         item.board_order = data["board_order"]
@@ -507,6 +551,12 @@ def create_config_item(program_id):
     if not title:
         return jsonify({"error": "Config item title is required"}), 400
 
+    status = data.get("status", "new")
+    if status not in VALID_STATUSES:
+        return jsonify({
+            "error": f"status must be one of: {', '.join(sorted(VALID_STATUSES))}"
+        }), 400
+
     item = ConfigItem(
         program_id=program_id,
         requirement_id=data.get("requirement_id"),
@@ -517,7 +567,7 @@ def create_config_item(program_id):
         config_key=data.get("config_key", ""),
         transaction_code=data.get("transaction_code", ""),
         transport_request=data.get("transport_request", ""),
-        status=data.get("status", "new"),
+        status=status,
         priority=data.get("priority", "medium"),
         assigned_to=data.get("assigned_to", ""),
         complexity=data.get("complexity", "low"),

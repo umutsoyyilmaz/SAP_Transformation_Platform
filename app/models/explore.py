@@ -45,6 +45,8 @@ References:
 import uuid
 from datetime import date, datetime, time, timezone
 
+from sqlalchemy.orm import synonym
+
 from app.models import db
 
 
@@ -273,6 +275,7 @@ class ExploreWorkshop(db.Model):
         db.String(5), nullable=False,
         comment="FI, CO, SD, MM, PP, QM, PM, WM, HR, PS",
     )
+    module = synonym("process_area")
     wave = db.Column(db.Integer, nullable=True)
 
     # Multi-session
@@ -333,6 +336,7 @@ class ExploreWorkshop(db.Model):
             "type": self.type,
             "status": self.status,
             "date": self.date.isoformat() if self.date else None,
+            "scheduled_date": self.date.isoformat() if self.date else None,  # compat alias
             "start_time": self.start_time.isoformat() if self.start_time else None,
             "end_time": self.end_time.isoformat() if self.end_time else None,
             "facilitator_id": self.facilitator_id,
@@ -435,6 +439,7 @@ class WorkshopAttendee(db.Model):
             "role": self.role,
             "organization": self.organization,
             "attendance_status": self.attendance_status,
+            "attended": self.attendance_status in ("present", "confirmed"),  # compat alias
             "is_required": self.is_required,
         }
 
@@ -548,11 +553,13 @@ class ProcessStep(db.Model):
     )
 
     def to_dict(self, include_children=False):
+        pl = self.process_level  # L4 ProcessLevel
         d = {
             "id": self.id,
             "workshop_id": self.workshop_id,
             "process_level_id": self.process_level_id,
             "sort_order": self.sort_order,
+            "order_index": self.sort_order,  # compat alias
             "fit_decision": self.fit_decision,
             "notes": self.notes,
             "demo_shown": self.demo_shown,
@@ -561,6 +568,14 @@ class ProcessStep(db.Model):
             "assessed_by": self.assessed_by,
             "previous_session_step_id": self.previous_session_step_id,
             "carried_from_session": self.carried_from_session,
+            # L4 ProcessLevel fields for display
+            "name": pl.name if pl else None,
+            "code": pl.code if pl else None,
+            "level": pl.level if pl else None,
+            "process_area_code": pl.process_area_code if pl else None,
+            "parent_id": pl.parent_id if pl else None,
+            "scope_status": pl.scope_status if pl else None,
+            "description": pl.description if pl else None,
         }
         if include_children:
             d["decisions"] = [dec.to_dict() for dec in self.decisions]
@@ -619,6 +634,7 @@ class ExploreDecision(db.Model):
             "process_step_id": self.process_step_id,
             "code": self.code,
             "text": self.text,
+            "decision_text": self.text,  # compat alias
             "decided_by": self.decided_by,
             "decided_by_user_id": self.decided_by_user_id,
             "category": self.category,
@@ -705,6 +721,7 @@ class ExploreOpenItem(db.Model):
     # Denormalized
     process_area = db.Column(db.String(5), nullable=True)
     wave = db.Column(db.Integer, nullable=True)
+    module = synonym("process_area")
 
     # Timestamps
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
@@ -859,6 +876,32 @@ class ExploreRequirement(db.Model):
         comment="low | medium | high | very_high",
     )
 
+    # ── Analytical fields (W-2: Operational Model enrichment) ────────
+    impact = db.Column(
+        db.String(10), nullable=True,
+        comment="high | medium | low — business impact assessment",
+    )
+    sap_module = db.Column(
+        db.String(10), nullable=True,
+        comment="SD | MM | FI | CO | PP | WM | QM | PM | PS | HR | etc.",
+    )
+    integration_ref = db.Column(
+        db.String(200), nullable=True,
+        comment="Cross-module integration reference (e.g. SD↔FI, MM↔WM)",
+    )
+    data_dependency = db.Column(
+        db.Text, nullable=True,
+        comment="Master data / migration dependency description",
+    )
+    business_criticality = db.Column(
+        db.String(20), nullable=True,
+        comment="business_critical | important | nice_to_have — KPI impact level",
+    )
+    wricef_candidate = db.Column(
+        db.Boolean, nullable=False, default=False,
+        comment="Flag: should this become a WRICEF backlog item?",
+    )
+
     # Ownership
     created_by_id = db.Column(db.String(36), nullable=False, comment="FK → user")
     created_by_name = db.Column(db.String(100), nullable=True)
@@ -877,6 +920,16 @@ class ExploreRequirement(db.Model):
     alm_sync_status = db.Column(
         db.String(20), nullable=True,
         comment="pending | synced | sync_error | out_of_sync",
+    )
+
+    # Backlog linkage (WRICEF or Config)
+    backlog_item_id = db.Column(
+        db.Integer, db.ForeignKey("backlog_items.id", ondelete="SET NULL"),
+        nullable=True, comment="Linked WRICEF backlog item",
+    )
+    config_item_id = db.Column(
+        db.Integer, db.ForeignKey("config_items.id", ondelete="SET NULL"),
+        nullable=True, comment="Linked config backlog item",
     )
 
     # Deferred / Rejected
@@ -933,11 +986,18 @@ class ExploreRequirement(db.Model):
             "description": self.description,
             "priority": self.priority,
             "type": self.type,
+            "requirement_type": self.type,  # compat alias
             "fit_status": self.fit_status,
             "status": self.status,
             "effort_hours": self.effort_hours,
             "effort_story_points": self.effort_story_points,
             "complexity": self.complexity,
+            "impact": self.impact,
+            "sap_module": self.sap_module,
+            "integration_ref": self.integration_ref,
+            "data_dependency": self.data_dependency,
+            "business_criticality": self.business_criticality,
+            "wricef_candidate": self.wricef_candidate,
             "created_by_id": self.created_by_id,
             "created_by_name": self.created_by_name,
             "approved_by_id": self.approved_by_id,
@@ -948,6 +1008,8 @@ class ExploreRequirement(db.Model):
             "alm_id": self.alm_id,
             "alm_synced": self.alm_synced,
             "alm_sync_status": self.alm_sync_status,
+            "backlog_item_id": self.backlog_item_id,
+            "config_item_id": self.config_item_id,
             "deferred_to_phase": self.deferred_to_phase,
             "rejection_reason": self.rejection_reason,
             "created_at": self.created_at.isoformat() if self.created_at else None,

@@ -230,21 +230,21 @@ TEST_CASE_DATA = [
 
     # ── SD ──
     {"code": "TC-SD-001", "title": "Order-to-Cash E2E — sipariş → sevkiyat → fatura",
-     "module": "SD", "test_layer": "sit", "status": "approved", "priority": "critical",
+     "module": "SD", "test_layer": "uat", "status": "approved", "priority": "critical",
      "req_code": "REQ-SD-001",
      "preconditions": "Müşteri, malzeme, fiyat koşulları mevcut",
      "test_steps": "1. VA01 satış siparişi\n2. VL01N sevkiyat\n3. PGI mal çıkışı\n4. VF01 fatura\n5. Muhasebe kaydı kontrol",
      "expected_result": "Sipariş→sevkiyat→fatura→muhasebe akışı sorunsuz",
      "is_regression": True},
     {"code": "TC-SD-002", "title": "e-Fatura GİB gönderim ve yanıt kontrolü",
-     "module": "SD", "test_layer": "sit", "status": "approved", "priority": "critical",
+     "module": "SD", "test_layer": "uat", "status": "approved", "priority": "critical",
      "req_code": "REQ-INT-001",
      "preconditions": "GİB test ortamı bağlantısı aktif, sertifika geçerli",
      "test_steps": "1. VF01 fatura oluştur\n2. e-Fatura tetikle\n3. UBL-TR XML kontrolü\n4. GİB yanıt (kabul/red)\n5. İrsaliye gönderim",
      "expected_result": "GİB'e başarılı gönderim, kabul yanıtı alınır",
      "is_regression": True},
     {"code": "TC-SD-003", "title": "Kanal bazlı fiyatlandırma koşulları",
-     "module": "SD", "test_layer": "sit", "status": "approved", "priority": "high",
+     "module": "SD", "test_layer": "uat", "status": "in_review", "priority": "high",
      "req_code": "REQ-SD-001",
      "preconditions": "ZPRC01 prosedürü, kanal koşul tipleri konfigüre",
      "test_steps": "1. Perakende kanalı sipariş (ZK01)\n2. Toptan kanal sipariş\n3. E-ticaret kanalı\n4. İskonto hesaplama",
@@ -252,19 +252,19 @@ TEST_CASE_DATA = [
 
     # ── PP/QM ──
     {"code": "TC-PP-001", "title": "Plan-to-Produce E2E — MRP → üretim emri → onay",
-     "module": "PP", "test_layer": "sit", "status": "approved", "priority": "critical",
+     "module": "PP", "test_layer": "uat", "status": "in_review", "priority": "critical",
      "req_code": "REQ-PP-001",
      "preconditions": "BOM, reçete, iş merkezi, MRP parametreleri hazır",
      "test_steps": "1. MD01 MRP çalıştır\n2. Planlı sipariş → üretim emri\n3. Emri serbest bırak\n4. Onay gir\n5. Maliyet hesaplama",
      "expected_result": "MRP doğru planlı sipariş oluşturur, üretim emri tamamlanır"},
     {"code": "TC-PP-002", "title": "MES → SAP üretim onay arayüz testi",
-     "module": "PP", "test_layer": "sit", "status": "ready", "priority": "high",
+     "module": "PP", "test_layer": "e2e", "status": "ready", "priority": "high",
      "req_code": "REQ-INT-002",
      "preconditions": "MES bağlantısı aktif, test üretim emri serbest",
      "test_steps": "1. MES'ten onay mesajı gönder\n2. SAP'de BAPI ile onay oluştur\n3. Hurda miktarı doğrula\n4. Hata mesaj kontrolü",
      "expected_result": "MES onayı SAP'ye başarılı aktarılır"},
     {"code": "TC-QM-001", "title": "HACCP kontrol noktası muayene tetikleme",
-     "module": "QM", "test_layer": "sit", "status": "ready", "priority": "high",
+     "module": "QM", "test_layer": "e2e", "status": "draft", "priority": "high",
      "req_code": "REQ-NFR-001",
      "preconditions": "Muayene planı, HACCP kontrol noktaları tanımlı",
      "test_steps": "1. Mal girişi yap (gıda hammaddesi)\n2. Otomatik muayene lotu kontrolü\n3. HACCP sonuç gir\n4. Kabul/red kararı",
@@ -272,7 +272,7 @@ TEST_CASE_DATA = [
 
     # ── EWM ──
     {"code": "TC-EWM-001", "title": "Depo sevkiyat süreci — wave picking",
-     "module": "EWM", "test_layer": "sit", "status": "ready", "priority": "high",
+     "module": "EWM", "test_layer": "e2e", "status": "draft", "priority": "high",
      "req_code": "REQ-BIZ-003",
      "preconditions": "Depo yapısı, raf tipleri, stratejiler tanımlı",
      "test_steps": "1. Outbound delivery oluştur\n2. Wave ata\n3. Picking task başlat\n4. Teyit ve PGI",
@@ -280,7 +280,7 @@ TEST_CASE_DATA = [
 
     # ── Integration ──
     {"code": "TC-INT-001", "title": "Banka hesap özeti (MT940) alım testi",
-     "module": "FI", "test_layer": "sit", "status": "ready", "priority": "medium",
+     "module": "FI", "test_layer": "e2e", "status": "in_review", "priority": "medium",
      "req_code": "REQ-INT-003",
      "preconditions": "Banka bağlantısı konfigüre, elektronik hesap özeti aktif",
      "test_steps": "1. MT940 dosyası yükle\n2. Otomatik eşleştirme çalıştır\n3. Eşleşmeyen kalemleri kontrol\n4. Hesap bakiyesi doğrulama",
@@ -288,14 +288,14 @@ TEST_CASE_DATA = [
 
     # ── Cross-Module (E2E) ──
     {"code": "TC-E2E-001", "title": "Procure-to-Pay tam akış entegrasyon testi",
-     "module": "MM", "test_layer": "sit", "status": "approved", "priority": "critical",
+     "module": "MM", "test_layer": "regression", "status": "approved", "priority": "critical",
      "req_code": "REQ-MM-001",
      "preconditions": "Tüm MM/FI konfigürasyon tamamlanmış",
      "test_steps": "1. Satınalma talebi\n2. PO oluştur + onay WF\n3. Mal girişi\n4. Fatura girişi (MIRO)\n5. Ödeme (F110)\n6. Muhasebe kontrol",
      "expected_result": "PR→PO→GR→IR→Payment akışı sorunsuz",
      "is_regression": True},
     {"code": "TC-E2E-002", "title": "Record-to-Report ay sonu kapanış testi",
-     "module": "FI", "test_layer": "sit", "status": "ready", "priority": "high",
+     "module": "FI", "test_layer": "regression", "status": "ready", "priority": "high",
      "req_code": "REQ-FI-002",
      "preconditions": "Ay içi FI kayıtları mevcut",
      "test_steps": "1. Tahakkuk kayıtları\n2. Amortisman çalıştır\n3. FX revaluation\n4. Dönem kapanış\n5. Raporlama kontrolü",
@@ -351,7 +351,7 @@ EXECUTION_DATA = [
 
 DEFECT_DATA = [
     {"code": "DEF-FI-001", "title": "Konsolide bilanço — 2. şirket kodu döviz çevrimi hatası",
-     "tc_code": "TC-FI-003", "module": "FI", "severity": "P2", "status": "fixed",
+     "tc_code": "TC-FI-003", "module": "FI", "severity": "S2", "status": "resolved",
      "environment": "QAS",
      "description": "Şirket kodu 2000 (USD bazlı) döviz çevrimi yanlış kur kullanıyor.",
      "steps_to_reproduce": "1. ZFI_BALANCE çalıştır\n2. Şirket kodu 2000 seç\n3. Konsolide et → EUR satırı yanlış",
@@ -361,21 +361,21 @@ DEFECT_DATA = [
      "root_cause": "Kur tablosu TCURR yerine sabit kur kullanılmış",
      "reopen_count": 0},
     {"code": "DEF-SD-001", "title": "e-Fatura GİB yanıtı timeout — 60sn aşımı",
-     "tc_code": "TC-SD-002", "module": "SD", "severity": "P1", "status": "in_progress",
+     "tc_code": "TC-SD-002", "module": "SD", "severity": "S1", "status": "in_progress",
      "environment": "QAS",
      "description": "GİB test ortamına e-fatura gönderiminde 60 saniye timeout.",
      "steps_to_reproduce": "1. VF01 ile fatura oluştur\n2. e-Fatura tetikle\n3. 60 saniye bekle → timeout hatası",
      "reported_by": "Zeynep Koç", "assigned_to": "Zeynep Koç",
      "found_in_cycle": "SIT Cycle 1"},
     {"code": "DEF-PP-001", "title": "MES hurda miktarı negatif değer gönderiyor",
-     "tc_code": "TC-PP-002", "module": "PP", "severity": "P2", "status": "open",
+     "tc_code": "TC-PP-002", "module": "PP", "severity": "S2", "status": "new",
      "environment": "QAS",
      "description": "MES sisteminden gelen hurda miktarı alanı negatif değer içeriyor.",
      "steps_to_reproduce": "1. MES'ten üretim onay gönder\n2. Hurda = -5 geldi\n3. BAPI hata verdi",
      "reported_by": "Zeynep Koç", "assigned_to": "Deniz Aydın",
      "found_in_cycle": "SIT Cycle 1"},
     {"code": "DEF-FI-002", "title": "Amortisman hesaplama sapma — yuvarlama hatası",
-     "tc_code": "TC-E2E-002", "module": "FI", "severity": "P3", "status": "fixed",
+     "tc_code": "TC-E2E-002", "module": "FI", "severity": "S3", "status": "resolved",
      "environment": "QAS",
      "description": "Sabit kıymet amortismanında 0.01 TL yuvarlama farkı oluşuyor.",
      "steps_to_reproduce": "1. AFAB çalıştır\n2. Kıymet 10001 kontrol → 0.01 fark",
@@ -385,13 +385,13 @@ DEFECT_DATA = [
      "root_cause": "Python-style banker's rounding kullanılıyordu",
      "reopen_count": 0},
     {"code": "DEF-MM-001", "title": "FEFO lot seçim — aynı SKT'li lotlarda önceliklendirme yok",
-     "tc_code": "TC-MM-002", "module": "MM", "severity": "P4", "status": "new",
+     "tc_code": "TC-MM-002", "module": "MM", "severity": "S4", "status": "new",
      "environment": "QAS",
      "description": "Aynı son kullanma tarihli 2 lot olduğunda rastgele seçim yapılıyor, FIFO ikincil kural uygulanmıyor.",
      "reported_by": "Elif Kara", "assigned_to": "Gökhan Demir",
      "found_in_cycle": "SIT Cycle 1"},
     {"code": "DEF-SD-002", "title": "Sevk irsaliyesi formunda barkod basılmıyor",
-     "tc_code": "TC-SD-001", "module": "SD", "severity": "P3", "status": "retest",
+     "tc_code": "TC-SD-001", "module": "SD", "severity": "S3", "status": "retest",
      "environment": "QAS",
      "description": "Adobe Form sevk irsaliyesinde EAN-13 barkod alanı boş geliyor.",
      "steps_to_reproduce": "1. VL01N sevkiyat oluştur\n2. İrsaliye yazdır\n3. Barkod alanı boş",
@@ -400,13 +400,13 @@ DEFECT_DATA = [
      "resolution": "Adobe Form'da barkod font mapping eklendi",
      "root_cause": "BC417 barkod fontu sunucuya yüklenmemişti"},
     {"code": "DEF-EWM-001", "title": "Wave picking — büyük sipariş split hatası",
-     "tc_code": "TC-EWM-001", "module": "EWM", "severity": "P3", "status": "open",
+     "tc_code": "TC-EWM-001", "module": "EWM", "severity": "S3", "status": "new",
      "environment": "QAS",
      "description": "500+ kalemli siparişte wave split düzgün çalışmıyor.",
      "reported_by": "Gökhan Demir", "assigned_to": "Gökhan Demir",
      "found_in_cycle": "SIT Cycle 1"},
     {"code": "DEF-INT-001", "title": "CPI iFlow — retry mekanizması çalışmıyor",
-     "tc_code": "TC-SD-002", "module": "BC", "severity": "P2", "status": "in_progress",
+     "tc_code": "TC-SD-002", "module": "BC", "severity": "S2", "status": "in_progress",
      "environment": "QAS",
      "description": "BTP CPI iFlow'da GİB timeout sonrası retry mekanizması tetiklenmiyor.",
      "steps_to_reproduce": "1. e-Fatura gönder\n2. GİB timeout\n3. Retry 0/3 — retry tetiklenmedi",
@@ -717,4 +717,70 @@ DEFECT_LINK_DATA = [
     # Defect 5 blocks Defect 6 (E2E → Konsolidasyon)
     {"source_index": 5, "target_index": 6,
      "link_type": "blocks", "notes": "E2E akış kapanmadan konsolidasyon testi yapılamaz"},
+]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# UAT SIGN-OFFS  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+UAT_SIGNOFF_DATA = [
+    {"cycle_name": "UAT Cycle 1 — İş Senaryoları",
+     "process_area": "Finance", "scope_item_id": None,
+     "signed_off_by": "Kemal Erdoğan", "role": "PM",
+     "status": "approved", "comments": "Tüm finans senaryoları başarılı test edildi"},
+    {"cycle_name": "UAT Cycle 1 — İş Senaryoları",
+     "process_area": "Logistics", "scope_item_id": None,
+     "signed_off_by": "Elif Kara", "role": "BPO",
+     "status": "approved", "comments": "Tedarik zinciri süreçleri onaylandı"},
+    {"cycle_name": "UAT Cycle 1 — İş Senaryoları",
+     "process_area": "Production", "scope_item_id": None,
+     "signed_off_by": "Deniz Aydın", "role": "BPO",
+     "status": "pending", "comments": "MES entegrasyonu bekleniyor"},
+]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PERFORMANCE TEST RESULTS  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+PERF_RESULT_DATA = [
+    {"tc_code": "TC-FI-001", "run_index": 0,
+     "response_time_ms": 1200, "throughput_rps": 85.5,
+     "concurrent_users": 50, "target_response_ms": 2000,
+     "target_throughput_rps": 80.0, "environment": "PERF",
+     "notes": "Fatura kayıt performansı hedef dahilinde"},
+    {"tc_code": "TC-SD-001", "run_index": 3,
+     "response_time_ms": 3500, "throughput_rps": 45.2,
+     "concurrent_users": 100, "target_response_ms": 3000,
+     "target_throughput_rps": 50.0, "environment": "PERF",
+     "notes": "OTC E2E performansı hedef üzerinde — optimizasyon gerekli"},
+    {"tc_code": "TC-MM-001", "run_index": 2,
+     "response_time_ms": 800, "throughput_rps": 120.0,
+     "concurrent_users": 50, "target_response_ms": 1500,
+     "target_throughput_rps": 100.0, "environment": "PERF",
+     "notes": "PO oluşturma performansı mükemmel"},
+]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST DAILY SNAPSHOTS  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+SNAPSHOT_DATA = [
+    {"snapshot_date": "2026-03-10", "cycle_name": "SIT Cycle 1 — Temel Akışlar",
+     "wave": "Wave 1", "total_cases": 18, "passed": 10, "failed": 3,
+     "blocked": 1, "not_run": 4,
+     "open_defects_s1": 1, "open_defects_s2": 2,
+     "open_defects_s3": 3, "open_defects_s4": 1, "closed_defects": 1},
+    {"snapshot_date": "2026-03-15", "cycle_name": "SIT Cycle 1 — Temel Akışlar",
+     "wave": "Wave 1", "total_cases": 18, "passed": 14, "failed": 2,
+     "blocked": 0, "not_run": 2,
+     "open_defects_s1": 0, "open_defects_s2": 1,
+     "open_defects_s3": 2, "open_defects_s4": 1, "closed_defects": 4},
+    {"snapshot_date": "2026-03-20", "cycle_name": "SIT Cycle 1 — Temel Akışlar",
+     "wave": "Wave 1", "total_cases": 18, "passed": 16, "failed": 1,
+     "blocked": 0, "not_run": 1,
+     "open_defects_s1": 0, "open_defects_s2": 0,
+     "open_defects_s3": 1, "open_defects_s4": 1, "closed_defects": 6},
 ]

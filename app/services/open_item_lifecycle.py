@@ -29,6 +29,7 @@ Usage:
 from datetime import date, datetime, timezone
 
 from app.models import db
+from app.models.audit import write_audit
 from app.models.explore import (
     ExploreOpenItem,
     ExploreRequirement,
@@ -227,6 +228,24 @@ def transition_open_item(
 
     elif action == "start_progress":
         _add_activity_log(oi, user_id, "status_change", "Started progress")
+
+    # 6. Audit log
+    _diff = {"status": {"old": previous_status, "new": oi.status}}
+    if action == "close":
+        _diff["resolution"] = {"old": None, "new": resolution}
+    elif action == "mark_blocked":
+        _diff["blocked_reason"] = {"old": None, "new": blocked_reason}
+    try:
+        write_audit(
+            entity_type="open_item",
+            entity_id=oi.id,
+            action=f"open_item.{action}",
+            actor=user_id,
+            program_id=project_id,
+            diff=_diff,
+        )
+    except Exception:
+        pass  # audit must not break the main flow
 
     return {
         "open_item_id": oi.id,

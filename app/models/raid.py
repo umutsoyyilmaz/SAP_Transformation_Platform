@@ -103,6 +103,20 @@ class Risk(db.Model):
     workstream_id = db.Column(db.Integer, db.ForeignKey("workstreams.id", ondelete="SET NULL"), nullable=True, index=True)
     phase_id = db.Column(db.Integer, db.ForeignKey("phases.id", ondelete="SET NULL"), nullable=True, index=True)
 
+    # ── Explore Phase linkage (W-6) ──────────────────────────────────
+    explore_requirement_id = db.Column(
+        db.String(36),
+        db.ForeignKey("explore_requirements.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+        comment="Linked Explore phase requirement for traceability",
+    )
+    workshop_id = db.Column(
+        db.String(36),
+        db.ForeignKey("explore_workshops.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+        comment="Workshop where this risk was identified",
+    )
+
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
@@ -134,6 +148,8 @@ class Risk(db.Model):
             "trigger_event": self.trigger_event,
             "workstream_id": self.workstream_id,
             "phase_id": self.phase_id,
+            "explore_requirement_id": self.explore_requirement_id,
+            "workshop_id": self.workshop_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -241,6 +257,20 @@ class Issue(db.Model):
     workstream_id = db.Column(db.Integer, db.ForeignKey("workstreams.id", ondelete="SET NULL"), nullable=True, index=True)
     phase_id = db.Column(db.Integer, db.ForeignKey("phases.id", ondelete="SET NULL"), nullable=True, index=True)
 
+    # ── Explore Phase linkage (W-6) ──────────────────────────────────
+    explore_requirement_id = db.Column(
+        db.String(36),
+        db.ForeignKey("explore_requirements.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+        comment="Linked Explore phase requirement",
+    )
+    workshop_id = db.Column(
+        db.String(36),
+        db.ForeignKey("explore_workshops.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+        comment="Workshop where this issue was identified",
+    )
+
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
@@ -263,6 +293,8 @@ class Issue(db.Model):
             "resolution_date": self.resolution_date.isoformat() if self.resolution_date else None,
             "workstream_id": self.workstream_id,
             "phase_id": self.phase_id,
+            "explore_requirement_id": self.explore_requirement_id,
+            "workshop_id": self.workshop_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

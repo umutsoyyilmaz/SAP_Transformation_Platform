@@ -10,6 +10,9 @@ NOTE: These tests use the LocalStub provider (no API key needed).
 
 import pytest
 
+from app.models import db as _db
+from app.models.requirement import Requirement
+
 pytestmark = [pytest.mark.ai_accuracy, pytest.mark.slow]
 
 
@@ -18,6 +21,19 @@ pytestmark = [pytest.mark.ai_accuracy, pytest.mark.slow]
 def _post(client, url, json=None):
     res = client.post(url, json=json or {})
     return res
+
+
+def _create_requirement(program_id, title, description):
+    req = Requirement(
+        program_id=program_id,
+        title=title,
+        description=description,
+        req_type="functional",
+        priority="must_have",
+    )
+    _db.session.add(req)
+    _db.session.commit()
+    return req
 
 
 # ── Labeled Test Data ────────────────────────────────────────────────────
@@ -74,23 +90,15 @@ class TestRequirementAnalystAccuracy:
         results = []
 
         for item in LABELED_REQUIREMENTS:
-            # Create requirement
-            req_res = _post(client, f"/api/v1/programs/{pid}/requirements", json={
-                "title": item["description"][:100],
-                "description": item["description"],
-                "req_type": "functional"
-            })
-            if req_res.status_code != 201:
-                continue
-
-            req_id = req_res.get_json()["id"]
+            req = _create_requirement(pid, item["description"][:100], item["description"])
+            req_id = req.id
             total += 1
 
             # Ask AI to analyze
-            analysis = _post(client, f"/api/v1/ai/analyze/requirement/{req_id}", json={})
+            analysis = _post(client, f"/api/v1/ai/analyst/requirement/{req_id}", json={})
             if analysis.status_code == 200:
                 data = analysis.get_json()
-                predicted = data.get("classification", {}).get("fit_status", "")
+                predicted = data.get("classification", "")
                 expected = item["expected"]
                 is_correct = predicted.lower().replace("_", " ") == expected.lower().replace("_", " ")
                 if is_correct:
@@ -137,7 +145,7 @@ class TestDefectTriageAccuracy:
 
         for item in LABELED_DEFECTS:
             # Create defect
-            defect_res = _post(client, f"/api/v1/programs/{pid}/defects", json={
+            defect_res = _post(client, f"/api/v1/programs/{pid}/testing/defects", json={
                 "title": item["title"],
                 "severity": "medium",  # placeholder — AI should suggest correct
                 "status": "new"
@@ -152,7 +160,7 @@ class TestDefectTriageAccuracy:
             triage = _post(client, f"/api/v1/ai/triage/defect/{defect_id}", json={})
             if triage.status_code == 200:
                 data = triage.get_json()
-                predicted = data.get("triage", {}).get("suggested_severity", "")
+                predicted = data.get("severity", "")
                 expected = item["expected_severity"]
                 is_correct = predicted.lower() == expected.lower()
                 if is_correct:

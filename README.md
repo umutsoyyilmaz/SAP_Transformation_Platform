@@ -64,7 +64,7 @@ This project follows a **governance-first** execution model:
 
 - All work is driven by **sprint-tracked tasks**.
 - The authoritative execution roadmap is defined in
-  [`SAP_Platform_Project_Plan_v2.md`](SAP_Platform_Project_Plan_v2.md).
+  [`SAP_Platform_Project_Plan_v2.md`](docs/plans/SAP_Platform_Project_Plan_v2.md).
 - Every change maps to a specific **Release → Sprint → Task** in the plan.
 - No files, dependencies, or patterns are introduced outside of task scope.
 
@@ -73,7 +73,7 @@ This project follows a **governance-first** execution model:
 ## Architecture
 
 The platform architecture is defined in
-[`sap_transformation_platform_architecture_v2.md`](sap_transformation_platform_architecture_v2.md)
+[`sap_transformation_platform_architecture_v2.md`](docs/specs/sap_transformation_platform_architecture_v2.md)
 and serves as the single source of truth for module boundaries, tech stack
 decisions, and directory structure.
 
@@ -181,9 +181,21 @@ Seed script gerçekçi bir Türk otomotiv şirketi SAP dönüşüm projesi oluş
 | — | Code Review & Hardening | ✅ 28/67 bulgu düzeltildi | — | — | — |
 | — | Monitoring | ✅ Health + Metrics | — | — | — |
 
-Detaylı ilerleme raporu: [`PROGRESS_REPORT.md`](PROGRESS_REPORT.md)  
-Teknik borç: [`TECHNICAL_DEBT_BACKLOG.md`](TECHNICAL_DEBT_BACKLOG.md)  
-Değişiklik geçmişi: [`CHANGELOG.md`](CHANGELOG.md)
+Detaylı ilerleme raporu: [`PROGRESS_REPORT.md`](docs/plans/PROGRESS_REPORT.md)  
+Teknik borç: [`TECHNICAL_DEBT.md`](docs/plans/TECHNICAL_DEBT.md)  
+Değişiklik geçmişi: [`CHANGELOG.md`](docs/plans/CHANGELOG.md)
+
+---
+
+## Documentation
+
+| Directory | Contents |
+|-----------|----------|
+| `docs/specs/` | Functional & technical specifications |
+| `docs/reviews/` | Review findings and audit reports |
+| `docs/plans/` | Project plans, changelog, task lists |
+| `docs/archive/` | Superseded documents |
+| `User Guide/` | End-user documentation (EN + TR) |
 
 ---
 

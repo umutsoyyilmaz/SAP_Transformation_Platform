@@ -39,6 +39,17 @@ from app.models.raid import (
     calculate_risk_score, risk_rag_status,
 )
 from app.models.notification import Notification
+from app.models.data_factory import (
+    DataObject, MigrationWave, CleansingTask, LoadCycle, Reconciliation,
+)
+from app.models.integration import Interface, Wave as IntWave, ConnectivityTest, SwitchPlan, InterfaceChecklist
+from app.models.explore import (
+    ProcessLevel, ExploreWorkshop, WorkshopScopeItem,
+    WorkshopAttendee, WorkshopAgendaItem,
+    ProcessStep, ExploreDecision, ExploreOpenItem,
+    ExploreRequirement, RequirementOpenItemLink,
+    RequirementDependency, OpenItemComment,
+)
 
 # ── Modular data imports ─────────────────────────────────────────────────
 from scripts.seed_data.scenarios import SCENARIOS
@@ -52,6 +63,18 @@ from scripts.seed_data.specs_testing import (
     DEFECT_HISTORY_DATA, DEFECT_LINK_DATA,
 )
 from scripts.seed_data.raid import RISK_DATA, ACTION_DATA, ISSUE_DATA, DECISION_DATA
+from scripts.seed_data.integration import WAVES as INT_WAVES, INTERFACES as INT_INTERFACES
+from scripts.seed_data.data_factory import (
+    DATA_OBJECTS, MIGRATION_WAVES, CLEANSING_TASKS,
+    LOAD_CYCLES, RECONCILIATIONS,
+)
+from scripts.seed_data.explore import (
+    PROCESS_LEVELS as EXPLORE_LEVELS, WORKSHOPS as EXPLORE_WORKSHOPS,
+    WORKSHOP_SCOPE_ITEMS, WORKSHOP_ATTENDEES, WORKSHOP_AGENDA_ITEMS,
+    PROCESS_STEPS as EXPLORE_STEPS, DECISIONS as EXPLORE_DECISIONS,
+    OPEN_ITEMS as EXPLORE_OI, REQUIREMENTS as EXPLORE_REQS,
+    REQUIREMENT_OI_LINKS, REQUIREMENT_DEPENDENCIES, OPEN_ITEM_COMMENTS,
+)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -219,7 +242,8 @@ def seed_all(app, append=False, verbose=False):
     with app.app_context():
         if not append:
             print("🗑️  Clearing existing data...")
-            for model in [Notification, Decision, Issue, Action, Risk,
+            for model in [InterfaceChecklist, SwitchPlan, ConnectivityTest, Interface, IntWave,
+                          Notification, Decision, Issue, Action, Risk,
                           DefectLink, DefectHistory, DefectComment,
                           TestStepResult, TestRun,
                           TestCycleSuite, TestStep, TestCaseDependency,
@@ -791,6 +815,431 @@ def seed_all(app, append=False, verbose=False):
             db.session.add(decision)
         print(f"   ✅ {len(DECISION_DATA)} decisions")
 
+        # ── 21. EXPLORE PHASE DATA ──────────────────────────────────────
+        print("\n🔍 Creating Explore Phase data...")
+        # 21a. Process Levels
+        for pl_d in EXPLORE_LEVELS:
+            pl = ProcessLevel(
+                id=pl_d["id"], project_id=pid,
+                parent_id=pl_d.get("parent_id"),
+                level=pl_d["level"], code=pl_d["code"], name=pl_d["name"],
+                description=pl_d.get("description", ""),
+                scope_status=pl_d.get("scope_status", "in_scope"),
+                fit_status=pl_d.get("fit_status"),
+                process_area_code=pl_d.get("process_area_code"),
+                wave=pl_d.get("wave"),
+                sort_order=pl_d.get("sort_order", 0),
+            )
+            db.session.add(pl)
+        db.session.flush()
+        print(f"   ✅ {len(EXPLORE_LEVELS)} process levels")
+
+        # 21b. Workshops
+        for ws_d in EXPLORE_WORKSHOPS:
+            ws = ExploreWorkshop(
+                id=ws_d["id"], project_id=pid,
+                code=ws_d["code"], name=ws_d["name"],
+                date=_d(ws_d.get("date")),
+                location=ws_d.get("location"),
+                facilitator_id=ws_d.get("facilitator_id"),
+                process_area=ws_d.get("process_area"),
+                wave=ws_d.get("wave"),
+                status=ws_d.get("status", "planned"),
+                session_number=ws_d.get("session_number"),
+                notes=ws_d.get("notes", ""),
+            )
+            db.session.add(ws)
+        db.session.flush()
+        print(f"   ✅ {len(EXPLORE_WORKSHOPS)} workshops")
+
+        # 21c. Workshop scope items
+        for si_d in WORKSHOP_SCOPE_ITEMS:
+            si = WorkshopScopeItem(
+                id=si_d["id"],
+                workshop_id=si_d["workshop_id"],
+                process_level_id=si_d["process_level_id"],
+            )
+            db.session.add(si)
+        print(f"   ✅ {len(WORKSHOP_SCOPE_ITEMS)} workshop scope items")
+
+        # 21d. Workshop attendees
+        for att_d in WORKSHOP_ATTENDEES:
+            att = WorkshopAttendee(
+                id=att_d["id"],
+                workshop_id=att_d["workshop_id"],
+                user_id=att_d.get("user_id"),
+                name=att_d.get("name"),
+                role=att_d.get("role"),
+                organization=att_d.get("organization", att_d.get("department", "customer")),
+                attendance_status=att_d.get("attendance_status", "confirmed"),
+            )
+            db.session.add(att)
+        print(f"   ✅ {len(WORKSHOP_ATTENDEES)} attendees")
+
+        # 21e. Workshop agenda items
+        from datetime import time as _time
+        for ag_d in WORKSHOP_AGENDA_ITEMS:
+            ag = WorkshopAgendaItem(
+                id=ag_d["id"],
+                workshop_id=ag_d["workshop_id"],
+                title=ag_d["title"],
+                sort_order=ag_d.get("sort_order", 0),
+                duration_minutes=ag_d.get("duration_minutes", 30),
+                type=ag_d.get("type", "session"),
+                time=ag_d.get("time", _time(9, 0)),
+                notes=ag_d.get("description", ag_d.get("notes", "")),
+            )
+            db.session.add(ag)
+        print(f"   ✅ {len(WORKSHOP_AGENDA_ITEMS)} agenda items")
+
+        # 21f. Process steps (fit decisions)
+        for ps_d in EXPLORE_STEPS:
+            ps = ProcessStep(
+                id=ps_d["id"],
+                workshop_id=ps_d["workshop_id"],
+                process_level_id=ps_d["process_level_id"],
+                sort_order=ps_d.get("sort_order", 0),
+                fit_decision=ps_d.get("fit_decision"),
+                notes=ps_d.get("notes", ps_d.get("description", "")),
+            )
+            db.session.add(ps)
+        db.session.flush()
+        print(f"   ✅ {len(EXPLORE_STEPS)} process steps")
+
+        # 21g. Decisions
+        for dec_d in EXPLORE_DECISIONS:
+            dec = ExploreDecision(
+                id=dec_d["id"],
+                project_id=pid,
+                process_step_id=dec_d["process_step_id"],
+                code=dec_d.get("code", f"DEC-{EXPLORE_DECISIONS.index(dec_d)+1:03d}"),
+                text=dec_d.get("text", dec_d.get("decision_text", "")),
+                decided_by=dec_d.get("decided_by", dec_d.get("owner_name", "Workshop Team")),
+                category=dec_d.get("category", "process"),
+                status=dec_d.get("status", "active"),
+                rationale=dec_d.get("rationale"),
+            )
+            db.session.add(dec)
+        print(f"   ✅ {len(EXPLORE_DECISIONS)} decisions (explore)")
+
+        # 21h. Open items
+        for oi_d in EXPLORE_OI:
+            oi = ExploreOpenItem(
+                id=oi_d["id"],
+                project_id=pid,
+                workshop_id=oi_d["workshop_id"],
+                process_step_id=oi_d.get("process_step_id"),
+                code=oi_d.get("code"),
+                title=oi_d.get("title"),
+                description=oi_d.get("description", ""),
+                priority=oi_d.get("priority", "P2"),
+                status=oi_d.get("status", "open"),
+                category=oi_d.get("category", "clarification"),
+                assignee_id=oi_d.get("assignee_id"),
+                assignee_name=oi_d.get("assignee_name"),
+                created_by_id=oi_d.get("created_by_id", oi_d.get("assignee_id", "system")),
+                due_date=_d(oi_d.get("due_date")),
+            )
+            db.session.add(oi)
+        db.session.flush()
+        print(f"   ✅ {len(EXPLORE_OI)} open items (explore)")
+
+        # 21i. Requirements (explore-level)
+        for r_d in EXPLORE_REQS:
+            req = ExploreRequirement(
+                id=r_d["id"], project_id=pid,
+                process_step_id=r_d.get("process_step_id"),
+                workshop_id=r_d.get("workshop_id"),
+                process_level_id=r_d.get("process_level_id"),
+                scope_item_id=r_d.get("scope_item_id"),
+                code=r_d.get("code"),
+                title=r_d.get("title"),
+                description=r_d.get("description", ""),
+                priority=r_d.get("priority"),
+                type=r_d.get("type"),
+                fit_status=r_d.get("fit_status"),
+                status=r_d.get("status"),
+                effort_hours=r_d.get("effort_hours"),
+                effort_story_points=r_d.get("effort_story_points"),
+                complexity=r_d.get("complexity"),
+                created_by_id=r_d.get("created_by_id"),
+                created_by_name=r_d.get("created_by_name"),
+                approved_by_id=r_d.get("approved_by_id"),
+                approved_by_name=r_d.get("approved_by_name"),
+                process_area=r_d.get("process_area"),
+                wave=r_d.get("wave"),
+                alm_synced=r_d.get("alm_synced", False),
+                alm_sync_status=r_d.get("alm_sync_status"),
+                deferred_to_phase=r_d.get("deferred_to_phase"),
+                rejection_reason=r_d.get("rejection_reason"),
+            )
+            db.session.add(req)
+        db.session.flush()
+        print(f"   ✅ {len(EXPLORE_REQS)} requirements (explore)")
+
+        # 21j. Requirement ↔ Open Item links
+        for rl_d in REQUIREMENT_OI_LINKS:
+            rl = RequirementOpenItemLink(
+                id=rl_d["id"],
+                requirement_id=rl_d["requirement_id"],
+                open_item_id=rl_d["open_item_id"],
+                link_type=rl_d.get("link_type", "related"),
+            )
+            db.session.add(rl)
+        print(f"   ✅ {len(REQUIREMENT_OI_LINKS)} requirement ↔ OI links")
+
+        # 21k. Requirement dependencies
+        for rd_d in REQUIREMENT_DEPENDENCIES:
+            rd = RequirementDependency(
+                id=rd_d["id"],
+                requirement_id=rd_d["requirement_id"],
+                depends_on_id=rd_d["depends_on_id"],
+                dependency_type=rd_d.get("dependency_type", "related"),
+            )
+            db.session.add(rd)
+        print(f"   ✅ {len(REQUIREMENT_DEPENDENCIES)} requirement dependencies")
+
+        # 21l. Open item comments
+        for cm_d in OPEN_ITEM_COMMENTS:
+            cm = OpenItemComment(
+                id=cm_d["id"],
+                open_item_id=cm_d["open_item_id"],
+                user_id=cm_d.get("user_id"),
+                type=cm_d.get("type", "comment"),
+                content=cm_d.get("content", ""),
+            )
+            db.session.add(cm)
+        print(f"   ✅ {len(OPEN_ITEM_COMMENTS)} open item comments")
+
+        # ── 22. DATA FACTORY ────────────────────────────────────────────
+        print("\n🏭 Creating Data Factory data...")
+        obj_objs = []
+        for do_d in DATA_OBJECTS:
+            dobj = DataObject(
+                program_id=pid,
+                name=do_d["name"], description=do_d.get("description"),
+                source_system=do_d["source_system"],
+                target_table=do_d.get("target_table"),
+                record_count=do_d.get("record_count", 0),
+                quality_score=do_d.get("quality_score"),
+                status=do_d.get("status", "draft"),
+                owner=do_d.get("owner"),
+            )
+            db.session.add(dobj)
+            obj_objs.append(dobj)
+        db.session.flush()
+        print(f"   ✅ {len(DATA_OBJECTS)} data objects")
+
+        wave_objs = []
+        for w_d in MIGRATION_WAVES:
+            wave = MigrationWave(
+                program_id=pid,
+                wave_number=w_d["wave_number"], name=w_d["name"],
+                description=w_d.get("description"),
+                planned_start=_d(w_d.get("planned_start")),
+                planned_end=_d(w_d.get("planned_end")),
+                status=w_d.get("status", "planned"),
+            )
+            db.session.add(wave)
+            wave_objs.append(wave)
+        db.session.flush()
+        print(f"   ✅ {len(MIGRATION_WAVES)} migration waves")
+
+        ct_count = 0
+        for ct_d in CLEANSING_TASKS:
+            idx = ct_d["obj_index"]
+            if idx < len(obj_objs):
+                ct = CleansingTask(
+                    data_object_id=obj_objs[idx].id,
+                    rule_type=ct_d["rule_type"],
+                    rule_expression=ct_d["rule_expression"],
+                    description=ct_d.get("description"),
+                    pass_count=ct_d.get("pass_count"),
+                    fail_count=ct_d.get("fail_count"),
+                    status=ct_d.get("status", "pending"),
+                )
+                db.session.add(ct)
+                ct_count += 1
+        print(f"   ✅ {ct_count} cleansing tasks")
+
+        lc_objs = []
+        for lc_d in LOAD_CYCLES:
+            oi = lc_d["obj_index"]
+            wi = lc_d["wave_index"]
+            if oi < len(obj_objs) and wi < len(wave_objs):
+                lc = LoadCycle(
+                    data_object_id=obj_objs[oi].id,
+                    wave_id=wave_objs[wi].id,
+                    environment=lc_d["env"],
+                    load_type=lc_d["type"],
+                    records_loaded=lc_d.get("loaded"),
+                    records_failed=lc_d.get("failed"),
+                    status=lc_d.get("status", "pending"),
+                    error_log=lc_d.get("error_log"),
+                )
+                db.session.add(lc)
+                lc_objs.append(lc)
+        db.session.flush()
+        print(f"   ✅ {len(lc_objs)} load cycles")
+
+        rc_count = 0
+        for rc_d in RECONCILIATIONS:
+            ci = rc_d["cycle_index"]
+            if ci < len(lc_objs):
+                src = rc_d["source"]
+                tgt = rc_d["target"]
+                variance = src - tgt
+                vpct = round(abs(variance) / src * 100, 2) if src else 0
+                rc = Reconciliation(
+                    load_cycle_id=lc_objs[ci].id,
+                    source_count=src, target_count=tgt,
+                    match_count=rc_d["match"],
+                    variance=variance, variance_pct=vpct,
+                    status=rc_d.get("status", "pending"),
+                    notes=rc_d.get("notes"),
+                )
+                db.session.add(rc)
+                rc_count += 1
+        print(f"   ✅ {rc_count} reconciliations")
+
+        # ── 23. INTEGRATION FACTORY ────────────────────────────────────
+        print("\n🔌 Creating Integration Factory data...")
+        int_wave_map = {}
+        for i, w_data in enumerate(INT_WAVES):
+            wave = IntWave(
+                program_id=pid,
+                name=w_data["name"],
+                status=w_data["status"],
+                order=w_data.get("order", i),
+                planned_start=_d(w_data.get("planned_start")),
+                planned_end=_d(w_data.get("planned_end")),
+            )
+            db.session.add(wave)
+            db.session.flush()
+            int_wave_map[i] = wave.id
+        print(f"   ✅ {len(INT_WAVES)} waves")
+
+        for if_data in INT_INTERFACES:
+            wave_idx = if_data["wave_index"]
+            iface = Interface(
+                program_id=pid,
+                wave_id=int_wave_map[wave_idx],
+                code=if_data["code"],
+                name=if_data["name"],
+                source_system=if_data["source_system"],
+                target_system=if_data["target_system"],
+                protocol=if_data["protocol"],
+                frequency=if_data["frequency"],
+                direction=if_data["direction"],
+                status=if_data["status"],
+                module=if_data["module"],
+                priority=if_data["priority"],
+            )
+            db.session.add(iface)
+        db.session.flush()
+        print(f"   ✅ {len(INT_INTERFACES)} interfaces")
+
+        # ── 15. Governance alerts & escalation demo ──────────────────────
+        print("15. Governance & Escalation Alerts")
+        from app.services.escalation import EscalationService
+        from app.services.governance_rules import GovernanceRules, THRESHOLDS
+
+        # Run escalation engine — creates alert notifications from live data
+        esc_result = EscalationService.check_and_alert(pid, commit=False)
+        gov_alert_count = esc_result.get("alerts_generated", 0)
+
+        # Seed example governance threshold snapshot as a notification
+        threshold_summary = Notification(
+            program_id=pid,
+            recipient="governance_dashboard",
+            title="Governance Thresholds Active",
+            message=(
+                f"Governance thresholds configured: "
+                f"P1 OI max={THRESHOLDS['ws_complete_max_open_p1_oi']}, "
+                f"Gap warning={THRESHOLDS['gap_ratio_warn_pct']}%, "
+                f"Req coverage warn={THRESHOLDS['req_coverage_warn_pct']}%, "
+                f"OI aging escalation={THRESHOLDS['oi_aging_escalate_days']}d"
+            ),
+            category="gate",
+            severity="info",
+            entity_type="governance",
+        )
+        db.session.add(threshold_summary)
+        db.session.flush()
+        print(f"   ✅ {gov_alert_count} escalation alerts + 1 threshold snapshot")
+
+        # ── 16. Audit demo data (WR-2.6) ─────────────────────────────────
+        print("16. Audit Demo Data")
+        from app.models.audit import write_audit
+
+        audit_count = 0
+
+        # Simulate requirement lifecycle audit trail for first few explore reqs
+        demo_actions = [
+            ("requirement", "requirement.submit_for_review", {"status": {"old": "draft", "new": "under_review"}}),
+            ("requirement", "requirement.approve", {"status": {"old": "under_review", "new": "approved"}, "approved_by": {"old": None, "new": "Ahmet Yilmaz"}}),
+            ("requirement", "requirement.push_to_alm", {"status": {"old": "approved", "new": "in_backlog"}}),
+        ]
+        for ereq in EXPLORE_REQS[:3]:
+            for etype, act, diff in demo_actions:
+                write_audit(
+                    entity_type=etype,
+                    entity_id=ereq["id"],
+                    action=act,
+                    actor="seed-user",
+                    program_id=pid,
+                    diff=diff,
+                )
+                audit_count += 1
+
+        # Simulate OI lifecycle audit trail
+        oi_actions = [
+            ("open_item", "open_item.start_progress", {"status": {"old": "open", "new": "in_progress"}}),
+            ("open_item", "open_item.close", {"status": {"old": "in_progress", "new": "closed"}, "resolution": {"old": None, "new": "Resolved in workshop"}}),
+        ]
+        for eoi in EXPLORE_OI[:2]:
+            for etype, act, diff in oi_actions:
+                write_audit(
+                    entity_type=etype,
+                    entity_id=eoi["id"],
+                    action=act,
+                    actor="seed-user",
+                    program_id=pid,
+                    diff=diff,
+                )
+                audit_count += 1
+
+        # Simulate workshop audit
+        for ews in EXPLORE_WORKSHOPS[:2]:
+            write_audit(
+                entity_type="workshop",
+                entity_id=ews["id"],
+                action="workshop.complete",
+                actor="facilitator-1",
+                program_id=pid,
+                diff={"status": {"old": "in_progress", "new": "completed"}},
+            )
+            audit_count += 1
+
+        # Simulate AI audit
+        write_audit(
+            entity_type="ai_call",
+            entity_id="demo-ai-1",
+            action="ai.llm_call",
+            actor="system",
+            program_id=pid,
+            diff={
+                "prompt_name": "requirement_analyst",
+                "model": "gemini-2.0-flash",
+                "tokens_used": 1250,
+                "cost_usd": 0.00125,
+                "success": True,
+            },
+        )
+        audit_count += 1
+
+        print(f"   ✅ {audit_count} audit log entries")
+
         # ── Commit ───────────────────────────────────────────────────────
         db.session.commit()
 
@@ -803,7 +1252,17 @@ def seed_all(app, append=False, verbose=False):
                  + len(TEST_PLAN_DATA) + len(cycle_objs) + len(TEST_CASE_DATA)
                  + len(SUITE_DATA) + step_count + cs_count
                  + exec_count + len(DEFECT_DATA)
-                 + len(RISK_DATA) + len(ACTION_DATA) + len(ISSUE_DATA) + len(DECISION_DATA))
+                 + len(RISK_DATA) + len(ACTION_DATA) + len(ISSUE_DATA) + len(DECISION_DATA)
+                 + len(EXPLORE_LEVELS) + len(EXPLORE_WORKSHOPS)
+                 + len(WORKSHOP_SCOPE_ITEMS) + len(WORKSHOP_ATTENDEES)
+                 + len(WORKSHOP_AGENDA_ITEMS) + len(EXPLORE_STEPS)
+                 + len(EXPLORE_DECISIONS) + len(EXPLORE_OI)
+                 + len(EXPLORE_REQS) + len(REQUIREMENT_OI_LINKS)
+                 + len(REQUIREMENT_DEPENDENCIES) + len(OPEN_ITEM_COMMENTS)
+                 + len(DATA_OBJECTS) + len(MIGRATION_WAVES)
+                 + ct_count + len(lc_objs) + rc_count
+                 + len(INT_WAVES) + len(INT_INTERFACES)
+                 + audit_count)
         print(f"\n{'='*60}")
         print(f"🎉 DEMO DATA SEED COMPLETE — {total} records")
         print(f"{'='*60}\n")

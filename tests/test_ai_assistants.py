@@ -78,9 +78,21 @@ def _create_requirement(client, pid, **kw):
         "priority": "must_have",
     }
     payload.update(kw)
-    res = client.post(f"/api/v1/programs/{pid}/requirements", json=payload)
-    assert res.status_code == 201
-    return res.get_json()
+    req = Requirement(
+        program_id=pid,
+        title=payload["title"],
+        description=payload.get("description", ""),
+        module=payload.get("module", ""),
+        req_type=payload.get("req_type", "functional"),
+        priority=payload.get("priority", "must_have"),
+        status=payload.get("status", "draft"),
+        source=payload.get("source", "workshop"),
+        process_id=payload.get("process_id"),
+        workshop_id=payload.get("workshop_id"),
+    )
+    _db.session.add(req)
+    _db.session.commit()
+    return req.to_dict()
 
 
 def _create_defect(client, pid, **kw):

@@ -18,6 +18,7 @@ from app import create_app
 from app.models import db as _db
 from app.models.backlog import BacklogItem, ConfigItem, FunctionalSpec, TechnicalSpec, Sprint
 from app.models.program import Program
+from app.models.requirement import Requirement
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -763,20 +764,22 @@ def test_traceability_summary(client):
 def test_requirement_linked_items(client):
     """Test the requirement → backlog/config linked items endpoint."""
     prog = _create_program(client)
-    # Create a requirement first
-    req_res = client.post(f"/api/v1/programs/{prog['id']}/requirements", json={
-        "title": "Auto credit check on sales order",
-        "req_type": "functional",
-    })
-    assert req_res.status_code == 201
-    req = req_res.get_json()
+    req = Requirement(
+        program_id=prog["id"],
+        title="Auto credit check on sales order",
+        req_type="functional",
+        priority="must_have",
+        status="draft",
+    )
+    _db.session.add(req)
+    _db.session.commit()
 
     # Create a backlog item linked to the requirement
-    _create_item(client, prog["id"], requirement_id=req["id"])
+    _create_item(client, prog["id"], requirement_id=req.id)
     # Create a config item linked to the requirement
-    _create_config(client, prog["id"], requirement_id=req["id"])
+    _create_config(client, prog["id"], requirement_id=req.id)
 
-    res = client.get(f"/api/v1/requirements/{req['id']}/linked-items")
+    res = client.get(f"/api/v1/requirements/{req.id}/linked-items")
     assert res.status_code == 200
     data = res.get_json()
     assert data["total_linked"] == 2

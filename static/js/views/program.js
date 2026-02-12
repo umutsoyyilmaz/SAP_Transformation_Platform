@@ -66,7 +66,7 @@ const ProgramView = (() => {
                 ${programs.map(p => {
                     const isActive = activeProgram && activeProgram.id === p.id;
                     return `
-                    <div class="program-card ${isActive ? 'program-card--active' : ''}">
+                    <div class="program-card ${isActive ? 'program-card--active' : ''}" onclick="ProgramView.openDetail(${p.id})" style="cursor:pointer">
                         <div class="program-card__header">
                             <div class="program-card__title">${escHtml(p.name)}</div>
                             <span class="badge badge-${p.status}">${p.status}</span>
@@ -83,12 +83,11 @@ const ProgramView = (() => {
                                 ${p.go_live_date ? `<span>🚀 Go-Live: ${p.go_live_date}</span>` : ''}
                             </div>
                         </div>
-                        <div class="program-card__actions">
+                        <div class="program-card__actions" onclick="event.stopPropagation()">
                             ${isActive
                                 ? '<span class="program-card__active-label">✅ Active Program</span>'
                                 : `<button class="btn btn-primary btn-sm" onclick="ProgramView.selectProgram(${p.id})">Select & Open</button>`
                             }
-                            <button class="btn btn-secondary btn-sm" onclick="ProgramView.openDetail(${p.id})">Details</button>
                             <button class="btn btn-danger btn-sm" onclick="ProgramView.deleteProgram(${p.id})">Delete</button>
                         </div>
                     </div>`;
@@ -131,7 +130,7 @@ const ProgramView = (() => {
             <div class="page-header">
                 <div>
                     <button class="btn btn-secondary btn-sm" onclick="ProgramView.render()" style="margin-right:12px">← Back</button>
-                    <span style="font-size:1.5rem;font-weight:700">${escHtml(p.name)}</span>
+                    <span style="font-size:22px;font-weight:700">${escHtml(p.name)}</span>
                     <span class="badge badge-${p.status}" style="margin-left:8px">${p.status}</span>
                 </div>
                 <button class="btn btn-primary" onclick="ProgramView.showEditModal(${p.id})">Edit Program</button>
@@ -244,19 +243,19 @@ const ProgramView = (() => {
                             </div>
                         </div>
                         <div class="phase-body">
-                            <p style="color:var(--text-secondary);font-size:0.85rem">${escHtml(ph.description || '')}</p>
-                            <div style="font-size:0.8rem;color:var(--text-secondary);margin-top:4px">
+                            <p style="color:var(--text-secondary);font-size:12px">${escHtml(ph.description || '')}</p>
+                            <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
                                 Plan: ${ph.planned_start || '?'} → ${ph.planned_end || '?'}
                                 ${ph.actual_start ? ` | Actual: ${ph.actual_start} → ${ph.actual_end || '...'}` : ''}
                             </div>
                         </div>
                         <div class="gates-section">
                             <div style="display:flex;justify-content:space-between;align-items:center">
-                                <strong style="font-size:0.85rem">Gates</strong>
+                                <strong style="font-size:12px">Gates</strong>
                                 <button class="btn btn-secondary btn-sm" onclick="ProgramView.showGateModal(${ph.id})">+ Gate</button>
                             </div>
                             ${(ph.gates || []).length === 0
-                                ? '<div style="color:var(--text-secondary);font-size:0.8rem;padding:8px 0">No gates</div>'
+                                ? '<div style="color:var(--text-secondary);font-size:11px;padding:8px 0">No gates</div>'
                                 : `<table class="data-table" style="margin-top:8px">
                                     <thead><tr><th>Gate</th><th>Type</th><th>Status</th><th>Planned</th><th>Actions</th></tr></thead>
                                     <tbody>

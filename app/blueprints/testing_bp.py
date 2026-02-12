@@ -2,7 +2,39 @@
 SAP Transformation Management Platform
 Testing Blueprint — Test Hub CRUD API.
 
-Sprint 5 + TS-Sprint 1 + TS-Sprint 2 endpoints.
+Sprint 5 + TS-Sprint 1 + TS-Sprint 2 + TS-Sprint 3 endpoints.
+
+TS-Sprint 3 new endpoints:
+    UAT Sign-Off:
+        GET    /api/v1/testing/cycles/<cid>/uat-signoffs     — List sign-offs
+        POST   /api/v1/testing/cycles/<cid>/uat-signoffs     — Create sign-off
+        GET    /api/v1/testing/uat-signoffs/<id>              — Detail
+        PUT    /api/v1/testing/uat-signoffs/<id>              — Update (approve/reject)
+        DELETE /api/v1/testing/uat-signoffs/<id>              — Delete
+
+    Performance Test Results:
+        GET    /api/v1/testing/catalog/<cid>/perf-results     — List results
+        POST   /api/v1/testing/catalog/<cid>/perf-results     — Record result
+        DELETE /api/v1/testing/perf-results/<id>              — Delete
+
+    Test Daily Snapshots:
+        GET    /api/v1/programs/<pid>/testing/snapshots        — List snapshots
+        POST   /api/v1/programs/<pid>/testing/snapshots        — Create snapshot
+        POST   /api/v1/programs/<pid>/testing/snapshots/generate — Auto-generate
+
+    SLA:
+        GET    /api/v1/testing/defects/<did>/sla               — SLA status
+
+    Go/No-Go:
+        GET    /api/v1/programs/<pid>/testing/go-no-go         — Scorecard
+
+    Entry/Exit Criteria:
+        POST   /api/v1/testing/cycles/<cid>/validate-entry     — Validate entry
+        POST   /api/v1/testing/cycles/<cid>/validate-exit      — Validate exit
+
+    Auto-generation:
+        POST   /api/v1/testing/suites/<sid>/generate-from-wricef   — Generate from WRICEF
+        POST   /api/v1/testing/suites/<sid>/generate-from-process  — Generate from process
 
 TS-Sprint 2 new endpoints:
     Test Runs:
@@ -34,7 +66,7 @@ TS-Sprint 2 new endpoints:
 
 import logging
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request
 
@@ -43,13 +75,18 @@ from app.models.testing import (
     TestPlan, TestCycle, TestCase, TestExecution, Defect,
     TestSuite, TestStep, TestCaseDependency, TestCycleSuite,
     TestRun, TestStepResult, DefectComment, DefectHistory, DefectLink,
+    UATSignOff, PerfTestResult, TestDailySnapshot,
     TEST_LAYERS, TEST_CASE_STATUSES, EXECUTION_RESULTS,
-    DEFECT_SEVERITIES, DEFECT_STATUSES, CYCLE_STATUSES, PLAN_STATUSES,
+    DEFECT_SEVERITIES, DEFECT_PRIORITIES, DEFECT_STATUSES,
+    CYCLE_STATUSES, PLAN_STATUSES,
     SUITE_TYPES, SUITE_STATUSES, DEPENDENCY_TYPES,
     RUN_TYPES, RUN_STATUSES, STEP_RESULTS, DEFECT_LINK_TYPES,
+    VALID_TRANSITIONS, validate_defect_transition,
+    SLA_MATRIX, UAT_SIGNOFF_STATUSES,
 )
 from app.models.program import Program
 from app.models.requirement import Requirement
+from app.models.explore import ExploreRequirement
 from app.blueprints import paginate_query
 
 logger = logging.getLogger(__name__)
@@ -268,7 +305,8 @@ def update_test_cycle(cycle_id):
         return err
 
     data = request.get_json(silent=True) or {}
-    for field in ("name", "description", "status", "test_layer", "order"):
+    for field in ("name", "description", "status", "test_layer", "order",
+                  "entry_criteria", "exit_criteria"):
         if field in data:
             setattr(cycle, field, data[field])
     for date_field in ("start_date", "end_date"):
@@ -337,6 +375,10 @@ def list_test_cases(pid):
     if requirement_id:
         q = q.filter(TestCase.requirement_id == int(requirement_id))
 
+    explore_requirement_id = request.args.get("explore_requirement_id")
+    if explore_requirement_id:
+        q = q.filter(TestCase.explore_requirement_id == explore_requirement_id)
+
     search = request.args.get("search")
     if search:
         term = f"%{search}%"
@@ -347,7 +389,13 @@ def list_test_cases(pid):
         ))
 
     cases, total = paginate_query(q.order_by(TestCase.created_at.desc()))
-    return jsonify({"items": [tc.to_dict() for tc in cases], "total": total})
+    result = []
+    for tc in cases:
+        d = tc.to_dict()
+        d["blocked_by_count"] = TestCaseDependency.query.filter_by(successor_id=tc.id).count()
+        d["blocks_count"] = TestCaseDependency.query.filter_by(predecessor_id=tc.id).count()
+        result.append(d)
+    return jsonify({"items": result, "total": total})
 
 
 @testing_bp.route("/programs/<int:pid>/testing/catalog", methods=["POST"])
@@ -381,6 +429,7 @@ def create_test_case(pid):
         is_regression=data.get("is_regression", False),
         assigned_to=data.get("assigned_to", ""),
         requirement_id=data.get("requirement_id"),
+        explore_requirement_id=data.get("explore_requirement_id"),
         backlog_item_id=data.get("backlog_item_id"),
         config_item_id=data.get("config_item_id"),
         suite_id=data.get("suite_id"),
@@ -416,7 +465,7 @@ def update_test_case(case_id):
     for field in ("code", "title", "description", "test_layer", "module",
                   "preconditions", "test_steps", "expected_result", "test_data_set",
                   "status", "priority", "is_regression", "assigned_to",
-                  "requirement_id", "backlog_item_id", "config_item_id", "suite_id"):
+                  "requirement_id", "explore_requirement_id", "backlog_item_id", "config_item_id", "suite_id"):
         if field in data:
             setattr(tc, field, data[field])
 
@@ -610,13 +659,38 @@ def create_defect(pid):
 
     code = data.get("code") or _auto_code(Defect, "DEF", pid)
 
+    severity = data.get("severity", "S3")
+    priority = data.get("priority", "P3")
+
+    # ── SLA computation ──
+    sla_due_date = None
+    sla_key = (severity, priority)
+    sla_config = SLA_MATRIX.get(sla_key)
+    if sla_config and sla_config.get("resolution_hours"):
+        now = datetime.now(timezone.utc)
+        hours = sla_config["resolution_hours"]
+        if sla_config.get("calendar"):
+            # 7/24 calendar
+            sla_due_date = now + timedelta(hours=hours)
+        else:
+            # Business days: skip weekends (approximate: add extra days for weekends)
+            business_hours_per_day = 8
+            days_needed = hours / business_hours_per_day
+            # Add weekend days
+            total_days = days_needed
+            full_weeks = int(total_days) // 5
+            remaining = int(total_days) % 5
+            calendar_days = full_weeks * 7 + remaining
+            sla_due_date = now + timedelta(days=calendar_days)
+
     defect = Defect(
         program_id=pid,
         code=code,
         title=data["title"],
         description=data.get("description", ""),
         steps_to_reproduce=data.get("steps_to_reproduce", ""),
-        severity=data.get("severity", "P3"),
+        severity=severity,
+        priority=priority,
         status=data.get("status", "new"),
         module=data.get("module", ""),
         environment=data.get("environment", ""),
@@ -631,6 +705,9 @@ def create_defect(pid):
         test_case_id=data.get("test_case_id"),
         backlog_item_id=data.get("backlog_item_id"),
         config_item_id=data.get("config_item_id"),
+        linked_requirement_id=data.get("linked_requirement_id"),
+        explore_requirement_id=data.get("explore_requirement_id"),
+        sla_due_date=sla_due_date,
     )
     db.session.add(defect)
     try:
@@ -663,13 +740,23 @@ def update_defect(defect_id):
     old_status = defect.status
     changed_by = data.pop("changed_by", "")
 
+    # ── Transition validation (9-status lifecycle) ──
+    new_status = data.get("status")
+    if new_status and new_status != old_status:
+        if not validate_defect_transition(old_status, new_status):
+            return jsonify({
+                "error": f"Invalid status transition: {old_status} → {new_status}",
+                "allowed": VALID_TRANSITIONS.get(old_status, []),
+            }), 400
+
     tracked_fields = (
         "code", "title", "description", "steps_to_reproduce",
-        "severity", "status", "module", "environment",
+        "severity", "priority", "status", "module", "environment",
         "reported_by", "assigned_to", "found_in_cycle",
         "resolution", "root_cause", "transport_request", "notes",
         "test_case_id", "backlog_item_id", "config_item_id",
         "linked_requirement_id",
+        "explore_requirement_id",
     )
 
     for field in tracked_fields:
@@ -730,24 +817,19 @@ def delete_defect(defect_id):
 def traceability_matrix(pid):
     """
     Build and return the full Requirement ↔ Test Case ↔ Defect traceability matrix.
-    Each row is a requirement with its linked test cases and defects.
+
+    Supports two modes:
+      - source=legacy (default): Uses old Requirement model
+      - source=explore: Uses ExploreRequirement model (Explore phase)
+      - source=both: Combines both sources
     """
     program, err = _get_or_404(Program, pid)
     if err:
         return err
 
-    requirements = Requirement.query.filter_by(program_id=pid).all()
+    source = request.args.get("source", "both")
     test_cases = TestCase.query.filter_by(program_id=pid).all()
     defects = Defect.query.filter_by(program_id=pid).all()
-
-    # Group test cases by requirement_id
-    tc_by_req = {}
-    tc_unlinked = []
-    for tc in test_cases:
-        if tc.requirement_id:
-            tc_by_req.setdefault(tc.requirement_id, []).append(tc)
-        else:
-            tc_unlinked.append(tc)
 
     # Group defects by test_case_id
     def_by_tc = {}
@@ -755,44 +837,93 @@ def traceability_matrix(pid):
         if d.test_case_id:
             def_by_tc.setdefault(d.test_case_id, []).append(d)
 
-    matrix = []
-    for req in requirements:
-        linked_cases = tc_by_req.get(req.id, [])
-        row = {
-            "requirement": {
-                "id": req.id, "code": req.code, "title": req.title,
-                "priority": req.priority, "status": req.status,
-            },
-            "test_cases": [],
-            "total_test_cases": len(linked_cases),
-            "total_defects": 0,
+    def _build_tc_row(tc):
+        tc_defects = def_by_tc.get(tc.id, [])
+        return {
+            "id": tc.id, "code": tc.code, "title": tc.title,
+            "test_layer": tc.test_layer, "status": tc.status,
+            "defects": [
+                {"id": d.id, "code": d.code, "severity": d.severity, "status": d.status}
+                for d in tc_defects
+            ],
         }
-        for tc in linked_cases:
-            tc_defects = def_by_tc.get(tc.id, [])
-            row["test_cases"].append({
-                "id": tc.id, "code": tc.code, "title": tc.title,
-                "test_layer": tc.test_layer, "status": tc.status,
-                "defects": [
-                    {"id": d.id, "code": d.code, "severity": d.severity, "status": d.status}
-                    for d in tc_defects
-                ],
-            })
-            row["total_defects"] += len(tc_defects)
-        matrix.append(row)
+
+    matrix = []
+
+    # ── Legacy requirements ──────────────────────────────────────────
+    if source in ("legacy", "both"):
+        requirements = Requirement.query.filter_by(program_id=pid).all()
+
+        tc_by_req = {}
+        for tc in test_cases:
+            if tc.requirement_id:
+                tc_by_req.setdefault(tc.requirement_id, []).append(tc)
+
+        for req in requirements:
+            linked_cases = tc_by_req.get(req.id, [])
+            row = {
+                "source": "legacy",
+                "requirement": {
+                    "id": req.id, "code": req.code, "title": req.title,
+                    "priority": req.priority, "status": req.status,
+                },
+                "test_cases": [_build_tc_row(tc) for tc in linked_cases],
+                "total_test_cases": len(linked_cases),
+                "total_defects": sum(len(def_by_tc.get(tc.id, [])) for tc in linked_cases),
+            }
+            matrix.append(row)
+
+    # ── Explore requirements ─────────────────────────────────────────
+    if source in ("explore", "both"):
+        explore_reqs = ExploreRequirement.query.filter_by(project_id=pid).all()
+
+        tc_by_ereq = {}
+        for tc in test_cases:
+            if tc.explore_requirement_id:
+                tc_by_ereq.setdefault(tc.explore_requirement_id, []).append(tc)
+
+        for req in explore_reqs:
+            linked_cases = tc_by_ereq.get(req.id, [])
+            row = {
+                "source": "explore",
+                "requirement": {
+                    "id": req.id, "code": req.code, "title": req.title,
+                    "priority": req.priority, "status": req.status,
+                    "process_area": req.process_area,
+                    "workshop_id": req.workshop_id,
+                    "impact": getattr(req, "impact", None),
+                    "business_criticality": getattr(req, "business_criticality", None),
+                },
+                "test_cases": [_build_tc_row(tc) for tc in linked_cases],
+                "total_test_cases": len(linked_cases),
+                "total_defects": sum(len(def_by_tc.get(tc.id, [])) for tc in linked_cases),
+            }
+            matrix.append(row)
+
+    # ── Unlinked test cases ──────────────────────────────────────────
+    tc_linked_ids = set()
+    for row in matrix:
+        for tc in row["test_cases"]:
+            tc_linked_ids.add(tc["id"])
+
+    tc_unlinked = [tc for tc in test_cases if tc.id not in tc_linked_ids]
+
+    # ── Summary ────────────────────────────────────────────────────
+    total_reqs = len(matrix)
+    reqs_with_tests = sum(1 for r in matrix if r["total_test_cases"] > 0)
 
     return jsonify({
         "program_id": pid,
+        "source": source,
         "matrix": matrix,
         "summary": {
-            "total_requirements": len(requirements),
-            "requirements_with_tests": sum(1 for r in requirements if r.id in tc_by_req),
-            "requirements_without_tests": sum(1 for r in requirements if r.id not in tc_by_req),
+            "total_requirements": total_reqs,
+            "requirements_with_tests": reqs_with_tests,
+            "requirements_without_tests": total_reqs - reqs_with_tests,
+            "test_coverage_pct": round(reqs_with_tests / total_reqs * 100) if total_reqs > 0 else 0,
             "total_test_cases": len(test_cases),
             "unlinked_test_cases": len(tc_unlinked),
             "total_defects": len(defects),
-            "coverage_pct": round(
-                sum(1 for r in requirements if r.id in tc_by_req) / len(requirements) * 100
-            ) if requirements else 0,
         },
     })
 
@@ -869,7 +1000,7 @@ def testing_dashboard(pid):
         .group_by(Defect.severity)
         .all()
     )
-    severity_dist = {s: sev_rows.get(s, 0) for s in ("P1", "P2", "P3", "P4")}
+    severity_dist = {s: sev_rows.get(s, 0) for s in ("S1", "S2", "S3", "S4")}
 
     # ── Open defects + aging (top 20 only) ────────────────────────────────
     open_defects_q = Defect.query.filter(
@@ -1006,7 +1137,7 @@ def testing_dashboard(pid):
             env_defects[env]["closed"] += cnt
         else:
             env_defects[env]["open"] += cnt
-        if severity in ("P1", "P2"):
+        if severity in ("S1", "S2"):
             env_defects[env]["p1_p2"] += cnt
 
     environment_stability = {}
@@ -1665,3 +1796,825 @@ def delete_defect_link(link_id):
         db.session.rollback()
         return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Defect link deleted"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# UAT SIGN-OFF  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/cycles/<int:cycle_id>/uat-signoffs", methods=["GET"])
+def list_uat_signoffs(cycle_id):
+    """List UAT sign-offs for a cycle."""
+    cycle, err = _get_or_404(TestCycle, cycle_id)
+    if err:
+        return err
+    signoffs = UATSignOff.query.filter_by(test_cycle_id=cycle_id)\
+        .order_by(UATSignOff.created_at.desc()).all()
+    return jsonify([s.to_dict() for s in signoffs])
+
+
+@testing_bp.route("/testing/cycles/<int:cycle_id>/uat-signoffs", methods=["POST"])
+def create_uat_signoff(cycle_id):
+    """Create a UAT sign-off. Only BPO or PM roles allowed."""
+    cycle, err = _get_or_404(TestCycle, cycle_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    if not data.get("process_area"):
+        return jsonify({"error": "process_area is required"}), 400
+    if not data.get("signed_off_by"):
+        return jsonify({"error": "signed_off_by is required"}), 400
+
+    role = data.get("role", "BPO")
+    if role not in ("BPO", "PM"):
+        return jsonify({"error": "role must be BPO or PM"}), 400
+
+    signoff = UATSignOff(
+        test_cycle_id=cycle_id,
+        process_area=data["process_area"],
+        scope_item_id=data.get("scope_item_id"),
+        signed_off_by=data["signed_off_by"],
+        status=data.get("status", "pending"),
+        role=role,
+        comments=data.get("comments", ""),
+    )
+    if data.get("sign_off_date"):
+        try:
+            signoff.sign_off_date = datetime.fromisoformat(data["sign_off_date"])
+        except (ValueError, TypeError):
+            pass
+    db.session.add(signoff)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(signoff.to_dict()), 201
+
+
+@testing_bp.route("/testing/uat-signoffs/<int:signoff_id>", methods=["GET"])
+def get_uat_signoff(signoff_id):
+    """Get UAT sign-off detail."""
+    signoff, err = _get_or_404(UATSignOff, signoff_id)
+    if err:
+        return err
+    return jsonify(signoff.to_dict())
+
+
+@testing_bp.route("/testing/uat-signoffs/<int:signoff_id>", methods=["PUT"])
+def update_uat_signoff(signoff_id):
+    """Update UAT sign-off (approve/reject)."""
+    signoff, err = _get_or_404(UATSignOff, signoff_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    for field in ("process_area", "scope_item_id", "signed_off_by", "status",
+                  "role", "comments"):
+        if field in data:
+            setattr(signoff, field, data[field])
+    if "sign_off_date" in data:
+        try:
+            signoff.sign_off_date = datetime.fromisoformat(data["sign_off_date"]) if data["sign_off_date"] else None
+        except (ValueError, TypeError):
+            pass
+    # Auto-set sign-off date on approval
+    if data.get("status") == "approved" and not signoff.sign_off_date:
+        signoff.sign_off_date = datetime.now(timezone.utc)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(signoff.to_dict())
+
+
+@testing_bp.route("/testing/uat-signoffs/<int:signoff_id>", methods=["DELETE"])
+def delete_uat_signoff(signoff_id):
+    """Delete a UAT sign-off."""
+    signoff, err = _get_or_404(UATSignOff, signoff_id)
+    if err:
+        return err
+    db.session.delete(signoff)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify({"message": "UAT sign-off deleted"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PERFORMANCE TEST RESULTS  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/catalog/<int:case_id>/perf-results", methods=["GET"])
+def list_perf_results(case_id):
+    """List performance test results for a test case."""
+    tc, err = _get_or_404(TestCase, case_id)
+    if err:
+        return err
+    results = PerfTestResult.query.filter_by(test_case_id=case_id)\
+        .order_by(PerfTestResult.executed_at.desc()).all()
+    return jsonify([r.to_dict() for r in results])
+
+
+@testing_bp.route("/testing/catalog/<int:case_id>/perf-results", methods=["POST"])
+def create_perf_result(case_id):
+    """Record a performance test result."""
+    tc, err = _get_or_404(TestCase, case_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    if data.get("response_time_ms") is None or data.get("target_response_ms") is None:
+        return jsonify({"error": "response_time_ms and target_response_ms are required"}), 400
+
+    result = PerfTestResult(
+        test_case_id=case_id,
+        test_run_id=data.get("test_run_id"),
+        response_time_ms=data["response_time_ms"],
+        throughput_rps=data.get("throughput_rps"),
+        concurrent_users=data.get("concurrent_users"),
+        target_response_ms=data["target_response_ms"],
+        target_throughput_rps=data.get("target_throughput_rps"),
+        environment=data.get("environment", ""),
+        notes=data.get("notes", ""),
+    )
+    db.session.add(result)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(result.to_dict()), 201
+
+
+@testing_bp.route("/testing/perf-results/<int:result_id>", methods=["DELETE"])
+def delete_perf_result(result_id):
+    """Delete a performance test result."""
+    result, err = _get_or_404(PerfTestResult, result_id)
+    if err:
+        return err
+    db.session.delete(result)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify({"message": "Performance test result deleted"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST DAILY SNAPSHOTS  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/programs/<int:pid>/testing/snapshots", methods=["GET"])
+def list_snapshots(pid):
+    """List daily snapshots for a program."""
+    program, err = _get_or_404(Program, pid)
+    if err:
+        return err
+    q = TestDailySnapshot.query.filter_by(program_id=pid)
+    cycle_id = request.args.get("cycle_id")
+    if cycle_id:
+        q = q.filter_by(test_cycle_id=int(cycle_id))
+    snapshots = q.order_by(TestDailySnapshot.snapshot_date.desc()).all()
+    return jsonify([s.to_dict() for s in snapshots])
+
+
+@testing_bp.route("/programs/<int:pid>/testing/snapshots", methods=["POST"])
+def create_snapshot(pid):
+    """Create or trigger a daily snapshot (manual trigger)."""
+    program, err = _get_or_404(Program, pid)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    today = date.today()
+    snapshot_date = _parse_date(data.get("snapshot_date")) or today
+
+    cycle_id = data.get("test_cycle_id")
+
+    # Auto-compute from DB if counts not provided
+    total_cases = data.get("total_cases", TestCase.query.filter_by(program_id=pid).count())
+
+    # Compute execution stats
+    plan_ids_sq = db.session.query(TestPlan.id).filter_by(program_id=pid).subquery()
+    cycle_ids_sq = db.session.query(TestCycle.id).filter(
+        TestCycle.plan_id.in_(db.session.query(plan_ids_sq))
+    ).subquery()
+    exec_counts = dict(
+        db.session.query(TestExecution.result, db.func.count(TestExecution.id))
+        .filter(TestExecution.cycle_id.in_(db.session.query(cycle_ids_sq)))
+        .group_by(TestExecution.result).all()
+    )
+    passed = data.get("passed", exec_counts.get("pass", 0))
+    failed = data.get("failed", exec_counts.get("fail", 0))
+    blocked = data.get("blocked", exec_counts.get("blocked", 0))
+    not_run = data.get("not_run", exec_counts.get("not_run", 0))
+
+    # Defect counts by severity
+    def _count_open_sev(sev):
+        return Defect.query.filter(
+            Defect.program_id == pid,
+            Defect.severity == sev,
+            Defect.status.notin_(["closed", "rejected"]),
+        ).count()
+
+    snapshot = TestDailySnapshot(
+        snapshot_date=snapshot_date,
+        test_cycle_id=cycle_id,
+        program_id=pid,
+        wave=data.get("wave", ""),
+        total_cases=total_cases,
+        passed=passed,
+        failed=failed,
+        blocked=blocked,
+        not_run=not_run,
+        open_defects_s1=data.get("open_defects_s1", _count_open_sev("S1")),
+        open_defects_s2=data.get("open_defects_s2", _count_open_sev("S2")),
+        open_defects_s3=data.get("open_defects_s3", _count_open_sev("S3")),
+        open_defects_s4=data.get("open_defects_s4", _count_open_sev("S4")),
+        closed_defects=data.get("closed_defects", Defect.query.filter(
+            Defect.program_id == pid,
+            Defect.status.in_(["closed", "rejected"]),
+        ).count()),
+    )
+    db.session.add(snapshot)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(snapshot.to_dict()), 201
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# SLA ENDPOINT  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/defects/<int:defect_id>/sla", methods=["GET"])
+def get_defect_sla(defect_id):
+    """Get SLA details for a defect."""
+    defect, err = _get_or_404(Defect, defect_id)
+    if err:
+        return err
+
+    sla_key = (defect.severity, defect.priority)
+    sla_config = SLA_MATRIX.get(sla_key, {})
+
+    return jsonify({
+        "defect_id": defect.id,
+        "severity": defect.severity,
+        "priority": defect.priority,
+        "sla_config": sla_config,
+        "sla_due_date": defect.sla_due_date.isoformat() if defect.sla_due_date else None,
+        "sla_status": defect.sla_status,
+        "status": defect.status,
+    })
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# GO/NO-GO SCORECARD  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/programs/<int:pid>/testing/dashboard/go-no-go", methods=["GET"])
+def go_no_go_scorecard(pid):
+    """
+    Go/No-Go scorecard — each criterion computed from real DB queries.
+    """
+    program, err = _get_or_404(Program, pid)
+    if err:
+        return err
+
+    # Helpers
+    plan_ids_sq = db.session.query(TestPlan.id).filter_by(program_id=pid).subquery()
+    cycle_ids_sq = db.session.query(TestCycle.id).filter(
+        TestCycle.plan_id.in_(db.session.query(plan_ids_sq))
+    ).subquery()
+
+    def _pass_rate_for_layer(layer):
+        exec_q = (
+            db.session.query(TestExecution.result, db.func.count(TestExecution.id))
+            .join(TestCase, TestCase.id == TestExecution.test_case_id)
+            .filter(
+                TestCase.program_id == pid,
+                TestCase.test_layer == layer,
+                TestExecution.cycle_id.in_(db.session.query(cycle_ids_sq)),
+            )
+            .group_by(TestExecution.result)
+            .all()
+        )
+        counts = dict(exec_q)
+        total = sum(v for k, v in counts.items() if k != "not_run")
+        passed = counts.get("pass", 0)
+        return round(passed / total * 100, 1) if total else 100.0
+
+    # 1. Unit test pass rate
+    unit_pr = _pass_rate_for_layer("unit")
+    # 2. SIT pass rate
+    sit_pr = _pass_rate_for_layer("sit")
+    # 3. UAT happy path — UAT layer pass rate
+    uat_pr = _pass_rate_for_layer("uat")
+    # 4. UAT BPO sign-off %
+    total_signoffs = UATSignOff.query.join(TestCycle).filter(
+        TestCycle.plan_id.in_(db.session.query(plan_ids_sq))
+    ).count()
+    approved_signoffs = UATSignOff.query.join(TestCycle).filter(
+        TestCycle.plan_id.in_(db.session.query(plan_ids_sq)),
+        UATSignOff.status == "approved",
+    ).count()
+    signoff_pct = round(approved_signoffs / total_signoffs * 100, 1) if total_signoffs else 100.0
+
+    # 5. Open S1 defects
+    open_s1 = Defect.query.filter(
+        Defect.program_id == pid, Defect.severity == "S1",
+        Defect.status.notin_(["closed", "rejected"]),
+    ).count()
+    # 6. Open S2 defects
+    open_s2 = Defect.query.filter(
+        Defect.program_id == pid, Defect.severity == "S2",
+        Defect.status.notin_(["closed", "rejected"]),
+    ).count()
+    # 7. Open S3 defects
+    open_s3 = Defect.query.filter(
+        Defect.program_id == pid, Defect.severity == "S3",
+        Defect.status.notin_(["closed", "rejected"]),
+    ).count()
+    # 8. Regression pass rate
+    regression_pr = _pass_rate_for_layer("regression")
+    # 9. Performance target
+    perf_total = PerfTestResult.query.join(TestCase).filter(TestCase.program_id == pid).count()
+    perf_pass = PerfTestResult.query.join(TestCase).filter(
+        TestCase.program_id == pid
+    ).all()
+    perf_pass_count = sum(1 for p in perf_pass if p.pass_fail)
+    perf_pct = round(perf_pass_count / perf_total * 100, 1) if perf_total else 100.0
+
+    # 10. All critical (S1+S2) closed
+    total_critical = Defect.query.filter(
+        Defect.program_id == pid, Defect.severity.in_(["S1", "S2"]),
+    ).count()
+    closed_critical = Defect.query.filter(
+        Defect.program_id == pid, Defect.severity.in_(["S1", "S2"]),
+        Defect.status.in_(["closed", "rejected"]),
+    ).count()
+    critical_closed_pct = round(closed_critical / total_critical * 100, 1) if total_critical else 100.0
+
+    scorecard = [
+        {"criterion": "Unit test pass rate", "target": ">=95%",
+         "actual": unit_pr, "status": "green" if unit_pr >= 95 else ("yellow" if unit_pr >= 90 else "red")},
+        {"criterion": "SIT pass rate", "target": ">=95%",
+         "actual": sit_pr, "status": "green" if sit_pr >= 95 else ("yellow" if sit_pr >= 90 else "red")},
+        {"criterion": "UAT Happy Path 100%", "target": "100%",
+         "actual": uat_pr, "status": "green" if uat_pr >= 100 else ("yellow" if uat_pr >= 95 else "red")},
+        {"criterion": "UAT BPO Sign-off", "target": "100%",
+         "actual": signoff_pct, "status": "green" if signoff_pct >= 100 else ("yellow" if signoff_pct >= 80 else "red")},
+        {"criterion": "Open S1 defects", "target": "=0",
+         "actual": open_s1, "status": "green" if open_s1 == 0 else "red"},
+        {"criterion": "Open S2 defects", "target": "=0",
+         "actual": open_s2, "status": "green" if open_s2 == 0 else "red"},
+        {"criterion": "Open S3 defects", "target": "<=5",
+         "actual": open_s3, "status": "green" if open_s3 <= 5 else ("yellow" if open_s3 <= 10 else "red")},
+        {"criterion": "Regression pass rate", "target": "100%",
+         "actual": regression_pr, "status": "green" if regression_pr >= 100 else ("yellow" if regression_pr >= 95 else "red")},
+        {"criterion": "Performance target", "target": ">=95%",
+         "actual": perf_pct, "status": "green" if perf_pct >= 95 else ("yellow" if perf_pct >= 90 else "red")},
+        {"criterion": "All critical closed", "target": "100%",
+         "actual": critical_closed_pct, "status": "green" if critical_closed_pct >= 100 else ("yellow" if critical_closed_pct >= 90 else "red")},
+    ]
+
+    green_count = sum(1 for s in scorecard if s["status"] == "green")
+    red_count = sum(1 for s in scorecard if s["status"] == "red")
+    yellow_count = sum(1 for s in scorecard if s["status"] == "yellow")
+    overall = "go" if red_count == 0 else "no_go"
+
+    return jsonify({
+        "scorecard": scorecard,
+        "overall": overall,
+        "green_count": green_count,
+        "red_count": red_count,
+        "yellow_count": yellow_count,
+    })
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ENTRY/EXIT CRITERIA VALIDATION  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/cycles/<int:cycle_id>/validate-entry", methods=["POST"])
+def validate_entry_criteria(cycle_id):
+    """Validate entry criteria before starting a cycle."""
+    cycle, err = _get_or_404(TestCycle, cycle_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    force = data.get("force", False)
+
+    criteria = cycle.entry_criteria or []
+    unmet = [c for c in criteria if not c.get("met", False)]
+    warnings = [c.get("criterion", "Unknown") for c in unmet]
+
+    if unmet and not force:
+        return jsonify({
+            "valid": False,
+            "unmet_criteria": warnings,
+            "message": "Entry criteria not met. Use force=true to override.",
+        }), 200
+
+    # Start the cycle
+    if cycle.status == "planning":
+        cycle.status = "in_progress"
+        if not cycle.start_date:
+            cycle.start_date = date.today()
+        try:
+            db.session.commit()
+        except Exception:
+            logger.exception("Database commit failed")
+            db.session.rollback()
+            return jsonify({"error": "Database error"}), 500
+
+    result = {"valid": True, "cycle_status": cycle.status}
+    if unmet and force:
+        result["overridden_criteria"] = warnings
+        result["message"] = "Entry criteria overridden with force=true"
+        logger.warning("Entry criteria overridden for cycle %d: %s", cycle_id, warnings)
+    return jsonify(result), 200
+
+
+@testing_bp.route("/testing/cycles/<int:cycle_id>/validate-exit", methods=["POST"])
+def validate_exit_criteria(cycle_id):
+    """Validate exit criteria before completing a cycle."""
+    cycle, err = _get_or_404(TestCycle, cycle_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    force = data.get("force", False)
+
+    criteria = cycle.exit_criteria or []
+    unmet = [c for c in criteria if not c.get("met", False)]
+    warnings = [c.get("criterion", "Unknown") for c in unmet]
+
+    if unmet and not force:
+        return jsonify({
+            "valid": False,
+            "unmet_criteria": warnings,
+            "message": "Exit criteria not met. Use force=true to override.",
+        }), 200
+
+    # Complete the cycle
+    if cycle.status == "in_progress":
+        cycle.status = "completed"
+        if not cycle.end_date:
+            cycle.end_date = date.today()
+        try:
+            db.session.commit()
+        except Exception:
+            logger.exception("Database commit failed")
+            db.session.rollback()
+            return jsonify({"error": "Database error"}), 500
+
+    result = {"valid": True, "cycle_status": cycle.status}
+    if unmet and force:
+        result["overridden_criteria"] = warnings
+        result["message"] = "Exit criteria overridden with force=true"
+        logger.warning("Exit criteria overridden for cycle %d: %s", cycle_id, warnings)
+    return jsonify(result), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# GENERATE FROM WRICEF  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/suites/<int:suite_id>/generate-from-wricef", methods=["POST"])
+def generate_from_wricef(suite_id):
+    """
+    Auto-generate test cases from WRICEF/Config items.
+    Request: {"wricef_item_ids": [1,2,3]} or {"scope_item_id": 5}
+    """
+    from app.models.backlog import BacklogItem, ConfigItem
+
+    suite, err = _get_or_404(TestSuite, suite_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+
+    wricef_ids = data.get("wricef_item_ids", [])
+    config_ids = data.get("config_item_ids", [])
+    scope_item_id = data.get("scope_item_id")
+
+    items = []
+    # Gather backlog items
+    if wricef_ids:
+        items.extend(BacklogItem.query.filter(BacklogItem.id.in_(wricef_ids)).all())
+    if config_ids:
+        items.extend(ConfigItem.query.filter(ConfigItem.id.in_(config_ids)).all())
+    if scope_item_id:
+        # Gather all backlog items linked to scope item process
+        scope_items = BacklogItem.query.filter_by(process_id=scope_item_id).all()
+        items.extend(scope_items)
+
+    if not items:
+        return jsonify({"error": "No WRICEF/Config items found"}), 404
+
+    created_cases = []
+    for item in items:
+        is_backlog = isinstance(item, BacklogItem)
+        code_prefix = item.code if item.code else f"WRICEF-{item.id}"
+        title = f"UT — {code_prefix} — {item.title}"
+
+        tc = TestCase(
+            program_id=suite.program_id,
+            suite_id=suite.id,
+            code=f"TC-{code_prefix}-{TestCase.query.filter_by(program_id=suite.program_id).count() + 1:04d}",
+            title=title,
+            description=f"Auto-generated from {'WRICEF' if is_backlog else 'Config'} item: {item.title}",
+            test_layer="unit",
+            module=item.module if hasattr(item, "module") else "",
+            status="draft",
+            priority="medium",
+            backlog_item_id=item.id if is_backlog else None,
+            config_item_id=item.id if not is_backlog else None,
+            requirement_id=item.requirement_id if hasattr(item, "requirement_id") else None,
+        )
+        db.session.add(tc)
+        db.session.flush()  # Get the ID
+
+        # Generate steps from technical_notes / acceptance_criteria
+        notes = ""
+        if hasattr(item, "technical_notes") and item.technical_notes:
+            notes = item.technical_notes
+        elif hasattr(item, "acceptance_criteria") and item.acceptance_criteria:
+            notes = item.acceptance_criteria
+
+        if notes:
+            steps = [line.strip() for line in notes.split("\n") if line.strip()]
+            for i, step_text in enumerate(steps[:10], 1):  # max 10 steps
+                ts = TestStep(
+                    test_case_id=tc.id,
+                    step_no=i,
+                    action=step_text,
+                    expected_result="Verify successful execution",
+                )
+                db.session.add(ts)
+        else:
+            # Default step
+            ts = TestStep(
+                test_case_id=tc.id,
+                step_no=1,
+                action=f"Execute {code_prefix} functionality",
+                expected_result=f"Verify {item.title} works as specified",
+            )
+            db.session.add(ts)
+
+        created_cases.append(tc)
+
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+
+    return jsonify({
+        "message": f"Generated {len(created_cases)} test cases",
+        "count": len(created_cases),
+        "test_case_ids": [tc.id for tc in created_cases],
+        "suite_id": suite.id,
+    }), 201
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# GENERATE FROM PROCESS  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/suites/<int:suite_id>/generate-from-process", methods=["POST"])
+def generate_from_process(suite_id):
+    """
+    Auto-generate test cases from Explore process steps.
+    Request: {"scope_item_ids": [1,2], "test_level": "sit", "uat_category": "happy_path"}
+    """
+    from app.models.explore import ProcessLevel, ProcessStep
+
+    suite, err = _get_or_404(TestSuite, suite_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+
+    scope_item_ids = data.get("scope_item_ids", [])
+    test_level = data.get("test_level", "sit")
+    uat_category = data.get("uat_category", "")
+
+    if not scope_item_ids:
+        return jsonify({"error": "scope_item_ids is required"}), 400
+
+    # Find L3 process levels by scope_item_code or ID
+    l3_items = ProcessLevel.query.filter(
+        ProcessLevel.id.in_([str(sid) for sid in scope_item_ids]),
+        ProcessLevel.level == 3,
+    ).all()
+
+    if not l3_items:
+        # Try matching by scope_item_code
+        l3_items = ProcessLevel.query.filter(
+            ProcessLevel.scope_item_code.in_([str(sid) for sid in scope_item_ids]),
+        ).all()
+
+    if not l3_items:
+        return jsonify({"error": "No matching L3 process levels found"}), 404
+
+    created_cases = []
+
+    for l3 in l3_items:
+        # Get workshop process steps for this L3 (through L4 children)
+        l4_children = ProcessLevel.query.filter_by(parent_id=l3.id, level=4).all()
+        l4_ids = [c.id for c in l4_children]
+
+        steps = []
+        if l4_ids:
+            steps = ProcessStep.query.filter(
+                ProcessStep.process_level_id.in_(l4_ids)
+            ).order_by(ProcessStep.sort_order).all()
+
+        # Filter to fit/partial_fit decisions
+        fit_steps = [s for s in steps if s.fit_decision in ("fit", "partial_fit")]
+
+        if not fit_steps:
+            fit_steps = steps  # Use all if no fit decisions
+
+        # Generate E2E scenario name
+        scope_code = l3.scope_item_code or l3.code or l3.name[:10]
+        scenario_name = f"E2E — {scope_code} — {l3.name}"
+
+        tc = TestCase(
+            program_id=suite.program_id,
+            suite_id=suite.id,
+            code=f"TC-{scope_code}-{TestCase.query.filter_by(program_id=suite.program_id).count() + 1:04d}",
+            title=scenario_name,
+            description=f"Auto-generated from process: {l3.name}. "
+                        f"Level: {test_level}. Category: {uat_category or 'N/A'}",
+            test_layer=test_level,
+            module=l3.process_area_code or "",
+            status="draft",
+            priority="high",
+        )
+        db.session.add(tc)
+        db.session.flush()
+
+        for i, ps in enumerate(fit_steps, 1):
+            # Get L4 process level info
+            l4 = db.session.get(ProcessLevel, ps.process_level_id)
+            l4_name = l4.name if l4 else f"Step {i}"
+            module_code = l4.process_area_code if l4 else ""
+
+            # Detect cross-module checkpoint
+            is_checkpoint = False
+            if i > 1 and l4:
+                prev_ps = fit_steps[i - 2] if i > 1 else None
+                if prev_ps:
+                    prev_l4 = db.session.get(ProcessLevel, prev_ps.process_level_id)
+                    if prev_l4 and prev_l4.process_area_code != l4.process_area_code:
+                        is_checkpoint = True
+
+            action = f"Execute: {l4_name}"
+            notes_text = ""
+            if ps.fit_decision == "partial_fit":
+                notes_text = "⚠ PARTIAL FIT — requires custom development validation"
+            if is_checkpoint:
+                notes_text = (notes_text + " | " if notes_text else "") + "🔀 CROSS-MODULE CHECKPOINT"
+
+            step = TestStep(
+                test_case_id=tc.id,
+                step_no=i,
+                action=action,
+                expected_result=f"Process step '{l4_name}' completes successfully",
+                test_data=module_code,
+                notes=notes_text,
+            )
+            db.session.add(step)
+
+        if not fit_steps:
+            # Default step if no process steps found
+            step = TestStep(
+                test_case_id=tc.id,
+                step_no=1,
+                action=f"Execute E2E scenario for {l3.name}",
+                expected_result="End-to-end process completes successfully",
+            )
+            db.session.add(step)
+
+        created_cases.append(tc)
+
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+
+    return jsonify({
+        "message": f"Generated {len(created_cases)} test cases from process",
+        "count": len(created_cases),
+        "test_case_ids": [tc.id for tc in created_cases],
+        "suite_id": suite.id,
+    }), 201
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST CASE DEPENDENCIES  (FE-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/catalog/<int:case_id>/dependencies", methods=["GET"])
+def list_case_dependencies(case_id):
+    """List dependencies for a test case (both predecessors and successors)."""
+    tc, err = _get_or_404(TestCase, case_id)
+    if err:
+        return err
+    # Where this case is blocked by others (predecessors)
+    blocked_by = TestCaseDependency.query.filter_by(successor_id=case_id).all()
+    # Where this case blocks others (successors)
+    blocks = TestCaseDependency.query.filter_by(predecessor_id=case_id).all()
+
+    # Enrich with test case info + execution status
+    def _enrich(dep, other_id):
+        d = dep.to_dict()
+        other_tc = db.session.get(TestCase, other_id)
+        if other_tc:
+            d["other_case_code"] = other_tc.code
+            d["other_case_title"] = other_tc.title
+            # Check last execution result
+            last_exec = TestExecution.query.filter_by(test_case_id=other_id)\
+                .order_by(TestExecution.executed_at.desc()).first()
+            d["other_last_result"] = last_exec.result if last_exec else "not_run"
+        return d
+
+    return jsonify({
+        "blocked_by": [_enrich(dep, dep.predecessor_id) for dep in blocked_by],
+        "blocks": [_enrich(dep, dep.successor_id) for dep in blocks],
+    })
+
+
+@testing_bp.route("/testing/catalog/<int:case_id>/dependencies", methods=["POST"])
+def create_case_dependency(case_id):
+    """Create a dependency for a test case."""
+    tc, err = _get_or_404(TestCase, case_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    dep_type = data.get("dependency_type", "blocks")
+    direction = data.get("direction", "blocked_by")  # blocked_by or blocks
+
+    other_id = data.get("other_case_id")
+    if not other_id:
+        return jsonify({"error": "other_case_id is required"}), 400
+    other_tc, err2 = _get_or_404(TestCase, other_id)
+    if err2:
+        return err2
+    if other_id == case_id:
+        return jsonify({"error": "Cannot create dependency to self"}), 400
+
+    if direction == "blocked_by":
+        predecessor_id, successor_id = other_id, case_id
+    else:
+        predecessor_id, successor_id = case_id, other_id
+
+    # Check for duplicate
+    existing = TestCaseDependency.query.filter_by(
+        predecessor_id=predecessor_id, successor_id=successor_id).first()
+    if existing:
+        return jsonify({"error": "Dependency already exists"}), 409
+
+    dep = TestCaseDependency(
+        predecessor_id=predecessor_id,
+        successor_id=successor_id,
+        dependency_type=dep_type,
+        notes=data.get("notes", ""),
+    )
+    db.session.add(dep)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify(dep.to_dict()), 201
+
+
+@testing_bp.route("/testing/dependencies/<int:dep_id>", methods=["DELETE"])
+def delete_case_dependency(dep_id):
+    """Delete a test case dependency."""
+    dep, err = _get_or_404(TestCaseDependency, dep_id)
+    if err:
+        return err
+    db.session.delete(dep)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Database commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+    return jsonify({"message": "Dependency deleted"}), 200

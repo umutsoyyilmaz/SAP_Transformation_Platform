@@ -46,9 +46,9 @@ const ExploreHierarchyView = (() => {
 
     // ── Tree Builder ─────────────────────────────────────────────────
     function buildTree() {
-        const l4ByL3 = groupBy(_l4List, 'l3_scope_item_id');
-        const l3ByL2 = groupBy(_l3List, 'l2_process_group_id');
-        const l2ByL1 = groupBy(_l2List, 'l1_process_area_id');
+        const l4ByL3 = groupBy(_l4List, 'parent_id');
+        const l3ByL2 = groupBy(_l3List, 'parent_id');
+        const l2ByL1 = groupBy(_l2List, 'parent_id');
 
         return _l1List.map(l1 => ({
             ...l1, level: 'L1',
@@ -123,23 +123,27 @@ const ExploreHierarchyView = (() => {
 
     // ── KPI Dashboard (F-007) ────────────────────────────────────────
     function renderKpiDashboard() {
-        const total = _l4List.length;
-        const fitC   = _l4List.filter(s => s.fit_status === 'fit').length;
-        const gapC   = _l4List.filter(s => s.fit_status === 'gap').length;
-        const partC  = _l4List.filter(s => s.fit_status === 'partial_fit').length;
-        const pendC  = total - fitC - gapC - partC;
-        const pct = (n) => total ? Math.round(n / total * 100) : 0;
-
-        return `<div class="exp-kpi-strip">
-            ${ExpUI.kpiBlock({ value: _l1List.length, label: 'L1 Areas', icon: '🏛️' })}
-            ${ExpUI.kpiBlock({ value: _l2List.length, label: 'L2 Groups', icon: '📂' })}
-            ${ExpUI.kpiBlock({ value: _l3List.length, label: 'L3 Scope Items', icon: '📋' })}
-            ${ExpUI.kpiBlock({ value: total, label: 'L4 Steps', icon: '⚙️' })}
-            ${ExpUI.kpiBlock({ value: `${pct(fitC)}%`, label: 'Fit', accent: 'var(--exp-fit)' })}
-            ${ExpUI.kpiBlock({ value: `${pct(gapC)}%`, label: 'Gap', accent: 'var(--exp-gap)' })}
-            ${ExpUI.kpiBlock({ value: `${pct(partC)}%`, label: 'Partial Fit', accent: 'var(--exp-partial)' })}
-            ${ExpUI.kpiBlock({ value: `${pct(pendC)}%`, label: 'Pending', accent: 'var(--exp-pending)' })}
-        </div>`;
+        const total = _l4List.length || 1;
+        const fitC  = _l4List.filter(l => l.fit_status === 'fit').length;
+        const gapC  = _l4List.filter(l => l.fit_status === 'gap').length;
+        const partC = _l4List.filter(l => l.fit_status === 'partial_fit').length;
+        const pendC = total - fitC - gapC - partC;
+        return `<div class="exp-kpi-strip exp-kpi-strip--compact">
+            ${ExpUI.kpiBlock({ value: _l1List.length, label: 'L1 Areas', accent: 'var(--exp-l1, #8b5cf6)' })}
+            ${ExpUI.kpiBlock({ value: _l2List.length, label: 'L2 Groups', accent: 'var(--exp-l2, #3b82f6)' })}
+            ${ExpUI.kpiBlock({ value: _l3List.length, label: 'L3 Scope Items', accent: 'var(--exp-l3, #10b981)' })}
+            ${ExpUI.kpiBlock({ value: _l4List.length, label: 'L4 Steps', accent: 'var(--exp-l4, #f59e0b)' })}
+        </div>
+        ${ExpUI.metricBar({
+            label: 'Fit Distribution',
+            total: total || 1,
+            segments: [
+                { value: fitC, label: 'Fit', color: 'var(--exp-fit)' },
+                { value: gapC, label: 'Gap', color: 'var(--exp-gap)' },
+                { value: partC, label: 'Partial', color: 'var(--exp-partial)' },
+                { value: pendC, label: 'Pending', color: 'var(--exp-pending)' },
+            ],
+        })}`;
     }
 
     // ── Fit Distribution Bar (F-004) ─────────────────────────────────
@@ -175,6 +179,26 @@ const ExploreHierarchyView = (() => {
                 ${ExpUI.fitBadge(node.effective_fit_status || node.fit_status || 'pending', { compact: true })}
                 ${renderFitDistBar(fitAgg)}
                 ${workshopIndicator(node)}
+            </span>
+            <span class="exp-tree-node__actions" onclick="event.stopPropagation()">
+                <button class="btn-icon" title="Details" onclick="ExploreHierarchyView.selectNode('${node.id}','${node.level}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                        <path d="M8 3c-3.2 0-5.8 2-6.7 5 0.9 3 3.5 5 6.7 5s5.8-2 6.7-5C13.8 5 11.2 3 8 3z" stroke="currentColor" stroke-width="1.4"/>
+                        <circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.4"/>
+                    </svg>
+                </button>
+                ${node.level === 'L3' ? `
+                <button class="btn-icon" title="Scope Change" onclick="ExploreHierarchyView.requestScopeChange('${node.id}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                        <path d="M3 8h10M8 3v10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <button class="btn-icon" title="Sign Off" onclick="ExploreHierarchyView.openSignOffDialog('${node.id}')">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                        <path d="M3 8l3 3 7-7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                ` : ''}
             </span>
         </div>`;
     }
@@ -572,31 +596,47 @@ const ExploreHierarchyView = (() => {
 
     // ── Filter Bar ───────────────────────────────────────────────────
     function renderFilterBar() {
-        const fitOptions = [
-            { value: '', label: 'All' },
-            { value: 'fit', label: 'Fit' },
-            { value: 'gap', label: 'Gap' },
-            { value: 'partial_fit', label: 'Partial' },
-            { value: 'pending', label: 'Pending' },
-        ];
         const areas = [...new Set(_l3List.map(l => l.area || l.area_code).filter(Boolean))].sort();
-        const areaOptions = [{ value: '', label: 'All' }, ...areas.map(a => ({ value: a, label: a }))];
         const waves = [...new Set(_l3List.map(l => l.wave).filter(Boolean))].sort();
-        const waveOptions = [{ value: '', label: 'All' }, ...waves.map(w => ({ value: w, label: `Wave ${w}` }))];
 
-        return `<div class="exp-toolbar" style="margin-bottom:var(--exp-space-md)">
-            <div class="exp-search" style="min-width:200px;max-width:300px">
-                <span class="exp-search__icon">🔍</span>
-                <input class="exp-search__input" type="text" placeholder="Search processes…"
-                       value="${esc(_searchQuery)}" oninput="ExploreHierarchyView.setSearch(this.value)">
-            </div>
-            ${ExpUI.filterGroup({ id: 'fit', label: 'Fit', options: fitOptions, selected: _filters.fit || '', onChange: 'ExploreHierarchyView.setFilter' })}
-            ${ExpUI.filterGroup({ id: 'area', label: 'Area', options: areaOptions, selected: _filters.area || '', onChange: 'ExploreHierarchyView.setFilter' })}
-            ${ExpUI.filterGroup({ id: 'wave', label: 'Wave', options: waveOptions, selected: _filters.wave || '', onChange: 'ExploreHierarchyView.setFilter' })}
-            <div class="exp-toolbar__spacer"></div>
-            ${renderViewToggle()}
-            ${ExpUI.actionButton({ label: '+ Import L4', variant: 'primary', size: 'sm', icon: '📥', onclick: 'ExploreHierarchyView.openSeedingDialog()' })}
-        </div>`;
+        return ExpUI.filterBar({
+            id: 'hierarchyFB',
+            searchPlaceholder: 'Search processes…',
+            searchValue: _searchQuery,
+            onSearch: "ExploreHierarchyView.setSearch(this.value)",
+            onChange: "ExploreHierarchyView.onFilterBarChange",
+            filters: [
+                {
+                    id: 'fit', label: 'Fit Status', icon: '◐', type: 'single',
+                    color: 'var(--exp-fit)',
+                    options: [
+                        {value: 'fit', label: 'Fit'},
+                        {value: 'gap', label: 'Gap'},
+                        {value: 'partial_fit', label: 'Partial Fit'},
+                        {value: 'pending', label: 'Pending'},
+                    ],
+                    selected: _filters.fit || '',
+                },
+                {
+                    id: 'area', label: 'Area / Module', icon: '📁', type: 'multi',
+                    color: 'var(--exp-l2)',
+                    options: areas.map(a => ({value: a, label: a})),
+                    selected: _filters.area ? [_filters.area] : [],
+                },
+                {
+                    id: 'wave', label: 'Wave', icon: '🌊', type: 'single',
+                    color: 'var(--exp-l4)',
+                    options: waves.map(w => ({value: String(w), label: `Wave ${w}`})),
+                    selected: _filters.wave ? String(_filters.wave) : '',
+                },
+            ],
+            actionsHtml: `
+                <div style="display:flex;gap:8px;align-items:center">
+                    ${renderViewToggle()}
+                    ${ExpUI.actionButton({ label: '+ Import L4', variant: 'primary', size: 'sm', icon: '📥', onclick: 'ExploreHierarchyView.openSeedingDialog()' })}
+                </div>
+            `,
+        });
     }
 
     // ── Main Page Render (F-001) ─────────────────────────────────────
@@ -664,6 +704,24 @@ const ExploreHierarchyView = (() => {
         renderPage();
     }
 
+    function onFilterBarChange(update) {
+        if (update._clearAll) {
+            _filters = { fit: null, wave: null, area: null };
+        } else {
+            Object.keys(update).forEach(key => {
+                const val = update[key];
+                if (val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+                    _filters[key] = null;
+                } else if (Array.isArray(val)) {
+                    _filters[key] = val[0];
+                } else {
+                    _filters[key] = val;
+                }
+            });
+        }
+        renderPage();
+    }
+
     function sortMatrix() {
         // Simple toggle — full sort implementation in future
         _l3List.reverse();
@@ -697,7 +755,7 @@ const ExploreHierarchyView = (() => {
     return {
         render,
         toggleNode, selectNode, closePanel, setDetailTab,
-        setViewMode, setSearch, setFilter, sortMatrix,
+        setViewMode, setSearch, setFilter, onFilterBarChange, sortMatrix,
         openSignOffDialog, submitSignOff,
         openSeedingDialog, submitSeedImport,
         requestScopeChange, submitScopeChange,

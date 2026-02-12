@@ -52,11 +52,49 @@ EXECUTION_RESULTS = {
     "not_run", "pass", "fail", "blocked", "deferred",
 }
 
-DEFECT_SEVERITIES = {"P1", "P2", "P3", "P4"}
+DEFECT_SEVERITIES = {"S1", "S2", "S3", "S4"}
+
+DEFECT_PRIORITIES = {"P1", "P2", "P3", "P4"}
 
 DEFECT_STATUSES = {
-    "new", "open", "in_progress", "fixed", "retest", "closed", "rejected", "reopened",
+    "new", "assigned", "in_progress", "resolved", "retest",
+    "closed", "rejected", "reopened", "deferred",
 }
+
+# ── 9-status lifecycle transition guard ──────────────────────────────────
+VALID_TRANSITIONS = {
+    "new":         ["assigned", "rejected", "deferred"],
+    "assigned":    ["in_progress", "deferred"],
+    "in_progress": ["resolved", "deferred"],
+    "resolved":    ["retest"],
+    "retest":      ["closed", "reopened"],
+    "reopened":    ["assigned"],
+    "closed":      ["reopened"],
+    "deferred":    ["assigned"],
+    "rejected":    [],
+}
+
+
+def validate_defect_transition(old_status, new_status):
+    """Return True if transition is valid, False otherwise."""
+    allowed = VALID_TRANSITIONS.get(old_status, [])
+    return new_status in allowed
+
+
+# ── SLA Matrix ───────────────────────────────────────────────────────────
+SLA_MATRIX = {
+    ("S1", "P1"): {"first_response_hours": 1,  "resolution_hours": 4,    "calendar": True},
+    ("S1", "P2"): {"first_response_hours": 2,  "resolution_hours": 8,    "calendar": True},
+    ("S2", "P1"): {"first_response_hours": 2,  "resolution_hours": 12,   "calendar": True},
+    ("S2", "P2"): {"first_response_hours": 4,  "resolution_hours": 24,   "calendar": False},
+    ("S3", "P3"): {"first_response_hours": 24, "resolution_hours": 72,   "calendar": False},
+    ("S3", "P4"): {"first_response_hours": 48, "resolution_hours": 120,  "calendar": False},
+    ("S4", "P3"): {"first_response_hours": 48, "resolution_hours": None, "calendar": False},
+    ("S4", "P4"): {"first_response_hours": 48, "resolution_hours": None, "calendar": False},
+}
+
+
+UAT_SIGNOFF_STATUSES = {"pending", "approved", "rejected"}
 
 CYCLE_STATUSES = {
     "planning", "in_progress", "completed", "cancelled",
@@ -197,6 +235,16 @@ class TestCycle(db.Model):
     end_date = db.Column(db.Date, nullable=True)
     order = db.Column(db.Integer, default=0, comment="Sort order within plan")
 
+    # ── Entry/Exit Criteria (TS-Sprint 3)
+    entry_criteria = db.Column(
+        db.JSON, nullable=True,
+        comment='JSON list of entry criteria, e.g. [{"criterion": "...", "met": true}]',
+    )
+    exit_criteria = db.Column(
+        db.JSON, nullable=True,
+        comment='JSON list of exit criteria, e.g. [{"criterion": "...", "met": false}]',
+    )
+
     created_at = db.Column(
         db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
     )
@@ -223,6 +271,8 @@ class TestCycle(db.Model):
             "start_date": self.start_date.isoformat() if self.start_date else None,
             "end_date": self.end_date.isoformat() if self.end_date else None,
             "order": self.order,
+            "entry_criteria": self.entry_criteria,
+            "exit_criteria": self.exit_criteria,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -255,6 +305,12 @@ class TestCase(db.Model):
     requirement_id = db.Column(
         db.Integer, db.ForeignKey("requirements.id", ondelete="SET NULL"),
         nullable=True, index=True, comment="Linked requirement for traceability",
+    )
+    explore_requirement_id = db.Column(
+        db.String(36),
+        db.ForeignKey("explore_requirements.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+        comment="Linked Explore phase requirement (new model)",
     )
     backlog_item_id = db.Column(
         db.Integer, db.ForeignKey("backlog_items.id", ondelete="SET NULL"),
@@ -344,6 +400,7 @@ class TestCase(db.Model):
             "id": self.id,
             "program_id": self.program_id,
             "requirement_id": self.requirement_id,
+            "explore_requirement_id": self.explore_requirement_id,
             "backlog_item_id": self.backlog_item_id,
             "config_item_id": self.config_item_id,
             "suite_id": self.suite_id,
@@ -473,6 +530,12 @@ class Defect(db.Model):
         nullable=True, comment="Linked requirement (TS-Sprint 2)",
         index=True,
     )
+    explore_requirement_id = db.Column(
+        db.String(36),
+        db.ForeignKey("explore_requirements.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+        comment="Linked Explore phase requirement (new model)",
+    )
 
     # ── Identification
     code = db.Column(
@@ -485,15 +548,25 @@ class Defect(db.Model):
 
     # ── Classification
     severity = db.Column(
+        db.String(10), default="S3",
+        comment="S1 (showstopper) | S2 (critical) | S3 (major) | S4 (minor)",
+    )
+    priority = db.Column(
         db.String(10), default="P3",
-        comment="P1 (blocker) | P2 (critical) | P3 (major) | P4 (minor/cosmetic)",
+        comment="P1 (immediate) | P2 (high) | P3 (medium) | P4 (low)",
     )
     status = db.Column(
         db.String(30), default="new",
-        comment="new | open | in_progress | fixed | retest | closed | rejected | reopened",
+        comment="new | assigned | in_progress | resolved | retest | closed | rejected | reopened | deferred",
     )
     module = db.Column(db.String(50), default="", comment="SAP module")
     environment = db.Column(db.String(50), default="", comment="DEV | QAS | PRD")
+
+    # ── SLA
+    sla_due_date = db.Column(
+        db.DateTime(timezone=True), nullable=True,
+        comment="SLA resolution deadline, auto-computed from severity+priority matrix",
+    )
 
     # ── Assignment & tracking
     reported_by = db.Column(db.String(100), default="")
@@ -560,6 +633,30 @@ class Defect(db.Model):
             return (end - start).days
         return 0
 
+    @property
+    def sla_status(self):
+        """Compute SLA status: on_track / warning / breached."""
+        if not self.sla_due_date:
+            return None
+        if self.status in ("closed", "rejected"):
+            return "on_track"
+        now = datetime.now(timezone.utc)
+        due = self.sla_due_date
+        if due.tzinfo is None:
+            due = due.replace(tzinfo=timezone.utc)
+        if now > due:
+            return "breached"
+        # Warning: >75% elapsed
+        created = self.reported_at or self.created_at
+        if created:
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            total = (due - created).total_seconds()
+            elapsed = (now - created).total_seconds()
+            if total > 0 and (elapsed / total) > 0.75:
+                return "warning"
+        return "on_track"
+
     def to_dict(self, include_comments=False):
         d = {
             "id": self.id,
@@ -568,11 +665,13 @@ class Defect(db.Model):
             "backlog_item_id": self.backlog_item_id,
             "config_item_id": self.config_item_id,
             "linked_requirement_id": self.linked_requirement_id,
+            "explore_requirement_id": self.explore_requirement_id,
             "code": self.code,
             "title": self.title,
             "description": self.description,
             "steps_to_reproduce": self.steps_to_reproduce,
             "severity": self.severity,
+            "priority": self.priority,
             "status": self.status,
             "module": self.module,
             "environment": self.environment,
@@ -581,6 +680,8 @@ class Defect(db.Model):
             "found_in_cycle": self.found_in_cycle,
             "reported_at": self.reported_at.isoformat() if self.reported_at else None,
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "sla_due_date": self.sla_due_date.isoformat() if self.sla_due_date else None,
+            "sla_status": self.sla_status,
             "reopen_count": self.reopen_count,
             "aging_days": self.aging_days,
             "resolution": self.resolution,
@@ -1149,3 +1250,221 @@ class DefectLink(db.Model):
 
     def __repr__(self):
         return f"<DefectLink {self.id}: #{self.source_defect_id} —[{self.link_type}]→ #{self.target_defect_id}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# UAT SIGN-OFF  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class UATSignOff(db.Model):
+    """
+    UAT sign-off record per process area / scope item.
+
+    Business rule: Only BPO or PM roles can sign off.
+    Linked to a test cycle (UAT cycle) for context.
+    """
+
+    __tablename__ = "uat_signoffs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    test_cycle_id = db.Column(
+        db.Integer, db.ForeignKey("test_cycles.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    process_area = db.Column(
+        db.String(100), nullable=False,
+        comment="e.g. Finance, Logistics, HR",
+    )
+    scope_item_id = db.Column(
+        db.String(36), nullable=True,
+        comment="Reference to scope item / process level ID",
+    )
+    signed_off_by = db.Column(
+        db.String(100), nullable=False,
+        comment="BPO or PM who signed off",
+    )
+    sign_off_date = db.Column(
+        db.DateTime(timezone=True), nullable=True,
+    )
+    status = db.Column(
+        db.String(20), default="pending",
+        comment="pending | approved | rejected",
+    )
+    role = db.Column(
+        db.String(20), default="BPO",
+        comment="BPO | PM — only these roles can sign off",
+    )
+    comments = db.Column(db.Text, default="")
+
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "test_cycle_id": self.test_cycle_id,
+            "process_area": self.process_area,
+            "scope_item_id": self.scope_item_id,
+            "signed_off_by": self.signed_off_by,
+            "sign_off_date": self.sign_off_date.isoformat() if self.sign_off_date else None,
+            "status": self.status,
+            "role": self.role,
+            "comments": self.comments,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self):
+        return f"<UATSignOff {self.id}: [{self.status}] {self.process_area}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PERFORMANCE TEST RESULT  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class PerfTestResult(db.Model):
+    """
+    Performance test result for a test case execution.
+
+    Business rule: pass_fail is auto-computed from response_time_ms <= target_response_ms.
+    Stores throughput, concurrent users, and environment info.
+    """
+
+    __tablename__ = "perf_test_results"
+
+    id = db.Column(db.Integer, primary_key=True)
+    test_case_id = db.Column(
+        db.Integer, db.ForeignKey("test_cases.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    test_run_id = db.Column(
+        db.Integer, db.ForeignKey("test_runs.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+
+    response_time_ms = db.Column(db.Float, nullable=False, comment="Actual response time in ms")
+    throughput_rps = db.Column(db.Float, nullable=True, comment="Requests per second")
+    concurrent_users = db.Column(db.Integer, nullable=True, comment="Number of concurrent users")
+    target_response_ms = db.Column(db.Float, nullable=False, comment="Target response time in ms")
+    target_throughput_rps = db.Column(db.Float, nullable=True, comment="Target throughput RPS")
+
+    environment = db.Column(db.String(50), default="", comment="DEV | QAS | PRD | PERF")
+    notes = db.Column(db.Text, default="")
+    executed_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+
+    @property
+    def pass_fail(self):
+        """Auto-compute pass/fail based on response time vs target."""
+        return self.response_time_ms <= self.target_response_ms
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "test_case_id": self.test_case_id,
+            "test_run_id": self.test_run_id,
+            "response_time_ms": self.response_time_ms,
+            "throughput_rps": self.throughput_rps,
+            "concurrent_users": self.concurrent_users,
+            "target_response_ms": self.target_response_ms,
+            "target_throughput_rps": self.target_throughput_rps,
+            "pass_fail": self.pass_fail,
+            "environment": self.environment,
+            "notes": self.notes,
+            "executed_at": self.executed_at.isoformat() if self.executed_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        pf = "PASS" if self.pass_fail else "FAIL"
+        return f"<PerfTestResult {self.id}: {self.response_time_ms}ms [{pf}]>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST DAILY SNAPSHOT  (TS-Sprint 3)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestDailySnapshot(db.Model):
+    """
+    Daily test progress snapshot for trend reporting.
+
+    Business rule: Created by daily cronjob or manual trigger.
+    Captures point-in-time counts for test execution and defects.
+    """
+
+    __tablename__ = "test_daily_snapshots"
+
+    id = db.Column(db.Integer, primary_key=True)
+    snapshot_date = db.Column(db.Date, nullable=False, index=True)
+    test_cycle_id = db.Column(
+        db.Integer, db.ForeignKey("test_cycles.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+        comment="Nullable — snapshot can be program-wide",
+    )
+    program_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    wave = db.Column(db.String(50), default="", comment="Implementation wave label")
+
+    # ── Test execution counts
+    total_cases = db.Column(db.Integer, default=0)
+    passed = db.Column(db.Integer, default=0)
+    failed = db.Column(db.Integer, default=0)
+    blocked = db.Column(db.Integer, default=0)
+    not_run = db.Column(db.Integer, default=0)
+
+    # ── Defect counts by severity
+    open_defects_s1 = db.Column(db.Integer, default=0)
+    open_defects_s2 = db.Column(db.Integer, default=0)
+    open_defects_s3 = db.Column(db.Integer, default=0)
+    open_defects_s4 = db.Column(db.Integer, default=0)
+    closed_defects = db.Column(db.Integer, default=0)
+
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+
+    @property
+    def pass_rate(self):
+        """Compute pass rate as percentage."""
+        executed = self.passed + self.failed + self.blocked
+        if executed == 0:
+            return 0.0
+        return round(self.passed / executed * 100, 1)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "snapshot_date": self.snapshot_date.isoformat() if self.snapshot_date else None,
+            "test_cycle_id": self.test_cycle_id,
+            "program_id": self.program_id,
+            "wave": self.wave,
+            "total_cases": self.total_cases,
+            "passed": self.passed,
+            "failed": self.failed,
+            "blocked": self.blocked,
+            "not_run": self.not_run,
+            "pass_rate": self.pass_rate,
+            "open_defects_s1": self.open_defects_s1,
+            "open_defects_s2": self.open_defects_s2,
+            "open_defects_s3": self.open_defects_s3,
+            "open_defects_s4": self.open_defects_s4,
+            "closed_defects": self.closed_defects,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<TestDailySnapshot {self.id}: {self.snapshot_date}>"
+

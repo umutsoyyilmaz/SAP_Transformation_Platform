@@ -61,9 +61,11 @@ def generate_workshop_code(project_id: int, process_area: str, session_number: i
 
 def _generate_sequential_code(model_class, prefix: str, project_id: int) -> str:
     """Generate next sequential code: {PREFIX}-{SEQ:03d}."""
+    # BacklogItem / ConfigItem use 'program_id' instead of 'project_id'
+    id_col = getattr(model_class, "project_id", None) or getattr(model_class, "program_id")
     count = (
         db.session.query(func.count(model_class.id))
-        .filter(model_class.project_id == project_id)
+        .filter(id_col == project_id)
         .scalar()
     ) or 0
 
@@ -89,3 +91,28 @@ def generate_decision_code(project_id: int) -> str:
 def generate_scope_change_code(project_id: int) -> str:
     """Generate next scope change request code: SCR-001, SCR-002, ..."""
     return _generate_sequential_code(ScopeChangeRequest, "SCR", project_id)
+
+
+# ── Backlog / Config codes ───────────────────────────────────────────────────
+
+_WRICEF_PREFIX = {
+    "report": "RPT",
+    "interface": "INT",
+    "conversion": "CNV",
+    "enhancement": "ENH",
+    "form": "FRM",
+    "workflow": "WFL",
+}
+
+
+def generate_backlog_item_code(project_id: int, wricef_type: str = "enhancement") -> str:
+    """Generate next WRICEF backlog item code: ENH-001, INT-002, RPT-003, ..."""
+    from app.models.backlog import BacklogItem  # lazy import — avoid circular
+    prefix = _WRICEF_PREFIX.get(wricef_type, "ENH")
+    return _generate_sequential_code(BacklogItem, prefix, project_id)
+
+
+def generate_config_item_code(project_id: int) -> str:
+    """Generate next config item code: CFG-001, CFG-002, ..."""
+    from app.models.backlog import ConfigItem  # lazy import — avoid circular
+    return _generate_sequential_code(ConfigItem, "CFG", project_id)

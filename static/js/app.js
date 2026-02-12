@@ -22,19 +22,19 @@ const App = (() => {
     // ── View registry ────────────────────────────────────────────────────
     const views = {
         dashboard:    () => renderDashboard(),
+        'executive-cockpit': () => ExecutiveCockpitView.render(),
         programs:     () => ProgramView.render(),
-        // Future Sprint views — placeholder
-        scenarios:    () => ScenarioView.render(),
-        analysis:     () => AnalysisView.render(),
-        requirements: () => RequirementView.render(),
+        // Legacy SCOPE views removed — FE-Sprint 1
         backlog:      () => BacklogView.render(),
-        testing:      () => TestingView.render(),
+        'test-planning':      () => TestPlanningView.render(),
+        'test-execution':     () => TestExecutionView.render(),
+        'defect-management':  () => DefectManagementView.render(),
         integration:  () => IntegrationView.render(),
-        'process-hierarchy': () => ProcessHierarchyView.render(),
-        'data-factory': () => placeholder('Data Factory', 'Sprint 10'),
+        'data-factory': () => DataFactoryView.render(),
         cutover:      () => placeholder('Cutover Hub', 'Sprint 13'),
         raid:         () => RaidView.render(),
-        reports:      () => placeholder('Reports', 'Sprint 11'),
+        reports:      () => ReportsView.render(),
+        'project-setup': () => ProjectSetupView.render(),
         'ai-query':   () => AIQueryView.render(),
         'ai-admin':   () => AIAdminView.render(),
         // Explore Phase views
@@ -50,9 +50,9 @@ const App = (() => {
     // ── Program Context ─────────────────────────────────────────────────
     // Views that require a program to be selected
     const programRequiredViews = new Set([
-        'scenarios', 'analysis', 'requirements', 'backlog', 'testing',
-        'integration', 'process-hierarchy', 'data-factory', 'cutover', 'raid',
-        'reports', 'ai-query',
+        'executive-cockpit',
+        'backlog', 'test-planning', 'test-execution', 'defect-management', 'integration', 'data-factory', 'cutover', 'raid',
+        'reports', 'project-setup', 'ai-query',
         'explore-dashboard', 'explore-hierarchy', 'explore-workshops', 'explore-workshop-detail', 'explore-requirements',
     ]);
 
@@ -163,14 +163,24 @@ const App = (() => {
                 <span class="badge badge-${esc(prog.status)}">${esc(prog.status)}</span>
             </div>
             <div class="kpi-row" id="kpiRow">
+                <!-- Explore -->
                 <div class="kpi-card">
-                    <div class="kpi-card__value" id="kpiScenarios">—</div>
-                    <div class="kpi-card__label">Scenarios</div>
+                    <div class="kpi-card__value" id="kpiWorkshops">—</div>
+                    <div class="kpi-card__label">Workshops</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-card__value" id="kpiWsCompletion">—</div>
+                    <div class="kpi-card__label">WS Completion</div>
                 </div>
                 <div class="kpi-card">
                     <div class="kpi-card__value" id="kpiRequirements">—</div>
                     <div class="kpi-card__label">Requirements</div>
                 </div>
+                <div class="kpi-card">
+                    <div class="kpi-card__value" id="kpiOpenItems">—</div>
+                    <div class="kpi-card__label">Open Items</div>
+                </div>
+                <!-- Delivery -->
                 <div class="kpi-card">
                     <div class="kpi-card__value" id="kpiBacklog">—</div>
                     <div class="kpi-card__label">Backlog Items</div>
@@ -180,26 +190,19 @@ const App = (() => {
                     <div class="kpi-card__label">Open Defects</div>
                 </div>
             </div>
-            <div class="dashboard-grid">
-                <div class="card">
-                    <div class="card-header"><h2>Requirement Fit/Gap</h2></div>
-                    <canvas id="fitGapChart" height="220"></canvas>
-                </div>
-                <div class="card">
-                    <div class="card-header"><h2>Backlog by Status</h2></div>
-                    <canvas id="backlogChart" height="220"></canvas>
-                </div>
-            </div>
             <div class="card">
                 <div class="card-header">
                     <h2>Quick Navigation</h2>
                 </div>
                 <div class="dashboard-quick-nav">
-                    <button class="btn btn-secondary" onclick="App.navigate('scenarios')">🎯 Scenarios</button>
-                    <button class="btn btn-secondary" onclick="App.navigate('analysis')">🔬 Analysis Hub</button>
-                    <button class="btn btn-secondary" onclick="App.navigate('requirements')">📝 Requirements</button>
+                    <button class="btn btn-secondary" onclick="App.navigate('explore-dashboard')">📊 Explore Dashboard</button>
+                    <button class="btn btn-secondary" onclick="App.navigate('explore-hierarchy')">🏗️ Process Hierarchy</button>
+                    <button class="btn btn-secondary" onclick="App.navigate('explore-workshops')">📋 Workshops</button>
+                    <button class="btn btn-secondary" onclick="App.navigate('explore-requirements')">📝 Requirements</button>
                     <button class="btn btn-secondary" onclick="App.navigate('backlog')">⚙️ Backlog</button>
-                    <button class="btn btn-secondary" onclick="App.navigate('testing')">🧪 Test Hub</button>
+                    <button class="btn btn-secondary" onclick="App.navigate('test-planning')">📋 Test Planning</button>
+                    <button class="btn btn-secondary" onclick="App.navigate('test-execution')">▶️ Test Execution</button>
+                    <button class="btn btn-secondary" onclick="App.navigate('defect-management')">🐛 Defects</button>
                     <button class="btn btn-secondary" onclick="App.navigate('raid')">⚠️ RAID</button>
                 </div>
             </div>
@@ -208,54 +211,38 @@ const App = (() => {
         // Load program-specific KPIs
         try {
             const pid = prog.id;
-            const [scenarios, reqStats, backlogStats, defects] = await Promise.allSettled([
-                API.get(`/programs/${pid}/scenarios`),
-                API.get(`/programs/${pid}/requirements/stats`),
+            const [wsStats, reqStats, oiStats, backlogStats, defectRes] = await Promise.allSettled([
+                API.get(`/explore/workshops/stats?project_id=${pid}`),
+                API.get(`/explore/requirements/stats?project_id=${pid}`),
+                API.get(`/explore/open-items/stats?project_id=${pid}`),
                 API.get(`/programs/${pid}/backlog/stats`),
-                API.get(`/programs/${pid}/testing/defects`),
+                API.get(`/programs/${pid}/testing/defects?per_page=1`),
             ]);
 
-            if (scenarios.status === 'fulfilled') {
-                document.getElementById('kpiScenarios').textContent = scenarios.value.length ?? 0;
+            if (wsStats.status === 'fulfilled') {
+                const ws = wsStats.value;
+                document.getElementById('kpiWorkshops').textContent = ws.total || 0;
+                document.getElementById('kpiWsCompletion').textContent = (ws.completion_pct || 0) + '%';
             }
 
             if (reqStats.status === 'fulfilled') {
                 const rs = reqStats.value;
-                document.getElementById('kpiRequirements').textContent = rs.total ?? 0;
-                // Fit/Gap chart
-                if (typeof Chart !== 'undefined' && rs.by_fit_gap) {
-                    const fitGapChart = new Chart(document.getElementById('fitGapChart'), {
-                        type: 'doughnut',
-                        data: {
-                            labels: Object.keys(rs.by_fit_gap),
-                            datasets: [{ data: Object.values(rs.by_fit_gap), backgroundColor: ['#30914c','#e76500','#0070f2','#a9b4be'] }],
-                        },
-                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
-                    });
-                    _charts.push(fitGapChart);
-                }
+                document.getElementById('kpiRequirements').textContent = rs.total || 0;
+            }
+
+            if (oiStats.status === 'fulfilled') {
+                const oi = oiStats.value;
+                document.getElementById('kpiOpenItems').textContent = oi.total || 0;
             }
 
             if (backlogStats.status === 'fulfilled') {
                 const bs = backlogStats.value;
-                document.getElementById('kpiBacklog').textContent = bs.total ?? 0;
-                // Backlog by status chart
-                if (typeof Chart !== 'undefined' && bs.by_status) {
-                    const backlogChart = new Chart(document.getElementById('backlogChart'), {
-                        type: 'bar',
-                        data: {
-                            labels: Object.keys(bs.by_status),
-                            datasets: [{ label: 'Items', data: Object.values(bs.by_status), backgroundColor: '#0070f2', borderRadius: 6 }],
-                        },
-                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
-                    });
-                    _charts.push(backlogChart);
-                }
+                document.getElementById('kpiBacklog').textContent = bs.total_items ?? bs.total ?? 0;
             }
 
-            if (defects.status === 'fulfilled') {
-                const openDefects = (defects.value || []).filter(d => d.status !== 'closed' && d.status !== 'cancelled');
-                document.getElementById('kpiDefects').textContent = openDefects.length;
+            if (defectRes.status === 'fulfilled') {
+                const dr = defectRes.value;
+                document.getElementById('kpiDefects').textContent = dr.total || 0;
             }
         } catch (err) {
             console.warn('Dashboard KPI load error:', err);
@@ -326,12 +313,82 @@ const App = (() => {
             SuggestionBadge.init();
         }
 
+        // Initialize role-based navigation (WR-3.1)
+        if (typeof RoleNav !== 'undefined') {
+            _initUserSwitcher();
+            RoleNav.preload();
+        }
+
         // Set up program context from localStorage
         updateProgramBadge();
         updateSidebarState();
 
         // Render default view
         navigate('dashboard');
+    }
+
+    // ── Demo User Switcher (WR-3.1) ─────────────────────────────────
+    const DEMO_USERS = [
+        { id: 'demo-pm',         name: 'Ahmet (PM)',         default_role: 'pm' },
+        { id: 'demo-lead',       name: 'Ayşe (Module Lead)', default_role: 'module_lead' },
+        { id: 'demo-facilitator', name: 'Fatma (Facilitator)', default_role: 'facilitator' },
+        { id: 'demo-bpo',        name: 'Mehmet (BPO)',       default_role: 'bpo' },
+        { id: 'demo-tech',       name: 'Elif (Tech Lead)',   default_role: 'tech_lead' },
+        { id: 'demo-tester',     name: 'Can (Tester)',       default_role: 'tester' },
+        { id: 'demo-viewer',     name: 'Zeynep (Viewer)',    default_role: 'viewer' },
+    ];
+
+    function _initUserSwitcher() {
+        const btn = document.getElementById('userSwitcherBtn');
+        const dd = document.getElementById('userSwitcherDropdown');
+        if (!btn || !dd) return;
+
+        // Set default demo user if none
+        if (!RoleNav.getUser()) {
+            RoleNav.setUser(DEMO_USERS[0]);
+        }
+        _updateUserLabel();
+
+        // Build dropdown items
+        dd.innerHTML = DEMO_USERS.map(u => {
+            const active = (RoleNav.getUser()?.id === u.id) ? ' user-switcher__item--active' : '';
+            return `<div class="user-switcher__item${active}" data-uid="${u.id}">
+                <span>${esc(u.name)}</span>
+                <span class="user-switcher__role">${u.default_role}</span>
+            </div>`;
+        }).join('');
+
+        // Toggle dropdown
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dd.classList.toggle('open');
+        });
+
+        // Select user
+        dd.addEventListener('click', async (e) => {
+            const item = e.target.closest('.user-switcher__item');
+            if (!item) return;
+            const uid = item.dataset.uid;
+            const user = DEMO_USERS.find(u => u.id === uid);
+            if (user) {
+                RoleNav.setUser(user);
+                await RoleNav.preload();
+                _updateUserLabel();
+                _initUserSwitcher();  // rebuild dropdown active state
+                dd.classList.remove('open');
+                // Re-apply permission guards on visible DOM
+                RoleNav.applyToDOM();
+                toast(`Switched to ${user.name}`, 'info');
+            }
+        });
+
+        // Close on outside click
+        document.addEventListener('click', () => dd.classList.remove('open'));
+    }
+
+    function _updateUserLabel() {
+        const label = document.getElementById('userSwitcherLabel');
+        if (label) label.textContent = RoleNav.getUserDisplay();
     }
 
     // Start

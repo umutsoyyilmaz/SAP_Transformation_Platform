@@ -1,7 +1,8 @@
-> **⚠️ ARCHIVED — 2026-02-10**  
-> Bu doküman v1.3 sürümüdür ve artık güncel değildir.  
-> Güncel mimari değişiklikler için bkz: `architecture_v2.2_changelog.md`  
-> Arşiv nedeni: Metrikler (65/295/766) gerçek durumla (71/321/860) uyumsuz, Test Hub 5→14 model eksik.
+> # ⚠️ ARCHIVED — Bu doküman arşivlenmiştir (DOC-014)
+> **Versiyon:** 1.3 — Arşivleme tarihi: 2026-02-10  
+> Bu doküman artık güncel değildir. Metrikler (65/295/766) gerçek durumla (71/321/860) uyumsuz, Test Hub 5→14 model eksik.  
+> **Güncel mimari doküman:** [`sap_transformation_platform_architecture_v2.md`](../../sap_transformation_platform_architecture_v2.md)  
+> Değişiklik özeti: `architecture_v2.2_changelog.md`
 
 ---
 

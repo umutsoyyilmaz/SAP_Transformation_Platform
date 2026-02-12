@@ -137,27 +137,65 @@ const ExpUI = (() => {
      * @param {Object} opts
      * @param {string|number} opts.value
      * @param {string}        opts.label
-     * @param {string}        [opts.icon]    — emoji or char
+     * @param {string}        [opts.icon]    — deprecated (ignored)
      * @param {string}        [opts.accent]  — CSS color for value
      * @param {string}        [opts.trend]   — up | down | flat
      * @param {string}        [opts.trendValue] — e.g. "+12%"
      * @param {string}        [opts.suffix]  — e.g. "%"
+     * @param {string}        [opts.sub]     — sub label
      * @returns {string}
      */
     function kpiBlock(opts = {}) {
-        const accent = opts.accent ? `color:${opts.accent}` : '';
-        const iconHtml = opts.icon ? `<div style="font-size:20px;margin-bottom:4px">${opts.icon}</div>` : '';
+        const accent = opts.accent || 'var(--sap-blue)';
         const trendColors = { up: '#10B981', down: '#EF4444', flat: '#94A3B8' };
         const trendIcons  = { up: '↑', down: '↓', flat: '→' };
         const trendHtml = opts.trend
             ? `<span style="font-size:11px;font-weight:600;color:${trendColors[opts.trend] || '#94A3B8'};margin-left:6px">${trendIcons[opts.trend] || ''}${opts.trendValue ? ' ' + esc(opts.trendValue) : ''}</span>`
             : '';
         const suffix = opts.suffix ? `<span style="font-size:14px;font-weight:400">${esc(opts.suffix)}</span>` : '';
+        const subHtml = opts.sub ? `<div class="exp-kpi-card__sub">${esc(opts.sub)}</div>` : '';
 
         return `<div class="exp-kpi-card">
-            ${iconHtml}
-            <div class="exp-kpi-card__value" style="${accent}">${esc(String(opts.value ?? '—'))}${suffix}${trendHtml}</div>
+            <div class="exp-kpi-card__value" style="color:${accent}">${esc(String(opts.value ?? '—'))}${suffix}${trendHtml}</div>
             <div class="exp-kpi-card__label">${esc(opts.label || '')}</div>
+            ${subHtml}
+        </div>`;
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // F-046b  MetricBar — compact distribution bar
+    // ────────────────────────────────────────────────────────────────
+    /**
+     * @param {Object} opts
+     * @param {string} [opts.label]
+     * @param {Array}  opts.segments — [{value, label, color}]
+     * @param {number} [opts.total]
+     * @param {number} [opts.height]
+     * @returns {string}
+     */
+    function metricBar(opts = {}) {
+        const segments = opts.segments || [];
+        const total = opts.total || segments.reduce((s, seg) => s + (seg.value || 0), 0) || 1;
+        const h = opts.height || 6;
+
+        const barSegs = segments.map(seg => {
+            const pct = Math.round((seg.value || 0) / total * 100);
+            if (pct === 0) return '';
+            return `<div style="flex:${seg.value || 0};height:${h}px;background:${seg.color};border-radius:${h / 2}px" title="${esc(seg.label)}: ${pct}%"></div>`;
+        }).join('');
+
+        const legend = segments.map(seg => {
+            const pct = Math.round((seg.value || 0) / total * 100);
+            return `<span style="display:inline-flex;align-items:center;gap:3px">
+                <span style="width:6px;height:6px;border-radius:50%;background:${seg.color}"></span>
+                <span>${esc(seg.label)} ${pct}%</span>
+            </span>`;
+        }).join('');
+
+        return `<div class="exp-metric-bar">
+            ${opts.label ? `<div class="exp-metric-bar__label">${esc(opts.label)}</div>` : ''}
+            <div style="display:flex;gap:2px;border-radius:${h / 2}px;overflow:hidden;background:#f1f5f9">${barSegs}</div>
+            <div class="exp-metric-bar__legend">${legend}</div>
         </div>`;
     }
 
@@ -187,6 +225,215 @@ const ExpUI = (() => {
         }).join('');
 
         return `<div class="exp-filter-group" data-group-id="${esc(opts.id || '')}" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">${groupLabel}${chips}</div>`;
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // F-050  FilterBar — Linear-style compact filter bar with dropdowns
+    // ────────────────────────────────────────────────────────────────
+    /**
+     * Renders a compact filter bar: search + filter dropdowns.
+     * Active filters shown as removable chips below the bar.
+     *
+     * @param {Object} opts
+     * @param {string} opts.id
+     * @param {string} opts.searchPlaceholder
+     * @param {string} opts.searchValue
+     * @param {string} opts.onSearch
+     * @param {Array}  opts.filters
+     * @param {string} opts.onChange
+     * @param {string} [opts.actionsHtml]
+     * @returns {string} HTML
+     */
+    function filterBar(opts = {}) {
+        const barId = opts.id || 'expFilterBar';
+        const filters = opts.filters || [];
+
+        const activeFilters = filters.filter(f => {
+            if (Array.isArray(f.selected)) return f.selected.length > 0;
+            return f.selected != null && f.selected !== '' && f.selected !== 'all';
+        });
+        const activeCount = activeFilters.length;
+
+        const row1 = `
+            <div class="exp-fb__row">
+                <div class="exp-search" style="flex:0 1 280px;min-width:180px">
+                    <span class="exp-search__icon">🔍</span>
+                    <input class="exp-search__input" type="text"
+                           placeholder="${esc(opts.searchPlaceholder || 'Search...')}"
+                           value="${esc(opts.searchValue || '')}"
+                           oninput="${esc(opts.onSearch || '')}">
+                </div>
+                <div class="exp-fb__controls">
+                    <button class="exp-fb-btn${activeCount ? ' exp-fb-btn--active' : ''}"
+                            id="${barId}_filterBtn"
+                            onclick="ExpUI._fbToggle('${barId}','filter')">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M4 8h8M6 13h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                        Filter${activeCount ? ` <span class="exp-fb-btn__badge">${activeCount}</span>` : ''}
+                    </button>
+                </div>
+                <div style="flex:1"></div>
+                ${opts.actionsHtml || ''}
+            </div>`;
+
+        let row2 = '';
+        if (activeCount > 0) {
+            const chips = activeFilters.map(f => {
+                const sel = Array.isArray(f.selected) ? f.selected : [f.selected];
+                const labels = sel.map(v => {
+                    const opt = (f.options || []).find(o => String(o.value) === String(v));
+                    return opt ? opt.label : v;
+                }).join(', ');
+                const dotColor = f.color || 'var(--sap-blue)';
+                return `<span class="exp-fb-chip">
+                    <span class="exp-fb-chip__dot" style="background:${dotColor}"></span>
+                    <span class="exp-fb-chip__label">${esc(f.label)}: ${esc(labels)}</span>
+                    <span class="exp-fb-chip__x" onclick="ExpUI._fbClear('${barId}','${f.id}')">✕</span>
+                </span>`;
+            }).join('');
+            row2 = `<div class="exp-fb__chips">${chips}
+                <button class="exp-fb-clear-all" onclick="ExpUI._fbClearAll('${barId}')">Clear all</button>
+            </div>`;
+        }
+
+        const dropdownItems = filters.map(f => {
+            const selCount = Array.isArray(f.selected) ? f.selected.length : (f.selected ? 1 : 0);
+            return `<div class="exp-fb-dd__item" onclick="ExpUI._fbShowSub('${barId}','${f.id}')">
+                <span style="font-size:14px">${f.icon || '⊞'}</span>
+                <span style="flex:1">${esc(f.label)}</span>
+                ${selCount > 0 ? `<span class="exp-fb-dd__count">${selCount}</span>` : ''}
+                <span style="color:#94a3b8;font-size:10px">▸</span>
+            </div>`;
+        }).join('');
+
+        const dropdown = `<div class="exp-fb-dd" id="${barId}_dd" style="display:none">
+            <div class="exp-fb-dd__header">Filter by</div>
+            ${dropdownItems}
+        </div>`;
+
+        const subDropdowns = filters.map(f => {
+            const sel = Array.isArray(f.selected) ? f.selected : (f.selected ? [f.selected] : []);
+            const optionItems = (f.options || []).map(o => {
+                const isChecked = sel.includes(String(o.value)) || sel.includes(o.value);
+                const countHtml = o.count != null ? `<span style="color:#94a3b8;font-size:11px;margin-left:auto">${o.count}</span>` : '';
+                return `<label class="exp-fb-dd__option" onclick="event.stopPropagation()">
+                    <input type="${f.type === 'single' ? 'radio' : 'checkbox'}"
+                           name="${barId}_${f.id}" value="${esc(String(o.value))}"
+                           ${isChecked ? 'checked' : ''}
+                           onchange="ExpUI._fbApply('${barId}','${f.id}')">
+                    <span>${esc(o.label)}</span>
+                    ${countHtml}
+                </label>`;
+            }).join('');
+
+            return `<div class="exp-fb-dd exp-fb-dd--sub" id="${barId}_sub_${f.id}" style="display:none">
+                <div class="exp-fb-dd__back" onclick="ExpUI._fbShowSub('${barId}',null)">
+                    <span style="font-size:10px">◂</span> ${esc(f.label)}
+                </div>
+                ${(f.options || []).length > 6 ? `
+                <div class="exp-fb-dd__search">
+                    <input type="text" placeholder="Search..." oninput="ExpUI._fbFilterOptions(this,'${barId}_sub_${f.id}')">
+                </div>` : ''}
+                <div class="exp-fb-dd__options">${optionItems}</div>
+            </div>`;
+        }).join('');
+
+        return `<div class="exp-fb" id="${barId}" data-onchange="${esc(opts.onChange || '')}">
+            ${row1}
+            ${row2}
+            ${dropdown}
+            ${subDropdowns}
+        </div>`;
+    }
+
+    function _fbToggle(barId) {
+        const dd = document.getElementById(`${barId}_dd`);
+        if (!dd) return;
+        document.querySelectorAll(`#${barId} .exp-fb-dd--sub`).forEach(el => { el.style.display = 'none'; });
+        dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+        const btn = document.getElementById(`${barId}_filterBtn`);
+        if (btn && dd.style.display === 'block') {
+            const rect = btn.getBoundingClientRect();
+            const barRect = document.getElementById(barId).getBoundingClientRect();
+            dd.style.left = (rect.left - barRect.left) + 'px';
+        }
+        if (dd.style.display === 'block') {
+            setTimeout(() => {
+                const handler = (e) => {
+                    if (!e.target.closest(`#${barId} .exp-fb-dd`) && !e.target.closest(`#${barId}_filterBtn`)) {
+                        dd.style.display = 'none';
+                        document.querySelectorAll(`#${barId} .exp-fb-dd--sub`).forEach(el => { el.style.display = 'none'; });
+                        document.removeEventListener('click', handler);
+                    }
+                };
+                document.addEventListener('click', handler);
+            }, 10);
+        }
+    }
+
+    function _fbShowSub(barId, filterId) {
+        const mainDd = document.getElementById(`${barId}_dd`);
+        document.querySelectorAll(`#${barId} .exp-fb-dd--sub`).forEach(el => { el.style.display = 'none'; });
+        if (filterId) {
+            if (mainDd) mainDd.style.display = 'none';
+            const sub = document.getElementById(`${barId}_sub_${filterId}`);
+            if (sub) {
+                sub.style.display = 'block';
+                sub.style.left = (mainDd && mainDd.style.left) ? mainDd.style.left : '0';
+            }
+        } else if (mainDd) {
+            mainDd.style.display = 'block';
+        }
+    }
+
+    function _fbApply(barId, filterId) {
+        const sub = document.getElementById(`${barId}_sub_${filterId}`);
+        if (!sub) return;
+        const checked = [...sub.querySelectorAll('input:checked')].map(el => el.value);
+
+        const bar = document.getElementById(barId);
+        const onChange = bar?.dataset.onchange;
+        if (onChange) {
+            const update = {};
+            update[filterId] = checked.length === 1 ? checked[0] : (checked.length > 0 ? checked : null);
+            try {
+                if (onChange.includes('FILTERS')) {
+                    const fn = new Function('filters', onChange.replace('FILTERS', 'filters'));
+                    fn(update);
+                } else {
+                    eval(`${onChange}(${JSON.stringify(update)})`);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+    }
+
+    function _fbClear(barId, filterId) {
+        const bar = document.getElementById(barId);
+        const onChange = bar?.dataset.onchange;
+        if (onChange) {
+            const update = {};
+            update[filterId] = null;
+            try { eval(`${onChange}(${JSON.stringify(update)})`); } catch (e) { console.error(e); }
+        }
+    }
+
+    function _fbClearAll(barId) {
+        const bar = document.getElementById(barId);
+        const onChange = bar?.dataset.onchange;
+        if (onChange) {
+            try { eval(`${onChange}({_clearAll: true})`); } catch (e) { console.error(e); }
+        }
+    }
+
+    function _fbFilterOptions(input, subId) {
+        const q = (input.value || '').toLowerCase();
+        const sub = document.getElementById(subId);
+        if (!sub) return;
+        sub.querySelectorAll('.exp-fb-dd__option').forEach(opt => {
+            const text = opt.textContent.toLowerCase();
+            opt.style.display = text.includes(q) ? '' : 'none';
+        });
     }
 
     // ────────────────────────────────────────────────────────────────
@@ -349,7 +596,15 @@ const ExpUI = (() => {
         fitBadge,
         fitBarMini,
         kpiBlock,
+        metricBar,
         filterGroup,
+        filterBar,
+        _fbToggle,
+        _fbShowSub,
+        _fbApply,
+        _fbClear,
+        _fbClearAll,
+        _fbFilterOptions,
         actionButton,
         countChip,
         levelBadge,

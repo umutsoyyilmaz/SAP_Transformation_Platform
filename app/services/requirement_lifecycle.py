@@ -26,12 +26,15 @@ Usage:
 from datetime import datetime, timezone
 
 from app.models import db
+from app.models.audit import write_audit
+from app.models.backlog import BacklogItem, ConfigItem
 from app.models.explore import (
     ExploreOpenItem,
     ExploreRequirement,
     RequirementOpenItemLink,
     REQUIREMENT_TRANSITIONS,
 )
+from app.services.code_generator import generate_backlog_item_code, generate_config_item_code
 from app.services.permission import PermissionDenied, has_permission
 
 
@@ -186,10 +189,31 @@ def transition_requirement(
         req.rejection_reason = None
     elif action == "push_to_alm":
         req.alm_sync_status = "pending"
+        _ensure_backlog_item(req)
     elif action == "mark_realized":
         pass  # alm_sync_status update handled by CloudALM service
     elif action == "verify":
         pass
+
+    # 6. Audit log
+    _diff = {"status": {"old": previous_status, "new": req.status}}
+    if action == "approve":
+        _diff["approved_by"] = {"old": None, "new": approved_by_name}
+    elif action == "reject":
+        _diff["rejection_reason"] = {"old": None, "new": rejection_reason}
+    elif action == "defer":
+        _diff["deferred_to_phase"] = {"old": None, "new": deferred_to_phase}
+    try:
+        write_audit(
+            entity_type="requirement",
+            entity_id=req.id,
+            action=f"requirement.{action}",
+            actor=user_id,
+            program_id=project_id,
+            diff=_diff,
+        )
+    except Exception:
+        pass  # audit must not break the main flow
 
     return {
         "requirement_id": req.id,
@@ -197,6 +221,125 @@ def transition_requirement(
         "previous_status": previous_status,
         "new_status": req.status,
         "action": action,
+    }
+
+
+def _map_priority(priority: str | None) -> str:
+    if priority == "P1":
+        return "critical"
+    if priority == "P2":
+        return "high"
+    if priority == "P3":
+        return "medium"
+    if priority == "P4":
+        return "low"
+    return "medium"
+
+
+def _map_wricef_type(req_type: str | None, title: str, description: str) -> str:
+    """Enhanced keyword-based WRICEF classification."""
+    text = f"{title} {description}".lower()
+
+    keyword_map = {
+        "report": ["report", "alv", "fiori app", "analytics", "dashboard"],
+        "interface": ["interface", "idoc", "bapi", "api", "rfc", "integration"],
+        "conversion": ["conversion", "migration", "data load", "legacy", "cutover"],
+        "enhancement": ["enhancement", "user exit", "badi", "bte", "custom"],
+        "form": ["form", "smartform", "sapscript", "adobe", "print", "output"],
+        "workflow": ["workflow", "approval", "notification", "escalation"],
+    }
+
+    for wricef_type, keywords in keyword_map.items():
+        for kw in keywords:
+            if kw in text:
+                return wricef_type
+
+    type_mapping = {
+        "integration": "interface",
+        "migration": "conversion",
+        "enhancement": "enhancement",
+        "development": "interface",
+    }
+    return type_mapping.get(req_type or "", "enhancement")
+
+
+def _ensure_backlog_item(req: ExploreRequirement) -> None:
+    """Create BacklogItem or ConfigItem from an ExploreRequirement, with codes and FK link."""
+    if req.backlog_item_id or req.config_item_id:
+        return
+
+    is_config = req.type in {"configuration", "workaround"}
+    title = req.title
+    description = req.description or ""
+    module = (req.process_area or "").upper()
+    priority = _map_priority(req.priority)
+
+    if is_config:
+        code = generate_config_item_code(req.project_id)
+        config = ConfigItem(
+            program_id=req.project_id,
+            title=title,
+            description=description,
+            module=module,
+            priority=priority,
+            code=code,
+            explore_requirement_id=req.id,
+        )
+        db.session.add(config)
+        db.session.flush()
+        req.config_item_id = config.id
+    else:
+        wricef = _map_wricef_type(req.type, title, description)
+        code = generate_backlog_item_code(req.project_id, wricef)
+        backlog = BacklogItem(
+            program_id=req.project_id,
+            title=title,
+            description=description,
+            module=module,
+            priority=priority,
+            wricef_type=wricef,
+            code=code,
+            explore_requirement_id=req.id,
+        )
+        db.session.add(backlog)
+        db.session.flush()
+        req.backlog_item_id = backlog.id
+
+
+def convert_requirement(requirement_id: str, user_id: str, project_id: int) -> dict:
+    """
+    Public API — convert a single approved requirement to a backlog/config item.
+
+    Returns dict with conversion result or raises TransitionError.
+    """
+    req = db.session.get(ExploreRequirement, requirement_id)
+    if not req or req.project_id != project_id:
+        raise TransitionError(f"Requirement {requirement_id} not found")
+
+    if req.status not in ("approved", "realized"):
+        raise TransitionError(
+            f"Requirement must be approved or realized to convert, "
+            f"current status: {req.status}"
+        )
+
+    if req.backlog_item_id or req.config_item_id:
+        return {
+            "requirement_id": req.id,
+            "code": req.code,
+            "status": "already_converted",
+            "backlog_item_id": req.backlog_item_id,
+            "config_item_id": req.config_item_id,
+        }
+
+    _ensure_backlog_item(req)
+    db.session.flush()
+
+    return {
+        "requirement_id": req.id,
+        "code": req.code,
+        "status": "converted",
+        "backlog_item_id": req.backlog_item_id,
+        "config_item_id": req.config_item_id,
     }
 
 
