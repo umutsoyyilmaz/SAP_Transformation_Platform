@@ -263,15 +263,21 @@ def _map_wricef_type(req_type: str | None, title: str, description: str) -> str:
     return type_mapping.get(req_type or "", "enhancement")
 
 
-def _ensure_backlog_item(req: ExploreRequirement) -> None:
+def _ensure_backlog_item(req: ExploreRequirement, *, target_type=None, wricef_type=None, module_override=None) -> None:
     """Create BacklogItem or ConfigItem from an ExploreRequirement, with codes and FK link."""
     if req.backlog_item_id or req.config_item_id:
         return
 
-    is_config = req.type in {"configuration", "workaround"}
+    # target_type override: "config" or "backlog" from frontend
+    if target_type == "config":
+        is_config = True
+    elif target_type == "backlog":
+        is_config = False
+    else:
+        is_config = req.type in {"configuration", "workaround"}
     title = req.title
     description = req.description or ""
-    module = (req.process_area or "").upper()
+    module = (module_override or req.process_area or "").upper()
     priority = _map_priority(req.priority)
 
     if is_config:
@@ -289,7 +295,7 @@ def _ensure_backlog_item(req: ExploreRequirement) -> None:
         db.session.flush()
         req.config_item_id = config.id
     else:
-        wricef = _map_wricef_type(req.type, title, description)
+        wricef = wricef_type if wricef_type else _map_wricef_type(req.type, title, description)
         code = generate_backlog_item_code(req.project_id, wricef)
         backlog = BacklogItem(
             program_id=req.project_id,
@@ -306,7 +312,8 @@ def _ensure_backlog_item(req: ExploreRequirement) -> None:
         req.backlog_item_id = backlog.id
 
 
-def convert_requirement(requirement_id: str, user_id: str, project_id: int) -> dict:
+def convert_requirement(requirement_id: str, user_id: str, project_id: int,
+                        *, target_type=None, wricef_type=None, module_override=None) -> dict:
     """
     Public API — convert a single approved requirement to a backlog/config item.
 
@@ -331,7 +338,7 @@ def convert_requirement(requirement_id: str, user_id: str, project_id: int) -> d
             "config_item_id": req.config_item_id,
         }
 
-    _ensure_backlog_item(req)
+    _ensure_backlog_item(req, target_type=target_type, wricef_type=wricef_type, module_override=module_override)
     db.session.flush()
 
     return {

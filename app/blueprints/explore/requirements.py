@@ -551,7 +551,12 @@ def convert_requirement_endpoint(req_id):
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
     try:
-        result = convert_requirement(req_id, user_id, project_id)
+        result = convert_requirement(
+            req_id, user_id, project_id,
+            target_type=data.get("target_type"),
+            wricef_type=data.get("wricef_type"),
+            module_override=data.get("module"),
+        )
         db.session.commit()
         return jsonify(result)
     except TransitionError as exc:

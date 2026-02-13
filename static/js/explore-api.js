@@ -110,7 +110,7 @@ const ExploreAPI = (() => {
         delete:     (pid, id)        => Promise.resolve(), // No backend DELETE endpoint — placeholder
         transition: (pid, id, d)     => API.post(`${B}/requirements/${id}/transition`, d),
         stats:      (pid)            => API.get(`${B}/requirements/stats?project_id=${pid}`),
-        convert:      (pid, id, d)     => API.post(`${B}/requirements/${id}/convert`, d || {}),
+        convert:      (pid, id, d)     => API.post(`${B}/requirements/${id}/convert`, Object.assign({project_id: pid}, d || {})),
         batchConvert: (pid, d)         => API.post(`${B}/requirements/batch-convert`, Object.assign({project_id: pid}, d || {})),
         coverageMatrix: (pid, params)  => API.get(`${B}/requirements/coverage-matrix?project_id=${pid}${_qs(params)}`),
     };
