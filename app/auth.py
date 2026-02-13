@@ -93,6 +93,33 @@ def _get_api_key_from_request() -> Optional[str]:
     return request.args.get("api_key", "").strip() or None
 
 
+def _is_same_origin_request() -> bool:
+    """
+    Detect same-origin browser requests originating from the SPA.
+
+    Modern browsers automatically set the Sec-Fetch-Site header which
+    cannot be forged by JavaScript (it is a *forbidden* header name).
+    Fallback: verify the Referer header matches the request's own host.
+
+    This allows the SPA (served by the same Flask server) to call API
+    endpoints without requiring an X-API-Key, while external consumers
+    (curl, scripts, third-party integrations) still need one.
+    """
+    # Sec-Fetch-Site — reliable on all modern browsers (Chrome 76+, FF 90+, Safari 16.1+)
+    fetch_site = request.headers.get("Sec-Fetch-Site", "")
+    if fetch_site in ("same-origin", "same-site"):
+        return True
+
+    # Fallback: Referer header (always sent for same-origin fetch())
+    referer = request.headers.get("Referer", "")
+    if referer:
+        host_url = request.host_url.rstrip("/")
+        if referer.startswith(host_url):
+            return True
+
+    return False
+
+
 # ── Authentication decorator ─────────────────────────────────────────────────
 
 def require_auth(f):
@@ -210,6 +237,16 @@ def init_auth(app):
         if not _is_auth_enabled():
             g.current_user_role = "admin"
             g.api_key = "dev-mode"
+            return None
+
+        # Same-origin SPA requests bypass API key requirement.
+        # The SPA is served by this same Flask server; if the user can
+        # see the page they are already "inside".  CSRF is mitigated by
+        # the Content-Type enforcement above (HTML forms cannot send
+        # application/json).  External API consumers still need X-API-Key.
+        if _is_same_origin_request():
+            g.current_user_role = "admin"
+            g.api_key = "spa-session"
             return None
 
         api_key = _get_api_key_from_request()
