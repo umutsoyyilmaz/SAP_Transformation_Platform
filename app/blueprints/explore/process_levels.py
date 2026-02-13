@@ -137,22 +137,30 @@ def list_process_levels():
             result.append(d)
         return jsonify({"items": result, "total": len(result)})
 
-    # Tree mode: start from roots (L1) and recursively build
-    roots = q.filter_by(parent_id=None).order_by(ProcessLevel.sort_order).all()
+    # Tree mode: load ALL matching process levels in ONE query, then build
+    # the tree in-memory to avoid N+1 query explosion (265+ rows = 265+ queries).
+    all_items = (
+        ProcessLevel.query
+        .filter_by(project_id=project_id)
+        .order_by(ProcessLevel.level, ProcessLevel.sort_order)
+        .all()
+    )
+
+    # Index by id and group children by parent_id
+    by_id = {pl.id: pl for pl in all_items}
+    children_map = {}  # parent_id -> [child, ...]
+    for pl in all_items:
+        children_map.setdefault(pl.parent_id, []).append(pl)
 
     def build_tree(node):
         d = node.to_dict()
         if include_stats:
             d["fit_summary"] = get_fit_summary(node)
-        children = (
-            ProcessLevel.query
-            .filter_by(parent_id=node.id, project_id=project_id)
-            .order_by(ProcessLevel.sort_order)
-            .all()
-        )
-        d["children"] = [build_tree(c) for c in children]
+        kids = children_map.get(node.id, [])
+        d["children"] = [build_tree(c) for c in kids]
         return d
 
+    roots = children_map.get(None, [])
     tree = [build_tree(r) for r in roots]
     return jsonify({"items": tree, "total": len(tree), "mode": "tree"})
 
