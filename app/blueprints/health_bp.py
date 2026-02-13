@@ -95,7 +95,8 @@ def db_diagnostic():
     tables_to_check = [
         "programs", "phases", "gates", "workstreams", "team_members",
         "committees", "backlog_items", "config_items", "test_suites",
-        "scenarios", "requirements", "sprints",
+        "scenarios", "requirements", "sprints", "process_levels",
+        "process_steps", "explore_workshops",
     ]
     results = {}
     for tbl in tables_to_check:
@@ -122,3 +123,49 @@ def db_diagnostic():
         results["program_detail_test"] = {"status": "error", "detail": str(exc)}
 
     return jsonify(results), 200
+
+
+@health_bp.route("/db-columns", methods=["GET"])
+def db_columns_check():
+    """
+    Compare SQLAlchemy model columns against live DB columns.
+    Shows missing columns that need ALTER TABLE to add.
+    Useful for diagnosing startup/query failures.
+    """
+    import sqlalchemy as sa
+
+    db_uri = str(db.engine.url)
+    if "postgresql" not in db_uri:
+        return jsonify({"status": "skipped", "reason": "SQLite — db.create_all handles it"}), 200
+
+    try:
+        inspector = sa.inspect(db.engine)
+    except Exception as exc:
+        return jsonify({"status": "error", "detail": str(exc)}), 500
+
+    report = {}
+    for table in db.metadata.sorted_tables:
+        tbl_name = table.name
+        try:
+            if not inspector.has_table(tbl_name):
+                report[tbl_name] = {"status": "missing_table"}
+                continue
+            db_cols = {c["name"] for c in inspector.get_columns(tbl_name)}
+            model_cols = {c.name for c in table.columns}
+            missing = model_cols - db_cols
+            extra = db_cols - model_cols
+            if missing:
+                report[tbl_name] = {"status": "missing_columns", "missing": sorted(missing)}
+            else:
+                report[tbl_name] = {"status": "ok", "columns": len(db_cols)}
+            if extra:
+                report[tbl_name]["extra_in_db"] = sorted(extra)
+        except Exception as exc:
+            report[tbl_name] = {"status": "error", "detail": str(exc)}
+
+    total_missing = sum(
+        len(v.get("missing", []))
+        for v in report.values()
+        if isinstance(v, dict) and "missing" in v
+    )
+    return jsonify({"total_missing_columns": total_missing, "tables": report}), 200
