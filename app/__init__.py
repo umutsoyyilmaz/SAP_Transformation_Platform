@@ -47,6 +47,73 @@ limiter = Limiter(
 )
 
 
+def _auto_add_missing_columns(app, db):
+    """
+    Compare SQLAlchemy model metadata against the live DB schema and
+    ADD COLUMN IF NOT EXISTS for any columns the code defines but the
+    DB table is missing.  Safe to run on every startup (idempotent).
+
+    Only works on PostgreSQL via ``ALTER TABLE ... ADD COLUMN IF NOT EXISTS``.
+    SQLite uses db.create_all() which handles this differently.
+    """
+    import sqlalchemy as sa
+
+    db_uri = str(db.engine.url)
+    if "postgresql" not in db_uri:
+        return  # SQLite doesn't support ADD COLUMN IF NOT EXISTS
+
+    inspector = sa.inspect(db.engine)
+    added = []
+
+    for table in db.metadata.sorted_tables:
+        table_name = table.name
+
+        if not inspector.has_table(table_name):
+            continue  # db.create_all() will handle new tables
+
+        # Get existing columns
+        existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
+
+        for col in table.columns:
+            if col.name in existing_cols:
+                continue
+
+            # Build ALTER TABLE statement
+            col_type = col.type.compile(dialect=db.engine.dialect)
+            nullable = "" if col.nullable else " NOT NULL"
+            default = ""
+            if col.server_default is not None:
+                default = f" DEFAULT {col.server_default.arg}"
+            elif col.default is not None and col.default.is_scalar:
+                default = f" DEFAULT '{col.default.arg}'"
+
+            sql = (
+                f'ALTER TABLE "{table_name}" '
+                f'ADD COLUMN IF NOT EXISTS "{col.name}" {col_type}{nullable}{default}'
+            )
+            try:
+                db.session.execute(sa.text(sql))
+                added.append(f"{table_name}.{col.name}")
+            except Exception as exc:
+                # If NOT NULL without default fails, retry as nullable
+                db.session.rollback()
+                sql_nullable = (
+                    f'ALTER TABLE "{table_name}" '
+                    f'ADD COLUMN IF NOT EXISTS "{col.name}" {col_type}{default}'
+                )
+                try:
+                    db.session.execute(sa.text(sql_nullable))
+                    added.append(f"{table_name}.{col.name} (nullable)")
+                except Exception:
+                    app.logger.warning("Could not add column %s.%s: %s", table_name, col.name, exc)
+
+    if added:
+        db.session.commit()
+        app.logger.info("Auto-added %d missing columns: %s", len(added), ", ".join(added))
+    else:
+        app.logger.info("All model columns present in DB — no migration needed")
+
+
 def create_app(config_name=None):
     """
     Create and configure the Flask application.
@@ -137,6 +204,14 @@ def create_app(config_name=None):
             app.logger.info("db.create_all() completed successfully")
         except Exception as e:
             app.logger.warning("db.create_all() failed: %s", e)
+
+        # ── Auto-add missing columns (PostgreSQL only) ───────────────
+        # db.create_all() does not ALTER existing tables. This ensures
+        # columns added in code but missing in DB are created on startup.
+        try:
+            _auto_add_missing_columns(app, db)
+        except Exception as e:
+            app.logger.warning("auto-add-columns failed: %s", e)
 
     # ── Blueprints ───────────────────────────────────────────────────────
     from app.blueprints.program_bp import program_bp
