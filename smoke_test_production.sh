@@ -347,11 +347,11 @@ if [ -n "$PID" ]; then
 
     test_post "POST requirement (MM gap)" \
         "$API/explore/requirements" \
-        "{\"project_id\":$PID,\"title\":\"Vendor evaluation custom scoring\",\"type\":\"functional\",\"priority\":\"P3\"}"
+        "{\"project_id\":$PID,\"title\":\"Vendor evaluation custom scoring\",\"type\":\"functional\",\"priority\":\"P3\",\"workshop_id\":\"$WS_ID\"}"
 
     test_post "POST requirement (technical)" \
         "$API/explore/requirements" \
-        "{\"project_id\":$PID,\"title\":\"API gateway integration\",\"type\":\"technical\",\"priority\":\"P1\"}"
+        "{\"project_id\":$PID,\"title\":\"API gateway integration\",\"type\":\"technical\",\"priority\":\"P1\",\"workshop_id\":\"$WS_ID\"}"
 
     test_get  "GET  /explore/requirements"       "$API/explore/requirements?project_id=$PID"
     test_get  "GET  /explore/requirements/stats"  "$API/explore/requirements/stats?project_id=$PID"
@@ -607,12 +607,12 @@ if [ -n "$PID" ]; then
         subsection "5.2 Scope Items"
         test_post "POST scope-item (data)" \
             "$API/cutover/plans/$CO_ID/scope-items" \
-            "{\"name\":\"Data Migration Tasks\",\"category\":\"data\",\"owner\":\"DM Lead\"}"
+            "{\"name\":\"Data Migration Tasks\",\"category\":\"data_load\",\"owner\":\"DM Lead\"}"
         SI_DATA=$(_json_val "id")
 
         test_post "POST scope-item (technical)" \
             "$API/cutover/plans/$CO_ID/scope-items" \
-            "{\"name\":\"Technical Cutovers\",\"category\":\"technical\",\"owner\":\"Basis\"}"
+            "{\"name\":\"Technical Cutovers\",\"category\":\"interface\",\"owner\":\"Basis\"}"
         SI_TECH=$(_json_val "id")
 
         subsection "5.3 Runbook Tasks"
@@ -692,7 +692,7 @@ if [ -n "$CO_ID" ] && [ "$CO_ID" != "" ]; then
 
     test_post "POST handover-item (access)" \
         "$API/run-sustain/plans/$CO_ID/handover-items" \
-        "{\"title\":\"Support team SAP access provisioning\",\"category\":\"access\",\"responsible\":\"Security Lead\",\"priority\":\"critical\"}"
+        "{\"title\":\"Support team SAP access provisioning\",\"category\":\"access_control\",\"responsible\":\"Security Lead\",\"priority\":\"high\"}"
 
     test_post "POST handover-item (monitoring)" \
         "$API/run-sustain/plans/$CO_ID/handover-items" \
@@ -723,19 +723,21 @@ fi
 
 subsection "7.3 Traceability Chain"
 if [ -n "$PID" ]; then
-    test_get "GET  traceability (program)" "$API/traceability/program/$PID"
-
     if [ -n "$BL_ID" ] && [ "$BL_ID" != "" ]; then
-        test_get "GET  traceability (backlog)" "$API/traceability/backlog/$BL_ID"
+        test_get "GET  traceability (backlog_item)" "$API/traceability/backlog_item/$BL_ID"
     fi
     if [ -n "$REQ_ID" ] && [ "$REQ_ID" != "" ]; then
-        test_get "GET  traceability (requirement)" "$API/traceability/requirement/$REQ_ID"
+        test_get "GET  traceability (explore_requirement)" "$API/traceability/explore_requirement/$REQ_ID"
+    fi
+    if [ -n "$CI_ID" ] && [ "$CI_ID" != "" ]; then
+        test_get "GET  traceability (config_item)" "$API/traceability/config_item/$CI_ID"
     fi
 fi
 
-subsection "7.4 AI Endpoints"
+subsection "7.4 AI & Knowledge Base"
 if [ -n "$PID" ]; then
-    test_get  "GET  /ai/health"  "$API/ai/health"
+    test_get  "GET  /ai/assistants"              "$API/ai/assistants"
+    test_get  "GET  /knowledge-base"              "$API/knowledge-base"
 fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
