@@ -75,6 +75,10 @@ const App = (() => {
         }
         updateProgramBadge();
         updateSidebarState();
+        // Refresh user switcher to load team members for new program
+        TeamMemberPicker.invalidateCache();
+        _allUsers = null;
+        _refreshUserDropdown();
     }
 
     function updateProgramBadge() {
@@ -327,7 +331,7 @@ const App = (() => {
         navigate('dashboard');
     }
 
-    // ── Demo User Switcher (WR-3.1) ─────────────────────────────────
+    // ── User Switcher (WR-3.1 + team members) ─────────────────────
     const DEMO_USERS = [
         { id: 'demo-pm',         name: 'Ahmet (PM)',         default_role: 'pm' },
         { id: 'demo-lead',       name: 'Ayşe (Module Lead)', default_role: 'module_lead' },
@@ -338,7 +342,40 @@ const App = (() => {
         { id: 'demo-viewer',     name: 'Zeynep (Viewer)',    default_role: 'viewer' },
     ];
 
-    function _initUserSwitcher() {
+    /** Merge demo users + real team members (deduped) */
+    async function _getAllUsers() {
+        let teamMembers = [];
+        const prog = getActiveProgram();
+        if (prog && prog.id) {
+            try {
+                teamMembers = await TeamMemberPicker.fetchMembers(prog.id);
+            } catch { /* ignore */ }
+        }
+        // Map team members to same shape as demo users
+        const realUsers = (teamMembers || [])
+            .filter(m => m.is_active !== false)
+            .map(m => ({
+                id: String(m.id),
+                name: m.name || m.full_name || `Member #${m.id}`,
+                default_role: m.role || m.project_role || 'team_member',
+            }));
+        // Combine: real team members first, then demo users (for fallback)
+        const seen = new Set();
+        const combined = [];
+        for (const u of realUsers) {
+            if (!seen.has(u.id)) { seen.add(u.id); combined.push(u); }
+        }
+        for (const u of DEMO_USERS) {
+            if (!seen.has(u.id)) { seen.add(u.id); combined.push(u); }
+        }
+        return combined;
+    }
+
+
+    /** All available users (cached after first load) */
+    let _allUsers = null;
+
+    async function _initUserSwitcher() {
         const btn = document.getElementById('userSwitcherBtn');
         const dd = document.getElementById('userSwitcherDropdown');
         if (!btn || !dd) return;
@@ -349,14 +386,10 @@ const App = (() => {
         }
         _updateUserLabel();
 
-        // Build dropdown items
-        dd.innerHTML = DEMO_USERS.map(u => {
-            const active = (RoleNav.getUser()?.id === u.id) ? ' user-switcher__item--active' : '';
-            return `<div class="user-switcher__item${active}" data-uid="${u.id}">
-                <span>${esc(u.name)}</span>
-                <span class="user-switcher__role">${u.default_role}</span>
-            </div>`;
-        }).join('');
+        // Load all users (team members + demo fallbacks)
+        _allUsers = await _getAllUsers();
+
+        _renderUserDropdown(dd, _allUsers);
 
         // Toggle dropdown
         btn.addEventListener('click', (e) => {
@@ -369,12 +402,12 @@ const App = (() => {
             const item = e.target.closest('.user-switcher__item');
             if (!item) return;
             const uid = item.dataset.uid;
-            const user = DEMO_USERS.find(u => u.id === uid);
+            const user = _allUsers.find(u => u.id === uid);
             if (user) {
                 RoleNav.setUser(user);
                 await RoleNav.preload();
                 _updateUserLabel();
-                _initUserSwitcher();  // rebuild dropdown active state
+                _renderUserDropdown(dd, _allUsers);
                 dd.classList.remove('open');
                 // Re-apply permission guards on visible DOM
                 RoleNav.applyToDOM();
@@ -384,6 +417,45 @@ const App = (() => {
 
         // Close on outside click
         document.addEventListener('click', () => dd.classList.remove('open'));
+    }
+
+    /** Render dropdown items with active state */
+    function _renderUserDropdown(dd, users) {
+        const currentId = RoleNav.getUser()?.id;
+        // Separate team vs demo users
+        const teamUsers = users.filter(u => !u.id.startsWith('demo-'));
+        const demoUsers = users.filter(u => u.id.startsWith('demo-'));
+
+        let html = '';
+        if (teamUsers.length) {
+            html += '<div class="user-switcher__section-label">Team Members</div>';
+            html += teamUsers.map(u => {
+                const active = (currentId === u.id) ? ' user-switcher__item--active' : '';
+                return `<div class="user-switcher__item${active}" data-uid="${u.id}">
+                    <span>${esc(u.name)}</span>
+                    <span class="user-switcher__role">${esc(u.default_role)}</span>
+                </div>`;
+            }).join('');
+        }
+        if (demoUsers.length) {
+            html += '<div class="user-switcher__section-label">Demo Users</div>';
+            html += demoUsers.map(u => {
+                const active = (currentId === u.id) ? ' user-switcher__item--active' : '';
+                return `<div class="user-switcher__item${active}" data-uid="${u.id}">
+                    <span>${esc(u.name)}</span>
+                    <span class="user-switcher__role">${esc(u.default_role)}</span>
+                </div>`;
+            }).join('');
+        }
+        dd.innerHTML = html;
+    }
+
+    /** Async refresh of dropdown (called on program switch) */
+    async function _refreshUserDropdown() {
+        const dd = document.getElementById('userSwitcherDropdown');
+        if (!dd) return;
+        _allUsers = await _getAllUsers();
+        _renderUserDropdown(dd, _allUsers);
     }
 
     function _updateUserLabel() {

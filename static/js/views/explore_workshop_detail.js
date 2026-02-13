@@ -889,7 +889,7 @@ const ExploreWorkshopDetailView = (() => {
     // ── OI Transition ────────────────────────────────────────────────
     async function transitionOI(oiId, action) {
         try {
-            await ExploreAPI.openItems.transition(_pid, oiId, { action, user_id: 'system' });
+            await ExploreAPI.openItems.transition(_pid, oiId, { action });
             App.toast(`Open item → ${action.replace(/_/g, ' ')}`, 'success');
             await fetchAll();
             renderPage();
@@ -901,7 +901,7 @@ const ExploreWorkshopDetailView = (() => {
     // ── Requirement Transition + Convert ─────────────────────────────
     async function transitionReq(reqId, action) {
         try {
-            await ExploreAPI.requirements.transition(_pid, reqId, { action, user_id: 'system', project_id: _pid });
+            await ExploreAPI.requirements.transition(_pid, reqId, { action, project_id: _pid });
             App.toast(`Requirement → ${action.replace(/_/g, ' ')}`, 'success');
             await fetchAll();
             renderPage();
@@ -913,7 +913,7 @@ const ExploreWorkshopDetailView = (() => {
     async function convertRequirement(reqId) {
         if (!confirm('Convert this requirement to a backlog/config item?')) return;
         try {
-            const result = await ExploreAPI.requirements.convert(_pid, reqId, { project_id: _pid, user_id: 'system' });
+            const result = await ExploreAPI.requirements.convert(_pid, reqId, { project_id: _pid });
             App.toast('Requirement converted', 'success');
             await fetchAll();
             renderPage();

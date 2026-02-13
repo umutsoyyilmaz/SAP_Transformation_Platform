@@ -2672,10 +2672,11 @@ button[disabled].btn--perm-blocked {
     border: 1px solid var(--sap-border);
     border-radius: var(--radius);
     box-shadow: var(--shadow-md);
-    width: 220px;
+    width: 240px;
+    max-height: 400px;
     z-index: 1050;
     display: none;
-    overflow: hidden;
+    overflow-y: auto;
 }
 .user-switcher__dropdown.open { display: block; }
 .user-switcher__item {
@@ -2699,6 +2700,18 @@ button[disabled].btn--perm-blocked {
     background: var(--sap-bg);
     padding: 1px 6px;
     border-radius: 4px;
+}
+.user-switcher__section-label {
+    font-size: var(--fs-2xs);
+    font-weight: var(--fw-semibold);
+    color: var(--sap-text-secondary);
+    padding: 6px 12px 2px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    border-top: 1px solid var(--sap-border);
+}
+.user-switcher__section-label:first-child {
+    border-top: none;
 }
 
 /* ── Executive Cockpit (WR-3.2) ──────────────────────────────────── */
