@@ -122,19 +122,20 @@ def create_program():
         sap_product=data.get("sap_product", "S/4HANA"),
         deployment_option=data.get("deployment_option", "on_premise"),
     )
-    db.session.add(program)
-    db.session.flush()  # Get program.id for auto-phase creation
-
-    # Auto-create SAP Activate phases if methodology is sap_activate
-    if program.methodology == "sap_activate":
-        _create_sap_activate_phases(program)
 
     try:
+        db.session.add(program)
+        db.session.flush()  # Get program.id for auto-phase creation
+
+        # Auto-create SAP Activate phases if methodology is sap_activate
+        if program.methodology == "sap_activate":
+            _create_sap_activate_phases(program)
+
         db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
+    except Exception as exc:
+        logger.exception("Program creation failed: %s", exc)
         db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+        return jsonify({"error": f"Database error: {exc}"}), 500
 
     return jsonify(program.to_dict(include_children=True)), 201
 

@@ -130,6 +130,14 @@ def create_app(config_name=None):
     from app.models import scheduling as _scheduling_models   # noqa: F401
     from app.models import run_sustain as _run_sustain_models  # noqa: F401
 
+    # ── Auto-create tables (safe for production — CREATE IF NOT EXISTS) ──
+    with app.app_context():
+        try:
+            db.create_all()
+            app.logger.info("db.create_all() completed successfully")
+        except Exception as e:
+            app.logger.warning("db.create_all() failed: %s", e)
+
     # ── Blueprints ───────────────────────────────────────────────────────
     from app.blueprints.program_bp import program_bp
     from app.blueprints.backlog_bp import backlog_bp
@@ -191,7 +199,7 @@ def create_app(config_name=None):
         import logging
         logging.getLogger(__name__).error(f"500 error: {e}", exc_info=True)
         if request.path.startswith("/api/"):
-            return {"error": "Internal server error"}, 500
+            return {"error": "Internal server error", "detail": str(e)}, 500
         return "<h1>500 — Internal Server Error</h1><p>An unexpected error occurred.</p>", 500
 
     @app.errorhandler(405)

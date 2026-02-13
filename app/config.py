@@ -50,7 +50,10 @@ class DevelopmentConfig(Config):
     """Development environment configuration."""
 
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", _SQLITE_DEV)
+    _raw_db_url = os.getenv("DATABASE_URL", "")
+    SQLALCHEMY_DATABASE_URI = (
+        _raw_db_url.replace("postgres://", "postgresql://", 1) if _raw_db_url else _SQLITE_DEV
+    )
     # Auth disabled by default in development for convenience
     API_AUTH_ENABLED = os.getenv("API_AUTH_ENABLED", "false")
 
@@ -69,7 +72,9 @@ class ProductionConfig(Config):
     """Production environment configuration."""
 
     DEBUG = False
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
+    # Railway/Heroku use postgres:// but SQLAlchemy 2.0 requires postgresql://
+    _raw_db_url = os.getenv("DATABASE_URL", "")
+    SQLALCHEMY_DATABASE_URI = _raw_db_url.replace("postgres://", "postgresql://", 1) if _raw_db_url else None
     CORS_ORIGINS = os.getenv("CORS_ORIGINS", "")  # Must be set explicitly in production
 
     def __init__(self):

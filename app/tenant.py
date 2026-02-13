@@ -151,6 +151,9 @@ def get_tenant_db_uri(tenant_id: str | None = None) -> str:
 
     # Check if a PostgreSQL connection is configured
     base_url = os.getenv("DATABASE_URL", "")
+    # Railway/Heroku use postgres:// but SQLAlchemy 2.0 requires postgresql://
+    if base_url.startswith("postgres://"):
+        base_url = base_url.replace("postgres://", "postgresql://", 1)
     if base_url.startswith("postgresql"):
         # Replace database name in pg URI:  postgresql://user:pass@host:port/OLD_DB → .../NEW_DB
         parts = base_url.rsplit("/", 1)
