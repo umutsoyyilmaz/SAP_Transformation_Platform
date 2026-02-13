@@ -226,10 +226,11 @@ def create_app(config_name=None):
         # ── Auto-add missing columns (PostgreSQL only) ───────────────
         # db.create_all() does not ALTER existing tables. This ensures
         # columns added in code but missing in DB are created on startup.
-        try:
-            _auto_add_missing_columns(app, db)
-        except Exception as e:
-            app.logger.warning("auto-add-columns failed: %s", e)
+        # NOTE: Temporarily disabled for debugging. Re-enable once stable.
+        # try:
+        #     _auto_add_missing_columns(app, db)
+        # except Exception as e:
+        #     app.logger.warning("auto-add-columns failed: %s", e)
 
     # ── Blueprints ───────────────────────────────────────────────────────
     from app.blueprints.program_bp import program_bp
