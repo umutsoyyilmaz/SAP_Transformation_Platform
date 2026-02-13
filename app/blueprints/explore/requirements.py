@@ -168,6 +168,12 @@ def create_requirement_flat():
     if mod_err:
         return mod_err
 
+    # L3 scope item is required unless created from workshop context
+    scope_item_id = data.get("scope_item_id")
+    if not scope_item_id and not data.get("workshop_id"):
+        return api_error(E.VALIDATION_REQUIRED,
+                         "scope_item_id (L3 scope item) is required")
+
     code = generate_requirement_code(project_id)
 
     req = ExploreRequirement(
@@ -179,6 +185,7 @@ def create_requirement_flat():
         priority=data.get("priority", "P3"),
         effort_hours=data.get("estimated_effort") or data.get("effort_hours"),
         process_area=data.get("area_code") or data.get("process_area"),
+        scope_item_id=scope_item_id,
         status="draft",
         created_by_id=data.get("created_by_id", "system"),
         created_by_name=data.get("created_by_name"),

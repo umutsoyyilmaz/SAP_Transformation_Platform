@@ -445,12 +445,30 @@ const ExploreRequirementHubView = (() => {
     }
 
     // ── Create Dialogs ───────────────────────────────────────────────
-    function createRequirement() {
+    async function createRequirement() {
+        // Fetch L3 scope items for dropdown
+        let l3Options = '<option value="">— Select L3 Scope Item —</option>';
+        try {
+            const l3Items = await ExploreAPI.levels.listL3(_pid);
+            const items = Array.isArray(l3Items) ? l3Items : (l3Items.items || []);
+            l3Options += items.map(p =>
+                `<option value="${p.id}">${p.code || p.sap_code || ''} — ${p.name || ''}</option>`
+            ).join('');
+        } catch (e) {
+            console.warn('Failed to load L3 items:', e);
+        }
+
         const html = `<div class="modal-content" style="max-width:560px;padding:24px">
             <h2 style="margin-bottom:16px">Create Requirement</h2>
             <div class="exp-inline-form">
                 <div class="exp-inline-form__row">
                     <div class="exp-inline-form__field"><label>Title</label><input id="newReqTitle" type="text" placeholder="Requirement title"></div>
+                </div>
+                <div class="exp-inline-form__row">
+                    <div class="exp-inline-form__field" style="flex:2">
+                        <label>L3 Scope Item <span style="color:var(--sap-error)">*</span></label>
+                        <select id="newReqScopeItem" required>${l3Options}</select>
+                    </div>
                 </div>
                 <div class="exp-inline-form__row">
                     <div class="exp-inline-form__field"><label>Priority</label>
@@ -480,8 +498,14 @@ const ExploreRequirementHubView = (() => {
 
     async function submitCreateReq() {
         try {
+            const scopeItemId = document.getElementById('newReqScopeItem')?.value;
+            if (!scopeItemId) {
+                App.toast('L3 Scope Item is required', 'error');
+                return;
+            }
             await ExploreAPI.requirements.create(_pid, {
                 title: document.getElementById('newReqTitle')?.value,
+                scope_item_id: scopeItemId,
                 priority: document.getElementById('newReqPriority')?.value,
                 requirement_type: document.getElementById('newReqType')?.value,
                 estimated_effort: parseFloat(document.getElementById('newReqEffort')?.value) || null,
