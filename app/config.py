@@ -29,7 +29,13 @@ class Config:
 
     # SQLAlchemy
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_size": 5,
+        "max_overflow": 10,
+        "pool_recycle": 300,   # recycle connections every 5 min
+        "pool_timeout": 20,    # wait max 20s for a connection from pool
+    }
 
     # Redis
     REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -76,6 +82,18 @@ class ProductionConfig(Config):
     _raw_db_url = os.getenv("DATABASE_URL", "")
     SQLALCHEMY_DATABASE_URI = _raw_db_url.replace("postgres://", "postgresql://", 1) if _raw_db_url else None
     CORS_ORIGINS = os.getenv("CORS_ORIGINS", "")  # Must be set explicitly in production
+
+    # Override engine options with PostgreSQL statement timeout
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_size": 5,
+        "max_overflow": 10,
+        "pool_recycle": 300,
+        "pool_timeout": 20,
+        "connect_args": {
+            "options": "-c statement_timeout=30000",  # 30s query timeout
+        },
+    }
 
     def __init__(self):
         if not self.SQLALCHEMY_DATABASE_URI:

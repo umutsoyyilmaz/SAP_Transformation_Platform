@@ -62,74 +62,70 @@ def _auto_add_missing_columns(app, db):
     if "postgresql" not in db_uri:
         return  # SQLite doesn't support ADD COLUMN IF NOT EXISTS
 
+    # Use a raw connection with a short timeout to avoid blocking startup
     try:
-        inspector = sa.inspect(db.engine)
-    except Exception as exc:
-        app.logger.warning("Cannot inspect DB for missing columns: %s", exc)
-        return
+        with db.engine.connect() as conn:
+            # Set a 15-second timeout for this connection
+            conn.execute(sa.text("SET statement_timeout = '15s'"))
+            conn.execute(sa.text("SET lock_timeout = '5s'"))
 
-    added = []
+            inspector = sa.inspect(conn)
+            added = []
 
-    for table in db.metadata.sorted_tables:
-        table_name = table.name
+            for table in db.metadata.sorted_tables:
+                table_name = table.name
 
-        try:
-            if not inspector.has_table(table_name):
-                continue  # db.create_all() will handle new tables
-
-            # Get existing columns
-            existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
-        except Exception as exc:
-            app.logger.warning("Cannot inspect table %s: %s", table_name, exc)
-            continue
-
-        for col in table.columns:
-            if col.name in existing_cols:
-                continue
-
-            # Build ALTER TABLE statement
-            try:
-                col_type = col.type.compile(dialect=db.engine.dialect)
-            except Exception:
-                col_type = "TEXT"  # fallback
-
-            nullable = "" if col.nullable else " NOT NULL"
-            default = ""
-            if col.server_default is not None:
-                default = f" DEFAULT {col.server_default.arg}"
-            elif col.default is not None and col.default.is_scalar:
-                default = f" DEFAULT '{col.default.arg}'"
-
-            sql = (
-                f'ALTER TABLE "{table_name}" '
-                f'ADD COLUMN IF NOT EXISTS "{col.name}" {col_type}{nullable}{default}'
-            )
-            try:
-                db.session.execute(sa.text(sql))
-                added.append(f"{table_name}.{col.name}")
-            except Exception as exc:
-                # If NOT NULL without default fails, retry as nullable
-                db.session.rollback()
-                sql_nullable = (
-                    f'ALTER TABLE "{table_name}" '
-                    f'ADD COLUMN IF NOT EXISTS "{col.name}" {col_type}{default}'
-                )
                 try:
-                    db.session.execute(sa.text(sql_nullable))
-                    added.append(f"{table_name}.{col.name} (nullable)")
-                except Exception:
-                    app.logger.warning("Could not add column %s.%s: %s", table_name, col.name, exc)
+                    if not inspector.has_table(table_name):
+                        continue
 
-    if added:
-        try:
-            db.session.commit()
-        except Exception as exc:
-            app.logger.warning("Commit failed for auto-add-columns: %s", exc)
-            db.session.rollback()
-            return
-        app.logger.info("Auto-added %d missing columns: %s", len(added), ", ".join(added))
-    else:
-        app.logger.info("All model columns present in DB — no migration needed")
+                    existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
+                except Exception as exc:
+                    app.logger.warning("Cannot inspect table %s: %s", table_name, exc)
+                    continue
+
+                for col in table.columns:
+                    if col.name in existing_cols:
+                        continue
+
+                    try:
+                        col_type = col.type.compile(dialect=db.engine.dialect)
+                    except Exception:
+                        col_type = "TEXT"
+
+                    nullable = "" if col.nullable else " NOT NULL"
+                    default = ""
+                    if col.server_default is not None:
+                        default = f" DEFAULT {col.server_default.arg}"
+                    elif col.default is not None and col.default.is_scalar:
+                        default = f" DEFAULT '{col.default.arg}'"
+
+                    sql = (
+                        f'ALTER TABLE "{table_name}" '
+                        f'ADD COLUMN IF NOT EXISTS "{col.name}" {col_type}{nullable}{default}'
+                    )
+                    try:
+                        conn.execute(sa.text(sql))
+                        added.append(f"{table_name}.{col.name}")
+                    except Exception:
+                        # If NOT NULL without default fails, retry as nullable
+                        sql_nullable = (
+                            f'ALTER TABLE "{table_name}" '
+                            f'ADD COLUMN IF NOT EXISTS "{col.name}" {col_type}{default}'
+                        )
+                        try:
+                            conn.execute(sa.text(sql_nullable))
+                            added.append(f"{table_name}.{col.name} (nullable)")
+                        except Exception as exc2:
+                            app.logger.warning("Could not add column %s.%s: %s", table_name, col.name, exc2)
+
+            if added:
+                conn.commit()
+                app.logger.info("Auto-added %d missing columns: %s", len(added), ", ".join(added))
+            else:
+                app.logger.info("All model columns present in DB — no migration needed")
+    except Exception as exc:
+        app.logger.warning("auto-add-columns connection failed: %s", exc)
 
 
 def create_app(config_name=None):
@@ -226,11 +222,10 @@ def create_app(config_name=None):
         # ── Auto-add missing columns (PostgreSQL only) ───────────────
         # db.create_all() does not ALTER existing tables. This ensures
         # columns added in code but missing in DB are created on startup.
-        # NOTE: Temporarily disabled for debugging. Re-enable once stable.
-        # try:
-        #     _auto_add_missing_columns(app, db)
-        # except Exception as e:
-        #     app.logger.warning("auto-add-columns failed: %s", e)
+        try:
+            _auto_add_missing_columns(app, db)
+        except Exception as e:
+            app.logger.warning("auto-add-columns failed: %s", e)
 
     # ── Blueprints ───────────────────────────────────────────────────────
     from app.blueprints.program_bp import program_bp
