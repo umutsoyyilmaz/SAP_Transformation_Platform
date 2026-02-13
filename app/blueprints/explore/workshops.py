@@ -445,15 +445,29 @@ def start_workshop(ws_id):
 
     # Create ProcessStep for each L4 child of scope items
     steps_created = 0
+    warnings = []
     for si in scope_items:
         l3 = db.session.get(ProcessLevel, si.process_level_id)
         if not l3:
             continue
         l4_children = (
-            ProcessLevel.query.filter_by(parent_id=l3.id, level=4, scope_status="in_scope")
+            ProcessLevel.query.filter(
+                ProcessLevel.parent_id == l3.id,
+                ProcessLevel.level == 4,
+                db.or_(
+                    ProcessLevel.scope_status == "in_scope",
+                    ProcessLevel.scope_status.is_(None),
+                    ProcessLevel.scope_status == "",
+                ),
+            )
             .order_by(ProcessLevel.sort_order)
             .all()
         )
+        if not l4_children:
+            warnings.append(
+                f"L3 '{l3.name or l3.code or l3.id[:8]}' has no L4 process steps. "
+                f"Import L4s from the Process Hierarchy page first."
+            )
         for idx, l4 in enumerate(l4_children):
             # Skip if step already exists
             existing = ProcessStep.query.filter_by(
@@ -496,6 +510,7 @@ def start_workshop(ws_id):
         "status": ws.status,
         "steps_created": steps_created,
         "steps_carried_forward": carried,
+        "warnings": warnings,
     })
 
 

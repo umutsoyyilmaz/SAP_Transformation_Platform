@@ -812,6 +812,9 @@ const ExploreWorkshopDetailView = (() => {
         if (!confirm('Start this workshop? Process steps will be created from scope items.')) return;
         try {
             const result = await ExploreAPI.workshops.start(_pid, _wsId);
+            if (result.warnings && result.warnings.length) {
+                result.warnings.forEach(w => App.toast(w, 'warning'));
+            }
             App.toast(`Workshop started — ${result.steps_created || 0} step(s) created`, 'success');
             await fetchAll();
             renderPage();
