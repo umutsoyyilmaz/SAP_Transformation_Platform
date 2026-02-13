@@ -341,10 +341,20 @@ const ExploreWorkshopDetailView = (() => {
 
     function renderReqActions(r) {
         const btns = [];
-        if (r.status === 'approved' && !r.backlog_item_id && !r.config_item_id) {
-            btns.push(ExpUI.actionButton({ label: '⚙ Convert', variant: 'ghost', size: 'sm', onclick: `ExploreWorkshopDetailView.convertRequirement('${r.id}')` }));
+        const s = r.status || 'draft';
+        const converted = !!(r.backlog_item_id || r.config_item_id);
+
+        // Convert / Move to Backlog — based on BOTH status and convert state
+        if (s === 'approved' && !converted) {
+            btns.push(ExpUI.actionButton({ label: '⚙ Convert First', variant: 'ghost', size: 'sm', onclick: `ExploreWorkshopDetailView.showConvertModal('${r.id}')` }));
+        } else if (s === 'approved' && converted) {
+            btns.push(ExpUI.actionButton({ label: 'Move to Backlog', variant: 'ghost', size: 'sm', onclick: `ExploreWorkshopDetailView.transitionReq('${r.id}','push_to_alm')` }));
+        } else if (s === 'in_backlog' && !converted) {
+            btns.push(ExpUI.actionButton({ label: '⚙ Convert', variant: 'ghost', size: 'sm', onclick: `ExploreWorkshopDetailView.showConvertModal('${r.id}')` }));
         }
-        const avail = r.available_transitions || [];
+
+        // Other available transitions (exclude push_to_alm — handled above)
+        const avail = (r.available_transitions || []).filter(t => t !== 'push_to_alm');
         if (avail.length) {
             btns.push(...avail.slice(0, 2).map(t =>
                 ExpUI.actionButton({ label: t.replace(/_/g, ' '), variant: 'ghost', size: 'sm', onclick: `ExploreWorkshopDetailView.transitionReq('${r.id}','${t}')` })
@@ -910,11 +920,71 @@ const ExploreWorkshopDetailView = (() => {
         }
     }
 
-    async function convertRequirement(reqId) {
-        if (!confirm('Convert this requirement to a backlog/config item?')) return;
+    function showConvertModal(reqId) {
+        const r = requirements().find(x => x.id === reqId);
+        if (!r) return;
+
+        const html = `<div class="modal-content" style="max-width:480px;padding:24px">
+            <h2 style="margin-bottom:4px">Convert Requirement</h2>
+            <p style="font-size:13px;color:var(--sap-text-secondary);margin-bottom:16px">
+                <code>${esc(r.code || '')}</code> — ${esc(r.title || '')}
+            </p>
+            <div class="exp-inline-form">
+                <div class="exp-inline-form__row">
+                    <div class="exp-inline-form__field"><label>Target Type</label>
+                        <select id="wsConvertTargetType" onchange="document.getElementById('wsConvertWricefRow').style.display = this.value === 'backlog' ? 'flex' : 'none'">
+                            <option value="">Auto-detect</option>
+                            <option value="backlog" selected>WRICEF (Backlog Item)</option>
+                            <option value="config">Configuration Item</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="exp-inline-form__row" id="wsConvertWricefRow">
+                    <div class="exp-inline-form__field"><label>WRICEF Type</label>
+                        <select id="wsConvertWricefType">
+                            <option value="">Auto-detect from title</option>
+                            <option value="enhancement">Enhancement (E)</option>
+                            <option value="report">Report (R)</option>
+                            <option value="interface">Interface (I)</option>
+                            <option value="conversion">Conversion (C)</option>
+                            <option value="workflow">Workflow (W)</option>
+                            <option value="form">Form (F)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="exp-inline-form__row">
+                    <div class="exp-inline-form__field"><label>Module Override</label>
+                        <select id="wsConvertModule">${typeof SAPConstants !== 'undefined' ? SAPConstants.moduleOptionsHTML(r.sap_module || r.process_area || '') : '<option value="">—</option>'}</select>
+                    </div>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+                ${ExpUI.actionButton({ label: 'Cancel', variant: 'secondary', onclick: 'App.closeModal()' })}
+                ${ExpUI.actionButton({ label: '⚙ Convert', variant: 'primary', onclick: `ExploreWorkshopDetailView.submitConvert('${reqId}')` })}
+            </div>
+        </div>`;
+        App.openModal(html);
+    }
+
+    async function submitConvert(reqId) {
         try {
-            const result = await ExploreAPI.requirements.convert(_pid, reqId, { project_id: _pid });
-            App.toast('Requirement converted', 'success');
+            const data = {};
+            const target = document.getElementById('wsConvertTargetType')?.value;
+            const wricef = document.getElementById('wsConvertWricefType')?.value;
+            const mod    = document.getElementById('wsConvertModule')?.value?.trim();
+
+            if (target) data.target_type = target;
+            if (wricef) data.wricef_type = wricef;
+            if (mod)    data.module = mod;
+
+            const result = await ExploreAPI.requirements.convert(_pid, reqId, data);
+            App.closeModal();
+
+            const label = result.config_item_id
+                ? `Config item #${result.config_item_id} created`
+                : `WRICEF backlog item #${result.backlog_item_id} created`;
+            App.toast(label, result.status === 'already_converted' ? 'info' : 'success');
+
             await fetchAll();
             renderPage();
         } catch (err) {
@@ -1164,7 +1234,8 @@ const ExploreWorkshopDetailView = (() => {
         createDeltaWorkshop,
         transitionOI,
         transitionReq,
-        convertRequirement,
+        showConvertModal,
+        submitConvert,
         acceptL3Suggestion,
         overrideL3Decision,
         showAgendaForm,

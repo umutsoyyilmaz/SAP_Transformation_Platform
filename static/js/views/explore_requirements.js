@@ -223,8 +223,13 @@ const ExploreRequirementHubView = (() => {
         if (s === 'realized') {
             actions.push(ExpUI.actionButton({ label: 'Verify', variant: 'success', size: 'sm', onclick: `ExploreRequirementHubView.transitionReq('${r.id}','verify')` }));
         }
-        if (s !== 'deferred' && s !== 'rejected' && s !== 'verified') {
+        // Defer: only valid from draft or approved per REQUIREMENT_TRANSITIONS
+        if (s === 'draft' || s === 'approved') {
             actions.push(ExpUI.actionButton({ label: 'Defer', variant: 'secondary', size: 'sm', onclick: `ExploreRequirementHubView.transitionReq('${r.id}','defer')` }));
+        }
+        // Reactivate: only from deferred
+        if (s === 'deferred') {
+            actions.push(ExpUI.actionButton({ label: 'Reactivate', variant: 'secondary', size: 'sm', onclick: `ExploreRequirementHubView.transitionReq('${r.id}','reactivate')` }));
         }
         if (!r.cloud_alm_id && (s === 'approved' || s === 'in_backlog')) {
             actions.push(ExpUI.actionButton({ label: '🔗 Push to ALM', variant: 'ghost', size: 'sm', onclick: `ExploreRequirementHubView.pushToALM('${r.id}')` }));

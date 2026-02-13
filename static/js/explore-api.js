@@ -108,9 +108,9 @@ const ExploreAPI = (() => {
         list:       (pid, params)    => _items(API.get(`${B}/requirements?project_id=${pid}${_qs(params)}`)),
         get:        (pid, id)        => API.get(`${B}/requirements/${id}`),
         create:     (pid, data)      => API.post(`${B}/requirements`, Object.assign({project_id: pid}, data)),
-        update:     (pid, id, d)     => API.put(`${B}/requirements/${id}`, d),
+        update:     (pid, id, d)     => API.put(`${B}/requirements/${id}`, Object.assign({project_id: pid}, d || {})),
         delete:     (pid, id)        => Promise.resolve(), // No backend DELETE endpoint — placeholder
-        transition: (pid, id, d)     => API.post(`${B}/requirements/${id}/transition`, d),
+        transition: (pid, id, d)     => API.post(`${B}/requirements/${id}/transition`, Object.assign({project_id: pid}, d || {})),
         stats:      (pid)            => API.get(`${B}/requirements/stats?project_id=${pid}`),
         convert:      (pid, id, d)     => API.post(`${B}/requirements/${id}/convert`, Object.assign({project_id: pid}, d || {})),
         batchConvert: (pid, d)         => API.post(`${B}/requirements/batch-convert`, Object.assign({project_id: pid}, d || {})),
@@ -122,9 +122,9 @@ const ExploreAPI = (() => {
         list:       (pid, params)    => _items(API.get(`${B}/open-items?project_id=${pid}${_qs(params)}`)),
         get:        (pid, id)        => API.get(`${B}/open-items/${id}`),
         create:     (pid, data)      => API.post(`${B}/open-items`, Object.assign({project_id: pid}, data)),
-        update:     (pid, id, d)     => API.put(`${B}/open-items/${id}`, d),
+        update:     (pid, id, d)     => API.put(`${B}/open-items/${id}`, Object.assign({project_id: pid}, d || {})),
         delete:     (pid, id)        => Promise.resolve(), // No backend DELETE endpoint — placeholder
-        transition: (pid, id, d)     => API.post(`${B}/open-items/${id}/transition`, d),
+        transition: (pid, id, d)     => API.post(`${B}/open-items/${id}/transition`, Object.assign({project_id: pid}, d || {})),
         stats:      (pid)            => API.get(`${B}/open-items/stats?project_id=${pid}`),
     };
 

@@ -30,15 +30,34 @@ const API = (() => {
         return body;
     }
 
+    /**
+     * Inject project context into mutating request bodies.
+     * If body has no project_id/program_id, reads from App global state.
+     */
+    function _injectProjectContext(body) {
+        if (!body || typeof body !== 'object') return body;
+        if (body.project_id || body.program_id) return body;
+
+        const prog = (typeof App !== 'undefined' && App.getActiveProgram)
+            ? App.getActiveProgram()
+            : null;
+        if (prog && prog.id) body.project_id = prog.id;
+
+        return body;
+    }
+
     async function request(method, path, body = null) {
         const opts = {
             method,
             headers: { 'Content-Type': 'application/json' },
         };
-        // Auto-inject user info for mutating requests
+
+        // ── Context Middleware (POST/PUT/PATCH only) ────────────────
         if (body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+            body = _injectProjectContext(body);
             body = _injectUser(body);
         }
+
         if (body) opts.body = JSON.stringify(body);
 
         const res = await fetch(`${BASE}${path}`, opts);
@@ -52,8 +71,13 @@ const API = (() => {
         }
 
         if (!res.ok) {
-            const msg = (data && data.error) || `Request failed (${res.status})`;
-            throw new Error(msg);
+            const err = new Error(
+                (data && data.error) || `Request failed (${res.status})`
+            );
+            err.status  = res.status;
+            err.code    = data && data.code;       // e.g. "ERR_VALIDATION_REQUIRED"
+            err.details = data && data.details;    // e.g. { blocking_oi_ids: [...] }
+            throw err;
         }
         return data;
     }

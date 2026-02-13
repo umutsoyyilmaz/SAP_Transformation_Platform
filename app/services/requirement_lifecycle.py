@@ -327,10 +327,12 @@ def convert_requirement(requirement_id: str, user_id: str, project_id: int,
     """
     req = db.session.get(ExploreRequirement, requirement_id)
     if not req or req.project_id != project_id:
-        raise TransitionError(f"Requirement {requirement_id} not found")
+        raise TransitionError(requirement_id, "convert", "unknown",
+                              f"Requirement {requirement_id} not found")
 
     if req.status not in ("approved", "realized"):
         raise TransitionError(
+            req.code, "convert", req.status,
             f"Requirement must be approved or realized to convert, "
             f"current status: {req.status}"
         )
