@@ -362,6 +362,7 @@ const ExploreWorkshopHubView = (() => {
             .map(l3 => ({
                 id: l3.id,
                 label: `${l3.code || l3.sap_code || ''} ${l3.name || ''}`.trim() || l3.id,
+                area: (l3.process_area_code || l3.area_code || '').toUpperCase(),
             }))
             .sort((a, b) => a.label.localeCompare(b.label));
 
@@ -382,7 +383,7 @@ const ExploreWorkshopHubView = (() => {
                         <select id="wsFacilitator"><option value="">—</option>${facilitators.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</select>
                     </div>
                     <div class="exp-inline-form__field"><label>Area</label>
-                        <select id="wsArea"><option value="">—</option>${areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
+                        <select id="wsArea" onchange="ExploreWorkshopHubView._onAreaChange()"><option value="">—</option>${areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
                     </div>
                 </div>
                 <div class="exp-inline-form__row">
@@ -406,6 +407,7 @@ const ExploreWorkshopHubView = (() => {
         </div>`;
         App.openModal(html);
         // Initialize L3 multi-select dropdown
+        _l3AllOptions = l3Options;
         _l3MultiSelectOptions = l3Options;
         _l3MultiSelectedIds = new Set();
         _l3DropdownOpen = false;
@@ -417,6 +419,7 @@ const ExploreWorkshopHubView = (() => {
 
     // ── L3 Multi-Select State & Helpers ───────────────────────────────
     let _l3MultiSelectOptions = [];
+    let _l3AllOptions = [];           // unfiltered full L3 list
     let _l3MultiSelectedIds = new Set();
     let _l3DropdownOpen = false;
 
@@ -426,6 +429,21 @@ const ExploreWorkshopHubView = (() => {
             _l3DropdownOpen = false;
             _renderL3Multiselect();
         }
+    }
+
+    function _onAreaChange() {
+        const area = (document.getElementById('wsArea')?.value || '').toUpperCase();
+        if (area) {
+            _l3MultiSelectOptions = _l3AllOptions.filter(o => o.area === area);
+        } else {
+            _l3MultiSelectOptions = _l3AllOptions;
+        }
+        // Remove selections that no longer match the filtered area
+        const visibleIds = new Set(_l3MultiSelectOptions.map(o => o.id));
+        for (const id of [..._l3MultiSelectedIds]) {
+            if (!visibleIds.has(id)) _l3MultiSelectedIds.delete(id);
+        }
+        _renderL3Multiselect();
     }
 
     function _toggleL3Dropdown(e) {
@@ -645,6 +663,6 @@ const ExploreWorkshopHubView = (() => {
     return {
         render, setViewMode, setFilter, onFilterBarChange, setGroupBy, sort,
         openWorkshop, createWorkshop, submitCreate,
-        _toggleL3Dropdown, _toggleL3Option, _removeL3Chip, _clearL3Selection, _filterL3Options,
+        _toggleL3Dropdown, _toggleL3Option, _removeL3Chip, _clearL3Selection, _filterL3Options, _onAreaChange,
     };
 })();
