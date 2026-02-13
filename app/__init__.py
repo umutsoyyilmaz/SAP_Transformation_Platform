@@ -69,20 +69,26 @@ def _auto_add_missing_columns(app, db):
             conn.execute(sa.text("SET statement_timeout = '15s'"))
             conn.execute(sa.text("SET lock_timeout = '5s'"))
 
-            inspector = sa.inspect(conn)
+            # Get ALL columns from information_schema in one fast query
+            # (avoids sa.inspect which can hang on table locks)
+            rows = conn.execute(sa.text(
+                "SELECT table_name, column_name "
+                "FROM information_schema.columns "
+                "WHERE table_schema = 'public'"
+            )).fetchall()
+
+            db_columns_map = {}
+            for row in rows:
+                db_columns_map.setdefault(row[0], set()).add(row[1])
+
             added = []
 
             for table in db.metadata.sorted_tables:
                 table_name = table.name
+                existing_cols = db_columns_map.get(table_name, None)
 
-                try:
-                    if not inspector.has_table(table_name):
-                        continue
-
-                    existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
-                except Exception as exc:
-                    app.logger.warning("Cannot inspect table %s: %s", table_name, exc)
-                    continue
+                if existing_cols is None:
+                    continue  # Table doesn't exist — db.create_all() handles it
 
                 for col in table.columns:
                     if col.name in existing_cols:

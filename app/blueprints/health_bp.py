@@ -128,40 +128,42 @@ def db_diagnostic():
 @health_bp.route("/db-columns", methods=["GET"])
 def db_columns_check():
     """
-    Compare SQLAlchemy model columns against live DB columns.
-    Shows missing columns that need ALTER TABLE to add.
-    Useful for diagnosing startup/query failures.
+    Compare SQLAlchemy model columns against live DB columns using
+    information_schema (avoids sa.inspect which can hang on locks).
     """
-    import sqlalchemy as sa
-
     db_uri = str(db.engine.url)
     if "postgresql" not in db_uri:
-        return jsonify({"status": "skipped", "reason": "SQLite — db.create_all handles it"}), 200
+        return jsonify({"status": "skipped", "reason": "SQLite"}), 200
 
+    report = {}
     try:
-        inspector = sa.inspect(db.engine)
+        # Get all columns from information_schema in one query
+        rows = db.session.execute(db.text(
+            "SELECT table_name, column_name "
+            "FROM information_schema.columns "
+            "WHERE table_schema = 'public' "
+            "ORDER BY table_name, ordinal_position"
+        )).fetchall()
+
+        db_columns_map = {}
+        for row in rows:
+            db_columns_map.setdefault(row[0], set()).add(row[1])
     except Exception as exc:
         return jsonify({"status": "error", "detail": str(exc)}), 500
 
-    report = {}
     for table in db.metadata.sorted_tables:
         tbl_name = table.name
-        try:
-            if not inspector.has_table(tbl_name):
-                report[tbl_name] = {"status": "missing_table"}
-                continue
-            db_cols = {c["name"] for c in inspector.get_columns(tbl_name)}
-            model_cols = {c.name for c in table.columns}
-            missing = model_cols - db_cols
-            extra = db_cols - model_cols
+        model_cols = {c.name for c in table.columns}
+        db_cols = db_columns_map.get(tbl_name, set())
+
+        if not db_cols:
+            report[tbl_name] = {"status": "missing_table"}
+        else:
+            missing = sorted(model_cols - db_cols)
             if missing:
-                report[tbl_name] = {"status": "missing_columns", "missing": sorted(missing)}
+                report[tbl_name] = {"status": "missing_columns", "missing": missing}
             else:
                 report[tbl_name] = {"status": "ok", "columns": len(db_cols)}
-            if extra:
-                report[tbl_name]["extra_in_db"] = sorted(extra)
-        except Exception as exc:
-            report[tbl_name] = {"status": "error", "detail": str(exc)}
 
     total_missing = sum(
         len(v.get("missing", []))
