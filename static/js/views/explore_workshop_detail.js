@@ -360,8 +360,10 @@ const ExploreWorkshopDetailView = (() => {
                 ExpUI.actionButton({ label: t.replace(/_/g, ' '), variant: 'ghost', size: 'sm', onclick: `ExploreWorkshopDetailView.transitionReq('${r.id}','${t}')` })
             ));
         }
-        // Traceability view (WR-3.5)
-        if (typeof TraceView !== 'undefined') {
+        // Traceability view (WR-3.5) — prefer unified TraceChain
+        if (typeof TraceChain !== 'undefined') {
+            btns.push(ExpUI.actionButton({ label: '🔍 Trace', variant: 'ghost', size: 'sm', onclick: `TraceChain.show('explore_requirement', '${r.id}')` }));
+        } else if (typeof TraceView !== 'undefined') {
             btns.push(ExpUI.actionButton({ label: '🔍 Trace', variant: 'ghost', size: 'sm', onclick: `TraceView.showForRequirement('${r.id}')` }));
         }
         if (!btns.length) return '';

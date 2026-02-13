@@ -234,8 +234,10 @@ const ExploreRequirementHubView = (() => {
         if (!r.cloud_alm_id && (s === 'approved' || s === 'in_backlog')) {
             actions.push(ExpUI.actionButton({ label: '🔗 Push to ALM', variant: 'ghost', size: 'sm', onclick: `ExploreRequirementHubView.pushToALM('${r.id}')` }));
         }
-        // Traceability view (WR-3.5)
-        if (typeof TraceView !== 'undefined') {
+        // Traceability view (WR-3.5) — prefer unified TraceChain
+        if (typeof TraceChain !== 'undefined') {
+            actions.push(ExpUI.actionButton({ label: '🔍 Trace', variant: 'ghost', size: 'sm', onclick: `TraceChain.show('explore_requirement', '${r.id}')` }));
+        } else if (typeof TraceView !== 'undefined') {
             actions.push(ExpUI.actionButton({ label: '🔍 Trace', variant: 'ghost', size: 'sm', onclick: `TraceView.showForRequirement('${r.id}')` }));
         }
 

@@ -857,19 +857,21 @@ const TestExecutionView = (() => {
             html += `
                 <table class="data-table">
                     <thead><tr>
-                        <th>Requirement</th><th>Priority</th><th>Test Cases</th><th>Defects</th><th>Status</th>
+                        <th>Requirement</th><th>Priority</th><th>Test Cases</th><th>Defects</th><th>Status</th>${typeof TraceChain !== 'undefined' ? '<th>Trace</th>' : ''}
                     </tr></thead>
                     <tbody>
                         ${data.matrix.map(row => {
                             const r = row.requirement;
                             const hasTests = row.total_test_cases > 0;
                             const hasDefects = row.total_defects > 0;
+                            const traceBtn = typeof TraceChain !== 'undefined' ? `<td><button class="btn btn-sm" style="font-size:11px" onclick="TraceChain.show('backlog_item', ${r.id})">🔍</button></td>` : '';
                             return `<tr>
                                 <td><strong>${r.code || '-'}</strong> ${r.title}</td>
                                 <td>${r.priority || '-'}</td>
                                 <td>${hasTests ? `<span style="color:#107e3e">${row.total_test_cases} case(s)</span>` : '<span style="color:#c4314b">—</span>'}</td>
                                 <td>${hasDefects ? `<span style="color:#c4314b">${row.total_defects} defect(s)</span>` : '<span style="color:#107e3e">Clean</span>'}</td>
                                 <td>${hasTests ? '✅ Covered' : '⚠️ Uncovered'}</td>
+                                ${traceBtn}
                             </tr>`;
                         }).join('')}
                     </tbody>

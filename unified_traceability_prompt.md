@@ -750,3 +750,470 @@ Block 3 validates everything together.
 5. ✅ Check API prefix pattern before wiring frontend
 6. ✅ Test with curl before touching frontend
 7. ✅ Use Perga brand colors (navy, gold, marble) for the visual component
+---
+
+# ═══════════════════════════════════════════════════════════════
+# SPRINT PLANI & UYGULAMA MODELİ
+# ═══════════════════════════════════════════════════════════════
+
+## 📊 Mevcut Durum Analizi
+
+| # | Sorun | Konum | Etki |
+|---|-------|-------|------|
+| 1 | Backlog Item traceability **404 hatası** | `backlog.js:881,925` → `GET /traceability/backlog_item/{id}` → endpoint YOK | Backlog izlenebilirliği tamamen kırık |
+| 2 | Explore Requirement trace **sığ** (depth 2/4) | `trace_explore_requirement()` sadece downstream | Upstream (Workshop→Process→Scenario) eksik |
+| 3 | `get_chain()` fonksiyonu var ama **route yok** | `traceability.py` 14 entity destekliyor ama hiçbir blueprint expose etmiyor | Tüm program-domain trace kullanılamaz |
+| 4 | Frontend trace component **tek tip** | `trace-view.js` sadece `ExploreRequirement` destekliyor | Test Case, Defect, Config Item trace yok |
+| 5 | Chain gap detection **yok** | Service'de coverage hesabı var ama gap tespiti yok | Kırık zincirler görünmez |
+
+## 📐 Hedef Uygulama Modeli
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        UNIFIED TRACEABILITY MODEL                       │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  BACKEND KATMANI                                                        │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │ traceability_bp.py  (YENİ Blueprint)                              │  │
+│  │   GET /api/v1/traceability/<entity_type>/<entity_id>              │  │
+│  │   ├── 16 entity type desteği                                      │  │
+│  │   ├── Query: ?depth=10&include_lateral=true                       │  │
+│  │   ├── Upstream builder (Workshop → Process → Scenario)            │  │
+│  │   ├── Lateral links (Open Items, Decisions, Interfaces)           │  │
+│  │   ├── Chain depth hesabı (1-6 ölçeği)                             │  │
+│  │   └── Gap detection (kırık zincir tespiti)                        │  │
+│  └──────────────────────┬────────────────────────────────────────────┘  │
+│                         │ wraps (değiştirmez)                           │
+│  ┌──────────────────────▼────────────────────────────────────────────┐  │
+│  │ traceability.py  (MEVCUT — dokunulmaz)                            │  │
+│  │   ├── get_chain(entity_type, entity_id)  → 14 entity traversal   │  │
+│  │   └── trace_explore_requirement(req_id)  → FK chain traversal    │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│  FRONTEND KATMANI                                                       │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │ trace-chain.js  (YENİ Component)                                  │  │
+│  │   ├── TraceChain.show(type, id)          → Modal açar             │  │
+│  │   ├── TraceChain.renderInTab(type, id, el) → Inline render       │  │
+│  │   ├── Flow diagram (upstream ← entity → downstream)              │  │
+│  │   ├── Entity-based renk kodlama                                   │  │
+│  │   ├── Chain depth progress bar                                    │  │
+│  │   ├── Gap uyarıları (⚠️)                                         │  │
+│  │   └── Clickable node'lar → navigasyon                             │  │
+│  └──────────────────────┬────────────────────────────────────────────┘  │
+│                         │ fallback olarak kalır                         │
+│  ┌──────────────────────▼────────────────────────────────────────────┐  │
+│  │ trace-view.js  (MEVCUT — dokunulmaz)                              │  │
+│  │   ├── TraceView.showForRequirement(reqId)                         │  │
+│  │   └── TraceView.renderInline(reqId)                               │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│  ENTEGRASYON NOKTALARI                                                  │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │ backlog.js         → TraceChain.renderInTab('backlog_item', ...)  │  │
+│  │ explore_req.js     → TraceChain.show('explore_requirement', ...)  │  │
+│  │ test_execution.js  → TraceChain.renderInTab('test_case', ...)     │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### SAP Activate Zinciri (6 Seviye)
+
+```
+Level 1   Level 2          Level 3       Level 4              Level 5        Level 6
+┌──────┐  ┌─────────────┐  ┌──────────┐  ┌───────────────┐   ┌──────────┐   ┌──────────┐
+│Scope │─▶│L3 Process / │─▶│Requirem. │─▶│WRICEF Item /  │──▶│FS → TS   │──▶│Test Case │
+│Item /│  │Process Step │  │(REQ-014) │  │Config Item    │   │          │   │→ Defect  │
+│Scenar│  │→ Workshop   │  │          │  │(ENH-009/CFG)  │   │          │   │          │
+└──────┘  └─────────────┘  └────┬─────┘  └───────────────┘   └──────────┘   └──────────┘
+                                │
+                 ┌──────────────┼──────────────┐
+                 ▼              ▼              ▼
+           Open Items     Decisions      Interfaces
+           (lateral)      (lateral)      → Connectivity Tests
+                                         → Switch Plans
+```
+
+### Etkilenen Dosyalar
+
+| Dosya | İşlem | Sprint |
+|-------|-------|--------|
+| `app/blueprints/traceability_bp.py` | **YENİ DOSYA** — Unified endpoint | S1 |
+| `app/__init__.py` (satır 151-166) | Değişiklik — Blueprint registrasyonu | S1 |
+| `app/services/traceability.py` | **DEĞİŞMEYECEK** — Wrapper yaklaşım | — |
+| `static/js/components/trace-chain.js` | **YENİ DOSYA** — Visual chain component | S2 |
+| `static/js/components/trace-view.js` | **DEĞİŞMEYECEK** — Fallback olarak kalır | — |
+| `static/js/views/backlog.js` (~satır 881, 921, 925) | Değişiklik — TraceChain entegrasyonu | S3 |
+| `static/js/views/explore_requirements.js` (~satır 174, 239) | Değişiklik — TraceChain entegrasyonu | S3 |
+| `static/js/views/test_execution.js` (~satır 51) | Değişiklik — TraceChain entegrasyonu | S3 |
+| `templates/index.html` | Değişiklik — Script include | S2 |
+| `tests/test_traceability_unified.py` | **YENİ DOSYA** — API contract tests | S4 |
+| `scripts/smoke_test_traceability.sh` | **YENİ DOSYA** — Curl smoke tests | S4 |
+
+### API Response Modeli
+
+```json
+{
+  "entity": {
+    "type": "backlog_item",
+    "id": 1,
+    "title": "SAP MM Custom Enhancement"
+  },
+  "upstream": [
+    {"type": "requirement", "id": 5, "title": "Material Management Gap"},
+    {"type": "process", "id": 3, "title": "Procure-to-Pay L3", "level": 3},
+    {"type": "scenario", "id": 1, "title": "Order-to-Cash"}
+  ],
+  "downstream": [
+    {"type": "functional_spec", "id": 2, "title": "FS-ENH-009"},
+    {"type": "technical_spec", "id": 2, "title": "TS-ENH-009"},
+    {"type": "test_case", "id": 7, "title": "TC-MM-001", "result": "pass"},
+    {"type": "interface", "id": 3, "title": "IF-SAP-MM", "direction": "outbound"}
+  ],
+  "lateral": {
+    "interfaces": [{"id": 3, "code": "IF-003", "name": "SAP MM Interface"}],
+    "open_items": []
+  },
+  "links_summary": {"requirement": 1, "process": 1, "scenario": 1, "functional_spec": 1, "test_case": 1},
+  "chain_depth": 5,
+  "gaps": [
+    {"level": "downstream", "message": "No defects recorded (tests passing)"}
+  ]
+}
+```
+
+---
+
+## 🏃 SPRINT 1: Backend Altyapı — Unified Endpoint
+**Süre:** 1.5 gün (~12 saat) | **Bağımlılık:** Yok | **Çıktı:** curl ile test edilebilir API
+
+### Task 1.1 — Blueprint Oluşturma (4 saat)
+**Dosya:** `app/blueprints/traceability_bp.py` (YENİ)
+
+Unified endpoint oluşturulacak:
+```
+GET /api/v1/traceability/<entity_type>/<entity_id>
+  ?depth=10          (max: 20)
+  &include_lateral=true
+```
+
+16 entity type:
+`scenario`, `workshop`, `process`, `analysis`, `requirement`, `explore_requirement`,
+`backlog_item`, `config_item`, `functional_spec`, `technical_spec`, `test_case`,
+`defect`, `interface`, `wave`, `connectivity_test`, `switch_plan`
+
+- `explore_requirement` → string ID (ör. "REQ-014"), `trace_explore_requirement()` kullanır
+- Diğer entity'ler → integer ID, `get_chain()` kullanır
+- Mevcut service fonksiyonları **wrap edilir, değiştirilmez**
+
+### Task 1.2 — Upstream Builder (2 saat)
+**Dosya:** `traceability_bp.py` içinde `_build_explore_upstream()`
+
+Explore Requirement için upstream zincir inşası:
+```
+ExploreRequirement → Workshop (workshop_id)
+                   → Scenario (workshop.scenario_id)
+                   → Process hiyerarşisi (process_step_id → parent → root)
+                   → Scope Item (scope_item_id)
+```
+> `hasattr()` kontrolü ile optional alanlar graceful degrade olur
+
+### Task 1.3 — Lateral Links & Gap Detection (2 saat)
+**Dosya:** `traceability_bp.py` içinde
+
+| Fonksiyon | Amaç |
+|-----------|------|
+| `_build_explore_lateral()` | Open Items (M:N RequirementOpenItemLink), Decisions |
+| `_build_lateral_links()` | entity_type'a göre: requirement→open_items, backlog_item→interfaces |
+| `_calculate_full_depth()` | 1-6 ölçeği (Req=1, +WRICEF=2, +FS/TS=3, +Test=4, +Defect=5, +Upstream=6) |
+| `_calculate_chain_depth()` | upstream/downstream'den type set'i çıkarıp depth hesabı |
+| `_find_chain_gaps()` | Explore req: eksik WRICEF, eksik Test, eksik upstream |
+| `_find_gaps_in_chain()` | Standard entity: eksik Requirement, eksik Test Case, eksik FS |
+
+### Task 1.4 — Blueprint Registrasyonu (0.5 saat)
+**Dosya:** `app/__init__.py` (satır 166 civarı)
+
+Mevcut 16 blueprint'in ardına eklenir:
+```python
+from app.blueprints.traceability_bp import traceability_bp
+app.register_blueprint(traceability_bp, url_prefix="/api/v1")
+```
+> Mevcut pattern: `url_prefix` olmadan veya `/api/v1` ile — kontrol edilecek
+
+### Task 1.5 — Curl Smoke Test (1.5 saat)
+
+| # | Test | Beklenen |
+|---|------|----------|
+| 1 | `GET /api/v1/traceability/backlog_item/1` | 200 (**önceden 404 idi!**) |
+| 2 | `GET /api/v1/traceability/explore_requirement/REQ-001` | 200 (string ID) |
+| 3 | `GET /api/v1/traceability/scenario/1` | 200 (full downstream) |
+| 4 | `GET /api/v1/traceability/test_case/1` | 200 (upstream trace) |
+| 5 | `GET /api/v1/traceability/defect/1` | 200 (full upstream) |
+| 6 | `GET /api/v1/traceability/invalid_type/1` | 404 |
+| 7 | `GET /api/v1/traceability/backlog_item/abc` | 400 |
+
+### Sprint 1 Kabul Kriterleri
+- [ ] Backlog item trace 200 döner (önceden 404)
+- [ ] Response: `upstream`, `downstream`, `lateral`, `chain_depth`, `gaps` alanları var
+- [ ] 16 entity type desteklenir
+- [ ] Invalid type/ID → 400/404
+- [ ] Mevcut `trace-view.js` + `audit_bp.py` endpointleri bozulmadı
+
+---
+
+## 🏃 SPRINT 2: Frontend Component — TraceChain.js
+**Süre:** 1.5 gün (~12 saat) | **Bağımlılık:** Sprint 1 | **Çıktı:** Modal + inline trace component
+
+### Task 2.1 — TraceChain Core Component (6 saat)
+**Dosya:** `static/js/components/trace-chain.js` (YENİ)
+
+IIFE pattern ile global `TraceChain` object:
+```javascript
+TraceChain.show(entityType, entityId)                    // Modal
+TraceChain.renderInTab(entityType, entityId, container)  // Inline
+TraceChain.close()                                       // Modal kapat
+```
+
+**Renk Kodlama Tablosu:**
+| Entity Type | Renk | Hex |
+|-------------|------|-----|
+| Scenario / Process | Mavi | `#3B82F6` |
+| Workshop | Mor | `#8B5CF6` |
+| Requirement (Fit) | Yeşil | `#10B981` |
+| Requirement (Gap) | Kırmızı | `#EF4444` |
+| Requirement (Partial) | Amber | `#F59E0B` |
+| WRICEF / Config | Perga Gold | `#C08B5C` |
+| FS / TS | Gri | `#6B7280` |
+| Test (Pass) | Yeşil | `#10B981` |
+| Test (Fail) | Kırmızı | `#EF4444` |
+| Defect (Critical) | Kırmızı | `#EF4444` |
+| Defect (High) | Amber | `#F59E0B` |
+| Open Item | Turuncu | `#F97316` |
+| Interface | Cyan | `#06B6D4` |
+
+### Task 2.2 — Modal HTML Yapısı (2 saat)
+**Dosya:** `trace-chain.js` içinde dynamic generation
+
+```
+┌─ Modal Overlay ───────────────────────────────────────────┐
+│ ┌─ Panel (max-width:900px, max-height:85vh) ────────────┐ │
+│ │ 🔗 Traceability Chain — [entity code + title]    [✕]  │ │
+│ │                                                        │ │
+│ │ Depth: █████░ 5/6 — Missing: FS/TS                    │ │
+│ │                                                        │ │
+│ │ ┌────┐→┌────┐→┌────┐→┌════┐→┌────┐→┌────┐           │ │
+│ │ │Scn │ │Proc│ │ WS │ ║Req ║ │WRIC│ │Test│           │ │
+│ │ └────┘ └────┘ └────┘ └════┘ └────┘ └────┘           │ │
+│ │                         │                              │ │
+│ │                   Open Items (2)                        │ │
+│ │                   Decisions (1)                         │ │
+│ │                                                        │ │
+│ │ ⚠️ Gaps:                                              │ │
+│ │   • No Functional Spec written                         │ │
+│ │   • No Test Cases created                              │ │
+│ └────────────────────────────────────────────────────────┘ │
+└───────────────────────────────────────────────────────────┘
+```
+> Current entity `═══` ile vurgulanır, diğerleri `───`
+
+### Task 2.3 — Script Include (0.5 saat)
+**Dosya:** `templates/index.html`
+
+`trace-view.js` SONRASINA eklenir:
+```html
+<script src="/static/js/components/trace-chain.js"></script>
+```
+
+### Task 2.4 — Error Handling & Loading States (1.5 saat)
+| Durum | Gösterim |
+|-------|----------|
+| Loading | Spinner + "Traceability chain yükleniyor..." |
+| Error | İkaz + "Veri yüklenemedi" + Retry butonu |
+| Empty | "Bu entity için bağlantı bulunamadı" |
+| 404 | "Entity bulunamadı" |
+
+### Sprint 2 Kabul Kriterleri
+- [ ] `TraceChain.show('backlog_item', 1)` → modal açılır
+- [ ] `TraceChain.renderInTab(...)` → inline render
+- [ ] Renk kodlaması doğru
+- [ ] Chain depth bar doğru
+- [ ] Gap uyarıları görünür
+- [ ] Node'lar tıklanabilir → navigasyon
+- [ ] ESC / ✕ ile modal kapanır
+- [ ] Mevcut `TraceView` bozulmadı
+
+---
+
+## 🏃 SPRINT 3: Frontend Entegrasyon — View Wiring
+**Süre:** 1 gün (~8 saat) | **Bağımlılık:** Sprint 1 + 2 | **Çıktı:** Tüm view'larda çalışan trace
+
+### Task 3.1 — Backlog Detail Traceability Tab (2 saat)
+**Dosya:** `static/js/views/backlog.js` (~satır 921)
+
+```javascript
+// ESKİ (kırık): API.get(`/traceability/backlog_item/${i.id}`) → 404
+// YENİ: TraceChain.renderInTab('backlog_item', item.id, container)
+// FALLBACK: Doğrudan API çağrısı (artık çalışan endpoint ile)
+```
+
+> Satır 881 ve 925'teki çağrılar da kontrol edilecek
+
+### Task 3.2 — Explore Requirements Trace Button (1.5 saat)
+**Dosya:** `static/js/views/explore_requirements.js` (~satır 239)
+
+```javascript
+// ESKİ: TraceView.showForRequirement('${r.id}')
+// YENİ: TraceChain.show('explore_requirement', '${r.id}')
+```
+
+### Task 3.3 — Explore Detail Panel Trace Section (1.5 saat)
+**Dosya:** `static/js/views/explore_requirements.js` (~satır 174)
+
+Detail panel'deki "Traceability" section'ını `TraceChain.renderInTab` ile güncelle.
+
+### Task 3.4 — Test Execution Traceability Tab (1.5 saat)
+**Dosya:** `static/js/views/test_execution.js` (~satır 51)
+
+```javascript
+case 'traceability':
+    if (typeof TraceChain !== 'undefined') {
+        await TraceChain.renderInTab('test_case', testCaseId, container);
+    } else {
+        await renderTraceability();  // mevcut fallback
+    }
+    break;
+```
+
+### Task 3.5 — API Prefix Doğrulama & Fix (1.5 saat)
+**Kontrol:** `API.get()` fonksiyonunun `/api/v1` prefix'ini otomatik ekleyip eklemediği:
+```bash
+grep -n "baseURL\|API_BASE\|prefix.*api" static/js/api.js
+```
+Prefix otomatikse frontend çağrıları olduğu gibi çalışır; değilse path düzeltilir.
+
+### Sprint 3 Kabul Kriterleri
+- [ ] Backlog detail → Traceability tab → chain görünür (**önceden "Could not load" idi**)
+- [ ] Explore → Trace butonu → TraceChain modal
+- [ ] Explore → Detail panel → inline trace
+- [ ] Test Execution → Traceability tab → çalışır
+- [ ] Console'da 404 hatası yok
+- [ ] TraceView fallback korunuyor
+
+---
+
+## 🏃 SPRINT 4: Test, Validasyon & Dokümantasyon
+**Süre:** 1 gün (~8 saat) | **Bağımlılık:** Sprint 1 + 2 + 3 | **Çıktı:** Tam test coverage
+
+### Task 4.1 — API Contract Test Suite (3 saat)
+**Dosya:** `tests/test_traceability_unified.py` (YENİ)
+
+```
+Pozitif Testler:
+  test_backlog_item_trace_returns_200()
+  test_explore_requirement_trace_with_string_id()
+  test_scenario_full_downstream_chain()
+  test_test_case_upstream_trace()
+  test_defect_upstream_trace()
+  test_response_has_required_fields()
+  test_lateral_links_included()
+  test_chain_depth_calculation()
+  test_gap_detection_missing_test_cases()
+
+Negatif Testler:
+  test_invalid_entity_type_returns_404()
+  test_invalid_entity_id_returns_400()
+  test_nonexistent_entity_returns_404()
+  test_depth_parameter_max_20()
+  test_include_lateral_false()
+```
+
+### Task 4.2 — Shell Smoke Test Script (1 saat)
+**Dosya:** `scripts/smoke_test_traceability.sh` (YENİ)
+
+Tüm entity type'ları curl ile test eden otomatik script.
+
+### Task 4.3 — Manuel Frontend Doğrulama (2 saat)
+
+| # | Senaryo | Adımlar | Beklenen |
+|---|---------|---------|----------|
+| 1 | Backlog trace yüklenir | WRICEF item → Traceability tab | Chain render |
+| 2 | Requirement trace | Requirements → Trace butonu | Full chain + upstream |
+| 3 | Chain depth doğru | WRICEF + Test bağlı REQ | Depth ≥4/6 |
+| 4 | Gap'ler gösterilir | WRICEF var, Test yok | ⚠️ "No Test Cases" |
+| 5 | Tıklanabilir node | Chain'de kutuya tıkla | Detail page açılır |
+| 6 | Lateral linkler | Open Item bağlı REQ | Lateral branch görünür |
+
+### Task 4.4 — Regresyon Testi (1 saat)
+```bash
+python -m pytest tests/ -x --tb=short -q        # 1593+ test hepsi geçmeli
+python -m pytest tests/test_audit_trace.py -v    # Mevcut trace testleri
+python -m pytest tests/test_api_backlog.py -v    # Backlog API testleri
+python -m pytest tests/test_api_testing.py -v    # Testing API testleri
+```
+
+### Task 4.5 — Git Commit & Changelog (1 saat)
+```
+feat: Unified traceability endpoint + visual chain component
+
+- New: GET /api/v1/traceability/<entity_type>/<entity_id>
+- 16 entity types, full upstream/downstream/lateral traversal
+- SAP Activate chain: Scenario → Process → Workshop → Req → WRICEF → FS/TS → Test → Defect
+- Chain depth indicator (1-6), gap detection
+- TraceChain.js visual component with flow diagram
+- Fixes: Backlog item traceability 404
+- Fixes: Requirement trace shallow depth (2/4 → 6/6)
+```
+
+### Sprint 4 Kabul Kriterleri
+- [ ] `test_traceability_unified.py` — tüm testler geçer
+- [ ] Smoke test script — tüm entity type'lar OK
+- [ ] Manuel test 6/6 senaryo geçer
+- [ ] 1593+ mevcut test kırılmadı
+- [ ] Git commit yapıldı
+
+---
+
+## 📅 Sprint Takvimi (Özet)
+
+```
+Sprint 1 ─── Backend Altyapı ───────────────── 1.5 gün ──── Bağımlılık: Yok
+  │ T1.1 Blueprint oluşturma          (4h)
+  │ T1.2 Upstream builder             (2h)
+  │ T1.3 Lateral + Gap detection      (2h)
+  │ T1.4 Blueprint registrasyonu      (0.5h)
+  │ T1.5 Curl smoke test              (1.5h)    → 12 saat
+  ▼
+Sprint 2 ─── Frontend Component ─────────────── 1.5 gün ──── Bağımlılık: S1
+  │ T2.1 TraceChain core component    (6h)
+  │ T2.2 Modal HTML yapısı            (2h)
+  │ T2.3 Script include               (0.5h)
+  │ T2.4 Error/loading states         (1.5h)    → 10 saat
+  ▼
+Sprint 3 ─── Frontend Entegrasyon ───────────── 1 gün ────── Bağımlılık: S1+S2
+  │ T3.1 Backlog detail tab           (2h)
+  │ T3.2 Explore trace button         (1.5h)
+  │ T3.3 Explore detail panel         (1.5h)
+  │ T3.4 Test execution tab           (1.5h)
+  │ T3.5 API prefix doğrulama         (1.5h)    → 8 saat
+  ▼
+Sprint 4 ─── Test & Validasyon ──────────────── 1 gün ────── Bağımlılık: S1+S2+S3
+    T4.1 API contract tests           (3h)
+    T4.2 Shell smoke test script      (1h)
+    T4.3 Manuel frontend doğrulama    (2h)
+    T4.4 Regresyon testi              (1h)
+    T4.5 Git commit & changelog       (1h)      → 8 saat
+                                                ══════════
+                                        TOPLAM:  ~38 saat (5 iş günü)
+```
+
+## ⚠️ Risk & Hafifletme
+
+| Risk | Etki | Olasılık | Hafifletme |
+|------|------|----------|------------|
+| ~~`API.get()` prefix uyumsuzluğu~~ | — | — | **ÇÖZÜLDÜ:** `static/js/api.js:7` → `const BASE = '/api/v1'` doğrulandı. Frontend `API.get('/traceability/...')` otomatik `/api/v1/traceability/...` olur. |
+| ~~`ExploreDecision` model henüz yok~~ | — | — | **ÇÖZÜLDÜ:** `app/models/explore.py:599` → `class ExploreDecision(db.Model)` mevcut. try/except yerine direkt import güvenli. |
+| ~~`process_step_id` ExploreRequirement'da yok~~ | — | — | **ÇÖZÜLDÜ:** `explore.py:860` → `process_step_id`, `workshop_id`, `scope_item_id`, `process_level_id` hepsi mevcut. |
+| Mevcut testlerin kırılması | Yüksek | Düşük | S4'te regresyon; yeni dosyalar çakışmaz |
+| Modal z-index çakışması | Düşük | Düşük | Mevcut modal pattern'e uyumlu z-index |

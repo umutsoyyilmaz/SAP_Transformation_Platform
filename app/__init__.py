@@ -147,6 +147,7 @@ def create_app(config_name=None):
     from app.blueprints.notification_bp import notification_bp
     from app.blueprints.run_sustain_bp import run_sustain_bp
     from app.blueprints.pwa_bp import pwa_bp
+    from app.blueprints.traceability_bp import traceability_bp
 
     app.register_blueprint(program_bp)
     app.register_blueprint(backlog_bp)
@@ -164,6 +165,7 @@ def create_app(config_name=None):
     app.register_blueprint(notification_bp)
     app.register_blueprint(run_sustain_bp)
     app.register_blueprint(pwa_bp)
+    app.register_blueprint(traceability_bp)
 
     # ── SPA catch-all ────────────────────────────────────────────────────
     @app.route("/")

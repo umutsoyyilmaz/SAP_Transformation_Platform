@@ -923,6 +923,12 @@ const BacklogView = (() => {
 
     async function _renderDetailTrace(i) {
         const container = document.getElementById('detailTabContent');
+        // Use unified TraceChain component if available
+        if (typeof TraceChain !== 'undefined') {
+            await TraceChain.renderInTab('backlog_item', i.id, container);
+            return;
+        }
+        // Fallback: basic table rendering
         container.innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner"></div></div>';
         try {
             const chain = await API.get(`/traceability/backlog_item/${i.id}`);
