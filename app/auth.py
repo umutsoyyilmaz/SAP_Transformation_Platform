@@ -120,6 +120,25 @@ def _is_same_origin_request() -> bool:
     return False
 
 
+def _has_valid_basic_auth() -> bool:
+    """
+    Check whether the request carries valid HTTP Basic Auth credentials
+    matching SITE_USERNAME / SITE_PASSWORD.
+
+    This lets external tools (curl, smoke tests, Postman) authenticate
+    with the same site-wide credentials instead of requiring a separate
+    X-API-Key.
+    """
+    auth = request.authorization
+    if not auth:
+        return False
+    site_user = os.getenv("SITE_USERNAME", "")
+    site_pass = os.getenv("SITE_PASSWORD", "")
+    if not site_user or not site_pass:
+        return False
+    return auth.username == site_user and auth.password == site_pass
+
+
 # ── Authentication decorator ─────────────────────────────────────────────────
 
 def require_auth(f):
@@ -249,9 +268,17 @@ def init_auth(app):
             g.api_key = "spa-session"
             return None
 
+        # Valid HTTP Basic Auth (SITE_USERNAME/SITE_PASSWORD) also grants
+        # API access — lets curl / smoke tests / Postman authenticate
+        # with the same site-wide credentials.
+        if _has_valid_basic_auth():
+            g.current_user_role = "admin"
+            g.api_key = "basic-auth"
+            return None
+
         api_key = _get_api_key_from_request()
         if not api_key:
-            return jsonify({"error": "Authentication required. Provide X-API-Key header."}), 401
+            return jsonify({"error": "Authentication required. Provide X-API-Key header or Basic Auth."}), 401
 
         api_keys = _parse_api_keys()
         if not api_keys:

@@ -16,9 +16,13 @@ def init_basic_auth(app):
     
     @app.before_request
     def require_basic_auth():
-        # Skip auth for health check
+        # Skip paths that have their own auth or are public
         if request.path == '/health':
             return None
+        if request.path.startswith('/api/v1/'):
+            return None  # API routes use X-API-Key / same-origin auth
+        if request.path.startswith('/static/'):
+            return None  # Static assets (JS/CSS/icons) must load for SPA
         
         auth = request.authorization
         if not auth or auth.username != username or auth.password != password:

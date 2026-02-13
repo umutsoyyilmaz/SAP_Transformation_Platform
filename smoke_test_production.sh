@@ -3,12 +3,19 @@
 #  🧪 Perga SAP Transformation Platform — Production Smoke Test
 #  Tarih: 2026-02-13
 #  Kullanım: chmod +x smoke_test_production.sh && ./smoke_test_production.sh
+#  Farklı URL: ./smoke_test_production.sh https://saptransformationplatform-production.up.railway.app
+#  Farklı şifre: SMOKE_USER=admin SMOKE_PASS=yenisifre ./smoke_test_production.sh
 # ═══════════════════════════════════════════════════════════════
 
 # ── Konfigürasyon ──────────────────────────────────────────────
 # İstersen BASE_URL'i değiştir:
 BASE_URL="${1:-https://app.univer.com.tr}"
 API="$BASE_URL/api/v1"
+
+# Basic Auth credentials (Railway env vars)
+AUTH_USER="${SMOKE_USER:-admin}"
+AUTH_PASS="${SMOKE_PASS:-Perga2026!}"
+AUTH="-u ${AUTH_USER}:${AUTH_PASS}"
 
 # Renkler
 GREEN='\033[0;32m'
@@ -30,7 +37,7 @@ test_get() {
     local url="$2"
     local expected="${3:-200}"
     
-    local response=$(curl -s -o /tmp/smoke_body -w "%{http_code}|%{time_total}" "$url" 2>/dev/null)
+    local response=$(curl -s $AUTH -o /tmp/smoke_body -w "%{http_code}|%{time_total}" "$url" 2>/dev/null)
     local status=$(echo "$response" | cut -d'|' -f1)
     local time=$(echo "$response" | cut -d'|' -f2)
     
@@ -41,6 +48,10 @@ test_get() {
         printf "  ${RED}❌${NC} %-45s ${RED}CONNECTION FAILED${NC}\n" "$name"
         FAIL=$((FAIL+1))
         ERRORS="$ERRORS\n  ❌ $name → Connection failed (sunucu erişilemez)"
+    elif [ "$status" = "401" ]; then
+        printf "  ${RED}❌${NC} %-45s ${RED}401 UNAUTHORIZED${NC} (şifre yanlış?)\n" "$name"
+        FAIL=$((FAIL+1))
+        ERRORS="$ERRORS\n  ❌ $name → 401 (Basic Auth credentials yanlış)"
     else
         printf "  ${RED}❌${NC} %-45s ${RED}%s${NC} (expected %s)\n" "$name" "$status" "$expected"
         FAIL=$((FAIL+1))
@@ -54,7 +65,7 @@ test_post() {
     local data="$3"
     local expected="${4:-200}"
     
-    local response=$(curl -s -o /tmp/smoke_body -w "%{http_code}|%{time_total}" \
+    local response=$(curl -s $AUTH -o /tmp/smoke_body -w "%{http_code}|%{time_total}" \
         -X POST -H "Content-Type: application/json" -d "$data" "$url" 2>/dev/null)
     local status=$(echo "$response" | cut -d'|' -f1)
     local time=$(echo "$response" | cut -d'|' -f2)
@@ -79,13 +90,14 @@ echo ""
 printf "${BOLD}═══════════════════════════════════════════════════════════${NC}\n"
 printf "${BOLD}  🧪 Perga — Production Smoke Test${NC}\n"
 printf "${BOLD}  📍 Target: ${CYAN}$BASE_URL${NC}\n"
+printf "${BOLD}  🔐 Auth:   ${CYAN}$AUTH_USER${NC}\n"
 printf "${BOLD}  📅 $(date '+%Y-%m-%d %H:%M:%S')${NC}\n"
 printf "${BOLD}═══════════════════════════════════════════════════════════${NC}\n"
 
 # ── 0. Bağlantı Kontrolü ──────────────────────────────────────
 section "0. SERVER CONNECTIVITY"
 
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL" 2>/dev/null)
+HTTP_CODE=$(curl -s $AUTH -o /dev/null -w "%{http_code}" "$BASE_URL" 2>/dev/null)
 if [ "$HTTP_CODE" = "000" ]; then
     printf "  ${RED}❌ Sunucuya bağlanılamadı! URL: $BASE_URL${NC}\n"
     printf "  ${YELLOW}   → DNS veya network sorunu olabilir${NC}\n"
@@ -93,11 +105,33 @@ if [ "$HTTP_CODE" = "000" ]; then
     echo ""
     exit 1
 fi
+
+if [ "$HTTP_CODE" = "401" ]; then
+    printf "  ${RED}❌ Basic Auth BAŞARISIZ! Homepage 401 döndü.${NC}\n"
+    printf "  ${YELLOW}   → SMOKE_USER ve SMOKE_PASS env vars ile override edebilirsin:${NC}\n"
+    printf "  ${YELLOW}   → SMOKE_USER=admin SMOKE_PASS=yenisifre ./smoke_test_production.sh${NC}\n"
+    echo ""
+    exit 1
+fi
 printf "  ${GREEN}✅${NC} Server reachable (HTTP $HTTP_CODE)\n"
 
-SSL_CHECK=$(curl -sI "$BASE_URL" 2>&1 | grep -i "SSL\|certificate" | head -1)
+# Auth check — API endpoint with Basic Auth
+AUTH_CODE=$(curl -s $AUTH -o /dev/null -w "%{http_code}" "$API/health" 2>/dev/null)
+printf "  ${GREEN}✅${NC} Health endpoint (HTTP $AUTH_CODE)\n"
+
+# Check API auth with Basic Auth credentials
+API_AUTH_CODE=$(curl -s $AUTH -o /dev/null -w "%{http_code}" "$API/programs" 2>/dev/null)
+if [ "$API_AUTH_CODE" = "401" ]; then
+    printf "  ${RED}❌ API Auth BAŞARISIZ! Basic Auth geçti ama API 401 döndü.${NC}\n"
+    printf "  ${YELLOW}   → X-API-Key veya SITE_USERNAME/SITE_PASSWORD ayarlarını kontrol et${NC}\n"
+    echo ""
+    exit 1
+fi
+printf "  ${GREEN}✅${NC} API Auth OK (user: $AUTH_USER)\n"
+
+SSL_CHECK=$(curl -sI $AUTH "$BASE_URL" 2>&1 | grep -i "SSL\|certificate" | head -1)
 if echo "$BASE_URL" | grep -q "https"; then
-    SSL_STATUS=$(curl -s -o /dev/null -w "%{ssl_verify_result}" "$BASE_URL" 2>/dev/null)
+    SSL_STATUS=$(curl -s $AUTH -o /dev/null -w "%{ssl_verify_result}" "$BASE_URL" 2>/dev/null)
     if [ "$SSL_STATUS" = "0" ]; then
         printf "  ${GREEN}✅${NC} SSL Certificate valid\n"
     else
@@ -134,7 +168,7 @@ section "3. PROGRAMS & PROJECTS"
 test_get "GET /programs" "$API/programs" "200"
 
 # Program ID'yi al (ilk program)
-PROG_ID=$(curl -s "$API/programs" 2>/dev/null | python3 -c "
+PROG_ID=$(curl -s $AUTH "$API/programs" 2>/dev/null | python3 -c "
 import sys,json
 try:
     data=json.load(sys.stdin)
@@ -210,7 +244,7 @@ echo "  Ortalama response time'ları kontrol ediliyor..."
 TOTAL_TIME=0
 COUNT=0
 for EP in "/explore/workshops" "/explore/requirements" "/programs"; do
-    T=$(curl -s -o /dev/null -w "%{time_total}" "$API$EP" 2>/dev/null)
+    T=$(curl -s $AUTH -o /dev/null -w "%{time_total}" "$API$EP" 2>/dev/null)
     TOTAL_TIME=$(echo "$TOTAL_TIME + $T" | bc 2>/dev/null || echo "0")
     COUNT=$((COUNT+1))
     printf "  ⏱️  %-35s %.3fs\n" "$EP" "$T"
@@ -246,6 +280,8 @@ if [ $FAIL -gt 0 ]; then
     printf "$ERRORS\n"
     echo ""
     printf "${YELLOW}💡 Olası çözümler:${NC}\n"
+    printf "  • 401 → Şifre yanlış: SMOKE_USER=admin SMOKE_PASS=yenisifre ./smoke_test_production.sh\n"
+    printf "  • 401 → API auth: Railway'de SITE_USERNAME/SITE_PASSWORD ayarlı mı kontrol et\n"
     printf "  • 404 → Endpoint henüz deploy edilmemiş olabilir\n"
     printf "  • 500 → Backend hatası — Railway Logs'u kontrol et\n"
     printf "  • 502/503 → Sunucu yeniden başlıyor veya crash olmuş\n"
