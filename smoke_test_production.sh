@@ -736,8 +736,10 @@ fi
 
 subsection "7.4 AI & Knowledge Base"
 if [ -n "$PID" ]; then
-    test_get  "GET  /ai/assistants"              "$API/ai/assistants"
-    test_get  "GET  /knowledge-base"              "$API/knowledge-base"
+    test_get  "GET  /ai/admin/dashboard"          "$API/ai/admin/dashboard"
+    test_get  "GET  /ai/prompts"                   "$API/ai/prompts"
+    test_get  "GET  /ai/kb/versions"               "$API/ai/kb/versions"
+    test_get  "GET  /ai/suggestions/stats"         "$API/ai/suggestions/stats"
 fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

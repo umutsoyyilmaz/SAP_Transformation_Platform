@@ -38,11 +38,9 @@ from app.models.cutover import (
 
 
 def generate_plan_code(program_id: int) -> str:
-    """Generate next cutover plan code: CUT-001, CUT-002, ... (program-scoped)."""
+    """Generate next cutover plan code: CUT-001, CUT-002, ... (globally unique)."""
     count = (
-        db.session.query(func.count(CutoverPlan.id))
-        .filter(CutoverPlan.program_id == program_id)
-        .scalar()
+        db.session.query(func.count(CutoverPlan.id)).scalar()
     ) or 0
     return f"CUT-{count + 1:03d}"
 
