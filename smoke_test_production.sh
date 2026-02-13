@@ -36,7 +36,7 @@ test_get() {
     local url="$2"
     local expected="${3:-200}"
 
-    local response=$(curl -s $AUTH -o /tmp/smoke_body -w "%{http_code}|%{time_total}" "$url" 2>/dev/null)
+    local response=$(curl -s --max-time 30 $AUTH -o /tmp/smoke_body -w "%{http_code}|%{time_total}" "$url" 2>/dev/null)
     local status=$(echo "$response" | cut -d'|' -f1)
     local time=$(echo "$response" | cut -d'|' -f2)
 
@@ -44,9 +44,9 @@ test_get() {
         printf "  ${GREEN}✅${NC} %-45s ${CYAN}%s${NC} (%.2fs)\n" "$name" "$status" "$time"
         PASS=$((PASS+1))
     elif [ "$status" = "000" ]; then
-        printf "  ${RED}❌${NC} %-45s ${RED}CONNECTION FAILED${NC}\n" "$name"
+        printf "  ${RED}❌${NC} %-45s ${RED}TIMEOUT / CONNECTION FAILED${NC}\n" "$name"
         FAIL=$((FAIL+1))
-        ERRORS="$ERRORS\n  ❌ $name → Connection failed"
+        ERRORS="$ERRORS\n  ❌ $name → Timeout or connection failed"
     else
         printf "  ${RED}❌${NC} %-45s ${RED}%s${NC} (expected %s)\n" "$name" "$status" "$expected"
         FAIL=$((FAIL+1))
@@ -60,7 +60,7 @@ test_post() {
     local data="$3"
     local expected="${4:-201}"
 
-    local response=$(curl -s $AUTH -o /tmp/smoke_body -w "%{http_code}|%{time_total}" \
+    local response=$(curl -s --max-time 30 $AUTH -o /tmp/smoke_body -w "%{http_code}|%{time_total}" \
         -X POST -H "Content-Type: application/json" -d "$data" "$url" 2>/dev/null)
     local status=$(echo "$response" | cut -d'|' -f1)
     local time=$(echo "$response" | cut -d'|' -f2)

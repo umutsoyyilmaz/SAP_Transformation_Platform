@@ -62,24 +62,37 @@ def _auto_add_missing_columns(app, db):
     if "postgresql" not in db_uri:
         return  # SQLite doesn't support ADD COLUMN IF NOT EXISTS
 
-    inspector = sa.inspect(db.engine)
+    try:
+        inspector = sa.inspect(db.engine)
+    except Exception as exc:
+        app.logger.warning("Cannot inspect DB for missing columns: %s", exc)
+        return
+
     added = []
 
     for table in db.metadata.sorted_tables:
         table_name = table.name
 
-        if not inspector.has_table(table_name):
-            continue  # db.create_all() will handle new tables
+        try:
+            if not inspector.has_table(table_name):
+                continue  # db.create_all() will handle new tables
 
-        # Get existing columns
-        existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
+            # Get existing columns
+            existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
+        except Exception as exc:
+            app.logger.warning("Cannot inspect table %s: %s", table_name, exc)
+            continue
 
         for col in table.columns:
             if col.name in existing_cols:
                 continue
 
             # Build ALTER TABLE statement
-            col_type = col.type.compile(dialect=db.engine.dialect)
+            try:
+                col_type = col.type.compile(dialect=db.engine.dialect)
+            except Exception:
+                col_type = "TEXT"  # fallback
+
             nullable = "" if col.nullable else " NOT NULL"
             default = ""
             if col.server_default is not None:
@@ -108,7 +121,12 @@ def _auto_add_missing_columns(app, db):
                     app.logger.warning("Could not add column %s.%s: %s", table_name, col.name, exc)
 
     if added:
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception as exc:
+            app.logger.warning("Commit failed for auto-add-columns: %s", exc)
+            db.session.rollback()
+            return
         app.logger.info("Auto-added %d missing columns: %s", len(added), ", ".join(added))
     else:
         app.logger.info("All model columns present in DB — no migration needed")
