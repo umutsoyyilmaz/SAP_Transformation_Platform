@@ -46,6 +46,8 @@ const ExploreAPI = (() => {
         consolidateFit: (l3Id)    => API.post(`${B}/process-levels/${l3Id}/consolidate-fit`),
         consolidatedView: (l3Id)  => API.get(`${B}/process-levels/${l3Id}/consolidated-view`),
         overrideFitStatus: (l3Id, data) => API.post(`${B}/process-levels/${l3Id}/override-fit-status`, data),
+        seedFromCatalog: (l3Id)   => API.post(`${B}/process-levels/${l3Id}/seed-from-catalog`),
+        addChild:        (l3Id, data) => API.post(`${B}/process-levels/${l3Id}/children`, data),
         l2Readiness:   (pid)      => API.get(`${B}/process-levels/l2-readiness?project_id=${pid}`),
         areaMilestones: (pid)     => API.get(`${B}/area-milestones?project_id=${pid}`),
         changeHistory: (plId)     => API.get(`${B}/process-levels/${plId}/change-history`),

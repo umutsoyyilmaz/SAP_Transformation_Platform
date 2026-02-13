@@ -832,6 +832,17 @@
     height: 22px;
 }
 
+/* ── Highlight Newly Imported Nodes ─────────────────────────────────── */
+@keyframes highlight-fade {
+    0%   { background-color: rgba(192, 139, 92, 0.25); }
+    70%  { background-color: rgba(192, 139, 92, 0.12); }
+    100% { background-color: transparent; }
+}
+.highlight-new {
+    animation: highlight-fade 5s ease-out forwards;
+    border-left: 3px solid var(--exp-l4, #c08b5c);
+}
+
 /* ── Status Flow Indicator ──────────────────────────────────────────── */
 .exp-status-flow {
     display: flex;

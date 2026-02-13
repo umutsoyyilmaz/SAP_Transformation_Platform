@@ -468,12 +468,22 @@ const ExploreHierarchyView = (() => {
     }
 
     function renderSeedCatalogMode() {
-        return `<div style="max-height:300px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:var(--exp-radius-md);padding:8px">
-            <div style="margin-bottom:8px">
-                <input type="text" placeholder="Search catalog..." class="exp-search__input" style="padding-left:12px" oninput="ExploreHierarchyView._filterCatalog(this.value)">
+        const l3Options = _l3List.map(l3 =>
+            `<option value="${l3.id}">${esc(l3.code || '')} — ${esc(l3.name || '')}</option>`
+        ).join('');
+
+        return `<div>
+            <div style="margin-bottom:12px">
+                <label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px">Select L3 Scope Item</label>
+                <select id="seedCatalogL3" style="width:100%;padding:8px;border-radius:var(--exp-radius-md);border:1px solid #e2e8f0">
+                    <option value="">— Select scope item to import L4s —</option>
+                    ${l3Options}
+                </select>
             </div>
-            <div id="seedCatalogList" style="font-size:13px">
-                <p style="color:var(--sap-text-secondary);padding:12px;text-align:center">Loading catalog…</p>
+            <div style="padding:16px;text-align:center;border:1px solid #e2e8f0;border-radius:var(--exp-radius-md);background:var(--sap-bg)">
+                <div style="font-size:24px;margin-bottom:8px">📚</div>
+                <p style="font-size:13px;color:var(--sap-text-secondary)">Selecting an L3 item will import all standard L4 process steps from the SAP Best Practice catalog.</p>
+                <p style="font-size:12px;color:var(--sap-text-secondary);margin-top:4px">Already existing steps will be skipped automatically.</p>
             </div>
         </div>`;
     }
@@ -519,11 +529,135 @@ const ExploreHierarchyView = (() => {
     }
 
     async function submitSeedImport() {
-        App.closeModal();
-        App.toast('Import started — this is a placeholder', 'info');
+        // Detect active seed mode
+        const catalogTab = document.querySelector('.exp-tab--active');
+        const mode = catalogTab?.textContent?.includes('Manual') ? 'manual'
+                   : catalogTab?.textContent?.includes('BPMN') ? 'bpmn'
+                   : 'catalog';
+
+        if (mode === 'bpmn') {
+            App.toast('BPMN import is not yet implemented', 'info');
+            return;
+        }
+
+        if (mode === 'manual') {
+            return _submitManualSeed();
+        }
+
+        // Catalog mode — seed L4s from catalog for selected L3
+        return _submitCatalogSeed();
     }
 
-    function _filterCatalog() { /* placeholder for catalog search */ }
+    async function _submitCatalogSeed() {
+        const l3Select = document.getElementById('seedCatalogL3');
+        const l3Id = l3Select?.value;
+        if (!l3Id) {
+            App.toast('Please select an L3 scope item first', 'warning');
+            return;
+        }
+
+        const btn = document.getElementById('seedImportBtn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+
+        try {
+            const result = await ExploreAPI.levels.seedFromCatalog(l3Id);
+            App.closeModal();
+
+            const count = result.created_count || 0;
+            const skipped = result.skipped_count || 0;
+
+            if (count === 0 && skipped > 0) {
+                App.toast(`All ${skipped} L4 steps already exist — nothing to import`, 'info');
+            } else {
+                App.toast(`${count} L4 process step${count !== 1 ? 's' : ''} imported successfully${skipped ? ` (${skipped} skipped)` : ''}`, 'success');
+            }
+
+            // Refresh and show the new items
+            await _postImportRefresh(l3Id, result.created || []);
+        } catch (err) {
+            App.toast(err.message || 'Import failed', 'error');
+            if (btn) { btn.disabled = false; btn.textContent = 'Import Selected'; }
+        }
+    }
+
+    async function _submitManualSeed() {
+        const l3Id = document.getElementById('seedManualL3')?.value;
+        const name = document.getElementById('seedManualName')?.value?.trim();
+        const code = document.getElementById('seedManualCode')?.value?.trim();
+        const desc = document.getElementById('seedManualDesc')?.value?.trim();
+
+        if (!l3Id) { App.toast('Please select an L3 scope item', 'warning'); return; }
+        if (!name) { App.toast('Step name is required', 'warning'); return; }
+
+        const btn = document.getElementById('seedImportBtn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+
+        try {
+            const data = { name, description: desc };
+            if (code) data.code = code;
+            else data.code = `L4-${Date.now()}`;
+
+            await ExploreAPI.levels.addChild(l3Id, data);
+            App.closeModal();
+            App.toast(`L4 step "${name}" added successfully`, 'success');
+            await _postImportRefresh(l3Id, [data.code]);
+        } catch (err) {
+            App.toast(err.message || 'Failed to add step', 'error');
+            if (btn) { btn.disabled = false; btn.textContent = 'Import Selected'; }
+        }
+    }
+
+    /** After import: refresh data, expand parent chain, highlight new items */
+    async function _postImportRefresh(l3Id, newCodes) {
+        const oldL4Ids = new Set(_l4List.map(l => l.id));
+
+        await fetchAll();
+
+        // Expand parent chain up to L1 so imported L4s are visible
+        const l3Node = _l3List.find(l => String(l.id) === String(l3Id));
+        if (l3Node) {
+            _expandedNodes.add(l3Node.id);
+            // Find L2 parent
+            const l2 = _l2List.find(l => l.id === l3Node.parent_id);
+            if (l2) {
+                _expandedNodes.add(l2.id);
+                // Find L1 parent
+                const l1 = _l1List.find(l => l.id === l2.parent_id);
+                if (l1) _expandedNodes.add(l1.id);
+            }
+        }
+
+        renderPage();
+
+        // Highlight newly added L4 nodes
+        const newL4Ids = _l4List
+            .filter(l => !oldL4Ids.has(l.id))
+            .map(l => l.id);
+
+        requestAnimationFrame(() => {
+            newL4Ids.forEach(id => {
+                const el = document.querySelector(`[data-node-id="${id}"]`);
+                if (el) {
+                    el.classList.add('highlight-new');
+                    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            });
+            // Remove highlight after animation
+            setTimeout(() => {
+                document.querySelectorAll('.highlight-new').forEach(el => {
+                    el.classList.remove('highlight-new');
+                });
+            }, 5000);
+        });
+    }
+
+    function _filterCatalog(q) {
+        const items = document.querySelectorAll('#seedCatalogList .seed-catalog-item');
+        const query = (q || '').toLowerCase();
+        items.forEach(el => {
+            el.style.display = el.textContent.toLowerCase().includes(query) ? '' : 'none';
+        });
+    }
 
     // ── Node Lookup ──────────────────────────────────────────────────
     function findNode(id, nodes) {
