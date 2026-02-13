@@ -583,8 +583,10 @@ const BacklogView = (() => {
         } catch (err) { App.toast(err.message, 'error'); }
     }
 
-    function _showConfigForm(item) {
+    async function _showConfigForm(item) {
         const isEdit = !!item;
+        const members = await TeamMemberPicker.fetchMembers(programId);
+        const assignedHtml = TeamMemberPicker.renderSelect('ciAssigned', members, item?.assigned_to_id || item?.assigned_to || '', { cssClass: 'form-input' });
         App.openModal(`
             <h2>${isEdit ? 'Edit Config Item' : 'New Config Item'}</h2>
             <div class="form-row">
@@ -611,7 +613,7 @@ const BacklogView = (() => {
                         ).join('')}
                     </select>
                 </div>
-                <div class="form-group"><label>Assigned To</label><input id="ciAssigned" class="form-input" value="${escHtml(item?.assigned_to || '')}"></div>
+                <div class="form-group"><label>Assigned To</label>${assignedHtml}</div>
             </div>
             <div style="text-align:right;margin-top:16px">
                 <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
@@ -628,7 +630,8 @@ const BacklogView = (() => {
             config_key: document.getElementById('ciKey').value.trim(),
             description: document.getElementById('ciDesc').value.trim(),
             priority: document.getElementById('ciPriority').value,
-            assigned_to: document.getElementById('ciAssigned').value.trim(),
+            assigned_to: document.getElementById('ciAssigned').value.trim() || null,
+            assigned_to_id: document.getElementById('ciAssigned').value.trim() || null,
         };
         if (!payload.title) { App.toast('Title is required', 'error'); return; }
         try {
@@ -1099,9 +1102,11 @@ const BacklogView = (() => {
         _showItemForm(currentItem);
     }
 
-    function _showItemForm(item) {
+    async function _showItemForm(item) {
         const isEdit = !!item;
         const title = isEdit ? 'Edit Backlog Item' : 'New Backlog Item';
+        const members = await TeamMemberPicker.fetchMembers(programId);
+        const assignedHtml = TeamMemberPicker.renderSelect('biAssigned', members, item?.assigned_to_id || item?.assigned_to || '', { cssClass: 'form-input' });
 
         App.openModal(`
             <h2>${title}</h2>
@@ -1152,7 +1157,7 @@ const BacklogView = (() => {
                     <div class="form-group"><label>Estimated Hours</label><input id="biEstH" type="number" step="0.5" class="form-input" value="${item?.estimated_hours || ''}"></div>
                 </div>
                 <div class="form-row">
-                    <div class="form-group"><label>Assigned To</label><input id="biAssigned" class="form-input" value="${escHtml(item?.assigned_to || '')}"></div>
+                    <div class="form-group"><label>Assigned To</label>${assignedHtml}</div>
                     <div class="form-group"><label>Sprint</label>
                         <select id="biSprint" class="form-input">
                             <option value="">Unassigned</option>
@@ -1187,7 +1192,8 @@ const BacklogView = (() => {
             complexity: document.getElementById('biComplexity').value,
             story_points: parseInt(document.getElementById('biSP').value) || null,
             estimated_hours: parseFloat(document.getElementById('biEstH').value) || null,
-            assigned_to: document.getElementById('biAssigned').value.trim(),
+            assigned_to: document.getElementById('biAssigned').value.trim() || null,
+            assigned_to_id: document.getElementById('biAssigned').value.trim() || null,
             sprint_id: parseInt(document.getElementById('biSprint').value) || null,
             transaction_code: document.getElementById('biTCode').value.trim(),
             package: document.getElementById('biPkg').value.trim(),

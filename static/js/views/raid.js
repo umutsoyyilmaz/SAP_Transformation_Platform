@@ -516,15 +516,16 @@ const RaidView = (() => {
     }
 
     // ── Create / Edit Forms ──────────────────────────────────────────────
-    function openCreate(type) {
+    async function openCreate(type) {
         const title = type.charAt(0).toUpperCase() + type.slice(1);
+        const formHtml = await _getForm(type, {});
         App.openModal(`
             <div class="modal">
                 <div class="modal__header"><h3>New ${title}</h3>
                     <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button>
                 </div>
                 <div class="modal__body">
-                    ${_getForm(type, {})}
+                    ${formHtml}
                 </div>
                 <div class="modal__footer">
                     <button class="btn btn-primary" onclick="RaidView.submitCreate('${type}')">Create</button>
@@ -538,13 +539,14 @@ const RaidView = (() => {
         const singular = tab.slice(0, -1);
         try {
             const item = await API.get(`/${tab}/${id}`);
+            const formHtml = await _getForm(singular, item);
             App.openModal(`
                 <div class="modal">
                     <div class="modal__header"><h3>Edit ${item.code}</h3>
                         <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button>
                     </div>
                     <div class="modal__body">
-                        ${_getForm(singular, item)}
+                        ${formHtml}
                     </div>
                     <div class="modal__footer">
                         <button class="btn btn-primary" onclick="RaidView.submitEdit('${tab}', ${id})">Save</button>
@@ -557,8 +559,10 @@ const RaidView = (() => {
         }
     }
 
-    function _getForm(type, data) {
+    async function _getForm(type, data) {
         const v = (k) => data[k] || '';
+        const members = await TeamMemberPicker.fetchMembers(_programId);
+        const ownerHtml = TeamMemberPicker.renderSelect('rf_owner', members, data.owner_id || data.owner || '', { cssClass: 'form-control' });
         let common = `
             <div class="form-group"><label>Title *</label>
                 <input id="rf_title" class="form-control" value="${v('title')}" required></div>
@@ -566,7 +570,7 @@ const RaidView = (() => {
                 <textarea id="rf_description" class="form-control" rows="3">${v('description')}</textarea></div>
             <div class="form-row">
                 <div class="form-group"><label>Owner</label>
-                    <input id="rf_owner" class="form-control" value="${v('owner')}"></div>
+                    ${ownerHtml}</div>
                 <div class="form-group"><label>Priority</label>
                     <select id="rf_priority" class="form-control">
                         ${['low', 'medium', 'high', 'critical'].map(p =>
@@ -632,9 +636,10 @@ const RaidView = (() => {
                     <textarea id="rf_root_cause" class="form-control" rows="2">${v('root_cause')}</textarea></div>
             `;
         } else if (type === 'decision') {
+            const decisionOwnerHtml = TeamMemberPicker.renderSelect('rf_decision_owner', members, data.decision_owner_id || data.decision_owner || '', { cssClass: 'form-control' });
             common += `
                 <div class="form-group"><label>Decision Owner</label>
-                    <input id="rf_decision_owner" class="form-control" value="${v('decision_owner')}"></div>
+                    ${decisionOwnerHtml}</div>
                 <div class="form-group"><label>Alternatives</label>
                     <textarea id="rf_alternatives" class="form-control" rows="2">${v('alternatives')}</textarea></div>
                 <div class="form-group"><label>Rationale</label>
@@ -654,6 +659,7 @@ const RaidView = (() => {
             title: document.getElementById('rf_title')?.value || '',
             description: document.getElementById('rf_description')?.value || '',
             owner: document.getElementById('rf_owner')?.value || '',
+            owner_id: document.getElementById('rf_owner')?.value || null,
             priority: document.getElementById('rf_priority')?.value || 'medium',
         };
         if (type === 'risk') {
@@ -672,6 +678,7 @@ const RaidView = (() => {
             data.root_cause = document.getElementById('rf_root_cause')?.value || '';
         } else if (type === 'decision') {
             data.decision_owner = document.getElementById('rf_decision_owner')?.value || '';
+            data.decision_owner_id = document.getElementById('rf_decision_owner')?.value || null;
             data.alternatives = document.getElementById('rf_alternatives')?.value || '';
             data.rationale = document.getElementById('rf_rationale')?.value || '';
             data.reversible = document.getElementById('rf_reversible')?.value === 'true';

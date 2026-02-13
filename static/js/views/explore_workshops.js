@@ -352,12 +352,13 @@ const ExploreWorkshopHubView = (() => {
     }
 
     // ── Create Workshop Dialog ───────────────────────────────────────
-    function createWorkshop() {
+    async function createWorkshop() {
         const areas = [...new Set([
             ..._workshops.map(w => w.process_area || w.area || w.area_code),
             ..._l3Items.map(l3 => l3.process_area_code || l3.area_code),
         ].filter(Boolean))].sort();
-        const facilitators = [...new Set(_workshops.map(w => w.facilitator || w.facilitator_id).filter(Boolean))].sort();
+        const members = await TeamMemberPicker.fetchMembers(_pid);
+        const facilitatorHtml = TeamMemberPicker.renderSelect('wsFacilitator', members, '', { placeholder: '— Select Facilitator —' });
         const l3Options = _l3Items
             .map(l3 => ({
                 id: l3.id,
@@ -380,7 +381,7 @@ const ExploreWorkshopHubView = (() => {
                 </div>
                 <div class="exp-inline-form__row">
                     <div class="exp-inline-form__field"><label>Facilitator</label>
-                        <select id="wsFacilitator"><option value="">—</option>${facilitators.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</select>
+                        ${facilitatorHtml}
                     </div>
                     <div class="exp-inline-form__field"><label>Area (SAP Module)</label>
                         <select id="wsArea" onchange="ExploreWorkshopHubView._onAreaChange()">${SAPConstants.moduleOptionsHTML()}</select>

@@ -154,10 +154,12 @@ const TestPlanningView = (() => {
         await renderCatalog();
     }
 
-    function showCaseModal(tc = null) {
+    async function showCaseModal(tc = null) {
         const pid = TestingShared.pid;
         const isEdit = !!tc;
         const title = isEdit ? 'Edit Test Case' : 'New Test Case';
+        const members = await TeamMemberPicker.fetchMembers(pid);
+        const assignedHtml = TeamMemberPicker.renderSelect('tcAssigned', members, isEdit ? (tc.assigned_to_id || tc.assigned_to || '') : '', { cssClass: 'form-control' });
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modalContainer');
         modal.innerHTML = `
@@ -219,7 +221,7 @@ const TestPlanningView = (() => {
                     <input id="tcData" class="form-control" value="${isEdit ? (tc.test_data_set || '') : ''}"></div>
                 <div class="form-row">
                     <div class="form-group"><label>Assigned To</label>
-                        <input id="tcAssigned" class="form-control" value="${isEdit ? (tc.assigned_to || '') : ''}"></div>
+                        ${assignedHtml}</div>
                     <div class="form-group"><label>
                         <input type="checkbox" id="tcRegression" ${isEdit && tc.is_regression ? 'checked' : ''}> Regression Set</label></div>
                 </div>
@@ -662,6 +664,7 @@ const TestPlanningView = (() => {
             expected_result: document.getElementById('tcExpected').value,
             test_data_set: document.getElementById('tcData').value,
             assigned_to: document.getElementById('tcAssigned').value,
+            assigned_to_id: document.getElementById('tcAssigned').value || null,
             is_regression: document.getElementById('tcRegression').checked,
             suite_id: parseInt(document.getElementById('tcSuiteId').value) || null,
         };
