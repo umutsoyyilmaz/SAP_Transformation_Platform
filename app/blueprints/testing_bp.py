@@ -428,6 +428,7 @@ def create_test_case(pid):
         priority=data.get("priority", "medium"),
         is_regression=data.get("is_regression", False),
         assigned_to=data.get("assigned_to", ""),
+        assigned_to_id=data.get("assigned_to_id"),
         requirement_id=data.get("requirement_id"),
         explore_requirement_id=data.get("explore_requirement_id"),
         backlog_item_id=data.get("backlog_item_id"),
@@ -465,6 +466,7 @@ def update_test_case(case_id):
     for field in ("code", "title", "description", "test_layer", "module",
                   "preconditions", "test_steps", "expected_result", "test_data_set",
                   "status", "priority", "is_regression", "assigned_to",
+                  "assigned_to_id",
                   "requirement_id", "explore_requirement_id", "backlog_item_id", "config_item_id", "suite_id"):
         if field in data:
             setattr(tc, field, data[field])
@@ -536,6 +538,7 @@ def create_test_execution(cycle_id):
         test_case_id=data["test_case_id"],
         result=data.get("result", "not_run"),
         executed_by=data.get("executed_by", ""),
+        executed_by_id=data.get("executed_by_id"),
         executed_at=datetime.now(timezone.utc) if data.get("result", "not_run") != "not_run" else None,
         duration_minutes=data.get("duration_minutes"),
         notes=data.get("notes", ""),
@@ -568,7 +571,7 @@ def update_test_execution(exec_id):
         return err
 
     data = request.get_json(silent=True) or {}
-    for field in ("result", "executed_by", "duration_minutes", "notes", "evidence_url"):
+    for field in ("result", "executed_by", "executed_by_id", "duration_minutes", "notes", "evidence_url"):
         if field in data:
             setattr(exe, field, data[field])
 
@@ -1233,6 +1236,7 @@ def create_test_suite(pid):
         status=data.get("status", "draft"),
         module=data.get("module", ""),
         owner=data.get("owner", ""),
+        owner_id=data.get("owner_id"),
         tags=data.get("tags", ""),
     )
     db.session.add(suite)
@@ -1263,7 +1267,7 @@ def update_test_suite(suite_id):
         return err
 
     data = request.get_json(silent=True) or {}
-    for field in ("name", "description", "suite_type", "status", "module", "owner", "tags"):
+    for field in ("name", "description", "suite_type", "status", "module", "owner", "owner_id", "tags"):
         if field in data:
             setattr(suite, field, data[field])
 

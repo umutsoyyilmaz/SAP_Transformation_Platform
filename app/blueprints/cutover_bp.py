@@ -126,6 +126,7 @@ def create_plan():
         name=data["name"],
         description=data.get("description", ""),
         cutover_manager=data.get("cutover_manager", ""),
+        cutover_manager_id=data.get("cutover_manager_id"),
         environment=data.get("environment", "PRD"),
         planned_start=_parse_dt(data.get("planned_start")),
         planned_end=_parse_dt(data.get("planned_end")),
@@ -155,7 +156,7 @@ def update_plan(plan_id):
         return err
     data = request.get_json(silent=True) or {}
     updatable = (
-        "name", "description", "cutover_manager", "environment",
+        "name", "description", "cutover_manager", "cutover_manager_id", "environment",
         "planned_start", "planned_end",
         "rollback_deadline", "rollback_decision_by",
         "hypercare_start", "hypercare_end",
@@ -240,6 +241,7 @@ def create_scope_item(plan_id):
         category=data.get("category", "custom"),
         description=data.get("description", ""),
         owner=data.get("owner", ""),
+        owner_id=data.get("owner_id"),
         order=data.get("order", 0),
     )
     db.session.add(si)
@@ -264,7 +266,7 @@ def update_scope_item(si_id):
     if err:
         return err
     data = request.get_json(silent=True) or {}
-    for f in ("name", "category", "description", "owner", "order"):
+    for f in ("name", "category", "description", "owner", "owner_id", "order"):
         if f in data:
             setattr(si, f, data[f])
     db.session.commit()
@@ -320,6 +322,7 @@ def create_task(si_id):
         planned_end=_parse_dt(data.get("planned_end")),
         planned_duration_min=data.get("planned_duration_min"),
         responsible=data.get("responsible", ""),
+        responsible_id=data.get("responsible_id"),
         accountable=data.get("accountable", ""),
         environment=data.get("environment", "PRD"),
         rollback_action=data.get("rollback_action", ""),
@@ -352,7 +355,7 @@ def update_task(task_id):
     updatable = (
         "sequence", "title", "description",
         "planned_start", "planned_end", "planned_duration_min",
-        "responsible", "accountable", "environment",
+        "responsible", "responsible_id", "accountable", "environment",
         "rollback_action", "rollback_decision_point",
         "linked_entity_type", "linked_entity_id", "notes",
     )

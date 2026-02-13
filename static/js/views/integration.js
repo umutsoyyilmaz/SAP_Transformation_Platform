@@ -415,7 +415,7 @@ const IntegrationView = (() => {
         }
     }
 
-    function _showInterfaceForm(iface) {
+    async function _showInterfaceForm(iface) {
         const isEdit = !!iface;
         const title = isEdit ? 'Edit Interface' : 'New Interface';
         const dirs = ['inbound','outbound','bidirectional'];
@@ -423,6 +423,8 @@ const IntegrationView = (() => {
         const statuses = ['identified','designed','developed','unit_tested','connectivity_tested','integration_tested','go_live_ready','live','decommissioned'];
         const priorities = ['low','medium','high','critical'];
         const complexities = ['low','medium','high','very_high'];
+        const members = await TeamMemberPicker.fetchMembers(_pid);
+        const assignedHtml = TeamMemberPicker.renderSelect('ifAssigned', members, iface?.assigned_to_id || iface?.assigned_to || '', { cssClass: 'form-control' });
 
         App.openModal(`
             <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto">
@@ -459,7 +461,7 @@ const IntegrationView = (() => {
                                 <option value="">— No Wave —</option>
                                 ${_waves.map(w=>`<option value="${w.id}" ${iface?.wave_id===w.id?'selected':''}>${esc(w.name)}</option>`).join('')}
                             </select></div>
-                        <div class="form-group"><label>Assigned To</label><input id="ifAssigned" class="form-control" value="${esc(iface?.assigned_to||'')}"></div>
+                        <div class="form-group"><label>Assigned To</label>${assignedHtml}</div>
                         <div class="form-group"><label>Est. Hours</label><input id="ifEstHours" type="number" class="form-control" value="${iface?.estimated_hours||''}"></div>
                         <div class="form-group"><label>Go-Live Date</label><input id="ifGoLive" type="date" class="form-control" value="${iface?.go_live_date||''}"></div>
                     </div>
@@ -492,6 +494,7 @@ const IntegrationView = (() => {
             complexity: document.getElementById('ifComplexity').value,
             wave_id: document.getElementById('ifWave').value ? parseInt(document.getElementById('ifWave').value) : null,
             assigned_to: document.getElementById('ifAssigned').value.trim(),
+            assigned_to_id: document.getElementById('ifAssigned').value ? parseInt(document.getElementById('ifAssigned').value) : null,
             estimated_hours: document.getElementById('ifEstHours').value ? parseFloat(document.getElementById('ifEstHours').value) : null,
             go_live_date: document.getElementById('ifGoLive').value || null,
             description: document.getElementById('ifDesc').value.trim(),

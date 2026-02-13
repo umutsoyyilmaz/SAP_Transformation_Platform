@@ -694,6 +694,11 @@ const CutoverView = (() => {
         </div>`;
     }
 
+    function _memberField(label, selectHtml, nameAttr) {
+        const withName = selectHtml.replace('<select ', `<select name="${nameAttr}" `);
+        return `<div class="fiori-field"><label>${label}</label>${withName}</div>`;
+    }
+
     function _selectField(label, name, options, selected='') {
         return `<div class="fiori-field">
             <label>${label}</label>
@@ -726,12 +731,14 @@ const CutoverView = (() => {
     // ═══════════════════════════════════════════════════════════════════
 
     // ── Plan ──
-    function showCreatePlan() {
+    async function showCreatePlan() {
+        const members = await TeamMemberPicker.fetchMembers(_pid);
+        const mgrHtml = TeamMemberPicker.renderSelect('cutMgr', members, '', { cssClass: '', placeholder: '— Select Manager —' });
         _modal('New Cutover Plan',
             _field('Plan Name','name','text','','required') +
             _textareaField('Description','description') +
             _row(
-                _field('Cutover Manager','cutover_manager'),
+                _memberField('Cutover Manager', mgrHtml, 'cutover_manager_id'),
                 _selectField('Environment','environment',[['PRD','PRD'],['QAS','QAS'],['Sandbox','Sandbox']])
             ) +
             _row(
@@ -749,6 +756,7 @@ const CutoverView = (() => {
     async function submitCreatePlan() {
         const d = _formData();
         d.program_id = _pid;
+        d.cutover_manager_id = parseInt(d.cutover_manager_id) || null;
         try {
             await API.post('/cutover/plans', d);
             document.getElementById('cutoverModal').remove();
@@ -759,14 +767,16 @@ const CutoverView = (() => {
         } catch(e) { App.toast(e.message,'error'); }
     }
 
-    function editPlan(id) {
+    async function editPlan(id) {
         const p = _plans.find(x => x.id === id);
         if (!p) return;
+        const members = await TeamMemberPicker.fetchMembers(_pid);
+        const mgrHtml = TeamMemberPicker.renderSelect('cutMgr', members, p.cutover_manager_id || p.cutover_manager || '', { cssClass: '', placeholder: '— Select Manager —' });
         _modal('Edit Cutover Plan',
             _field('Plan Name','name','text',p.name,'required') +
             _textareaField('Description','description',p.description||'') +
             _row(
-                _field('Cutover Manager','cutover_manager','text',p.cutover_manager||''),
+                _memberField('Cutover Manager', mgrHtml, 'cutover_manager_id'),
                 _selectField('Environment','environment',[['PRD','PRD'],['QAS','QAS'],['Sandbox','Sandbox']],p.environment)
             ) +
             _row(
@@ -780,6 +790,7 @@ const CutoverView = (() => {
 
     async function submitEditPlan(id) {
         const d = _formData();
+        d.cutover_manager_id = parseInt(d.cutover_manager_id) || null;
         try {
             await API.put(`/cutover/plans/${id}`, d);
             document.getElementById('cutoverModal').remove();
@@ -812,7 +823,9 @@ const CutoverView = (() => {
     }
 
     // ── Scope Item ──
-    function showCreateScopeItem() {
+    async function showCreateScopeItem() {
+        const members = await TeamMemberPicker.fetchMembers(_pid);
+        const ownerHtml = TeamMemberPicker.renderSelect('siOwner', members, '', { cssClass: '', placeholder: '— Select Owner —' });
         _modal('New Scope Item',
             _field('Name','name','text','','required') +
             _row(
@@ -820,7 +833,7 @@ const CutoverView = (() => {
                     ['data_load','Data Load'],['interface','Interface'],['authorization','Authorization'],
                     ['job_scheduling','Job Scheduling'],['reconciliation','Reconciliation'],['custom','Custom']
                 ]),
-                _field('Owner','owner')
+                _memberField('Owner', ownerHtml, 'owner_id')
             ) +
             _textareaField('Description','description') +
             _field('Order','order','number','0'),
@@ -831,6 +844,7 @@ const CutoverView = (() => {
     async function submitCreateScopeItem() {
         const d = _formData();
         d.order = parseInt(d.order) || 0;
+        d.owner_id = parseInt(d.owner_id) || null;
         try {
             await API.post(`/cutover/plans/${_activePlan.id}/scope-items`, d);
             document.getElementById('cutoverModal').remove();
@@ -849,7 +863,9 @@ const CutoverView = (() => {
     }
 
     // ── Task ──
-    function showCreateTask(siId) {
+    async function showCreateTask(siId) {
+        const members = await TeamMemberPicker.fetchMembers(_pid);
+        const respHtml = TeamMemberPicker.renderSelect('taskResp', members, '', { cssClass: '', placeholder: '— Select Responsible —' });
         _modal('New Runbook Task',
             _field('Title','title','text','','required') +
             _textareaField('Description','description') +
@@ -858,7 +874,7 @@ const CutoverView = (() => {
                 _field('Planned Duration (min)','planned_duration_min','number')
             ) +
             _row(
-                _field('Responsible','responsible'),
+                _memberField('Responsible', respHtml, 'responsible_id'),
                 _field('Accountable','accountable')
             ) +
             _textareaField('Rollback Action','rollback_action') +
@@ -874,6 +890,7 @@ const CutoverView = (() => {
         delete d._si_id;
         d.sequence = parseInt(d.sequence) || 0;
         d.planned_duration_min = parseInt(d.planned_duration_min) || null;
+        d.responsible_id = parseInt(d.responsible_id) || null;
         try {
             await API.post(`/cutover/scope-items/${siId}/tasks`, d);
             document.getElementById('cutoverModal').remove();

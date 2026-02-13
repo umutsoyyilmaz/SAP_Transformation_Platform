@@ -358,6 +358,10 @@ class TestCase(db.Model):
         comment="Flagged for regression set (re-run on upgrades/releases)",
     )
     assigned_to = db.Column(db.String(100), default="", comment="Tester name")
+    assigned_to_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True, comment="FK → team_members",
+    )
 
     # ── Audit
     created_at = db.Column(
@@ -394,6 +398,7 @@ class TestCase(db.Model):
         backref="predecessor_case", lazy="dynamic",
         cascade="all, delete-orphan",
     )
+    assigned_member = db.relationship("TeamMember", foreign_keys=[assigned_to_id])
 
     def to_dict(self, include_steps=False):
         result = {
@@ -417,6 +422,8 @@ class TestCase(db.Model):
             "priority": self.priority,
             "is_regression": self.is_regression,
             "assigned_to": self.assigned_to,
+            "assigned_to_id": self.assigned_to_id,
+            "assigned_to_member": self.assigned_member.to_dict() if self.assigned_to_id and self.assigned_member else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -456,6 +463,10 @@ class TestExecution(db.Model):
         comment="not_run | pass | fail | blocked | deferred",
     )
     executed_by = db.Column(db.String(100), default="", comment="Tester name")
+    executed_by_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True, comment="FK → team_members",
+    )
     executed_at = db.Column(db.DateTime(timezone=True), nullable=True)
     duration_minutes = db.Column(db.Integer, nullable=True, comment="Execution time in minutes")
     notes = db.Column(db.Text, default="", comment="Execution notes / evidence")
@@ -469,6 +480,7 @@ class TestExecution(db.Model):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+    executed_by_member = db.relationship("TeamMember", foreign_keys=[executed_by_id])
 
     def to_dict(self):
         return {
@@ -477,6 +489,8 @@ class TestExecution(db.Model):
             "test_case_id": self.test_case_id,
             "result": self.result,
             "executed_by": self.executed_by,
+            "executed_by_id": self.executed_by_id,
+            "executed_by_member": self.executed_by_member.to_dict() if self.executed_by_id and self.executed_by_member else None,
             "executed_at": self.executed_at.isoformat() if self.executed_at else None,
             "duration_minutes": self.duration_minutes,
             "notes": self.notes,
@@ -738,6 +752,10 @@ class TestSuite(db.Model):
     )
     module = db.Column(db.String(50), default="", comment="SAP module scope: FI, MM, SD, etc.")
     owner = db.Column(db.String(100), default="", comment="Suite owner / test lead")
+    owner_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True, comment="FK → team_members",
+    )
     tags = db.Column(db.Text, default="", comment="Comma-separated tags for filtering")
 
     # ── Audit
@@ -760,6 +778,7 @@ class TestSuite(db.Model):
         "TestCycleSuite", backref="suite", lazy="dynamic",
         cascade="all, delete-orphan",
     )
+    owner_member = db.relationship("TeamMember", foreign_keys=[owner_id])
 
     def to_dict(self, include_cases=False):
         result = {
@@ -771,6 +790,8 @@ class TestSuite(db.Model):
             "status": self.status,
             "module": self.module,
             "owner": self.owner,
+            "owner_id": self.owner_id,
+            "owner_member": self.owner_member.to_dict() if self.owner_id and self.owner_member else None,
             "tags": self.tags,
             "case_count": self.test_cases.count(),
             "created_at": self.created_at.isoformat() if self.created_at else None,

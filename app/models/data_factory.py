@@ -55,12 +55,17 @@ class DataObject(db.Model):
         comment="draft | profiled | cleansed | ready | migrated | archived",
     )
     owner = db.Column(db.String(100), nullable=True)
+    owner_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True, comment="FK → team_members",
+    )
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow)
 
     # Relationships
     cleansing_tasks = db.relationship("CleansingTask", backref="data_object", lazy="dynamic", cascade="all, delete-orphan")
     load_cycles = db.relationship("LoadCycle", backref="data_object", lazy="dynamic", cascade="all, delete-orphan")
+    owner_member = db.relationship("TeamMember", foreign_keys=[owner_id])
 
     def to_dict(self):
         return {
@@ -74,6 +79,8 @@ class DataObject(db.Model):
             "quality_score": self.quality_score,
             "status": self.status,
             "owner": self.owner,
+            "owner_id": self.owner_id,
+            "owner_member": self.owner_member.to_dict() if self.owner_id and self.owner_member else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

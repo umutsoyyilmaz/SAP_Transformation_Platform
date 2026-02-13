@@ -158,6 +158,7 @@ def create_interface(program_id):
         status=data.get("status", "identified"),
         priority=data.get("priority", "medium"),
         assigned_to=data.get("assigned_to", ""),
+        assigned_to_id=data.get("assigned_to_id"),
         complexity=data.get("complexity", "medium"),
         estimated_hours=data.get("estimated_hours"),
         actual_hours=data.get("actual_hours"),
@@ -206,7 +207,7 @@ def update_interface(interface_id):
         "wave_id", "backlog_item_id", "code", "name", "description",
         "direction", "protocol", "middleware", "source_system", "target_system",
         "frequency", "volume", "module", "transaction_code", "message_type",
-        "interface_type", "status", "priority", "assigned_to", "complexity",
+        "interface_type", "status", "priority", "assigned_to", "assigned_to_id", "complexity",
         "estimated_hours", "actual_hours", "notes",
     ]
     for field in simple_fields:

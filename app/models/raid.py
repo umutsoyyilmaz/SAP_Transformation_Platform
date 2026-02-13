@@ -86,6 +86,10 @@ class Risk(db.Model):
     description = db.Column(db.Text, default="")
     status = db.Column(db.String(30), default="identified", index=True)
     owner = db.Column(db.String(150), default="")
+    owner_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True, comment="FK → team_members",
+    )
     priority = db.Column(db.String(20), default="medium")
 
     # Risk-specific
@@ -121,6 +125,8 @@ class Risk(db.Model):
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
 
+    owner_member = db.relationship("TeamMember", foreign_keys=[owner_id])
+
     def recalculate_score(self):
         """Recalculate risk_score and rag_status from probability & impact."""
         self.risk_score = calculate_risk_score(self.probability, self.impact)
@@ -136,6 +142,8 @@ class Risk(db.Model):
             "description": self.description,
             "status": self.status,
             "owner": self.owner,
+            "owner_id": self.owner_id,
+            "owner_member": self.owner_member.to_dict() if self.owner_id and self.owner_member else None,
             "priority": self.priority,
             "probability": self.probability,
             "impact": self.impact,
@@ -179,6 +187,10 @@ class Action(db.Model):
     description = db.Column(db.Text, default="")
     status = db.Column(db.String(30), default="open", index=True)
     owner = db.Column(db.String(150), default="")
+    owner_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True, comment="FK → team_members",
+    )
     priority = db.Column(db.String(20), default="medium")
     action_type = db.Column(db.String(30), default="corrective")
 
@@ -197,6 +209,7 @@ class Action(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
+    owner_member = db.relationship("TeamMember", foreign_keys=[owner_id])
 
     def to_dict(self):
         return {
@@ -208,6 +221,8 @@ class Action(db.Model):
             "description": self.description,
             "status": self.status,
             "owner": self.owner,
+            "owner_id": self.owner_id,
+            "owner_member": self.owner_member.to_dict() if self.owner_id and self.owner_member else None,
             "priority": self.priority,
             "action_type": self.action_type,
             "due_date": self.due_date.isoformat() if self.due_date else None,
@@ -244,6 +259,10 @@ class Issue(db.Model):
     description = db.Column(db.Text, default="")
     status = db.Column(db.String(30), default="open", index=True)
     owner = db.Column(db.String(150), default="")
+    owner_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True, comment="FK → team_members",
+    )
     priority = db.Column(db.String(20), default="medium")
 
     # Issue-specific
@@ -274,6 +293,7 @@ class Issue(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
+    owner_member = db.relationship("TeamMember", foreign_keys=[owner_id])
 
     def to_dict(self):
         return {
@@ -285,6 +305,8 @@ class Issue(db.Model):
             "description": self.description,
             "status": self.status,
             "owner": self.owner,
+            "owner_id": self.owner_id,
+            "owner_member": self.owner_member.to_dict() if self.owner_id and self.owner_member else None,
             "priority": self.priority,
             "severity": self.severity,
             "escalation_path": self.escalation_path,
@@ -323,11 +345,19 @@ class Decision(db.Model):
     description = db.Column(db.Text, default="")
     status = db.Column(db.String(30), default="proposed", index=True)
     owner = db.Column(db.String(150), default="")
+    owner_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True, comment="FK → team_members",
+    )
     priority = db.Column(db.String(20), default="medium")
 
     # Decision-specific
     decision_date = db.Column(db.Date, nullable=True)
     decision_owner = db.Column(db.String(150), default="", comment="Final approver / decision maker")
+    decision_owner_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True, comment="FK → team_members (decision maker)",
+    )
     alternatives = db.Column(db.Text, default="", comment="JSON or freetext list of alternatives")
     rationale = db.Column(db.Text, default="")
     impact_description = db.Column(db.Text, default="")
@@ -340,6 +370,8 @@ class Decision(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
+    owner_member = db.relationship("TeamMember", foreign_keys=[owner_id])
+    decision_owner_member = db.relationship("TeamMember", foreign_keys=[decision_owner_id])
 
     def to_dict(self):
         return {
@@ -351,9 +383,13 @@ class Decision(db.Model):
             "description": self.description,
             "status": self.status,
             "owner": self.owner,
+            "owner_id": self.owner_id,
+            "owner_member": self.owner_member.to_dict() if self.owner_id and self.owner_member else None,
             "priority": self.priority,
             "decision_date": self.decision_date.isoformat() if self.decision_date else None,
             "decision_owner": self.decision_owner,
+            "decision_owner_id": self.decision_owner_id,
+            "decision_owner_member": self.decision_owner_member.to_dict() if self.decision_owner_id and self.decision_owner_member else None,
             "alternatives": self.alternatives,
             "rationale": self.rationale,
             "impact_description": self.impact_description,

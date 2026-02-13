@@ -181,6 +181,7 @@ def create_backlog_item(program_id):
         status=status,
         priority=data.get("priority", "medium"),
         assigned_to=data.get("assigned_to", ""),
+        assigned_to_id=data.get("assigned_to_id"),
         story_points=data.get("story_points"),
         estimated_hours=data.get("estimated_hours"),
         actual_hours=data.get("actual_hours"),
@@ -253,7 +254,7 @@ def update_backlog_item(item_id):
                     return err
             setattr(item, nullable, value)
 
-    for num in ["story_points", "estimated_hours", "actual_hours", "board_order"]:
+    for num in ["story_points", "estimated_hours", "actual_hours", "board_order", "assigned_to_id"]:
         if num in data:
             setattr(item, num, data[num])
 
@@ -570,6 +571,7 @@ def create_config_item(program_id):
         status=status,
         priority=data.get("priority", "medium"),
         assigned_to=data.get("assigned_to", ""),
+        assigned_to_id=data.get("assigned_to_id"),
         complexity=data.get("complexity", "low"),
         estimated_hours=data.get("estimated_hours"),
         actual_hours=data.get("actual_hours"),
@@ -624,7 +626,7 @@ def update_config_item(item_id):
         if nullable in data:
             setattr(item, nullable, data[nullable])
 
-    for num in ["estimated_hours", "actual_hours"]:
+    for num in ["estimated_hours", "actual_hours", "assigned_to_id"]:
         if num in data:
             setattr(item, num, data[num])
 

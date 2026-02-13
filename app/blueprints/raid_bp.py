@@ -124,6 +124,7 @@ def create_risk(pid):
         description=data.get("description", ""),
         status=data.get("status", "identified"),
         owner=data.get("owner", ""),
+        owner_id=data.get("owner_id"),
         priority=data.get("priority", "medium"),
         probability=probability,
         impact=impact,
@@ -177,7 +178,7 @@ def update_risk(rid):
     data = request.get_json(silent=True) or {}
     old_score = risk.risk_score
 
-    for field in ("title", "description", "status", "owner", "priority",
+    for field in ("title", "description", "status", "owner", "owner_id", "priority",
                   "risk_category", "risk_response", "mitigation_plan",
                   "contingency_plan", "trigger_event"):
         if field in data:
@@ -289,6 +290,7 @@ def create_action(pid):
         description=data.get("description", ""),
         status=data.get("status", "open"),
         owner=data.get("owner", ""),
+        owner_id=data.get("owner_id"),
         priority=data.get("priority", "medium"),
         action_type=data.get("action_type", "corrective"),
         due_date=_parse_date(data.get("due_date")),
@@ -323,7 +325,7 @@ def update_action(aid):
         return jsonify({"error": "Action not found"}), 404
 
     data = request.get_json(silent=True) or {}
-    for field in ("title", "description", "status", "owner", "priority",
+    for field in ("title", "description", "status", "owner", "owner_id", "priority",
                   "action_type", "linked_entity_type", "linked_entity_id"):
         if field in data:
             setattr(action, field, data[field])
@@ -428,6 +430,7 @@ def create_issue(pid):
         description=data.get("description", ""),
         status=data.get("status", "open"),
         owner=data.get("owner", ""),
+        owner_id=data.get("owner_id"),
         priority=data.get("priority", "medium"),
         severity=data.get("severity", "moderate"),
         escalation_path=data.get("escalation_path", ""),
@@ -470,7 +473,7 @@ def update_issue(iid):
         return jsonify({"error": "Issue not found"}), 404
 
     data = request.get_json(silent=True) or {}
-    for field in ("title", "description", "status", "owner", "priority",
+    for field in ("title", "description", "status", "owner", "owner_id", "priority",
                   "severity", "escalation_path", "root_cause", "resolution"):
         if field in data:
             setattr(issue, field, data[field])
@@ -574,9 +577,11 @@ def create_decision(pid):
         description=data.get("description", ""),
         status=data.get("status", "proposed"),
         owner=data.get("owner", ""),
+        owner_id=data.get("owner_id"),
         priority=data.get("priority", "medium"),
         decision_date=_parse_date(data.get("decision_date")),
         decision_owner=data.get("decision_owner", ""),
+        decision_owner_id=data.get("decision_owner_id"),
         alternatives=data.get("alternatives", ""),
         rationale=data.get("rationale", ""),
         impact_description=data.get("impact_description", ""),
@@ -611,8 +616,8 @@ def update_decision(did):
     data = request.get_json(silent=True) or {}
     old_status = decision.status
 
-    for field in ("title", "description", "status", "owner", "priority",
-                  "decision_owner", "alternatives", "rationale",
+    for field in ("title", "description", "status", "owner", "owner_id", "priority",
+                  "decision_owner", "decision_owner_id", "alternatives", "rationale",
                   "impact_description"):
         if field in data:
             setattr(decision, field, data[field])

@@ -608,7 +608,9 @@ const DataFactoryView = (() => {
         `);
     }
 
-    function showCreateObject() {
+    async function showCreateObject() {
+        const members = await TeamMemberPicker.fetchMembers(_pid);
+        const ownerHtml = TeamMemberPicker.renderSelect('df_obj_owner', members, '', { cssClass: 'form-control', placeholder: '— Select Owner —' });
         _modal('📦 New Data Object', `
             <form onsubmit="DataFactoryView.submitCreateObject(event)">
                 <div style="display:grid;gap:12px">
@@ -616,7 +618,7 @@ const DataFactoryView = (() => {
                     <div><label>Source System *</label><input class="form-control" id="df_obj_source" required placeholder="SAP ECC, Legacy HR, etc."></div>
                     <div><label>Target Table</label><input class="form-control" id="df_obj_target" placeholder="S/4HANA target table"></div>
                     <div><label>Record Count</label><input type="number" class="form-control" id="df_obj_records" value="0"></div>
-                    <div><label>Owner</label><input class="form-control" id="df_obj_owner"></div>
+                    <div><label>Owner</label>${ownerHtml}</div>
                     <div><label>Description</label><textarea class="form-control" id="df_obj_desc" rows="2"></textarea></div>
                 </div>
                 <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
@@ -637,6 +639,7 @@ const DataFactoryView = (() => {
                 target_table: document.getElementById('df_obj_target').value || null,
                 record_count: parseInt(document.getElementById('df_obj_records').value) || 0,
                 owner: document.getElementById('df_obj_owner').value || null,
+                owner_id: document.getElementById('df_obj_owner').value ? parseInt(document.getElementById('df_obj_owner').value) : null,
                 description: document.getElementById('df_obj_desc').value || null,
             });
             App.closeModal();

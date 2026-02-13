@@ -78,6 +78,7 @@ def create_data_object():
         quality_score=data.get("quality_score"),
         status=data.get("status", "draft"),
         owner=data.get("owner"),
+        owner_id=data.get("owner_id"),
     )
     db.session.add(obj)
     db.session.commit()
@@ -104,7 +105,7 @@ def update_data_object(obj_id):
         return err
     data = request.get_json(silent=True) or {}
     for f in ("name", "description", "source_system", "target_table",
-              "record_count", "quality_score", "status", "owner"):
+              "record_count", "quality_score", "status", "owner", "owner_id"):
         if f in data:
             setattr(obj, f, data[f])
     db.session.commit()

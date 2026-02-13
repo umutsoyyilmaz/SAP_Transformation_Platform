@@ -223,6 +223,10 @@ class CutoverPlan(db.Model):
 
     # Ownership
     cutover_manager = db.Column(db.String(100), default="")
+    cutover_manager_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True, comment="FK → team_members",
+    )
     environment = db.Column(
         db.String(30), default="PRD",
         comment="Target environment: PRD | QAS | Sandbox",
@@ -297,6 +301,7 @@ class CutoverPlan(db.Model):
         "HypercareSLA", backref="cutover_plan", lazy="dynamic",
         cascade="all, delete-orphan", order_by="HypercareSLA.severity",
     )
+    cutover_manager_member = db.relationship("TeamMember", foreign_keys=[cutover_manager_id])
 
     def to_dict(self, include_children=False):
         result = {
@@ -312,6 +317,8 @@ class CutoverPlan(db.Model):
             "actual_start": self.actual_start.isoformat() if self.actual_start else None,
             "actual_end": self.actual_end.isoformat() if self.actual_end else None,
             "cutover_manager": self.cutover_manager,
+            "cutover_manager_id": self.cutover_manager_id,
+            "cutover_manager_member": self.cutover_manager_member.to_dict() if self.cutover_manager_id and self.cutover_manager_member else None,
             "environment": self.environment,
             "rollback_deadline": (
                 self.rollback_deadline.isoformat() if self.rollback_deadline else None
@@ -367,6 +374,10 @@ class CutoverScopeItem(db.Model):
     )
     description = db.Column(db.Text, default="")
     owner = db.Column(db.String(100), default="")
+    owner_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True, comment="FK → team_members",
+    )
     order = db.Column(
         db.Integer, default=0,
         comment="Display order within the plan",
@@ -397,6 +408,7 @@ class CutoverScopeItem(db.Model):
         "RunbookTask", backref="scope_item", lazy="dynamic",
         cascade="all, delete-orphan", order_by="RunbookTask.sequence",
     )
+    owner_member = db.relationship("TeamMember", foreign_keys=[owner_id])
 
     def _compute_status(self):
         """Derive status from child task statuses."""
@@ -421,6 +433,8 @@ class CutoverScopeItem(db.Model):
             "category": self.category,
             "description": self.description,
             "owner": self.owner,
+            "owner_id": self.owner_id,
+            "owner_member": self.owner_member.to_dict() if self.owner_id and self.owner_member else None,
             "order": self.order,
             "status": self._compute_status(),
             "task_count": task_count,
@@ -475,6 +489,10 @@ class RunbookTask(db.Model):
 
     # Responsibility (RACI)
     responsible = db.Column(db.String(100), default="", comment="R — does the work")
+    responsible_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True, comment="FK → team_members (responsible)",
+    )
     accountable = db.Column(db.String(100), default="", comment="A — signs off")
 
     # Execution
@@ -534,6 +552,7 @@ class RunbookTask(db.Model):
         lazy="dynamic",
         cascade="all, delete-orphan",
     )
+    responsible_member = db.relationship("TeamMember", foreign_keys=[responsible_id])
 
     def to_dict(self, include_dependencies=False):
         result = {
@@ -550,6 +569,8 @@ class RunbookTask(db.Model):
             "actual_end": self.actual_end.isoformat() if self.actual_end else None,
             "actual_duration_min": self.actual_duration_min,
             "responsible": self.responsible,
+            "responsible_id": self.responsible_id,
+            "responsible_member": self.responsible_member.to_dict() if self.responsible_id and self.responsible_member else None,
             "accountable": self.accountable,
             "status": self.status,
             "environment": self.environment,

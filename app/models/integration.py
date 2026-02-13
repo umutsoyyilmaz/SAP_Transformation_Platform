@@ -138,6 +138,10 @@ class Interface(db.Model):
     )
     priority = db.Column(db.String(20), default="medium", comment="low | medium | high | critical")
     assigned_to = db.Column(db.String(100), default="")
+    assigned_to_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True, comment="FK → team_members",
+    )
     complexity = db.Column(db.String(20), default="medium", comment="low | medium | high | very_high")
     estimated_hours = db.Column(db.Float, nullable=True)
     actual_hours = db.Column(db.Float, nullable=True)
@@ -170,6 +174,7 @@ class Interface(db.Model):
         "InterfaceChecklist", backref="interface", lazy="dynamic",
         cascade="all, delete-orphan", order_by="InterfaceChecklist.order",
     )
+    assigned_member = db.relationship("TeamMember", foreign_keys=[assigned_to_id])
 
     def to_dict(self, include_children=False):
         result = {
@@ -194,6 +199,8 @@ class Interface(db.Model):
             "status": self.status,
             "priority": self.priority,
             "assigned_to": self.assigned_to,
+            "assigned_to_id": self.assigned_to_id,
+            "assigned_to_member": self.assigned_member.to_dict() if self.assigned_to_id and self.assigned_member else None,
             "complexity": self.complexity,
             "estimated_hours": self.estimated_hours,
             "actual_hours": self.actual_hours,

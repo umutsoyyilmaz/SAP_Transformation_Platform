@@ -183,6 +183,10 @@ class BacklogItem(db.Model):
         comment="low | medium | high | critical",
     )
     assigned_to = db.Column(db.String(100), default="", comment="Developer / consultant name")
+    assigned_to_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True, comment="FK → team_members",
+    )
 
     # ── Estimation
     story_points = db.Column(db.Integer, nullable=True, comment="Fibonacci: 1,2,3,5,8,13,21")
@@ -223,6 +227,7 @@ class BacklogItem(db.Model):
         cascade="all, delete-orphan",
         foreign_keys="FunctionalSpec.backlog_item_id",
     )
+    assigned_member = db.relationship("TeamMember", foreign_keys=[assigned_to_id])
 
     def to_dict(self, include_specs=False):
         result = {
@@ -244,6 +249,8 @@ class BacklogItem(db.Model):
             "status": self.status,
             "priority": self.priority,
             "assigned_to": self.assigned_to,
+            "assigned_to_id": self.assigned_to_id,
+            "assigned_to_member": self.assigned_member.to_dict() if self.assigned_to_id and self.assigned_member else None,
             "story_points": self.story_points,
             "estimated_hours": self.estimated_hours,
             "actual_hours": self.actual_hours,
@@ -327,6 +334,10 @@ class ConfigItem(db.Model):
         comment="low | medium | high | critical",
     )
     assigned_to = db.Column(db.String(100), default="", comment="Functional consultant name")
+    assigned_to_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True, comment="FK → team_members",
+    )
     complexity = db.Column(
         db.String(20), default="low",
         comment="low | medium | high",
@@ -357,6 +368,7 @@ class ConfigItem(db.Model):
         cascade="all, delete-orphan",
         foreign_keys="FunctionalSpec.config_item_id",
     )
+    assigned_member = db.relationship("TeamMember", foreign_keys=[assigned_to_id])
 
     def to_dict(self, include_specs=False):
         result = {
@@ -374,6 +386,8 @@ class ConfigItem(db.Model):
             "status": self.status,
             "priority": self.priority,
             "assigned_to": self.assigned_to,
+            "assigned_to_id": self.assigned_to_id,
+            "assigned_to_member": self.assigned_member.to_dict() if self.assigned_to_id and self.assigned_member else None,
             "complexity": self.complexity,
             "estimated_hours": self.estimated_hours,
             "actual_hours": self.actual_hours,

@@ -314,7 +314,10 @@ const TestExecutionView = (() => {
         _loadUatSignoffs(cycleId);
     }
 
-    function showExecModal(cycleId) {
+    async function showExecModal(cycleId) {
+        const pid = TestingShared.pid;
+        const members = await TeamMemberPicker.fetchMembers(pid);
+        const execByHtml = TeamMemberPicker.renderSelect('execBy', members, '', { cssClass: 'form-control', placeholder: '— Select Tester —' });
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modalContainer');
         modal.innerHTML = `
@@ -330,7 +333,7 @@ const TestExecutionView = (() => {
                     </select></div>
                 <div class="form-row">
                     <div class="form-group"><label>Executed By</label>
-                        <input id="execBy" class="form-control"></div>
+                        ${execByHtml}</div>
                     <div class="form-group"><label>Duration (min)</label>
                         <input id="execDuration" class="form-control" type="number"></div>
                 </div>
@@ -350,6 +353,7 @@ const TestExecutionView = (() => {
             test_case_id: parseInt(document.getElementById('execCaseId').value),
             result: document.getElementById('execResult').value,
             executed_by: document.getElementById('execBy').value,
+            executed_by_id: document.getElementById('execBy').value ? parseInt(document.getElementById('execBy').value) : null,
             duration_minutes: parseInt(document.getElementById('execDuration').value) || null,
             notes: document.getElementById('execNotes').value,
         };
@@ -362,6 +366,9 @@ const TestExecutionView = (() => {
 
     async function showExecEditModal(execId, cycleId) {
         const e = await API.get(`/testing/executions/${execId}`);
+        const pid = TestingShared.pid;
+        const members = await TeamMemberPicker.fetchMembers(pid);
+        const execByHtml = TeamMemberPicker.renderSelect('execBy', members, e.executed_by_id || e.executed_by || '', { cssClass: 'form-control', placeholder: '— Select Tester —' });
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modalContainer');
         modal.innerHTML = `
@@ -375,7 +382,7 @@ const TestExecutionView = (() => {
                     </select></div>
                 <div class="form-row">
                     <div class="form-group"><label>Executed By</label>
-                        <input id="execBy" class="form-control" value="${e.executed_by || ''}"></div>
+                        ${execByHtml}</div>
                     <div class="form-group"><label>Duration (min)</label>
                         <input id="execDuration" class="form-control" type="number" value="${e.duration_minutes || ''}"></div>
                 </div>
@@ -394,6 +401,7 @@ const TestExecutionView = (() => {
         const body = {
             result: document.getElementById('execResult').value,
             executed_by: document.getElementById('execBy').value,
+            executed_by_id: document.getElementById('execBy').value ? parseInt(document.getElementById('execBy').value) : null,
             duration_minutes: parseInt(document.getElementById('execDuration').value) || null,
             notes: document.getElementById('execNotes').value,
         };
