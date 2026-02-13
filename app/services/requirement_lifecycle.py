@@ -188,8 +188,14 @@ def transition_requirement(
         req.deferred_to_phase = None
         req.rejection_reason = None
     elif action == "push_to_alm":
+        # ADR-1: Convert must be explicit. Block push_to_alm if not yet converted.
+        if not req.backlog_item_id and not req.config_item_id:
+            raise TransitionError(
+                req.code, action, req.status,
+                "Requirement must be converted before moving to backlog. "
+                "Use the Convert button first."
+            )
         req.alm_sync_status = "pending"
-        _ensure_backlog_item(req)
     elif action == "mark_realized":
         pass  # alm_sync_status update handled by CloudALM service
     elif action == "verify":

@@ -206,9 +206,12 @@ const ExploreRequirementHubView = (() => {
             actions.push(ExpUI.actionButton({ label: 'Reject', variant: 'danger', size: 'sm', onclick: `ExploreRequirementHubView.transitionReq('${r.id}','reject')` }));
         }
         if (s === 'approved') {
-            actions.push(ExpUI.actionButton({ label: 'Move to Backlog', variant: 'primary', size: 'sm', onclick: `ExploreRequirementHubView.transitionReq('${r.id}','push_to_alm')` }));
-            if (!r.backlog_item_id && !r.config_item_id) {
-                actions.push(ExpUI.actionButton({ label: '⚙ Convert', variant: 'ghost', size: 'sm', onclick: `ExploreRequirementHubView.showConvertModal('${r.id}')` }));
+            if (r.backlog_item_id || r.config_item_id) {
+                // Already converted — allow move to backlog
+                actions.push(ExpUI.actionButton({ label: 'Move to Backlog', variant: 'primary', size: 'sm', onclick: `ExploreRequirementHubView.transitionReq('${r.id}','push_to_alm')` }));
+            } else {
+                // ADR-1: Must convert first
+                actions.push(ExpUI.actionButton({ label: '⚙ Convert First', variant: 'primary', size: 'sm', onclick: `ExploreRequirementHubView.showConvertModal('${r.id}')` }));
             }
         }
         if (s === 'in_backlog') {
