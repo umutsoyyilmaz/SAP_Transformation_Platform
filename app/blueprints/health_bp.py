@@ -105,6 +105,26 @@ def db_diagnostic():
             results[tbl] = {"status": "ok", "count": row}
         except Exception as exc:
             results[tbl] = {"status": "error", "detail": str(exc)}
+            db.session.rollback()
+
+    # Check for active locks on process_levels (debug)
+    try:
+        locks = db.session.execute(db.text(
+            "SELECT l.locktype, l.mode, l.granted, a.state, a.query "
+            "FROM pg_locks l "
+            "JOIN pg_stat_activity a ON l.pid = a.pid "
+            "WHERE l.relation = (SELECT oid FROM pg_class WHERE relname = 'process_levels') "
+            "LIMIT 5"
+        )).fetchall()
+        if locks:
+            results["process_levels_locks"] = [
+                {"locktype": r[0], "mode": r[1], "granted": r[2], "state": r[3], "query": r[4][:200]}
+                for r in locks
+            ]
+        else:
+            results["process_levels_locks"] = "none"
+    except Exception as exc:
+        results["process_levels_locks"] = {"error": str(exc)}
 
     # Also try to load program #1 detail to catch relationship errors
     try:
