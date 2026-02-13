@@ -84,3 +84,41 @@ def live():
         "status": "healthy" if overall else "degraded",
         "checks": checks,
     }), status_code
+
+
+@health_bp.route("/db-diag", methods=["GET"])
+def db_diagnostic():
+    """
+    Quick DB diagnostic — check if key tables exist and are queryable.
+    Useful for debugging production 500 errors after deployment.
+    """
+    tables_to_check = [
+        "programs", "phases", "gates", "workstreams", "team_members",
+        "committees", "backlog_items", "config_items", "test_suites",
+        "scenarios", "requirements", "sprints",
+    ]
+    results = {}
+    for tbl in tables_to_check:
+        try:
+            row = db.session.execute(db.text(f"SELECT COUNT(*) FROM {tbl}")).scalar()
+            results[tbl] = {"status": "ok", "count": row}
+        except Exception as exc:
+            results[tbl] = {"status": "error", "detail": str(exc)}
+
+    # Also try to load program #1 detail to catch relationship errors
+    try:
+        from app.models.program import Program
+        p = db.session.get(Program, 1)
+        if p:
+            d = p.to_dict(include_children=True)
+            results["program_detail_test"] = {
+                "status": "ok",
+                "phases": len(d.get("phases", [])),
+                "workstreams": len(d.get("workstreams", [])),
+            }
+        else:
+            results["program_detail_test"] = {"status": "no_data"}
+    except Exception as exc:
+        results["program_detail_test"] = {"status": "error", "detail": str(exc)}
+
+    return jsonify(results), 200
