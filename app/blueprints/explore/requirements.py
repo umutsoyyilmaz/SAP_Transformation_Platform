@@ -139,6 +139,21 @@ def list_requirements():
     })
 
 
+VALID_SAP_MODULES = {
+    "SD", "MM", "FI", "CO", "PP", "PM", "QM", "PS",
+    "WM", "EWM", "HR", "HCM", "TM", "GTS", "BTP",
+    "BASIS", "FICO", "MDG", "S4CORE",
+}
+
+
+def _validate_sap_module(data):
+    """Return api_error response if area value is not a valid SAP module, else None."""
+    area = (data.get("area_code") or data.get("process_area") or "").strip().upper()
+    if area and area not in VALID_SAP_MODULES:
+        return api_error(E.VALIDATION_INVALID, f"Invalid SAP module: {area}")
+    return None
+
+
 @explore_bp.route("/requirements", methods=["POST"])
 def create_requirement_flat():
     """Create a requirement without requiring a process-step parent."""
@@ -148,6 +163,10 @@ def create_requirement_flat():
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
     if not data.get("title"):
         return api_error(E.VALIDATION_REQUIRED, "title is required")
+
+    mod_err = _validate_sap_module(data)
+    if mod_err:
+        return mod_err
 
     code = generate_requirement_code(project_id)
 
@@ -199,6 +218,12 @@ def update_requirement(req_id):
         return api_error(E.NOT_FOUND, "Requirement not found")
 
     data = request.get_json(silent=True) or {}
+
+    if "process_area" in data or "area_code" in data:
+        mod_err = _validate_sap_module(data)
+        if mod_err:
+            return mod_err
+
     for field in ["title", "description", "priority", "type", "fit_status",
                    "effort_hours", "effort_story_points", "complexity",
                    "process_area", "wave",

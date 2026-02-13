@@ -382,8 +382,8 @@ const ExploreWorkshopHubView = (() => {
                     <div class="exp-inline-form__field"><label>Facilitator</label>
                         <select id="wsFacilitator"><option value="">—</option>${facilitators.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('')}</select>
                     </div>
-                    <div class="exp-inline-form__field"><label>Area</label>
-                        <select id="wsArea" onchange="ExploreWorkshopHubView._onAreaChange()"><option value="">—</option>${areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
+                    <div class="exp-inline-form__field"><label>Area (SAP Module)</label>
+                        <select id="wsArea" onchange="ExploreWorkshopHubView._onAreaChange()">${SAPConstants.moduleOptionsHTML()}</select>
                     </div>
                 </div>
                 <div class="exp-inline-form__row">

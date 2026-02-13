@@ -462,7 +462,9 @@ const ExploreRequirementHubView = (() => {
                 </div>
                 <div class="exp-inline-form__row">
                     <div class="exp-inline-form__field"><label>Effort (days)</label><input id="newReqEffort" type="number" min="0" step="0.5" placeholder="0"></div>
-                    <div class="exp-inline-form__field"><label>Area</label><input id="newReqArea" type="text" placeholder="e.g. FI, CO"></div>
+                    <div class="exp-inline-form__field"><label>Area (SAP Module)</label>
+                        <select id="newReqArea">${SAPConstants.moduleOptionsHTML()}</select>
+                    </div>
                 </div>
                 <div class="exp-inline-form__row">
                     <div class="exp-inline-form__field"><label>Description</label><textarea id="newReqDesc" rows="3" placeholder="Details"></textarea></div>
@@ -576,7 +578,7 @@ const ExploreRequirementHubView = (() => {
                 </div>
                 <div class="exp-inline-form__row">
                     <div class="exp-inline-form__field"><label>Module Override</label>
-                        <input id="convertModule" type="text" placeholder="${esc(r.sap_module || r.process_area || 'e.g. FI, SD')}" value="${esc(r.sap_module || '')}">
+                        <select id="convertModule">${SAPConstants.moduleOptionsHTML(r.sap_module || r.process_area || '')}</select>
                     </div>
                 </div>
             </div>
