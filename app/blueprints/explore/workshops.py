@@ -454,11 +454,7 @@ def start_workshop(ws_id):
             ProcessLevel.query.filter(
                 ProcessLevel.parent_id == l3.id,
                 ProcessLevel.level == 4,
-                db.or_(
-                    ProcessLevel.scope_status == "in_scope",
-                    ProcessLevel.scope_status.is_(None),
-                    ProcessLevel.scope_status == "",
-                ),
+                ProcessLevel.scope_status != "out_of_scope",
             )
             .order_by(ProcessLevel.sort_order)
             .all()
