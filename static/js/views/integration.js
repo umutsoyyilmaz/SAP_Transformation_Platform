@@ -16,6 +16,10 @@ const IntegrationView = (() => {
     let _stats = {};
     let _currentTab = 'inventory';
 
+    // ── Filter state ──────────────────────────────────────────────────
+    let _invSearch = '';
+    let _invFilters = {};
+
     const DIR_ICONS  = { inbound: '⬇️', outbound: '⬆️', bidirectional: '↕️' };
     const PROTO_LABELS = {
         rfc:'RFC', idoc:'IDoc', odata:'OData', soap:'SOAP', rest:'REST',
@@ -121,7 +125,103 @@ const IntegrationView = (() => {
             return;
         }
 
-        const rows = _interfaces.map(i => `
+        c.innerHTML = `
+            <div id="invFilterBar" style="margin-bottom:8px"></div>
+            <div id="invTableArea"></div>
+        `;
+        renderInventoryFilterBar();
+        applyInventoryFilter();
+    }
+
+    function renderInventoryFilterBar() {
+        const el = document.getElementById('invFilterBar');
+        if (!el) return;
+        el.innerHTML = ExpUI.filterBar({
+            id: 'invFB',
+            searchPlaceholder: 'Search interfaces…',
+            searchValue: _invSearch,
+            onSearch: 'IntegrationView.setInvSearch(this.value)',
+            onChange: 'IntegrationView.onInvFilterChange',
+            filters: [
+                {
+                    id: 'direction', label: 'Direction', type: 'multi', color: '#3b82f6',
+                    options: ['inbound','outbound','bidirectional'].map(d => ({ value: d, label: d.charAt(0).toUpperCase() + d.slice(1) })),
+                    selected: _invFilters.direction || [],
+                },
+                {
+                    id: 'protocol', label: 'Protocol', type: 'multi', color: '#e76500',
+                    options: Object.entries(PROTO_LABELS).map(([k, v]) => ({ value: k, label: v })),
+                    selected: _invFilters.protocol || [],
+                },
+                {
+                    id: 'status', label: 'Status', type: 'multi', color: '#10b981',
+                    options: Object.entries(STATUS_LABELS).map(([k, v]) => ({ value: k, label: v })),
+                    selected: _invFilters.status || [],
+                },
+                {
+                    id: 'module', label: 'Module', type: 'multi', color: '#8b5cf6',
+                    options: [...new Set(_interfaces.map(i => i.module).filter(Boolean))].sort().map(m => ({ value: m, label: m })),
+                    selected: _invFilters.module || [],
+                },
+            ],
+            actionsHtml: `<span style="font-size:12px;color:#94a3b8" id="invItemCount"></span>`,
+        });
+    }
+
+    function setInvSearch(val) {
+        _invSearch = val;
+        applyInventoryFilter();
+    }
+
+    function onInvFilterChange(update) {
+        if (update._clearAll) {
+            _invFilters = {};
+        } else {
+            Object.keys(update).forEach(key => {
+                const val = update[key];
+                if (val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+                    delete _invFilters[key];
+                } else {
+                    _invFilters[key] = val;
+                }
+            });
+        }
+        renderInventoryFilterBar();
+        applyInventoryFilter();
+    }
+
+    function applyInventoryFilter() {
+        let filtered = [..._interfaces];
+
+        if (_invSearch) {
+            const q = _invSearch.toLowerCase();
+            filtered = filtered.filter(i =>
+                (i.name || '').toLowerCase().includes(q) ||
+                (i.code || '').toLowerCase().includes(q) ||
+                (i.module || '').toLowerCase().includes(q) ||
+                (i.source_system || '').toLowerCase().includes(q) ||
+                (i.target_system || '').toLowerCase().includes(q)
+            );
+        }
+
+        Object.entries(_invFilters).forEach(([key, val]) => {
+            if (!val) return;
+            const values = Array.isArray(val) ? val : [val];
+            if (values.length === 0) return;
+            filtered = filtered.filter(i => values.includes(String(i[key])));
+        });
+
+        const countEl = document.getElementById('invItemCount');
+        if (countEl) countEl.textContent = `${filtered.length} of ${_interfaces.length}`;
+
+        const tableEl = document.getElementById('invTableArea');
+        if (!tableEl) return;
+        if (filtered.length === 0) {
+            tableEl.innerHTML = '<div class="empty-state" style="padding:40px"><p>No interfaces match your filters.</p></div>';
+            return;
+        }
+
+        const rows = filtered.map(i => `
             <tr onclick="IntegrationView.showDetail(${i.id})" style="cursor:pointer">
                 <td><strong>${esc(i.code || '—')}</strong></td>
                 <td>${esc(i.name)}</td>
@@ -135,7 +235,7 @@ const IntegrationView = (() => {
                 <td>${esc(i.priority)}</td>
             </tr>`).join('');
 
-        c.innerHTML = `
+        tableEl.innerHTML = `
             <div class="card">
                 <table class="data-table">
                     <thead><tr>
@@ -769,5 +869,6 @@ const IntegrationView = (() => {
         showConnTests, addConnTest, saveConnTest,
         addSwitchPlan, saveSwitchPlan, executeSwitchPlan,
         toggleChecklist, addChecklistItem,
+        setInvSearch, onInvFilterChange,
     };
 })();

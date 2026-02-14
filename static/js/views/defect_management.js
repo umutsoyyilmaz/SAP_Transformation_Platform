@@ -9,6 +9,8 @@ const DefectManagementView = (() => {
 
     // State
     let defects = [];
+    let _defectSearch = '';
+    let _defectFilters = {};
 
     // ── Main render ───────────────────────────────────────────────────
     async function render() {
@@ -49,6 +51,100 @@ const DefectManagementView = (() => {
             return;
         }
 
+        container.innerHTML = `
+            <div id="defectFilterBar" style="margin-bottom:8px"></div>
+            <div id="defectTableArea"></div>
+        `;
+        renderDefectFilterBar();
+        applyDefectFilter();
+    }
+
+    function renderDefectFilterBar() {
+        const el = document.getElementById('defectFilterBar');
+        if (!el) return;
+        el.innerHTML = ExpUI.filterBar({
+            id: 'defFB',
+            searchPlaceholder: 'Search defects…',
+            searchValue: _defectSearch,
+            onSearch: 'DefectManagementView.setDefectSearch(this.value)',
+            onChange: 'DefectManagementView.onDefectFilterChange',
+            filters: [
+                {
+                    id: 'severity', label: 'Severity', type: 'multi', color: '#ef4444',
+                    options: ['P1','P2','P3','P4'].map(s => ({ value: s, label: s })),
+                    selected: _defectFilters.severity || [],
+                },
+                {
+                    id: 'status', label: 'Status', type: 'multi', color: '#10b981',
+                    options: ['new','open','in_progress','fixed','retest','closed','rejected','reopened'].map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ') })),
+                    selected: _defectFilters.status || [],
+                },
+                {
+                    id: 'module', label: 'Module', type: 'multi', color: '#8b5cf6',
+                    options: [...new Set(defects.map(d => d.module).filter(Boolean))].sort().map(m => ({ value: m, label: m })),
+                    selected: _defectFilters.module || [],
+                },
+            ],
+            actionsHtml: `<span style="font-size:12px;color:#94a3b8" id="defItemCount"></span>
+                <button class="btn btn-primary btn-sm" onclick="DefectManagementView.showDefectModal()">+ Report Defect</button>`,
+        });
+    }
+
+    function setDefectSearch(val) {
+        _defectSearch = val;
+        applyDefectFilter();
+    }
+
+    function onDefectFilterChange(update) {
+        if (update._clearAll) {
+            _defectFilters = {};
+        } else {
+            Object.keys(update).forEach(key => {
+                const val = update[key];
+                if (val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+                    delete _defectFilters[key];
+                } else {
+                    _defectFilters[key] = val;
+                }
+            });
+        }
+        renderDefectFilterBar();
+        applyDefectFilter();
+    }
+
+    function applyDefectFilter() {
+        let filtered = [...defects];
+
+        if (_defectSearch) {
+            const q = _defectSearch.toLowerCase();
+            filtered = filtered.filter(d =>
+                (d.title || '').toLowerCase().includes(q) ||
+                (d.code || '').toLowerCase().includes(q) ||
+                (d.module || '').toLowerCase().includes(q) ||
+                (d.assigned_to || '').toLowerCase().includes(q)
+            );
+        }
+
+        Object.entries(_defectFilters).forEach(([key, val]) => {
+            if (!val) return;
+            const values = Array.isArray(val) ? val : [val];
+            if (values.length === 0) return;
+            filtered = filtered.filter(d => values.includes(String(d[key])));
+        });
+
+        const countEl = document.getElementById('defItemCount');
+        if (countEl) countEl.textContent = `${filtered.length} of ${defects.length}`;
+
+        const tableEl = document.getElementById('defectTableArea');
+        if (!tableEl) return;
+        if (filtered.length === 0) {
+            tableEl.innerHTML = '<div class="empty-state" style="padding:40px"><p>No defects match your filters.</p></div>';
+            return;
+        }
+        tableEl.innerHTML = _renderDefectTable(filtered);
+    }
+
+    function _renderDefectTable(list) {
         const sevBadge = (s) => {
             const c = { P1: '#c4314b', P2: '#e9730c', P3: '#e5a800', P4: '#888' };
             return `<span class="badge" style="background:${c[s] || '#888'};color:#fff">${s}</span>`;
@@ -63,31 +159,13 @@ const DefectManagementView = (() => {
             const label = { on_track: '✓ On Track', warning: '⚠ Warning', breached: '🔴 Breached' };
             return `<span class="badge" style="background:${c[s] || '#888'};color:#fff">${label[s] || s}</span>`;
         };
-
-        container.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                <div style="display:flex;gap:8px">
-                    <select id="filterSeverity" class="form-control" style="width:110px" onchange="DefectManagementView.filterDefects()">
-                        <option value="">All Sev</option>
-                        <option value="P1">P1</option><option value="P2">P2</option>
-                        <option value="P3">P3</option><option value="P4">P4</option>
-                    </select>
-                    <select id="filterDefStatus" class="form-control" style="width:130px" onchange="DefectManagementView.filterDefects()">
-                        <option value="">All Status</option>
-                        ${['new','open','in_progress','fixed','retest','closed','rejected','reopened'].map(s =>
-                            `<option value="${s}">${s}</option>`).join('')}
-                    </select>
-                    <input id="filterDefSearch" class="form-control" style="width:200px" placeholder="Search..." oninput="DefectManagementView.filterDefects()">
-                </div>
-                <button class="btn btn-primary" onclick="DefectManagementView.showDefectModal()">+ Report Defect</button>
-            </div>
-            <table class="data-table">
+        return `<table class="data-table">
                 <thead><tr>
                     <th>Code</th><th>Title</th><th>Severity</th><th>Status</th>
                     <th>SLA</th><th>Module</th><th>Aging</th><th>Reopen</th><th>Actions</th>
                 </tr></thead>
                 <tbody>
-                    ${defects.map(d => `<tr onclick="DefectManagementView.showDefectDetail(${d.id})" style="cursor:pointer" class="clickable-row">
+                    ${list.map(d => `<tr onclick="DefectManagementView.showDefectDetail(${d.id})" style="cursor:pointer" class="clickable-row">
                         <td><strong>${d.code || '-'}</strong></td>
                         <td>${d.title}</td>
                         <td>${sevBadge(d.severity)}</td>
@@ -101,24 +179,7 @@ const DefectManagementView = (() => {
                         </td>
                     </tr>`).join('')}
                 </tbody>
-            </table>
-            <div style="margin-top:8px;color:#666;font-size:13px">${defects.length} defect(s)</div>
-        `;
-    }
-
-    async function filterDefects() {
-        const pid = TestingShared.pid;
-        const severity = document.getElementById('filterSeverity').value;
-        const status = document.getElementById('filterDefStatus').value;
-        const search = document.getElementById('filterDefSearch').value;
-        let params = [];
-        if (severity) params.push(`severity=${severity}`);
-        if (status) params.push(`status=${status}`);
-        if (search) params.push(`search=${encodeURIComponent(search)}`);
-        const qs = params.length ? '?' + params.join('&') : '';
-        const _fres = await API.get(`/programs/${pid}/testing/defects${qs}`);
-        defects = _fres.items || _fres || [];
-        await renderDefects();
+            </table>`;
     }
 
     function showDefectModal(d = null) {
@@ -563,10 +624,14 @@ const DefectManagementView = (() => {
         App.toast('AI suggestions applied to form. Click Update to save.', 'info');
     }
 
+    // Legacy shim
+    async function filterDefects() { applyDefectFilter(); }
+
     // ── Public API ─────────────────────────────────────────────────────────
     return {
         render,
         showDefectModal, saveDefect, showDefectDetail, deleteDefect, filterDefects,
+        setDefectSearch, onDefectFilterChange,
         runAITriage, applyTriageSuggestion,
         _switchDefectTab, addDefectComment, deleteDefectComment,
         addDefectLink, deleteDefectLink,

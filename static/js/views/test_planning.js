@@ -12,6 +12,12 @@ const TestPlanningView = (() => {
     let testCases = [];
     let testSuites = [];
 
+    // ── Filter state (persisted across re-renders) ────────────────────
+    let _catalogSearch = '';
+    let _catalogFilters = {};
+    let _suiteSearch = '';
+    let _suiteFilters = {};
+
     // ── Structured Step state ──────────────────────────────────────────
     let _currentSteps = [];
     let _currentCaseIdForSteps = null;
@@ -90,32 +96,122 @@ const TestPlanningView = (() => {
         };
 
         container.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                <div style="display:flex;gap:8px">
-                    <select id="filterLayer" class="form-control" style="width:140px" onchange="TestPlanningView.filterCatalog()">
-                        <option value="">All Layers</option>
-                        <option value="unit">Unit</option><option value="sit">SIT</option>
-                        <option value="uat">UAT</option><option value="e2e">E2E</option>
-                        <option value="regression">Regression</option>
-                        <option value="performance">Performance</option><option value="cutover_rehearsal">Cutover</option>
-                    </select>
-                    <select id="filterCaseStatus" class="form-control" style="width:130px" onchange="TestPlanningView.filterCatalog()">
-                        <option value="">All Status</option>
-                        <option value="draft">Draft</option><option value="ready">Ready</option>
-                        <option value="in_review">In Review</option>
-                        <option value="approved">Approved</option><option value="deprecated">Deprecated</option>
-                    </select>
-                    <input id="filterCaseSearch" class="form-control" style="width:200px" placeholder="Search..." oninput="TestPlanningView.filterCatalog()">
-                </div>
-                <button class="btn btn-primary" onclick="TestPlanningView.showCaseModal()">+ New Test Case</button>
-            </div>
-            <table class="data-table">
+            <div id="catalogFilterBar" style="margin-bottom:8px"></div>
+            <div id="catalogTableArea"></div>
+        `;
+        renderCatalogFilterBar();
+        applyCatalogFilter();
+    }
+
+    function renderCatalogFilterBar() {
+        const el = document.getElementById('catalogFilterBar');
+        if (!el) return;
+        el.innerHTML = ExpUI.filterBar({
+            id: 'catFB',
+            searchPlaceholder: 'Search test cases…',
+            searchValue: _catalogSearch,
+            onSearch: 'TestPlanningView.setCatalogSearch(this.value)',
+            onChange: 'TestPlanningView.onCatalogFilterChange',
+            filters: [
+                {
+                    id: 'test_layer', label: 'Layer', type: 'multi', color: '#0070f3',
+                    options: ['unit','sit','uat','e2e','regression','performance','cutover_rehearsal'].map(l => ({ value: l, label: l.toUpperCase() })),
+                    selected: _catalogFilters.test_layer || [],
+                },
+                {
+                    id: 'status', label: 'Status', type: 'multi', color: '#10b981',
+                    options: ['draft','ready','in_review','approved','deprecated'].map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ') })),
+                    selected: _catalogFilters.status || [],
+                },
+                {
+                    id: 'priority', label: 'Priority', type: 'multi', color: '#ef4444',
+                    options: ['critical','high','medium','low'].map(p => ({ value: p, label: p.charAt(0).toUpperCase() + p.slice(1) })),
+                    selected: _catalogFilters.priority || [],
+                },
+                {
+                    id: 'module', label: 'Module', type: 'multi', color: '#8b5cf6',
+                    options: [...new Set(testCases.map(tc => tc.module).filter(Boolean))].sort().map(m => ({ value: m, label: m })),
+                    selected: _catalogFilters.module || [],
+                },
+            ],
+            actionsHtml: `<span style="font-size:12px;color:#94a3b8" id="catItemCount"></span>
+                <button class="btn btn-primary btn-sm" onclick="TestPlanningView.showCaseModal()">+ New Test Case</button>`,
+        });
+    }
+
+    function setCatalogSearch(val) {
+        _catalogSearch = val;
+        applyCatalogFilter();
+    }
+
+    function onCatalogFilterChange(update) {
+        if (update._clearAll) {
+            _catalogFilters = {};
+        } else {
+            Object.keys(update).forEach(key => {
+                const val = update[key];
+                if (val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+                    delete _catalogFilters[key];
+                } else {
+                    _catalogFilters[key] = val;
+                }
+            });
+        }
+        renderCatalogFilterBar();
+        applyCatalogFilter();
+    }
+
+    function applyCatalogFilter() {
+        let filtered = [...testCases];
+
+        if (_catalogSearch) {
+            const q = _catalogSearch.toLowerCase();
+            filtered = filtered.filter(tc =>
+                (tc.title || '').toLowerCase().includes(q) ||
+                (tc.code || '').toLowerCase().includes(q) ||
+                (tc.module || '').toLowerCase().includes(q) ||
+                (tc.assigned_to || '').toLowerCase().includes(q)
+            );
+        }
+
+        Object.entries(_catalogFilters).forEach(([key, val]) => {
+            if (!val) return;
+            const values = Array.isArray(val) ? val : [val];
+            if (values.length === 0) return;
+            filtered = filtered.filter(tc => values.includes(String(tc[key])));
+        });
+
+        const countEl = document.getElementById('catItemCount');
+        if (countEl) countEl.textContent = `${filtered.length} of ${testCases.length}`;
+
+        const tableEl = document.getElementById('catalogTableArea');
+        if (!tableEl) return;
+        if (filtered.length === 0) {
+            tableEl.innerHTML = '<div class="empty-state" style="padding:40px"><p>No test cases match your filters.</p></div>';
+            return;
+        }
+        tableEl.innerHTML = _renderCatalogTable(filtered);
+    }
+
+    // Legacy shim — old server-side filter, now handled client-side
+    async function filterCatalog() { applyCatalogFilter(); }
+
+    function _renderCatalogTable(list) {
+        const layerBadge = (l) => {
+            const colors = { unit: '#0070f3', sit: '#e9730c', uat: '#107e3e', regression: '#a93e7e', e2e: '#6a4fa0', performance: '#6a4fa0', cutover_rehearsal: '#c4314b' };
+            return `<span class="badge" style="background:${colors[l] || '#888'};color:#fff">${(l || 'N/A').toUpperCase()}</span>`;
+        };
+        const statusBadge = (s) => {
+            const colors = { draft: '#888', ready: '#0070f3', approved: '#107e3e', in_review: '#e5a800', deprecated: '#c4314b' };
+            return `<span class="badge" style="background:${colors[s] || '#888'};color:#fff">${s}</span>`;
+        };
+        return `<table class="data-table">
                 <thead><tr>
                     <th>Code</th><th>Title</th><th>Layer</th><th>Module</th><th>Status</th>
                     <th>Priority</th><th>Deps</th><th>Regression</th><th style="width:40px"></th>
                 </tr></thead>
-                <tbody id="catalogBody">
-                    ${testCases.map(tc => {
+                <tbody>
+                    ${list.map(tc => {
                         const depCount = (tc.blocked_by_count || 0) + (tc.blocks_count || 0);
                         const depBadge = depCount > 0
                             ? `<span class="badge" style="background:${tc.blocked_by_count > 0 ? '#c4314b' : '#e9730c'};color:#fff" title="${tc.blocked_by_count || 0} blocked by, ${tc.blocks_count || 0} blocks">${depCount}</span>`
@@ -134,24 +230,7 @@ const TestPlanningView = (() => {
                         </td>
                     </tr>`}).join('')}
                 </tbody>
-            </table>
-            <div style="margin-top:8px;color:#666;font-size:13px">${testCases.length} test case(s)</div>
-        `;
-    }
-
-    async function filterCatalog() {
-        const pid = TestingShared.pid;
-        const layer = document.getElementById('filterLayer').value;
-        const status = document.getElementById('filterCaseStatus').value;
-        const search = document.getElementById('filterCaseSearch').value;
-        let params = [];
-        if (layer) params.push(`test_layer=${layer}`);
-        if (status) params.push(`status=${status}`);
-        if (search) params.push(`search=${encodeURIComponent(search)}`);
-        const qs = params.length ? '?' + params.join('&') : '';
-        const res = await API.get(`/programs/${pid}/testing/catalog${qs}`);
-        testCases = res.items || res || [];
-        await renderCatalog();
+            </table>`;
     }
 
     async function showCaseModal(tc = null) {
@@ -726,26 +805,113 @@ const TestPlanningView = (() => {
         };
 
         container.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                <div style="display:flex;gap:8px">
-                    <select id="filterSuiteType" class="form-control" style="width:140px" onchange="TestPlanningView.filterSuites()">
-                        <option value="">All Types</option>
-                        ${SUITE_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}
-                    </select>
-                    <select id="filterSuiteStatus" class="form-control" style="width:130px" onchange="TestPlanningView.filterSuites()">
-                        <option value="">All Status</option>
-                        ${SUITE_STATUSES.map(s => `<option value="${s}">${s}</option>`).join('')}
-                    </select>
-                    <input id="filterSuiteSearch" class="form-control" style="width:200px" placeholder="Search..." oninput="TestPlanningView.filterSuites()">
-                </div>
-                <button class="btn btn-primary" onclick="TestPlanningView.showSuiteModal()">+ New Suite</button>
-            </div>
-            <table class="data-table">
+            <div id="suiteFilterBar" style="margin-bottom:8px"></div>
+            <div id="suiteTableArea"></div>
+        `;
+        renderSuiteFilterBar();
+        applySuiteFilter();
+    }
+
+    function renderSuiteFilterBar() {
+        const el = document.getElementById('suiteFilterBar');
+        if (!el) return;
+        el.innerHTML = ExpUI.filterBar({
+            id: 'suiteFB',
+            searchPlaceholder: 'Search suites…',
+            searchValue: _suiteSearch,
+            onSearch: 'TestPlanningView.setSuiteSearch(this.value)',
+            onChange: 'TestPlanningView.onSuiteFilterChange',
+            filters: [
+                {
+                    id: 'suite_type', label: 'Type', type: 'multi', color: '#3b82f6',
+                    options: SUITE_TYPES.map(t => ({ value: t, label: t })),
+                    selected: _suiteFilters.suite_type || [],
+                },
+                {
+                    id: 'status', label: 'Status', type: 'multi', color: '#10b981',
+                    options: SUITE_STATUSES.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) })),
+                    selected: _suiteFilters.status || [],
+                },
+                {
+                    id: 'module', label: 'Module', type: 'multi', color: '#8b5cf6',
+                    options: [...new Set(testSuites.map(s => s.module).filter(Boolean))].sort().map(m => ({ value: m, label: m })),
+                    selected: _suiteFilters.module || [],
+                },
+            ],
+            actionsHtml: `<span style="font-size:12px;color:#94a3b8" id="suiteItemCount"></span>
+                <button class="btn btn-primary btn-sm" onclick="TestPlanningView.showSuiteModal()">+ New Suite</button>`,
+        });
+    }
+
+    function setSuiteSearch(val) {
+        _suiteSearch = val;
+        applySuiteFilter();
+    }
+
+    function onSuiteFilterChange(update) {
+        if (update._clearAll) {
+            _suiteFilters = {};
+        } else {
+            Object.keys(update).forEach(key => {
+                const val = update[key];
+                if (val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+                    delete _suiteFilters[key];
+                } else {
+                    _suiteFilters[key] = val;
+                }
+            });
+        }
+        renderSuiteFilterBar();
+        applySuiteFilter();
+    }
+
+    function applySuiteFilter() {
+        let filtered = [...testSuites];
+
+        if (_suiteSearch) {
+            const q = _suiteSearch.toLowerCase();
+            filtered = filtered.filter(s =>
+                (s.name || '').toLowerCase().includes(q) ||
+                (s.module || '').toLowerCase().includes(q) ||
+                (s.owner || '').toLowerCase().includes(q) ||
+                (s.tags || '').toLowerCase().includes(q)
+            );
+        }
+
+        Object.entries(_suiteFilters).forEach(([key, val]) => {
+            if (!val) return;
+            const values = Array.isArray(val) ? val : [val];
+            if (values.length === 0) return;
+            filtered = filtered.filter(s => values.includes(String(s[key])));
+        });
+
+        const countEl = document.getElementById('suiteItemCount');
+        if (countEl) countEl.textContent = `${filtered.length} of ${testSuites.length}`;
+
+        const tableEl = document.getElementById('suiteTableArea');
+        if (!tableEl) return;
+        if (filtered.length === 0) {
+            tableEl.innerHTML = '<div class="empty-state" style="padding:40px"><p>No suites match your filters.</p></div>';
+            return;
+        }
+        tableEl.innerHTML = _renderSuiteTable(filtered);
+    }
+
+    function _renderSuiteTable(list) {
+        const typeBadge = (t) => {
+            const colors = { SIT: '#0070f3', UAT: '#107e3e', Regression: '#a93e7e', E2E: '#6a4fa0', Performance: '#e9730c', Custom: '#888' };
+            return `<span class="badge" style="background:${colors[t] || '#888'};color:#fff">${t}</span>`;
+        };
+        const statusBadge = (s) => {
+            const colors = { draft: '#888', active: '#0070f3', locked: '#e9730c', archived: '#555' };
+            return `<span class="badge" style="background:${colors[s] || '#888'};color:#fff">${s}</span>`;
+        };
+        return `<table class="data-table">
                 <thead><tr>
                     <th>Name</th><th>Type</th><th>Status</th><th>Module</th><th>Owner</th><th>Tags</th><th>Actions</th>
                 </tr></thead>
                 <tbody>
-                    ${testSuites.map(s => `<tr onclick="TestPlanningView.showSuiteDetail(${s.id})" style="cursor:pointer" class="clickable-row">
+                    ${list.map(s => `<tr onclick="TestPlanningView.showSuiteDetail(${s.id})" style="cursor:pointer" class="clickable-row">
                         <td><strong>${esc(s.name)}</strong></td>
                         <td>${typeBadge(s.suite_type)}</td>
                         <td>${statusBadge(s.status)}</td>
@@ -758,24 +924,12 @@ const TestPlanningView = (() => {
                         </td>
                     </tr>`).join('')}
                 </tbody>
-            </table>
-            <div style="margin-top:8px;color:#666;font-size:13px">${testSuites.length} suite(s)</div>
-        `;
+            </table>`;
     }
 
     async function filterSuites() {
-        const pid = TestingShared.pid;
-        const suiteType = document.getElementById('filterSuiteType').value;
-        const status = document.getElementById('filterSuiteStatus').value;
-        const search = document.getElementById('filterSuiteSearch').value;
-        let params = [];
-        if (suiteType) params.push(`suite_type=${suiteType}`);
-        if (status) params.push(`status=${status}`);
-        if (search) params.push(`search=${encodeURIComponent(search)}`);
-        const qs = params.length ? '?' + params.join('&') : '';
-        const res = await API.get(`/programs/${pid}/testing/suites${qs}`);
-        testSuites = res.items || res || [];
-        await renderSuites();
+        // Legacy — kept for compatibility; now uses client-side filter
+        applySuiteFilter();
     }
 
     function showSuiteModal(suite = null) {
@@ -1040,8 +1194,10 @@ const TestPlanningView = (() => {
         switchTab,
         // Catalog
         showCaseModal, saveCase, showCaseDetail, deleteCase, filterCatalog,
+        setCatalogSearch, onCatalogFilterChange,
         // Suites
         showSuiteModal, saveSuite, editSuite, showSuiteDetail, deleteSuite, filterSuites,
+        setSuiteSearch, onSuiteFilterChange,
         // Steps
         addStepRow, saveNewStep, editStepRow, updateStep, deleteStep, _loadSteps,
         // Case tabs

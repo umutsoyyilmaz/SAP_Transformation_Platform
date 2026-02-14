@@ -15,6 +15,10 @@ const DataFactoryView = (() => {
     let _currentTab = 'objects';
     let _selectedObjectId = null;
 
+    // ── Filter state ──────────────────────────────────────────────────
+    let _objSearch = '';
+    let _objFilters = {};
+
     const STATUS_COLORS = {
         draft: '#a9b4be', profiled: '#0070f2', cleansed: '#e76500',
         ready: '#30914c', migrated: '#107e3e', archived: '#556b82',
@@ -158,6 +162,97 @@ const DataFactoryView = (() => {
                 </div>
             </div>
 
+            <div id="objFilterBar" style="margin-bottom:8px"></div>
+            <div id="objTableArea"></div>
+        `;
+        renderObjectFilterBar();
+        applyObjectFilter();
+    }
+
+    function renderObjectFilterBar() {
+        const el = document.getElementById('objFilterBar');
+        if (!el) return;
+        el.innerHTML = ExpUI.filterBar({
+            id: 'objFB',
+            searchPlaceholder: 'Search data objects…',
+            searchValue: _objSearch,
+            onSearch: 'DataFactoryView.setObjSearch(this.value)',
+            onChange: 'DataFactoryView.onObjFilterChange',
+            filters: [
+                {
+                    id: 'status', label: 'Status', type: 'multi', color: '#10b981',
+                    options: Object.keys(STATUS_COLORS).map(s => ({ value: s, label: fmtStatus(s) })),
+                    selected: _objFilters.status || [],
+                },
+                {
+                    id: 'source_system', label: 'Source', type: 'multi', color: '#3b82f6',
+                    options: [...new Set(_objects.map(o => o.source_system).filter(Boolean))].sort().map(s => ({ value: s, label: s })),
+                    selected: _objFilters.source_system || [],
+                },
+                {
+                    id: 'owner', label: 'Owner', type: 'multi', color: '#8b5cf6',
+                    options: [...new Set(_objects.map(o => o.owner).filter(Boolean))].sort().map(o => ({ value: o, label: o })),
+                    selected: _objFilters.owner || [],
+                },
+            ],
+            actionsHtml: `<span style="font-size:12px;color:#94a3b8" id="objItemCount"></span>`,
+        });
+    }
+
+    function setObjSearch(val) {
+        _objSearch = val;
+        applyObjectFilter();
+    }
+
+    function onObjFilterChange(update) {
+        if (update._clearAll) {
+            _objFilters = {};
+        } else {
+            Object.keys(update).forEach(key => {
+                const val = update[key];
+                if (val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
+                    delete _objFilters[key];
+                } else {
+                    _objFilters[key] = val;
+                }
+            });
+        }
+        renderObjectFilterBar();
+        applyObjectFilter();
+    }
+
+    function applyObjectFilter() {
+        let filtered = [..._objects];
+
+        if (_objSearch) {
+            const q = _objSearch.toLowerCase();
+            filtered = filtered.filter(o =>
+                (o.name || '').toLowerCase().includes(q) ||
+                (o.source_system || '').toLowerCase().includes(q) ||
+                (o.target_table || '').toLowerCase().includes(q) ||
+                (o.owner || '').toLowerCase().includes(q) ||
+                (o.description || '').toLowerCase().includes(q)
+            );
+        }
+
+        Object.entries(_objFilters).forEach(([key, val]) => {
+            if (!val) return;
+            const values = Array.isArray(val) ? val : [val];
+            if (values.length === 0) return;
+            filtered = filtered.filter(o => values.includes(String(o[key])));
+        });
+
+        const countEl = document.getElementById('objItemCount');
+        if (countEl) countEl.textContent = `${filtered.length} of ${_objects.length}`;
+
+        const tableEl = document.getElementById('objTableArea');
+        if (!tableEl) return;
+        if (filtered.length === 0) {
+            tableEl.innerHTML = '<div class="empty-state" style="padding:40px"><p>No data objects match your filters.</p></div>';
+            return;
+        }
+
+        tableEl.innerHTML = `
             <table class="data-table">
                 <thead>
                     <tr>
@@ -172,7 +267,7 @@ const DataFactoryView = (() => {
                     </tr>
                 </thead>
                 <tbody>
-                    ${_objects.map(o => `
+                    ${filtered.map(o => `
                         <tr onclick="DataFactoryView.showObjectDetail(${o.id})" style="cursor:pointer" class="clickable-row">
                             <td><strong>${esc(o.name)}</strong>
                                 ${o.description ? `<br><small style="color:var(--sap-text-secondary)">${esc(o.description)}</small>` : ''}
@@ -1037,5 +1132,7 @@ const DataFactoryView = (() => {
         createRecon,
         submitCreateRecon,
         calcRecon,
+        setObjSearch,
+        onObjFilterChange,
     };
 })();
