@@ -49,6 +49,7 @@ _ACTION_PERMISSION = {
     "mark_realized": "req_mark_realized",
     "verify": "req_verify",
     "reactivate": "req_submit_for_review",
+    "unconvert": "req_push_to_alm",      # same permission as convert/push
 }
 
 
@@ -397,5 +398,192 @@ def get_available_transitions(requirement: ExploreRequirement) -> list[str]:
     actions = []
     for action, rule in REQUIREMENT_TRANSITIONS.items():
         if requirement.status in rule["from"]:
+            # unconvert only shows if actually converted
+            if action == "unconvert" and not (requirement.backlog_item_id or requirement.config_item_id):
+                continue
             actions.append(action)
     return actions
+
+
+def unconvert_requirement(
+    requirement_id: str,
+    user_id: str,
+    project_id: int,
+    *,
+    force: bool = False,
+    skip_permission: bool = False,
+) -> dict:
+    """
+    Undo a requirement conversion — delete the created BacklogItem/ConfigItem
+    and reset the requirement status to 'approved'.
+
+    Safe mode (default): refuses if downstream items (FS, TS, TestCase, Defect) exist.
+    Force mode: cascade-deletes all downstream before removing the item.
+
+    Returns:
+        dict with unconvert result
+
+    Raises:
+        TransitionError, PermissionDenied
+    """
+    from app.models.backlog import FunctionalSpec, TechnicalSpec
+    from app.models.testing import TestCase, Defect
+    from app.models.audit import write_audit
+
+    req = db.session.get(ExploreRequirement, requirement_id)
+    if not req:
+        raise ValueError(f"Requirement not found: {requirement_id}")
+
+    if req.project_id != project_id:
+        raise ValueError(f"Requirement {requirement_id} not in project {project_id}")
+
+    # Permission check
+    if not skip_permission:
+        perm = _ACTION_PERMISSION.get("unconvert")
+        if perm and not has_permission(project_id, user_id, perm):
+            raise PermissionDenied(user_id, perm)
+
+    # Must have a backlog or config item link to unconvert
+    if not req.backlog_item_id and not req.config_item_id:
+        raise TransitionError(
+            req.code, "unconvert", req.status,
+            "Requirement is not converted (no backlog/config item linked)",
+        )
+
+    # Collect linked items
+    linked_backlog = BacklogItem.query.filter_by(explore_requirement_id=requirement_id).all()
+    linked_config = ConfigItem.query.filter_by(explore_requirement_id=requirement_id).all()
+    all_linked = linked_backlog + linked_config
+
+    if not all_linked:
+        # FK on requirement side exists but no matching item — data inconsistency
+        # Still allow clearing the FK
+        pass
+
+    # ── Downstream dependency check ──
+    blockers = []
+
+    for item in linked_backlog:
+        fs_count = FunctionalSpec.query.filter_by(backlog_item_id=item.id).count()
+        tc_count = TestCase.query.filter_by(backlog_item_id=item.id).count()
+        defect_count = Defect.query.filter_by(backlog_item_id=item.id).count()
+        if fs_count:
+            blockers.append({"type": "functional_spec", "count": fs_count,
+                             "parent": f"BacklogItem {item.code}", "parent_id": item.id})
+        if tc_count:
+            blockers.append({"type": "test_case", "count": tc_count,
+                             "parent": f"BacklogItem {item.code}", "parent_id": item.id})
+        if defect_count:
+            blockers.append({"type": "defect", "count": defect_count,
+                             "parent": f"BacklogItem {item.code}", "parent_id": item.id})
+
+    for item in linked_config:
+        fs_count = FunctionalSpec.query.filter_by(config_item_id=item.id).count()
+        tc_count = TestCase.query.filter_by(config_item_id=item.id).count()
+        defect_count = Defect.query.filter_by(config_item_id=item.id).count()
+        if fs_count:
+            blockers.append({"type": "functional_spec", "count": fs_count,
+                             "parent": f"ConfigItem {item.code}", "parent_id": item.id})
+        if tc_count:
+            blockers.append({"type": "test_case", "count": tc_count,
+                             "parent": f"ConfigItem {item.code}", "parent_id": item.id})
+        if defect_count:
+            blockers.append({"type": "defect", "count": defect_count,
+                             "parent": f"ConfigItem {item.code}", "parent_id": item.id})
+
+    if blockers and not force:
+        return {
+            "status": "blocked",
+            "requirement_id": req.id,
+            "code": req.code,
+            "blockers": blockers,
+            "total_blockers": sum(b["count"] for b in blockers),
+            "hint": "Delete downstream items first, or use ?force=true to cascade delete (DANGEROUS)",
+        }
+
+    # ── Force cascade delete (child → parent order) ──
+    cascade_deleted = []
+    if blockers and force:
+        for item in linked_backlog:
+            # FS (has TS via cascade) → delete FS and its TS goes with it
+            fs_list = FunctionalSpec.query.filter_by(backlog_item_id=item.id).all()
+            for fs in fs_list:
+                cascade_deleted.append({"type": "functional_spec", "id": fs.id, "title": fs.title})
+                db.session.delete(fs)  # TS cascade-deleted via relationship
+            # Defects linked to test cases under this backlog item
+            for tc in TestCase.query.filter_by(backlog_item_id=item.id).all():
+                for d in Defect.query.filter_by(test_case_id=tc.id).all():
+                    cascade_deleted.append({"type": "defect", "id": d.id, "code": d.code})
+                    db.session.delete(d)
+            # Defects directly linked to backlog item
+            for d in Defect.query.filter_by(backlog_item_id=item.id).all():
+                cascade_deleted.append({"type": "defect", "id": d.id, "code": d.code})
+                db.session.delete(d)
+            # Test cases
+            for tc in TestCase.query.filter_by(backlog_item_id=item.id).all():
+                cascade_deleted.append({"type": "test_case", "id": tc.id, "code": tc.code})
+                db.session.delete(tc)
+
+        for item in linked_config:
+            fs_list = FunctionalSpec.query.filter_by(config_item_id=item.id).all()
+            for fs in fs_list:
+                cascade_deleted.append({"type": "functional_spec", "id": fs.id, "title": fs.title})
+                db.session.delete(fs)
+            for tc in TestCase.query.filter_by(config_item_id=item.id).all():
+                for d in Defect.query.filter_by(test_case_id=tc.id).all():
+                    cascade_deleted.append({"type": "defect", "id": d.id, "code": d.code})
+                    db.session.delete(d)
+            for d in Defect.query.filter_by(config_item_id=item.id).all():
+                cascade_deleted.append({"type": "defect", "id": d.id, "code": d.code})
+                db.session.delete(d)
+            for tc in TestCase.query.filter_by(config_item_id=item.id).all():
+                cascade_deleted.append({"type": "test_case", "id": tc.id, "code": tc.code})
+                db.session.delete(tc)
+
+        db.session.flush()
+
+    # ── Delete backlog/config items ──
+    deleted_items = []
+    for item in linked_backlog:
+        deleted_items.append({"type": "backlog_item", "id": item.id, "code": item.code})
+        db.session.delete(item)
+    for item in linked_config:
+        deleted_items.append({"type": "config_item", "id": item.id, "code": item.code})
+        db.session.delete(item)
+
+    # ── Reset requirement ──
+    previous_status = req.status
+    req.backlog_item_id = None
+    req.config_item_id = None
+    req.status = "approved"
+    req.alm_sync_status = None
+
+    # Audit log
+    try:
+        write_audit(
+            entity_type="requirement",
+            entity_id=req.id,
+            action="requirement.unconvert",
+            actor=user_id,
+            program_id=project_id,
+            diff={
+                "status": {"old": previous_status, "new": "approved"},
+                "backlog_item_id": {"old": req.backlog_item_id, "new": None},
+                "config_item_id": {"old": req.config_item_id, "new": None},
+                "deleted_items": deleted_items,
+                "force": force,
+            },
+        )
+    except Exception:
+        pass  # audit must not break main flow
+
+    return {
+        "status": "unconverted",
+        "requirement_id": req.id,
+        "code": req.code,
+        "previous_status": previous_status,
+        "new_status": "approved",
+        "deleted_items": deleted_items,
+        "force_used": force,
+        "cascade_deleted": cascade_deleted,
+    }

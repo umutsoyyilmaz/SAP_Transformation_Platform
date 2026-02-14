@@ -828,6 +828,7 @@ REQUIREMENT_TRANSITIONS = {
     "mark_realized": {"from": ["in_backlog"], "to": "realized"},
     "verify": {"from": ["realized"], "to": "verified"},
     "reactivate": {"from": ["deferred"], "to": "draft"},
+    "unconvert": {"from": ["approved", "in_backlog", "realized"], "to": "approved"},
 }
 
 

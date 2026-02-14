@@ -14,6 +14,7 @@ ALM sync, stats, coverage matrix, conversion, workshop documents.
   - POST               /requirements/batch-transition
   - POST               /requirements/<id>/convert
   - POST               /requirements/batch-convert
+  - POST               /requirements/<id>/unconvert
   - GET                /workshops/<id>/documents
   - POST               /workshops/<id>/documents/generate
 """
@@ -40,6 +41,7 @@ from app.services.requirement_lifecycle import (
     convert_requirement,
     get_available_transitions,
     transition_requirement,
+    unconvert_requirement,
 )
 from app.services.cloud_alm import bulk_sync_to_alm
 from app.services.permission import PermissionDenied
@@ -775,4 +777,52 @@ def get_requirement_linked_items(requirement_id):
             "interfaces": len(interfaces),
         },
     }
+    return jsonify(result), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Unconvert (rollback convert)
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+@explore_bp.route("/requirements/<string:req_id>/unconvert", methods=["POST"])
+def unconvert_requirement_endpoint(req_id):
+    """
+    Undo a requirement's conversion — delete the linked BacklogItem/ConfigItem
+    and reset the requirement to 'approved'.
+
+    Safe mode (default): returns 409 if downstream items exist (FS, TS, Tests, Defects).
+    Force mode (?force=true): cascade-deletes all downstream items first.
+
+    Body (optional): { "project_id": <int>, "user_id": "..." }
+    Query: ?force=true|false
+    """
+    data = request.get_json(silent=True) or {}
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    user_id = data.get("user_id", "system")
+    force = request.args.get("force", "false").lower() == "true"
+
+    # If project_id not provided, look it up from the requirement
+    if not project_id:
+        req = db.session.get(ExploreRequirement, req_id)
+        if not req:
+            return jsonify({"error": f"Requirement {req_id} not found"}), 404
+        project_id = req.project_id
+
+    try:
+        result = unconvert_requirement(
+            req_id, user_id, project_id,
+            force=force,
+            skip_permission=True,
+        )
+    except TransitionError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+
+    # If blocked (safe mode), return 409
+    if result.get("status") == "blocked":
+        return jsonify(result), 409
+
+    db.session.commit()
     return jsonify(result), 200
