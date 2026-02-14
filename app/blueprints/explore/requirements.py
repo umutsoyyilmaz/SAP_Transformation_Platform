@@ -660,3 +660,119 @@ def generate_workshop_document(workshop_id):
     except Exception as e:
         db.session.rollback()
         return api_error(E.INTERNAL, f"Generation failed: {str(e)}")
+
+
+# ── Linked Items ─────────────────────────────────────────────
+
+
+@explore_bp.route("/requirements/<requirement_id>/linked-items", methods=["GET"])
+def get_requirement_linked_items(requirement_id):
+    """
+    Return all downstream entities linked to an ExploreRequirement:
+    backlog items, config items, test cases, defects, open items, interfaces.
+    """
+    from app.models.backlog import BacklogItem, ConfigItem
+    from app.models.testing import TestCase, Defect
+    from app.models.integration import Interface
+
+    req = db.session.get(ExploreRequirement, requirement_id)
+    if not req:
+        return jsonify({"error": f"Requirement {requirement_id} not found"}), 404
+
+    # Backlog items linked via explore_requirement_id
+    backlog_items = BacklogItem.query.filter_by(
+        explore_requirement_id=requirement_id
+    ).all()
+
+    # Config items linked via explore_requirement_id
+    config_items = ConfigItem.query.filter_by(
+        explore_requirement_id=requirement_id
+    ).all()
+
+    # Test cases linked directly or via backlog/config
+    backlog_ids = [b.id for b in backlog_items]
+    config_ids = [c.id for c in config_items]
+
+    tc_filters = [TestCase.explore_requirement_id == requirement_id]
+    if backlog_ids:
+        tc_filters.append(TestCase.backlog_item_id.in_(backlog_ids))
+    if config_ids:
+        tc_filters.append(TestCase.config_item_id.in_(config_ids))
+    test_cases = TestCase.query.filter(or_(*tc_filters)).all()
+
+    # Defects linked directly or via backlog/test cases
+    test_case_ids = [t.id for t in test_cases]
+    df_filters = [Defect.explore_requirement_id == requirement_id]
+    if backlog_ids:
+        df_filters.append(Defect.backlog_item_id.in_(backlog_ids))
+    if test_case_ids:
+        df_filters.append(Defect.test_case_id.in_(test_case_ids))
+    defects = Defect.query.filter(or_(*df_filters)).all()
+
+    # Open items via M:N link table
+    oi_links = RequirementOpenItemLink.query.filter_by(
+        requirement_id=requirement_id
+    ).all()
+    oi_ids = [link.open_item_id for link in oi_links]
+    open_items = (
+        ExploreOpenItem.query.filter(ExploreOpenItem.id.in_(oi_ids)).all()
+        if oi_ids
+        else []
+    )
+
+    # Interfaces linked via backlog items
+    interfaces = (
+        Interface.query.filter(Interface.backlog_item_id.in_(backlog_ids)).all()
+        if backlog_ids
+        else []
+    )
+
+    def _pick(obj, fields):
+        return {f: getattr(obj, f, None) for f in fields}
+
+    result = {
+        "requirement_id": requirement_id,
+        "requirement_code": req.code,
+        "requirement_title": req.title,
+        "backlog_items": [
+            _pick(b, ["id", "code", "title", "wricef_type", "status", "priority"])
+            for b in backlog_items
+        ],
+        "config_items": [
+            _pick(c, ["id", "code", "title", "module", "status"])
+            for c in config_items
+        ],
+        "test_cases": [
+            _pick(t, ["id", "code", "title", "test_type", "status"])
+            for t in test_cases
+        ],
+        "defects": [
+            _pick(d, ["id", "code", "title", "severity", "status"])
+            for d in defects
+        ],
+        "open_items": [
+            _pick(o, ["id", "code", "title", "status", "priority"])
+            for o in open_items
+        ],
+        "interfaces": [
+            _pick(i, ["id", "code", "name", "direction", "status"])
+            for i in interfaces
+        ],
+        "summary": {
+            "total": (
+                len(backlog_items)
+                + len(config_items)
+                + len(test_cases)
+                + len(defects)
+                + len(open_items)
+                + len(interfaces)
+            ),
+            "backlog_items": len(backlog_items),
+            "config_items": len(config_items),
+            "test_cases": len(test_cases),
+            "defects": len(defects),
+            "open_items": len(open_items),
+            "interfaces": len(interfaces),
+        },
+    }
+    return jsonify(result), 200
