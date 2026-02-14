@@ -52,6 +52,12 @@ class Requirement(db.Model):
     __tablename__ = "requirements"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False,
     )
@@ -179,6 +185,12 @@ class OpenItem(db.Model):
     __tablename__ = "open_items"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     requirement_id = db.Column(
         db.Integer, db.ForeignKey("requirements.id", ondelete="CASCADE"),
         nullable=False,
@@ -259,6 +271,12 @@ class RequirementTrace(db.Model):
     __tablename__ = "requirement_traces"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     requirement_id = db.Column(
         db.Integer, db.ForeignKey("requirements.id", ondelete="CASCADE"),
         nullable=False,

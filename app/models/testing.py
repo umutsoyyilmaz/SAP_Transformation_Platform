@@ -150,6 +150,12 @@ class TestPlan(db.Model):
     __tablename__ = "test_plans"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True,
     )
@@ -218,6 +224,12 @@ class TestCycle(db.Model):
     __tablename__ = "test_cycles"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     plan_id = db.Column(
         db.Integer, db.ForeignKey("test_plans.id", ondelete="CASCADE"), nullable=False, index=True,
     )
@@ -299,6 +311,12 @@ class TestCase(db.Model):
     __tablename__ = "test_cases"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True,
     )
@@ -461,6 +479,12 @@ class TestExecution(db.Model):
     __tablename__ = "test_executions"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     cycle_id = db.Column(
         db.Integer, db.ForeignKey("test_cycles.id", ondelete="CASCADE"), nullable=False,
         index=True,
@@ -534,6 +558,12 @@ class Defect(db.Model):
     __tablename__ = "defects"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False,
         index=True,
@@ -747,6 +777,12 @@ class TestSuite(db.Model):
     __tablename__ = "test_suites"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -832,6 +868,12 @@ class TestStep(db.Model):
     __tablename__ = "test_steps"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     test_case_id = db.Column(
         db.Integer, db.ForeignKey("test_cases.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -887,6 +929,12 @@ class TestCaseDependency(db.Model):
     __tablename__ = "test_case_dependencies"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     predecessor_id = db.Column(
         db.Integer, db.ForeignKey("test_cases.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -943,6 +991,12 @@ class TestCycleSuite(db.Model):
     __tablename__ = "test_cycle_suites"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     cycle_id = db.Column(
         db.Integer, db.ForeignKey("test_cycles.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -997,6 +1051,12 @@ class TestRun(db.Model):
     __tablename__ = "test_runs"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     cycle_id = db.Column(
         db.Integer, db.ForeignKey("test_cycles.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1097,6 +1157,12 @@ class TestStepResult(db.Model):
     __tablename__ = "test_step_results"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     run_id = db.Column(
         db.Integer, db.ForeignKey("test_runs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1152,6 +1218,12 @@ class DefectComment(db.Model):
     __tablename__ = "defect_comments"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     defect_id = db.Column(
         db.Integer, db.ForeignKey("defects.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1199,6 +1271,12 @@ class DefectHistory(db.Model):
     __tablename__ = "defect_history"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     defect_id = db.Column(
         db.Integer, db.ForeignKey("defects.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1242,6 +1320,12 @@ class DefectLink(db.Model):
     __tablename__ = "defect_links"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     source_defect_id = db.Column(
         db.Integer, db.ForeignKey("defects.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1300,6 +1384,12 @@ class UATSignOff(db.Model):
     __tablename__ = "uat_signoffs"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     test_cycle_id = db.Column(
         db.Integer, db.ForeignKey("test_cycles.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1372,6 +1462,12 @@ class PerfTestResult(db.Model):
     __tablename__ = "perf_test_results"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     test_case_id = db.Column(
         db.Integer, db.ForeignKey("test_cases.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1439,6 +1535,12 @@ class TestDailySnapshot(db.Model):
     __tablename__ = "test_daily_snapshots"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     snapshot_date = db.Column(db.Date, nullable=False, index=True)
     test_cycle_id = db.Column(
         db.Integer, db.ForeignKey("test_cycles.id", ondelete="SET NULL"),

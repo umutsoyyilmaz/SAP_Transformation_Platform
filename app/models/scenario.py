@@ -63,6 +63,12 @@ class Scenario(db.Model):
     __tablename__ = "scenarios"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False
     )
@@ -177,6 +183,12 @@ class Workshop(db.Model):
     __tablename__ = "workshops"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     scenario_id = db.Column(
         db.Integer, db.ForeignKey("scenarios.id", ondelete="CASCADE"), nullable=False
     )
@@ -280,6 +292,12 @@ class WorkshopDocument(db.Model):
     __tablename__ = "workshop_documents"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     workshop_id = db.Column(
         db.Integer, db.ForeignKey("workshops.id", ondelete="CASCADE"), nullable=False,
     )

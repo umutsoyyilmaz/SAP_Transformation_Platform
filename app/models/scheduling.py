@@ -41,6 +41,12 @@ class NotificationPreference(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     user_id = db.Column(db.String(150), nullable=False, index=True,
                         comment="Username or user identifier")
     category = db.Column(db.String(30), nullable=False,
@@ -160,6 +166,12 @@ class EmailLog(db.Model):
     __tablename__ = "email_logs"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     recipient_email = db.Column(db.String(255), nullable=False, index=True)
     recipient_name = db.Column(db.String(150), nullable=True)
     subject = db.Column(db.String(500), nullable=False)

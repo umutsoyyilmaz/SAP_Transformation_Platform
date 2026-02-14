@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perga Platform Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --surface-hover: #283548;
+            --border: #334155;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --primary: #3b82f6;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── Header ─────────────────────────────────────── */
+        .pa-header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .pa-header h1 { font-size: 18px; font-weight: 700; }
+        .pa-header-actions { display: flex; gap: 8px; align-items: center; }
+        .pa-header-actions a, .pa-header-actions button {
+            padding: 6px 14px;
+            font-size: 13px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-muted);
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .pa-header-actions a:hover, .pa-header-actions button:hover {
+            background: var(--surface-hover);
+            color: var(--text);
+        }
+
+        /* ── Container ──────────────────────────────────── */
+        .pa-content { max-width: 1280px; margin: 0 auto; padding: 24px; }
+
+        /* ── Stat Cards ─────────────────────────────────── */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: border-color 0.2s;
+        }
+        .stat-card:hover { border-color: var(--primary); }
+        .stat-card .stat-value {
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: var(--primary);
+            line-height: 1.1;
+        }
+        .stat-card .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* ── Sections ───────────────────────────────────── */
+        .section { margin-bottom: 32px; }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .section-header h2 { font-size: 18px; font-weight: 600; }
+        .section-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        /* ── Health ─────────────────────────────────────── */
+        .health-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 8px;
+        }
+        .health-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+        .health-item:hover { background: var(--surface-hover); }
+        .health-dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            display: inline-block; flex-shrink: 0;
+        }
+        .health-ok { background: var(--success); }
+        .health-error { background: var(--danger); }
+
+        /* ── Tenant Table ───────────────────────────────── */
+        .tenant-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .tenant-table th, .tenant-table td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+        }
+        .tenant-table th {
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .tenant-table tbody tr:hover { background: var(--surface-hover); }
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .badge-active { background: rgba(34,197,94,0.15); color: var(--success); }
+        .badge-frozen { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .badge-plan { background: rgba(59,130,246,0.15); color: var(--primary); }
+        .actions-cell { display: flex; gap: 6px; }
+
+        /* ── Buttons ────────────────────────────────────── */
+        .btn {
+            padding: 6px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn:hover { background: var(--surface-hover); }
+        .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-danger { border-color: var(--danger); color: var(--danger); }
+        .btn-danger:hover { background: rgba(239,68,68,0.1); }
+        .btn-success { border-color: var(--success); color: var(--success); }
+        .btn-success:hover { background: rgba(34,197,94,0.1); }
+        .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+
+        /* ── Create Form ────────────────────────────────── */
+        .create-form {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .create-form.visible { display: block; }
+        .create-form h3 { margin-bottom: 12px; font-size: 15px; }
+        .form-row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+        .form-row input, .form-row select {
+            flex: 1; min-width: 140px;
+            padding: 8px 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 14px;
+        }
+        .form-row input:focus, .form-row select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        /* ── Activity ───────────────────────────────────── */
+        .activity-list { list-style: none; padding: 0; }
+        .activity-list li {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.88rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .activity-list li:last-child { border-bottom: none; }
+        .activity-list li:hover { background: var(--surface-hover); border-radius: 6px; }
+        .activity-time {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            white-space: nowrap;
+            margin-left: 12px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="pa-header">
+        <h1>🏢 Perga Platform Admin</h1>
+        <div class="pa-header-actions">
+            <a href="/admin">Tenant Admin</a>
+            <button onclick="loadAll()">↻ Refresh</button>
+        </div>
+    </header>
+
+    <div class="pa-content">
+        <!-- Dashboard Stats -->
+        <div id="dashboard" class="stat-grid">
+            <div class="stat-card"><div class="stat-value">—</div><div class="stat-label">Loading...</div></div>
+        </div>
+
+        <!-- System Health -->
+        <div class="section">
+            <div class="section-header"><h2>System Health</h2></div>
+            <div class="section-panel">
+                <div id="health-panel" class="health-grid">
+                    <div class="health-item"><span class="health-dot health-ok"></span> Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tenant Management -->
+        <div class="section">
+            <div class="section-header">
+                <h2>Tenants</h2>
+                <button class="btn btn-success" onclick="toggleCreateForm()">+ New Tenant</button>
+            </div>
+
+            <div id="create-form" class="create-form">
+                <h3>Create Tenant</h3>
+                <div class="form-row">
+                    <input type="text" id="new-name" placeholder="Company Name" required>
+                    <input type="text" id="new-slug" placeholder="Slug (auto)">
+                    <select id="new-plan">
+                        <option value="trial">Trial</option>
+                        <option value="premium">Premium</option>
+                        <option value="enterprise">Enterprise</option>
+                    </select>
+                    <input type="number" id="new-max-users" placeholder="Max Users" value="10">
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn-primary" onclick="createTenant()">Create</button>
+                    <button class="btn" onclick="toggleCreateForm()">Cancel</button>
+                </div>
+            </div>
+
+            <div class="section-panel" style="padding:0;overflow:hidden">
+                <div id="tenant-list"></div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="section">
+            <div class="section-header"><h2>Recent Activity</h2></div>
+            <div class="section-panel" style="padding:0">
+                <ul id="activity-list" class="activity-list">
+                    <li>Loading...</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const API = '/api/v1/platform-admin';
+    const token = localStorage.getItem('perga_access_token') || localStorage.getItem('admin_access_token') || '';
+    const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? {'Authorization': `Bearer ${token}`} : {}),
+    };
+
+    async function loadDashboard() {
+        try {
+            const res = await fetch(`${API}/dashboard`, {headers});
+            if (!res.ok) return;
+            const d = await res.json();
+
+            document.getElementById('dashboard').innerHTML = [
+                {v: d.total_tenants, l: 'Total Tenants'},
+                {v: d.active_tenants, l: 'Active'},
+                {v: d.frozen_tenants, l: 'Frozen'},
+                {v: d.total_users, l: 'Total Users'},
+                {v: d.active_users, l: 'Active Users'},
+                {v: d.total_programs, l: 'Programs'},
+            ].map(s => `<div class="stat-card"><div class="stat-value">${s.v ?? '—'}</div><div class="stat-label">${s.l}</div></div>`).join('');
+
+            // Activity
+            const list = document.getElementById('activity-list');
+            if (d.recent_activity && d.recent_activity.length > 0) {
+                list.innerHTML = d.recent_activity.map(a => {
+                    const time = a.created_at ? new Date(a.created_at).toLocaleString('tr-TR') : '';
+                    return `<li>
+                        <span><strong>${a.action}</strong> ${a.entity_type} #${a.entity_id} <span style="color:var(--text-muted)">by ${a.actor}</span></span>
+                        <span class="activity-time">${time}</span>
+                    </li>`;
+                }).join('');
+            } else {
+                list.innerHTML = '<li style="color:var(--text-muted)">No recent activity</li>';
+            }
+        } catch(e) { console.error('Dashboard error:', e); }
+    }
+
+    async function loadHealth() {
+        try {
+            const res = await fetch(`${API}/system-health`, {headers});
+            if (!res.ok) return;
+            const d = await res.json();
+
+            const panel = document.getElementById('health-panel');
+            let items = [];
+
+            // Overall status
+            const statusDot = d.status === 'healthy' ? 'health-ok' : 'health-error';
+            items.push(`<div class="health-item"><span class="health-dot ${statusDot}"></span> <strong>Status:</strong>&nbsp;${d.status}</div>`);
+
+            // Database
+            if (d.database) {
+                const dbDot = d.database.connected ? 'health-ok' : 'health-error';
+                items.push(`<div class="health-item"><span class="health-dot ${dbDot}"></span> <strong>Database:</strong>&nbsp;${d.database.connected ? 'Connected' : 'Down'} (${d.database.table_count} tables)</div>`);
+            }
+
+            // Row counts
+            if (d.row_counts) {
+                for (const [table, count] of Object.entries(d.row_counts)) {
+                    const dot = count >= 0 ? 'health-ok' : 'health-error';
+                    items.push(`<div class="health-item"><span class="health-dot ${dot}"></span> ${table}: ${count} rows</div>`);
+                }
+            }
+
+            // Active sessions & errors
+            if (d.active_sessions !== undefined) {
+                items.push(`<div class="health-item"><span class="health-dot health-ok"></span> Active Sessions: ${d.active_sessions}</div>`);
+            }
+            if (d.recent_errors !== undefined) {
+                const errDot = d.recent_errors > 0 ? 'health-error' : 'health-ok';
+                items.push(`<div class="health-item"><span class="health-dot ${errDot}"></span> Recent Errors (1h): ${d.recent_errors}</div>`);
+            }
+
+            panel.innerHTML = items.join('') || '<p style="color:var(--text-muted)">No health data</p>';
+        } catch(e) { console.error('Health error:', e); }
+    }
+
+    async function loadTenants() {
+        try {
+            const res = await fetch(`${API}/tenants`, {headers});
+            if (!res.ok) return;
+            const d = await res.json();
+            const tenants = d.items || [];
+
+            if (tenants.length === 0) {
+                document.getElementById('tenant-list').innerHTML = '<p style="padding:20px;color:var(--text-muted)">No tenants found</p>';
+                return;
+            }
+
+            document.getElementById('tenant-list').innerHTML = `<table class="tenant-table">
+                <thead><tr>
+                    <th>ID</th><th>Name</th><th>Slug</th><th>Plan</th>
+                    <th>Users</th><th>Programs</th><th>Status</th><th>Actions</th>
+                </tr></thead>
+                <tbody>${tenants.map(t => `
+                    <tr>
+                        <td>${t.id}</td>
+                        <td><strong>${t.name}</strong></td>
+                        <td>${t.slug}</td>
+                        <td><span class="badge badge-plan">${(t.plan||'').toUpperCase()}</span></td>
+                        <td>${t.user_count ?? 0}/${t.max_users ?? '∞'}</td>
+                        <td>${t.program_count ?? 0}</td>
+                        <td><span class="badge ${t.is_active ? 'badge-active' : 'badge-frozen'}">${t.is_active ? 'Active' : 'Frozen'}</span></td>
+                        <td class="actions-cell">
+                            ${t.is_active
+                                ? `<button class="btn btn-sm btn-danger" onclick="freezeTenant(${t.id})">Freeze</button>`
+                                : `<button class="btn btn-sm btn-success" onclick="unfreezeTenant(${t.id})">Unfreeze</button>`
+                            }
+                        </td>
+                    </tr>
+                `).join('')}</tbody>
+            </table>`;
+        } catch(e) { console.error('Tenant list error:', e); }
+    }
+
+    function toggleCreateForm() {
+        document.getElementById('create-form').classList.toggle('visible');
+    }
+
+    async function createTenant() {
+        const name = document.getElementById('new-name').value.trim();
+        if (!name) return alert('Name required');
+        const body = {
+            name,
+            slug: document.getElementById('new-slug').value.trim() || undefined,
+            plan: document.getElementById('new-plan').value,
+            max_users: parseInt(document.getElementById('new-max-users').value) || 10,
+        };
+        const res = await fetch(`${API}/tenants`, {method:'POST', headers, body: JSON.stringify(body)});
+        if (res.ok) { toggleCreateForm(); loadAll(); }
+        else { const e = await res.json(); alert(e.error || 'Error'); }
+    }
+
+    async function freezeTenant(id) {
+        if (!confirm('Freeze this tenant?')) return;
+        await fetch(`${API}/tenants/${id}/freeze`, {method:'POST', headers});
+        loadAll();
+    }
+
+    async function unfreezeTenant(id) {
+        await fetch(`${API}/tenants/${id}/unfreeze`, {method:'POST', headers});
+        loadAll();
+    }
+
+    function loadAll() { loadDashboard(); loadHealth(); loadTenants(); }
+    loadAll();
+    </script>
+</body>
+</html>

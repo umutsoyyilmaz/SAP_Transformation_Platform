@@ -51,6 +51,11 @@ class Config:
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", "noreply@sap-platform.local")
 
+    # JWT Auth
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY") or SECRET_KEY
+    JWT_ACCESS_EXPIRES = int(os.getenv("JWT_ACCESS_EXPIRES", "900"))      # 15 minutes
+    JWT_REFRESH_EXPIRES = int(os.getenv("JWT_REFRESH_EXPIRES", "604800"))  # 7 days
+
 
 class DevelopmentConfig(Config):
     """Development environment configuration."""
@@ -72,6 +77,9 @@ class TestingConfig(Config):
     # Auth disabled in test environment
     API_AUTH_ENABLED = "false"
     RATELIMIT_ENABLED = False
+
+    # SQLite in-memory doesn't support pool settings
+    SQLALCHEMY_ENGINE_OPTIONS = {}
 
 
 class ProductionConfig(Config):

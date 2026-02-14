@@ -70,6 +70,12 @@ class AuditLog(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(
         db.Integer,
         db.ForeignKey("programs.id", ondelete="CASCADE"),
@@ -94,7 +100,14 @@ class AuditLog(db.Model):
     )
     actor = db.Column(
         db.String(150), nullable=False, default="system",
-        comment="User ID or 'system'",
+        comment="Legacy: username or 'system'",
+    )
+    actor_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="FK to users table (nullable for system/legacy entries)",
     )
 
     # Change payload
@@ -122,11 +135,13 @@ class AuditLog(db.Model):
     def to_dict(self) -> dict:
         return {
             "id": self.id,
+            "tenant_id": self.tenant_id,
             "program_id": self.program_id,
             "entity_type": self.entity_type,
             "entity_id": self.entity_id,
             "action": self.action,
             "actor": self.actor,
+            "actor_user_id": self.actor_user_id,
             "diff": self.diff,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
         }
@@ -144,6 +159,8 @@ def write_audit(
     action: str,
     actor: str = "system",
     program_id: int | None = None,
+    tenant_id: int | None = None,
+    actor_user_id: int | None = None,
     diff: dict | None = None,
 ) -> AuditLog:
     """
@@ -153,11 +170,13 @@ def write_audit(
     Returns the (flushed) AuditLog instance.
     """
     log = AuditLog(
+        tenant_id=tenant_id,
         program_id=program_id,
         entity_type=entity_type,
         entity_id=str(entity_id),
         action=action,
         actor=actor,
+        actor_user_id=actor_user_id,
         diff_json=json.dumps(diff or {}, default=str),
     )
     db.session.add(log)

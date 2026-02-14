@@ -26,6 +26,8 @@ from app.middleware.diagnostics import run_startup_diagnostics
 from app.middleware.security_headers import init_security_headers
 from app.middleware.basic_auth import init_basic_auth
 from app.middleware.rate_limiter import init_rate_limits
+from app.middleware.jwt_auth import init_jwt_middleware
+from app.middleware.tenant_context import init_tenant_context
 
 # ── SQLite FK enforcement (global engine event) ─────────────────────────
 from sqlalchemy import event as _sa_event, engine as _sa_engine
@@ -180,6 +182,12 @@ def create_app(config_name=None):
     # ── Request timing middleware ────────────────────────────────────────
     init_request_timing(app)
 
+    # ── JWT auth middleware (runs alongside existing auth) ───────────────
+    init_jwt_middleware(app)
+
+    # ── Tenant context middleware (sets g.tenant from JWT) ───────────────
+    init_tenant_context(app)
+
     # ── Multi-tenant support ─────────────────────────────────────────────
     init_tenant_support(app)
 
@@ -196,6 +204,12 @@ def create_app(config_name=None):
         # Content-Type validation for mutating methods
         if _req.method in ("POST", "PUT", "PATCH") and _req.path.startswith("/api/"):
             ct = _req.content_type or ""
+            # SCIM endpoints accept JSON from IdPs with Bearer auth
+            if _req.path.startswith("/api/v1/scim/"):
+                return None
+            # Bulk import accepts multipart file upload
+            if _req.path.startswith("/api/v1/admin/users/import"):
+                return None
             if _req.data and "json" not in ct and "multipart/form-data" not in ct:
                 abort(415, description="Content-Type must be application/json")
 
@@ -216,6 +230,10 @@ def create_app(config_name=None):
     from app.models import cutover as _cutover_models       # noqa: F401
     from app.models import scheduling as _scheduling_models   # noqa: F401
     from app.models import run_sustain as _run_sustain_models  # noqa: F401
+    from app.models import auth as _auth_models               # noqa: F401
+    from app.models import base as _base_models               # noqa: F401
+    from app.models import feature_flag as _feature_flag_models  # noqa: F401
+    from app.models import soft_delete as _soft_delete_models    # noqa: F401
 
     # ── Auto-create tables (safe for production — CREATE IF NOT EXISTS) ──
     with app.app_context():
@@ -251,6 +269,17 @@ def create_app(config_name=None):
     from app.blueprints.run_sustain_bp import run_sustain_bp
     from app.blueprints.pwa_bp import pwa_bp
     from app.blueprints.traceability_bp import traceability_bp
+    from app.blueprints.auth_bp import auth_bp
+    from app.blueprints.admin_bp import admin_bp
+    from app.blueprints.platform_admin_bp import platform_admin_bp
+    from app.blueprints.sso_bp import sso_bp, sso_ui_bp
+    from app.blueprints.scim_bp import scim_bp
+    from app.blueprints.bulk_import_bp import bulk_import_bp
+    from app.blueprints.custom_roles_bp import custom_roles_bp, roles_ui_bp
+    from app.blueprints.feature_flag_bp import feature_flag_bp, feature_flag_ui_bp
+    from app.blueprints.dashboard_bp import dashboard_bp
+    from app.blueprints.onboarding_bp import onboarding_bp
+    from app.blueprints.tenant_export_bp import tenant_export_bp
 
     app.register_blueprint(program_bp)
     app.register_blueprint(backlog_bp)
@@ -269,6 +298,24 @@ def create_app(config_name=None):
     app.register_blueprint(run_sustain_bp)
     app.register_blueprint(pwa_bp)
     app.register_blueprint(traceability_bp)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(platform_admin_bp)
+    app.register_blueprint(sso_bp)
+    app.register_blueprint(sso_ui_bp)
+    app.register_blueprint(scim_bp)
+    app.register_blueprint(bulk_import_bp)
+    app.register_blueprint(custom_roles_bp)
+    app.register_blueprint(roles_ui_bp)
+    app.register_blueprint(feature_flag_bp)
+    app.register_blueprint(feature_flag_ui_bp)
+    app.register_blueprint(dashboard_bp)
+    app.register_blueprint(onboarding_bp)
+    app.register_blueprint(tenant_export_bp)
+
+    # ── Blueprint Permission Guards (Sprint 6) ──────────────────────────
+    from app.middleware.blueprint_permissions import apply_all_blueprint_permissions
+    apply_all_blueprint_permissions(app)
 
     # ── SPA catch-all ────────────────────────────────────────────────────
     @app.route("/")

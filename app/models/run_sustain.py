@@ -51,6 +51,12 @@ class KnowledgeTransfer(db.Model):
     __tablename__ = "knowledge_transfers"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     cutover_plan_id = db.Column(
         db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -153,6 +159,12 @@ class HandoverItem(db.Model):
     __tablename__ = "handover_items"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     cutover_plan_id = db.Column(
         db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -246,6 +258,12 @@ class StabilizationMetric(db.Model):
     __tablename__ = "stabilization_metrics"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     cutover_plan_id = db.Column(
         db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
         nullable=False, index=True,

@@ -76,6 +76,12 @@ class Interface(db.Model):
     __tablename__ = "interfaces"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False,
         index=True,
@@ -242,6 +248,12 @@ class Wave(db.Model):
     __tablename__ = "waves"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False,
     )
@@ -315,6 +327,12 @@ class ConnectivityTest(db.Model):
     __tablename__ = "connectivity_tests"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     interface_id = db.Column(
         db.Integer, db.ForeignKey("interfaces.id", ondelete="CASCADE"), nullable=False,
     )
@@ -378,6 +396,12 @@ class SwitchPlan(db.Model):
     __tablename__ = "switch_plans"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     interface_id = db.Column(
         db.Integer, db.ForeignKey("interfaces.id", ondelete="CASCADE"), nullable=False,
     )
@@ -454,6 +478,12 @@ class InterfaceChecklist(db.Model):
     __tablename__ = "interface_checklists"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     interface_id = db.Column(
         db.Integer, db.ForeignKey("interfaces.id", ondelete="CASCADE"), nullable=False,
     )

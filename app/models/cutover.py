@@ -189,6 +189,12 @@ class CutoverPlan(db.Model):
     __tablename__ = "cutover_plans"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -362,6 +368,12 @@ class CutoverScopeItem(db.Model):
     __tablename__ = "cutover_scope_items"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     cutover_plan_id = db.Column(
         db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -463,6 +475,12 @@ class RunbookTask(db.Model):
     __tablename__ = "runbook_tasks"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     scope_item_id = db.Column(
         db.Integer, db.ForeignKey("cutover_scope_items.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -612,6 +630,12 @@ class TaskDependency(db.Model):
     __tablename__ = "task_dependencies"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     predecessor_id = db.Column(
         db.Integer, db.ForeignKey("runbook_tasks.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -671,6 +695,12 @@ class Rehearsal(db.Model):
     __tablename__ = "rehearsals"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     cutover_plan_id = db.Column(
         db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -777,6 +807,12 @@ class GoNoGoItem(db.Model):
     __tablename__ = "go_no_go_items"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     cutover_plan_id = db.Column(
         db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -905,6 +941,12 @@ class HypercareIncident(db.Model):
     __tablename__ = "hypercare_incidents"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     cutover_plan_id = db.Column(
         db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1032,6 +1074,12 @@ class HypercareSLA(db.Model):
     __tablename__ = "hypercare_sla_targets"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     cutover_plan_id = db.Column(
         db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
         nullable=False, index=True,

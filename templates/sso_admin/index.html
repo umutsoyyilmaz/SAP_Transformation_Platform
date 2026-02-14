@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSO Yönetimi — Perga Platform</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+    <style>
+        /* ── SSO Admin Styles ── */
+        .sso-admin { max-width: 1100px; margin: 0 auto; padding: 24px; }
+        .sso-admin h1 { font-size: 1.5rem; margin-bottom: 8px; }
+        .sso-admin .subtitle { color: #666; margin-bottom: 24px; }
+
+        /* Tabs */
+        .tab-bar { display: flex; gap: 0; border-bottom: 2px solid #e5e7eb; margin-bottom: 24px; }
+        .tab-btn { padding: 10px 20px; border: none; background: none; cursor: pointer;
+                   font-size: 0.9rem; color: #666; border-bottom: 2px solid transparent;
+                   margin-bottom: -2px; transition: all 0.2s; }
+        .tab-btn.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+        .tab-btn:hover { color: #2563eb; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Cards */
+        .sso-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+                    padding: 20px; margin-bottom: 16px; }
+        .sso-card-header { display: flex; justify-content: space-between; align-items: center;
+                           margin-bottom: 12px; }
+        .sso-card-header h3 { margin: 0; font-size: 1.1rem; }
+        .provider-badge { display: inline-block; padding: 2px 8px; border-radius: 12px;
+                          font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+        .provider-badge.oidc { background: #dbeafe; color: #1e40af; }
+        .provider-badge.saml { background: #fce7f3; color: #be185d; }
+        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+                      margin-right: 6px; }
+        .status-dot.enabled { background: #22c55e; }
+        .status-dot.disabled { background: #ef4444; }
+
+        /* Forms */
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 0.85rem; }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;
+            font-size: 0.9rem; }
+        .form-group textarea { min-height: 80px; font-family: monospace; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+        /* Buttons */
+        .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer;
+               font-size: 0.85rem; font-weight: 500; transition: all 0.2s; }
+        .btn-primary { background: #2563eb; color: #fff; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-danger { background: #ef4444; color: #fff; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-success { background: #22c55e; color: #fff; }
+        .btn-success:hover { background: #16a34a; }
+        .btn-secondary { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+        .btn-secondary:hover { background: #e5e7eb; }
+        .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+        .btn-group { display: flex; gap: 8px; margin-top: 16px; }
+
+        /* Domain table */
+        .domain-table { width: 100%; border-collapse: collapse; }
+        .domain-table th, .domain-table td { padding: 10px 12px; text-align: left;
+                                              border-bottom: 1px solid #e5e7eb; }
+        .domain-table th { font-weight: 600; font-size: 0.85rem; color: #6b7280; }
+        .verified-badge { display: inline-flex; align-items: center; gap: 4px;
+                          color: #22c55e; font-size: 0.85rem; }
+        .unverified-badge { display: inline-flex; align-items: center; gap: 4px;
+                            color: #f59e0b; font-size: 0.85rem; }
+
+        /* Modal */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                         background: rgba(0,0,0,0.4); z-index: 1000; align-items: center;
+                         justify-content: center; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: #fff; border-radius: 12px; padding: 24px; width: 600px;
+                 max-width: 90vw; max-height: 85vh; overflow-y: auto; }
+        .modal h2 { margin-top: 0; font-size: 1.2rem; }
+
+        /* Alert */
+        .alert { padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; font-size: 0.9rem; }
+        .alert-info { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+        .alert-success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+        .alert-error { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+
+        /* Empty state */
+        .empty-state { text-align: center; padding: 40px; color: #9ca3af; }
+        .empty-state p { margin-bottom: 16px; }
+    </style>
+</head>
+<body>
+<div class="sso-admin">
+    <h1>🔐 SSO Yönetimi</h1>
+    <p class="subtitle">Single Sign-On (OIDC / SAML) yapılandırması ve domain eşleştirme</p>
+
+    <div id="alertContainer"></div>
+
+    <!-- Tabs -->
+    <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('providers')">SSO Sağlayıcıları</button>
+        <button class="tab-btn" onclick="switchTab('domains')">Domain Eşleştirme</button>
+    </div>
+
+    <!-- Tab: SSO Providers -->
+    <div id="tab-providers" class="tab-content active">
+        <div style="display:flex; justify-content:space-between; margin-bottom:16px;">
+            <h2 style="margin:0;">Yapılandırılmış Sağlayıcılar</h2>
+            <button class="btn btn-primary" onclick="showAddConfigModal()">+ Sağlayıcı Ekle</button>
+        </div>
+        <div id="configList">
+            <div class="empty-state"><p>Henüz SSO sağlayıcısı eklenmemiş.</p></div>
+        </div>
+    </div>
+
+    <!-- Tab: Domains -->
+    <div id="tab-domains" class="tab-content">
+        <div style="display:flex; justify-content:space-between; margin-bottom:16px;">
+            <h2 style="margin:0;">Email Domain Eşleştirme</h2>
+            <button class="btn btn-primary" onclick="showAddDomainModal()">+ Domain Ekle</button>
+        </div>
+        <div class="alert alert-info">
+            Email domain eşleştirmesi, kullanıcıların SSO ile giriş yaparken otomatik olarak doğru tenant'a yönlendirilmesini sağlar.
+        </div>
+        <div id="domainList">
+            <div class="empty-state"><p>Henüz domain eklenmemiş.</p></div>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Config Modal -->
+<div class="modal-overlay" id="configModal">
+    <div class="modal">
+        <h2 id="configModalTitle">SSO Sağlayıcı Ekle</h2>
+        <form id="configForm" onsubmit="saveConfig(event)">
+            <input type="hidden" id="cfgId" value="">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Sağlayıcı Türü</label>
+                    <select id="cfgProviderType" onchange="toggleProviderFields()" required>
+                        <option value="oidc">OIDC (Azure AD, Google)</option>
+                        <option value="saml">SAML (SAP IAS, Okta)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Sağlayıcı Adı (tekil)</label>
+                    <input id="cfgProviderName" placeholder="azure_ad" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Görünen Ad</label>
+                <input id="cfgDisplayName" placeholder="Azure Active Directory ile Giriş">
+            </div>
+
+            <!-- OIDC Fields -->
+            <div id="oidcFields">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Client ID</label>
+                        <input id="cfgClientId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                    </div>
+                    <div class="form-group">
+                        <label>Client Secret</label>
+                        <input id="cfgClientSecret" type="password" placeholder="Client Secret">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Discovery URL</label>
+                    <input id="cfgDiscoveryUrl"
+                           placeholder="https://login.microsoftonline.com/{tenant-id}/v2.0/.well-known/openid-configuration">
+                </div>
+                <div class="form-group">
+                    <label>Scopes</label>
+                    <input id="cfgScopes" value="openid email profile">
+                </div>
+            </div>
+
+            <!-- SAML Fields -->
+            <div id="samlFields" style="display:none;">
+                <div class="form-group">
+                    <label>IdP Entity ID</label>
+                    <input id="cfgIdpEntityId" placeholder="https://idp.example.com/saml">
+                </div>
+                <div class="form-group">
+                    <label>IdP SSO URL</label>
+                    <input id="cfgIdpSsoUrl" placeholder="https://idp.example.com/saml/sso">
+                </div>
+                <div class="form-group">
+                    <label>IdP SLO URL (opsiyonel)</label>
+                    <input id="cfgIdpSloUrl" placeholder="https://idp.example.com/saml/slo">
+                </div>
+                <div class="form-group">
+                    <label>SP Entity ID</label>
+                    <input id="cfgSpEntityId" placeholder="https://app.perga.com/saml">
+                </div>
+                <div class="form-group">
+                    <label>IdP Sertifikası (PEM)</label>
+                    <textarea id="cfgIdpCert" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+                </div>
+            </div>
+
+            <!-- Common Fields -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Varsayılan Rol</label>
+                    <select id="cfgDefaultRole">
+                        <option value="viewer">viewer</option>
+                        <option value="tester">tester</option>
+                        <option value="functional_consultant">functional_consultant</option>
+                        <option value="technical_consultant">technical_consultant</option>
+                        <option value="project_manager">project_manager</option>
+                    </select>
+                </div>
+                <div class="form-group" style="display:flex; align-items:center; gap:16px; padding-top:24px;">
+                    <label style="margin:0; display:flex; align-items:center; gap:6px;">
+                        <input type="checkbox" id="cfgAutoProvision" checked> Otomatik Kullanıcı Oluşturma
+                    </label>
+                    <label style="margin:0; display:flex; align-items:center; gap:6px;">
+                        <input type="checkbox" id="cfgEnabled"> Aktif
+                    </label>
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">Kaydet</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('configModal')">İptal</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Add Domain Modal -->
+<div class="modal-overlay" id="domainModal">
+    <div class="modal">
+        <h2>Email Domain Ekle</h2>
+        <form id="domainForm" onsubmit="saveDomain(event)">
+            <div class="form-group">
+                <label>Domain</label>
+                <input id="domDomain" placeholder="sirket.com.tr" required>
+            </div>
+            <div class="alert alert-info">
+                Domain eklendikten sonra doğrulama gerekir. DNS TXT kaydı ile doğrulama yapabilirsiniz.
+                Geliştirme ortamında otomatik doğrulama yapabilirsiniz.
+            </div>
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">Ekle</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('domainModal')">İptal</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const API_BASE = '/api/v1/sso/admin';
+
+function getAuthHeaders() {
+    const token = localStorage.getItem('access_token') || '';
+    return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+}
+
+/* ── Tabs ── */
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelector(`[onclick="switchTab('${tab}')"]`).classList.add('active');
+    document.getElementById(`tab-${tab}`).classList.add('active');
+}
+
+/* ── Alerts ── */
+function showAlert(msg, type = 'info') {
+    const c = document.getElementById('alertContainer');
+    c.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+    setTimeout(() => c.innerHTML = '', 5000);
+}
+
+/* ── Modals ── */
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+
+function toggleProviderFields() {
+    const t = document.getElementById('cfgProviderType').value;
+    document.getElementById('oidcFields').style.display = t === 'oidc' ? 'block' : 'none';
+    document.getElementById('samlFields').style.display = t === 'saml' ? 'block' : 'none';
+}
+
+function showAddConfigModal() {
+    document.getElementById('cfgId').value = '';
+    document.getElementById('configModalTitle').textContent = 'SSO Sağlayıcı Ekle';
+    document.getElementById('configForm').reset();
+    document.getElementById('cfgAutoProvision').checked = true;
+    toggleProviderFields();
+    openModal('configModal');
+}
+
+function showEditConfigModal(cfg) {
+    document.getElementById('cfgId').value = cfg.id;
+    document.getElementById('configModalTitle').textContent = 'SSO Sağlayıcı Düzenle';
+    document.getElementById('cfgProviderType').value = cfg.provider_type;
+    document.getElementById('cfgProviderName').value = cfg.provider_name;
+    document.getElementById('cfgDisplayName').value = cfg.display_name || '';
+    document.getElementById('cfgDefaultRole').value = cfg.default_role || 'viewer';
+    document.getElementById('cfgAutoProvision').checked = cfg.auto_provision;
+    document.getElementById('cfgEnabled').checked = cfg.is_enabled;
+
+    if (cfg.provider_type === 'oidc') {
+        document.getElementById('cfgClientId').value = cfg.client_id || '';
+        document.getElementById('cfgClientSecret').value = '';
+        document.getElementById('cfgDiscoveryUrl').value = cfg.discovery_url || '';
+        document.getElementById('cfgScopes').value = cfg.scopes || 'openid email profile';
+    } else {
+        document.getElementById('cfgIdpEntityId').value = cfg.idp_entity_id || '';
+        document.getElementById('cfgIdpSsoUrl').value = cfg.idp_sso_url || '';
+        document.getElementById('cfgIdpSloUrl').value = cfg.idp_slo_url || '';
+        document.getElementById('cfgSpEntityId').value = cfg.sp_entity_id || '';
+        document.getElementById('cfgIdpCert').value = cfg.idp_certificate || '';
+    }
+    toggleProviderFields();
+    openModal('configModal');
+}
+
+function showAddDomainModal() {
+    document.getElementById('domainForm').reset();
+    openModal('domainModal');
+}
+
+/* ── Load data ── */
+async function loadConfigs() {
+    try {
+        const res = await fetch(`${API_BASE}/configs`, { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error('Yüklenemedi');
+        const data = await res.json();
+        renderConfigs(data.configs || []);
+    } catch (e) { showAlert('SSO yapılandırmaları yüklenemedi: ' + e.message, 'error'); }
+}
+
+async function loadDomains() {
+    try {
+        const res = await fetch(`${API_BASE}/domains`, { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error('Yüklenemedi');
+        const data = await res.json();
+        renderDomains(data.domains || []);
+    } catch (e) { showAlert('Domain listesi yüklenemedi: ' + e.message, 'error'); }
+}
+
+/* ── Render ── */
+function renderConfigs(configs) {
+    const el = document.getElementById('configList');
+    if (!configs.length) {
+        el.innerHTML = '<div class="empty-state"><p>Henüz SSO sağlayıcısı eklenmemiş.</p></div>';
+        return;
+    }
+    el.innerHTML = configs.map(c => `
+        <div class="sso-card">
+            <div class="sso-card-header">
+                <div>
+                    <h3>
+                        <span class="status-dot ${c.is_enabled ? 'enabled' : 'disabled'}"></span>
+                        ${c.display_name || c.provider_name}
+                    </h3>
+                    <span class="provider-badge ${c.provider_type}">${c.provider_type.toUpperCase()}</span>
+                    <span style="color:#888; font-size:0.85rem; margin-left:8px;">${c.provider_name}</span>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn btn-sm btn-secondary" onclick='showEditConfigModal(${JSON.stringify(c)})'>Düzenle</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteConfig(${c.id})">Sil</button>
+                </div>
+            </div>
+            <div style="font-size:0.85rem; color:#666;">
+                ${c.provider_type === 'oidc'
+                    ? `Discovery: ${c.discovery_url || '—'} | Client ID: ${c.client_id ? c.client_id.substring(0,8) + '...' : '—'}`
+                    : `IdP SSO: ${c.idp_sso_url || '—'}`}
+                | Varsayılan Rol: <strong>${c.default_role}</strong>
+                | Oto-Provision: ${c.auto_provision ? '✅' : '❌'}
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderDomains(domains) {
+    const el = document.getElementById('domainList');
+    if (!domains.length) {
+        el.innerHTML = '<div class="empty-state"><p>Henüz domain eklenmemiş.</p></div>';
+        return;
+    }
+    el.innerHTML = `<table class="domain-table">
+        <thead><tr><th>Domain</th><th>Durum</th><th>Eklenme</th><th>İşlem</th></tr></thead>
+        <tbody>
+        ${domains.map(d => `<tr>
+            <td><strong>${d.domain}</strong></td>
+            <td>${d.is_verified
+                ? '<span class="verified-badge">✅ Doğrulanmış</span>'
+                : '<span class="unverified-badge">⏳ Doğrulama Bekliyor</span>'}</td>
+            <td style="font-size:0.85rem; color:#888;">${d.created_at ? new Date(d.created_at).toLocaleDateString('tr') : '—'}</td>
+            <td>
+                ${!d.is_verified ? `<button class="btn btn-sm btn-success" onclick="verifyDomain(${d.id})">Doğrula</button>` : ''}
+                <button class="btn btn-sm btn-danger" onclick="deleteDomain(${d.id})">Sil</button>
+            </td>
+        </tr>`).join('')}
+        </tbody></table>`;
+}
+
+/* ── CRUD ops ── */
+async function saveConfig(e) {
+    e.preventDefault();
+    const id = document.getElementById('cfgId').value;
+    const providerType = document.getElementById('cfgProviderType').value;
+
+    const body = {
+        provider_type: providerType,
+        provider_name: document.getElementById('cfgProviderName').value,
+        display_name: document.getElementById('cfgDisplayName').value,
+        default_role: document.getElementById('cfgDefaultRole').value,
+        auto_provision: document.getElementById('cfgAutoProvision').checked,
+        is_enabled: document.getElementById('cfgEnabled').checked,
+    };
+
+    if (providerType === 'oidc') {
+        body.client_id = document.getElementById('cfgClientId').value;
+        const secret = document.getElementById('cfgClientSecret').value;
+        if (secret) body.client_secret = secret;
+        body.discovery_url = document.getElementById('cfgDiscoveryUrl').value;
+        body.scopes = document.getElementById('cfgScopes').value;
+    } else {
+        body.idp_entity_id = document.getElementById('cfgIdpEntityId').value;
+        body.idp_sso_url = document.getElementById('cfgIdpSsoUrl').value;
+        body.idp_slo_url = document.getElementById('cfgIdpSloUrl').value;
+        body.sp_entity_id = document.getElementById('cfgSpEntityId').value;
+        body.idp_certificate = document.getElementById('cfgIdpCert').value;
+    }
+
+    try {
+        const url = id ? `${API_BASE}/configs/${id}` : `${API_BASE}/configs`;
+        const method = id ? 'PUT' : 'POST';
+        const res = await fetch(url, { method, headers: getAuthHeaders(), body: JSON.stringify(body) });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Hata'); }
+        closeModal('configModal');
+        showAlert(id ? 'Güncellendi' : 'Eklendi', 'success');
+        loadConfigs();
+    } catch (e) { showAlert(e.message, 'error'); }
+}
+
+async function deleteConfig(id) {
+    if (!confirm('Bu SSO sağlayıcısını silmek istediğinize emin misiniz?')) return;
+    try {
+        const res = await fetch(`${API_BASE}/configs/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Hata'); }
+        showAlert('Silindi', 'success');
+        loadConfigs();
+    } catch (e) { showAlert(e.message, 'error'); }
+}
+
+async function saveDomain(e) {
+    e.preventDefault();
+    const domain = document.getElementById('domDomain').value.trim().toLowerCase();
+    try {
+        const res = await fetch(`${API_BASE}/domains`, {
+            method: 'POST', headers: getAuthHeaders(),
+            body: JSON.stringify({ domain })
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Hata'); }
+        closeModal('domainModal');
+        showAlert('Domain eklendi. Doğrulama yapmanız gerekiyor.', 'success');
+        loadDomains();
+    } catch (e) { showAlert(e.message, 'error'); }
+}
+
+async function verifyDomain(id) {
+    try {
+        const res = await fetch(`${API_BASE}/domains/${id}/verify`, {
+            method: 'POST', headers: getAuthHeaders()
+        });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Hata'); }
+        showAlert('Domain doğrulandı ✅', 'success');
+        loadDomains();
+    } catch (e) { showAlert(e.message, 'error'); }
+}
+
+async function deleteDomain(id) {
+    if (!confirm('Bu domain eşleştirmesini silmek istediğinize emin misiniz?')) return;
+    try {
+        const res = await fetch(`${API_BASE}/domains/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Hata'); }
+        showAlert('Domain silindi', 'success');
+        loadDomains();
+    } catch (e) { showAlert(e.message, 'error'); }
+}
+
+/* ── Init ── */
+document.addEventListener('DOMContentLoaded', () => { loadConfigs(); loadDomains(); });
+</script>
+</body>
+</html>

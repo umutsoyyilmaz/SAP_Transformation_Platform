@@ -86,6 +86,100 @@ from scripts.seed_data.cutover import (
     HYPERCARE_INCIDENTS, SLA_TARGETS,
 )
 
+# Auth models for admin seeding
+from app.models.auth import Tenant, User, Role, Permission, RolePermission, UserRole
+from app.utils.crypto import hash_password
+
+
+def _seed_admin_data():
+    """Seed tenants, roles, permissions, and demo users.
+
+    Delegates to seed_roles.py for permissions/roles, then creates
+    additional demo tenants and users for a realistic demo environment.
+    """
+    from scripts.seed_roles import seed_permissions, seed_roles
+
+    print("\n🔐 Seeding permissions & roles...")
+    seed_permissions()
+    seed_roles()
+
+    # ── Tenants ────────────────────────────────────────────────
+    print("\n🏢 Seeding demo tenants...")
+    DEMO_TENANTS = [
+        {"name": "Perga Platform", "slug": "perga", "plan": "enterprise",
+         "max_users": 100, "max_projects": 50, "is_active": True},
+        {"name": "Anadolu Gıda A.Ş.", "slug": "anadolu-gida", "plan": "premium",
+         "max_users": 50, "max_projects": 20, "is_active": True},
+        {"name": "Demo Şirket", "slug": "demo", "plan": "trial",
+         "max_users": 10, "max_projects": 3, "is_active": True},
+    ]
+
+    tenants = {}
+    for t_data in DEMO_TENANTS:
+        existing = Tenant.query.filter_by(slug=t_data["slug"]).first()
+        if existing:
+            tenants[t_data["slug"]] = existing
+            print(f"   ⏩ Tenant '{t_data['name']}' already exists (id={existing.id})")
+        else:
+            t = Tenant(**t_data)
+            db.session.add(t)
+            db.session.flush()
+            tenants[t_data["slug"]] = t
+            print(f"   ✅ Tenant '{t.name}' created (id={t.id})")
+
+    # ── Users ──────────────────────────────────────────────────
+    print("\n👤 Seeding demo users...")
+    DEMO_USERS = [
+        # Perga platform admin
+        {"tenant_slug": "perga", "email": "admin@perga.io",
+         "full_name": "Platform Admin", "password": "Perga2026!",
+         "role": "platform_admin"},
+        # Anadolu tenant admin
+        {"tenant_slug": "anadolu-gida", "email": "admin@anadolu.com",
+         "full_name": "Anadolu Admin", "password": "Anadolu2026!",
+         "role": "tenant_admin"},
+        # Anadolu project manager
+        {"tenant_slug": "anadolu-gida", "email": "pm@anadolu.com",
+         "full_name": "Mehmet Yılmaz", "password": "Test1234!",
+         "role": "project_manager"},
+        # Anadolu functional consultant
+        {"tenant_slug": "anadolu-gida", "email": "consultant@anadolu.com",
+         "full_name": "Ayşe Kaya", "password": "Test1234!",
+         "role": "functional_consultant"},
+        # Demo viewer
+        {"tenant_slug": "demo", "email": "viewer@demo.com",
+         "full_name": "Demo Viewer", "password": "Demo1234!",
+         "role": "viewer"},
+    ]
+
+    for u_data in DEMO_USERS:
+        tenant = tenants.get(u_data["tenant_slug"])
+        if not tenant:
+            continue
+        existing = User.query.filter_by(
+            tenant_id=tenant.id, email=u_data["email"]
+        ).first()
+        if existing:
+            print(f"   ⏩ User '{u_data['email']}' already exists")
+            continue
+        user = User(
+            tenant_id=tenant.id,
+            email=u_data["email"],
+            password_hash=hash_password(u_data["password"]),
+            full_name=u_data["full_name"],
+            status="active",
+        )
+        db.session.add(user)
+        db.session.flush()
+        # Assign role
+        role = Role.query.filter_by(name=u_data["role"], tenant_id=None).first()
+        if role:
+            db.session.add(UserRole(user_id=user.id, role_id=role.id))
+        print(f"   ✅ User '{u_data['email']}' (role={u_data['role']}, pw={u_data['password']})")
+
+    db.session.commit()
+    print(f"\n   📊 Totals → Tenants: {Tenant.query.count()}, Users: {User.query.count()}")
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # CORE DATA — Anadolu Gıda ve İçecek A.Ş.
@@ -265,10 +359,14 @@ def seed_all(app, append=False, verbose=False):
                           TechnicalSpec, FunctionalSpec, ConfigItem, BacklogItem,
                           Sprint, RequirementTrace, OpenItem, RequirementProcessMapping, Requirement,
                           Analysis, Process, Workshop, Scenario,
-                          Committee, TeamMember, Workstream, Gate, Phase, Program]:
+                          Committee, TeamMember, Workstream, Gate, Phase, Program,
+                          UserRole, RolePermission, User, Role, Permission, Tenant]:
                 db.session.query(model).delete()
             db.session.commit()
             print("   Done.\n")
+
+        # ── 0. Tenants, Roles & Users ─────────────────────────────────────
+        _seed_admin_data()
 
         # ── 1. Program ───────────────────────────────────────────────────
         print("📦 Creating program...")

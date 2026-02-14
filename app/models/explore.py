@@ -85,6 +85,12 @@ class ProcessLevel(db.Model):
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -244,6 +250,12 @@ class ExploreWorkshop(db.Model):
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -381,6 +393,12 @@ class WorkshopScopeItem(db.Model):
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     workshop_id = db.Column(
         db.String(36), db.ForeignKey("explore_workshops.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -413,6 +431,12 @@ class WorkshopAttendee(db.Model):
     __tablename__ = "workshop_attendees"
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     workshop_id = db.Column(
         db.String(36), db.ForeignKey("explore_workshops.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -457,6 +481,12 @@ class WorkshopAgendaItem(db.Model):
     __tablename__ = "workshop_agenda_items"
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     workshop_id = db.Column(
         db.String(36), db.ForeignKey("explore_workshops.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -506,6 +536,12 @@ class ProcessStep(db.Model):
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     workshop_id = db.Column(
         db.String(36), db.ForeignKey("explore_workshops.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -606,6 +642,12 @@ class ExploreDecision(db.Model):
     __tablename__ = "explore_decisions"
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -674,6 +716,12 @@ class ExploreOpenItem(db.Model):
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -852,6 +900,12 @@ class ExploreRequirement(db.Model):
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1103,6 +1157,12 @@ class RequirementOpenItemLink(db.Model):
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     requirement_id = db.Column(
         db.String(36), db.ForeignKey("explore_requirements.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1146,6 +1206,12 @@ class RequirementDependency(db.Model):
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     requirement_id = db.Column(
         db.String(36), db.ForeignKey("explore_requirements.id", ondelete="CASCADE"),
         nullable=False, index=True, comment="Dependent requirement",
@@ -1183,6 +1249,12 @@ class OpenItemComment(db.Model):
     __tablename__ = "open_item_comments"
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     open_item_id = db.Column(
         db.String(36), db.ForeignKey("explore_open_items.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1219,6 +1291,12 @@ class CloudALMSyncLog(db.Model):
     __tablename__ = "cloud_alm_sync_logs"
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     requirement_id = db.Column(
         db.String(36), db.ForeignKey("explore_requirements.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1364,6 +1442,12 @@ class ProjectRole(db.Model):
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1409,6 +1493,12 @@ class PhaseGate(db.Model):
     __tablename__ = "phase_gates"
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1486,6 +1576,12 @@ class WorkshopDependency(db.Model):
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     workshop_id = db.Column(
         db.String(36), db.ForeignKey("explore_workshops.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1553,6 +1649,12 @@ class CrossModuleFlag(db.Model):
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     process_step_id = db.Column(
         db.String(36), db.ForeignKey("process_steps.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1619,6 +1721,12 @@ class WorkshopRevisionLog(db.Model):
     __tablename__ = "workshop_revision_logs"
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     workshop_id = db.Column(
         db.String(36), db.ForeignKey("explore_workshops.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1676,6 +1784,12 @@ class Attachment(db.Model):
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1748,6 +1862,12 @@ class ScopeChangeRequest(db.Model):
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1836,6 +1956,12 @@ class ScopeChangeLog(db.Model):
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1886,6 +2012,12 @@ class BPMNDiagram(db.Model):
     __tablename__ = "bpmn_diagrams"
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     process_level_id = db.Column(
         db.String(36), db.ForeignKey("process_levels.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1930,6 +2062,12 @@ class ExploreWorkshopDocument(db.Model):
     __tablename__ = "explore_workshop_documents"
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     workshop_id = db.Column(
         db.String(36), db.ForeignKey("explore_workshops.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -1992,6 +2130,12 @@ class DailySnapshot(db.Model):
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     project_id = db.Column(
         db.String(36), nullable=False, index=True,
         comment="FK → programs",

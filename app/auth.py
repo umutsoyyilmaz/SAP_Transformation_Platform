@@ -214,8 +214,22 @@ def _check_content_type():
     For state-changing requests (POST/PUT/PATCH/DELETE), require
     Content-Type: application/json. This acts as a lightweight CSRF mitigation
     because HTML forms cannot send application/json content type.
+
+    Exemptions:
+    - SAML ACS callback (/api/v1/sso/callback/saml) uses form POST per SAML spec
+    - SCIM endpoints (/api/v1/scim/) use Bearer token auth from IdPs
+    - Bulk import (/api/v1/admin/users/import) may use multipart/form-data
     """
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        # SAML callback uses x-www-form-urlencoded (spec requirement)
+        if request.path == "/api/v1/sso/callback/saml":
+            return None
+        # SCIM endpoints use Bearer token — IdPs send JSON but may vary
+        if request.path.startswith("/api/v1/scim/"):
+            return None
+        # Bulk import may use multipart/form-data for file upload
+        if request.path.startswith("/api/v1/admin/users/import"):
+            return None
         ct = request.content_type or ""
         if "application/json" not in ct and request.content_length and request.content_length > 0:
             return jsonify({

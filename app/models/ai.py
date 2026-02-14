@@ -115,6 +115,12 @@ class AIUsageLog(db.Model):
     __tablename__ = "ai_usage_logs"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     provider = db.Column(db.String(30), nullable=False, comment="anthropic / openai / local")
     model = db.Column(db.String(80), nullable=False)
     prompt_tokens = db.Column(db.Integer, default=0)
@@ -172,6 +178,12 @@ class AIEmbedding(db.Model):
     __tablename__ = "ai_embeddings"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     entity_type = db.Column(db.String(50), nullable=False, index=True,
                             comment="requirement, backlog_item, risk, config_item, ...")
     entity_id = db.Column(db.Integer, nullable=False)
@@ -312,6 +324,12 @@ class AISuggestion(db.Model):
     __tablename__ = "ai_suggestions"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     suggestion_type = db.Column(db.String(50), nullable=False, default="general",
                                 comment="fit_gap_classification, defect_triage, ...")
     entity_type = db.Column(db.String(50), nullable=False, comment="requirement, defect, risk, ...")
@@ -392,6 +410,12 @@ class AIAuditLog(db.Model):
     __tablename__ = "ai_audit_logs"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     action = db.Column(db.String(50), nullable=False,
                        comment="llm_call, embedding_create, suggestion_create, search, ...")
     provider = db.Column(db.String(30), default="")
@@ -495,6 +519,12 @@ class AITokenBudget(db.Model):
     __tablename__ = "ai_token_budgets"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
                            nullable=True, index=True)
     user = db.Column(db.String(150), nullable=True, comment="Optional user-level budget")
@@ -571,6 +601,12 @@ class AIConversation(db.Model):
     __tablename__ = "ai_conversations"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     title = db.Column(db.String(300), default="")
     assistant_type = db.Column(db.String(50), nullable=False, default="general")
     status = db.Column(db.String(20), default="active")
@@ -628,6 +664,12 @@ class AIConversationMessage(db.Model):
     __tablename__ = "ai_conversation_messages"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     conversation_id = db.Column(db.Integer, db.ForeignKey("ai_conversations.id", ondelete="CASCADE"),
                                 nullable=False, index=True)
     seq = db.Column(db.Integer, nullable=False, comment="Message sequence number (1-based)")
@@ -727,6 +769,12 @@ class AITask(db.Model):
     __tablename__ = "ai_tasks"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     task_type = db.Column(db.String(60), nullable=False, index=True)
     status = db.Column(db.String(20), nullable=False, default="pending")
     progress_pct = db.Column(db.Integer, default=0)

@@ -69,6 +69,12 @@ class Process(db.Model):
     __tablename__ = "processes"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     scenario_id = db.Column(
         db.Integer, db.ForeignKey("scenarios.id", ondelete="CASCADE"), nullable=False,
         index=True,
@@ -234,6 +240,12 @@ class RequirementProcessMapping(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     requirement_id = db.Column(
         db.Integer, db.ForeignKey("requirements.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -277,6 +289,12 @@ class Analysis(db.Model):
     __tablename__ = "analyses"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     process_id = db.Column(
         db.Integer, db.ForeignKey("processes.id", ondelete="CASCADE"),
         nullable=False, comment="L3 process step being analyzed",

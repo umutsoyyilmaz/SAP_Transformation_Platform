@@ -40,6 +40,12 @@ class DataObject(db.Model):
     __tablename__ = "data_objects"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -99,6 +105,12 @@ class MigrationWave(db.Model):
     __tablename__ = "migration_waves"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -150,6 +162,12 @@ class CleansingTask(db.Model):
     __tablename__ = "cleansing_tasks"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     data_object_id = db.Column(
         db.Integer, db.ForeignKey("data_objects.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -197,6 +215,12 @@ class LoadCycle(db.Model):
     __tablename__ = "load_cycles"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     data_object_id = db.Column(
         db.Integer, db.ForeignKey("data_objects.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -257,6 +281,12 @@ class Reconciliation(db.Model):
     __tablename__ = "reconciliations"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     load_cycle_id = db.Column(
         db.Integer, db.ForeignKey("load_cycles.id", ondelete="CASCADE"),
         nullable=False, index=True,

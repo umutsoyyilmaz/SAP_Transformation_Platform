@@ -28,6 +28,11 @@ redis==5.2.1
 # --- Production Server ---
 gunicorn==23.0.0
 
+# --- Auth & Security ---
+PyJWT==2.9.0
+bcrypt==4.2.1
+email-validator==2.2.0
+
 # --- Testing ---
 pytest==8.3.4
 pytest-flask==1.3.0
@@ -39,6 +44,12 @@ ruff>=0.8.0
 # Sprint 7 – AI Infrastructure (optional)
 # ============================================
 PyYAML==6.0.2
+
+# ============================================
+# Sprint 7 – SSO / OIDC / SAML
+# ============================================
+Authlib>=1.3.0
+httpx>=0.27.0
 
 # ============================================
 # Gemini Free-Tier Demo (google-genai SDK)

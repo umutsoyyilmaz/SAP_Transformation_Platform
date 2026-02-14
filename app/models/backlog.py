@@ -37,6 +37,12 @@ class Sprint(db.Model):
     __tablename__ = "sprints"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False
     )
@@ -116,6 +122,12 @@ class BacklogItem(db.Model):
     __tablename__ = "backlog_items"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False
     )
@@ -284,6 +296,12 @@ class ConfigItem(db.Model):
     __tablename__ = "config_items"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False
     )
@@ -422,6 +440,12 @@ class FunctionalSpec(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     backlog_item_id = db.Column(
         db.Integer, db.ForeignKey("backlog_items.id", ondelete="CASCADE"),
         nullable=True, index=True, comment="Link to WRICEF item (mutually exclusive with config_item_id)",
@@ -498,6 +522,12 @@ class TechnicalSpec(db.Model):
     __tablename__ = "technical_specs"
 
     id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     functional_spec_id = db.Column(
         db.Integer, db.ForeignKey("functional_specs.id", ondelete="CASCADE"),
         nullable=False,

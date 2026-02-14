@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — SAP Transformation Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/admin.css">
+</head>
+<body>
+    <!-- ── Top Bar ─────────────────────────────────────────────────── -->
+    <header class="admin-header">
+        <div class="admin-header__logo">
+            🛡️ <span>Admin Panel</span>
+        </div>
+        <div class="admin-header__spacer"></div>
+        <div class="admin-header__tenant" id="tenantBadge">—</div>
+        <div class="admin-header__user">
+            <span id="userName">Admin</span>
+            <button class="admin-header__logout" onclick="AdminAuth.logout()" title="Sign out">⏻</button>
+        </div>
+    </header>
+
+    <!-- ── Layout ──────────────────────────────────────────────────── -->
+    <div class="admin-layout">
+        <!-- Sidebar -->
+        <nav class="admin-sidebar">
+            <a class="admin-nav-item active" data-view="dashboard" onclick="Admin.navigate('dashboard')">
+                <span class="nav-icon">📊</span> Dashboard
+            </a>
+            <a class="admin-nav-item" data-view="users" onclick="Admin.navigate('users')">
+                <span class="nav-icon">👥</span> Users
+            </a>
+            <a class="admin-nav-item" data-view="roles" onclick="Admin.navigate('roles')">
+                <span class="nav-icon">🔑</span> Roles & Permissions
+            </a>
+            <hr class="admin-nav-divider">
+            <a class="admin-nav-item" onclick="window.location.href='/'">
+                <span class="nav-icon">↩️</span> Back to Platform
+            </a>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="admin-main" id="adminMain">
+            <!-- Views loaded dynamically -->
+        </main>
+    </div>
+
+    <!-- ── Invite Modal ────────────────────────────────────────────── -->
+    <div class="modal-overlay" id="inviteModal" style="display:none">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Invite User</h3>
+                <button class="modal-close" onclick="Admin.closeModal('inviteModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Email Address</label>
+                    <input type="email" id="inviteEmail" placeholder="user@company.com">
+                </div>
+                <div class="form-group">
+                    <label>Assign Roles</label>
+                    <div id="inviteRoles" class="checkbox-group"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="Admin.closeModal('inviteModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="Admin.sendInvite()">Send Invite</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Role Assignment Modal ───────────────────────────────────── -->
+    <div class="modal-overlay" id="roleModal" style="display:none">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Manage Roles</h3>
+                <button class="modal-close" onclick="Admin.closeModal('roleModal')">✕</button>
+            </div>
+            <div class="modal-body" id="roleModalBody">
+                <!-- Dynamically populated -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="Admin.closeModal('roleModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/admin.js"></script>
+</body>
+</html>
