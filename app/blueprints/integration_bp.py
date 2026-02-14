@@ -42,8 +42,6 @@ Endpoints (Sprint 9 scope — aligned with master plan):
 
 import logging
 
-from datetime import date, datetime, timezone
-
 from flask import Blueprint, jsonify, request
 
 from app.models import db
@@ -51,11 +49,11 @@ from app.models.integration import (
     Interface, Wave, ConnectivityTest, SwitchPlan, InterfaceChecklist,
     INTERFACE_DIRECTIONS, INTERFACE_PROTOCOLS, INTERFACE_STATUSES,
     WAVE_STATUSES, CONNECTIVITY_RESULTS, SWITCH_ACTIONS,
-    seed_default_checklist,
 )
 from app.models.program import Program
+from app.services import integration_service
 from app.blueprints import paginate_query
-from app.utils.helpers import get_or_404 as _get_or_404, parse_date as _parse_date
+from app.utils.helpers import get_or_404 as _get_or_404
 
 logger = logging.getLogger(__name__)
 
@@ -112,48 +110,9 @@ def create_interface(program_id):
     if not data.get("name"):
         return jsonify({"error": "name is required"}), 400
 
-    direction = data.get("direction", "outbound")
-    if direction not in INTERFACE_DIRECTIONS:
-        return jsonify({"error": f"Invalid direction. Use: {sorted(INTERFACE_DIRECTIONS)}"}), 400
-
-    protocol = data.get("protocol", "idoc")
-    if protocol not in INTERFACE_PROTOCOLS:
-        return jsonify({"error": f"Invalid protocol. Use: {sorted(INTERFACE_PROTOCOLS)}"}), 400
-
-    iface = Interface(
-        program_id=program_id,
-        wave_id=data.get("wave_id"),
-        backlog_item_id=data.get("backlog_item_id"),
-        code=data.get("code", ""),
-        name=data["name"],
-        description=data.get("description", ""),
-        direction=direction,
-        protocol=protocol,
-        middleware=data.get("middleware", ""),
-        source_system=data.get("source_system", ""),
-        target_system=data.get("target_system", ""),
-        frequency=data.get("frequency", ""),
-        volume=data.get("volume", ""),
-        module=data.get("module", ""),
-        transaction_code=data.get("transaction_code", ""),
-        message_type=data.get("message_type", ""),
-        interface_type=data.get("interface_type", ""),
-        status=data.get("status", "identified"),
-        priority=data.get("priority", "medium"),
-        assigned_to=data.get("assigned_to", ""),
-        assigned_to_id=data.get("assigned_to_id"),
-        complexity=data.get("complexity", "medium"),
-        estimated_hours=data.get("estimated_hours"),
-        actual_hours=data.get("actual_hours"),
-        go_live_date=_parse_date(data.get("go_live_date")),
-        notes=data.get("notes", ""),
-    )
-    db.session.add(iface)
-    db.session.flush()  # get iface.id before seeding checklist
-
-    # Auto-create 12-item SAP standard readiness checklist
-    seed_default_checklist(iface.id)
-
+    iface, err = integration_service.create_interface(program_id, data)
+    if err:
+        return jsonify({"error": err["error"]}), err["status"]
     try:
         db.session.commit()
     except Exception:
@@ -181,25 +140,9 @@ def update_interface(interface_id):
 
     data = request.get_json(silent=True) or {}
 
-    if "direction" in data and data["direction"] not in INTERFACE_DIRECTIONS:
-        return jsonify({"error": f"Invalid direction. Use: {sorted(INTERFACE_DIRECTIONS)}"}), 400
-    if "protocol" in data and data["protocol"] not in INTERFACE_PROTOCOLS:
-        return jsonify({"error": f"Invalid protocol. Use: {sorted(INTERFACE_PROTOCOLS)}"}), 400
-
-    simple_fields = [
-        "wave_id", "backlog_item_id", "code", "name", "description",
-        "direction", "protocol", "middleware", "source_system", "target_system",
-        "frequency", "volume", "module", "transaction_code", "message_type",
-        "interface_type", "status", "priority", "assigned_to", "assigned_to_id", "complexity",
-        "estimated_hours", "actual_hours", "notes",
-    ]
-    for field in simple_fields:
-        if field in data:
-            setattr(iface, field, data[field])
-
-    if "go_live_date" in data:
-        iface.go_live_date = _parse_date(data["go_live_date"])
-
+    iface, svc_err = integration_service.update_interface(iface, data)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
     try:
         db.session.commit()
     except Exception:
@@ -236,10 +179,10 @@ def update_interface_status(interface_id):
     new_status = data.get("status")
     if not new_status:
         return jsonify({"error": "status is required"}), 400
-    if new_status not in INTERFACE_STATUSES:
-        return jsonify({"error": f"Invalid status. Use: {sorted(INTERFACE_STATUSES)}"}), 400
 
-    iface.status = new_status
+    iface, svc_err = integration_service.update_interface_status(iface, new_status)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
     try:
         db.session.commit()
     except Exception:
@@ -255,41 +198,7 @@ def interface_stats(program_id):
     program, err = _get_or_404(Program, program_id)
     if err:
         return err
-
-    interfaces = Interface.query.filter_by(program_id=program_id).all()
-    total = len(interfaces)
-
-    by_status = {}
-    by_direction = {}
-    by_protocol = {}
-    by_module = {}
-    by_priority = {}
-    total_estimated = 0
-    total_actual = 0
-
-    for i in interfaces:
-        by_status[i.status] = by_status.get(i.status, 0) + 1
-        by_direction[i.direction] = by_direction.get(i.direction, 0) + 1
-        by_protocol[i.protocol] = by_protocol.get(i.protocol, 0) + 1
-        if i.module:
-            by_module[i.module] = by_module.get(i.module, 0) + 1
-        by_priority[i.priority] = by_priority.get(i.priority, 0) + 1
-        if i.estimated_hours:
-            total_estimated += i.estimated_hours
-        if i.actual_hours:
-            total_actual += i.actual_hours
-
-    return jsonify({
-        "total": total,
-        "by_status": by_status,
-        "by_direction": by_direction,
-        "by_protocol": by_protocol,
-        "by_module": by_module,
-        "by_priority": by_priority,
-        "total_estimated_hours": total_estimated,
-        "total_actual_hours": total_actual,
-        "unassigned_to_wave": sum(1 for i in interfaces if i.wave_id is None),
-    })
+    return jsonify(integration_service.compute_interface_stats(program_id))
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -318,23 +227,9 @@ def create_wave(program_id):
     if not data.get("name"):
         return jsonify({"error": "name is required"}), 400
 
-    status = data.get("status", "planning")
-    if status not in WAVE_STATUSES:
-        return jsonify({"error": f"Invalid status. Use: {sorted(WAVE_STATUSES)}"}), 400
-
-    wave = Wave(
-        program_id=program_id,
-        name=data["name"],
-        description=data.get("description", ""),
-        status=status,
-        order=data.get("order", 0),
-        planned_start=_parse_date(data.get("planned_start")),
-        planned_end=_parse_date(data.get("planned_end")),
-        actual_start=_parse_date(data.get("actual_start")),
-        actual_end=_parse_date(data.get("actual_end")),
-        notes=data.get("notes", ""),
-    )
-    db.session.add(wave)
+    wave, svc_err = integration_service.create_wave(program_id, data)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
     try:
         db.session.commit()
     except Exception:
@@ -362,17 +257,9 @@ def update_wave(wave_id):
 
     data = request.get_json(silent=True) or {}
 
-    if "status" in data and data["status"] not in WAVE_STATUSES:
-        return jsonify({"error": f"Invalid status. Use: {sorted(WAVE_STATUSES)}"}), 400
-
-    for field in ["name", "description", "status", "order", "notes"]:
-        if field in data:
-            setattr(wave, field, data[field])
-
-    for date_field in ["planned_start", "planned_end", "actual_start", "actual_end"]:
-        if date_field in data:
-            setattr(wave, date_field, _parse_date(data[date_field]))
-
+    wave, svc_err = integration_service.update_wave(wave, data)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
     try:
         db.session.commit()
     except Exception:
@@ -389,9 +276,7 @@ def delete_wave(wave_id):
     if err:
         return err
 
-    # Unassign interfaces from this wave
-    Interface.query.filter_by(wave_id=wave_id).update({"wave_id": None})
-    db.session.delete(wave)
+    integration_service.delete_wave(wave)
     try:
         db.session.commit()
     except Exception:
@@ -452,20 +337,9 @@ def create_connectivity_test(interface_id):
 
     data = request.get_json(silent=True) or {}
 
-    result = data.get("result", "pending")
-    if result not in CONNECTIVITY_RESULTS:
-        return jsonify({"error": f"Invalid result. Use: {sorted(CONNECTIVITY_RESULTS)}"}), 400
-
-    test = ConnectivityTest(
-        interface_id=interface_id,
-        environment=data.get("environment", "dev"),
-        result=result,
-        response_time_ms=data.get("response_time_ms"),
-        tested_by=data.get("tested_by", ""),
-        error_message=data.get("error_message", ""),
-        notes=data.get("notes", ""),
-    )
-    db.session.add(test)
+    test, svc_err = integration_service.create_connectivity_test(interface_id, data)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
     try:
         db.session.commit()
     except Exception:
@@ -526,21 +400,9 @@ def create_switch_plan(interface_id):
 
     data = request.get_json(silent=True) or {}
 
-    action = data.get("action", "activate")
-    if action not in SWITCH_ACTIONS:
-        return jsonify({"error": f"Invalid action. Use: {sorted(SWITCH_ACTIONS)}"}), 400
-
-    plan = SwitchPlan(
-        interface_id=interface_id,
-        sequence=data.get("sequence", 0),
-        action=action,
-        description=data.get("description", ""),
-        responsible=data.get("responsible", ""),
-        planned_duration_min=data.get("planned_duration_min"),
-        status=data.get("status", "pending"),
-        notes=data.get("notes", ""),
-    )
-    db.session.add(plan)
+    plan, svc_err = integration_service.create_switch_plan(interface_id, data)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
     try:
         db.session.commit()
     except Exception:
@@ -559,14 +421,9 @@ def update_switch_plan(plan_id):
 
     data = request.get_json(silent=True) or {}
 
-    if "action" in data and data["action"] not in SWITCH_ACTIONS:
-        return jsonify({"error": f"Invalid action. Use: {sorted(SWITCH_ACTIONS)}"}), 400
-
-    for field in ["sequence", "action", "description", "responsible",
-                   "planned_duration_min", "actual_duration_min", "status", "notes"]:
-        if field in data:
-            setattr(plan, field, data[field])
-
+    plan, svc_err = integration_service.update_switch_plan(plan, data)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
     try:
         db.session.commit()
     except Exception:
@@ -600,11 +457,7 @@ def execute_switch_plan(plan_id):
         return err
 
     data = request.get_json(silent=True) or {}
-    plan.status = "completed"
-    plan.executed_at = datetime.now(timezone.utc)
-    if "actual_duration_min" in data:
-        plan.actual_duration_min = data["actual_duration_min"]
-
+    integration_service.execute_switch_plan(plan, data)
     try:
         db.session.commit()
     except Exception:
@@ -642,21 +495,9 @@ def add_checklist_item(interface_id):
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
 
-    # Default order: append at end
-    max_order = db.session.query(
-        db.func.max(InterfaceChecklist.order)
-    ).filter_by(interface_id=interface_id).scalar() or 0
-
-    item = InterfaceChecklist(
-        interface_id=interface_id,
-        order=data.get("order", max_order + 1),
-        title=data["title"],
-        checked=data.get("checked", False),
-        checked_by=data.get("checked_by", ""),
-        evidence=data.get("evidence", ""),
-        notes=data.get("notes", ""),
-    )
-    db.session.add(item)
+    item, svc_err = integration_service.create_checklist_item(interface_id, data)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
     try:
         db.session.commit()
     except Exception:
@@ -675,20 +516,7 @@ def update_checklist_item(item_id):
 
     data = request.get_json(silent=True) or {}
 
-    for field in ["title", "order", "checked_by", "evidence", "notes"]:
-        if field in data:
-            setattr(item, field, data[field])
-
-    # Handle checked toggle with auto-timestamp
-    if "checked" in data:
-        item.checked = bool(data["checked"])
-        if item.checked:
-            item.checked_at = datetime.now(timezone.utc)
-            if data.get("checked_by"):
-                item.checked_by = data["checked_by"]
-        else:
-            item.checked_at = None
-
+    integration_service.update_checklist_item(item, data)
     try:
         db.session.commit()
     except Exception:

@@ -14,24 +14,18 @@ Endpoints:
   Dashboard:       GET /data-factory/quality-score, GET /data-factory/cycle-comparison
 """
 
-from datetime import datetime, timezone
-
 from flask import Blueprint, jsonify, request
-from sqlalchemy import func
 
 from app.models import db
 from app.models.data_factory import (
     DataObject, MigrationWave, CleansingTask, LoadCycle, Reconciliation,
 )
+from app.services import data_factory_service
 from app.utils.helpers import get_or_404 as _get_or_404
 
 data_factory_bp = Blueprint(
     "data_factory", __name__, url_prefix="/api/v1/data-factory",
 )
-
-
-def _utcnow():
-    return datetime.now(timezone.utc)
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -271,14 +265,8 @@ def run_cleansing_task(task_id):
     if err:
         return err
     data = request.get_json(silent=True) or {}
-    task.status = "running"
-    db.session.commit()
 
-    # Simulation: accept pass/fail from request or use defaults
-    task.pass_count = data.get("pass_count", task.pass_count or 0)
-    task.fail_count = data.get("fail_count", task.fail_count or 0)
-    task.status = "passed" if (task.fail_count or 0) == 0 else "failed"
-    task.last_run_at = _utcnow()
+    data_factory_service.run_cleansing_task(task, data)
     db.session.commit()
     return jsonify(task.to_dict())
 
@@ -356,10 +344,9 @@ def start_load_cycle(lc_id):
     lc, err = _get_or_404(LoadCycle, lc_id, "LoadCycle")
     if err:
         return err
-    if lc.status not in ("pending", "failed"):
-        return jsonify({"error": f"Cannot start from status '{lc.status}'"}), 400
-    lc.status = "running"
-    lc.started_at = _utcnow()
+    lc, svc_err = data_factory_service.start_load_cycle(lc)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
     db.session.commit()
     return jsonify(lc.to_dict())
 
@@ -371,11 +358,7 @@ def complete_load_cycle(lc_id):
     if err:
         return err
     data = request.get_json(silent=True) or {}
-    lc.records_loaded = data.get("records_loaded", lc.records_loaded or 0)
-    lc.records_failed = data.get("records_failed", lc.records_failed or 0)
-    lc.error_log = data.get("error_log", lc.error_log)
-    lc.status = "failed" if (lc.records_failed or 0) > 0 else "completed"
-    lc.completed_at = _utcnow()
+    data_factory_service.complete_load_cycle(lc, data)
     db.session.commit()
     return jsonify(lc.to_dict())
 
@@ -450,20 +433,7 @@ def calculate_reconciliation(recon_id):
     recon, err = _get_or_404(Reconciliation, recon_id, "Reconciliation")
     if err:
         return err
-    recon.variance = recon.source_count - recon.target_count
-    if recon.source_count > 0:
-        recon.variance_pct = round(abs(recon.variance) / recon.source_count * 100, 2)
-    else:
-        recon.variance_pct = 0.0
-
-    if recon.variance == 0 and recon.match_count == recon.source_count:
-        recon.status = "matched"
-    elif abs(recon.variance) > 0:
-        recon.status = "variance"
-    else:
-        recon.status = "matched"
-
-    recon.checked_at = _utcnow()
+    data_factory_service.calculate_reconciliation(recon)
     db.session.commit()
     return jsonify(recon.to_dict())
 
@@ -478,31 +448,7 @@ def quality_score_dashboard():
     pid = request.args.get("program_id", type=int)
     if not pid:
         return jsonify({"error": "program_id is required"}), 400
-
-    objects = DataObject.query.filter_by(program_id=pid).all()
-    if not objects:
-        return jsonify({
-            "total_objects": 0, "avg_quality_score": 0,
-            "by_status": {}, "objects": [],
-        })
-
-    scores = [o.quality_score for o in objects if o.quality_score is not None]
-    avg = round(sum(scores) / len(scores), 2) if scores else 0
-
-    by_status = {}
-    for o in objects:
-        by_status.setdefault(o.status, 0)
-        by_status[o.status] += 1
-
-    return jsonify({
-        "total_objects": len(objects),
-        "avg_quality_score": avg,
-        "by_status": by_status,
-        "objects": [
-            {"id": o.id, "name": o.name, "quality_score": o.quality_score, "status": o.status}
-            for o in objects
-        ],
-    })
+    return jsonify(data_factory_service.compute_quality_score(pid))
 
 
 @data_factory_bp.route("/cycle-comparison", methods=["GET"])
@@ -511,28 +457,4 @@ def cycle_comparison_dashboard():
     pid = request.args.get("program_id", type=int)
     if not pid:
         return jsonify({"error": "program_id is required"}), 400
-
-    obj_ids = [o.id for o in DataObject.query.filter_by(program_id=pid).all()]
-    if not obj_ids:
-        return jsonify({"environments": {}, "total_cycles": 0})
-
-    cycles = LoadCycle.query.filter(LoadCycle.data_object_id.in_(obj_ids)).all()
-
-    by_env = {}
-    for c in cycles:
-        env = c.environment or "UNKNOWN"
-        if env not in by_env:
-            by_env[env] = {"total": 0, "completed": 0, "failed": 0,
-                           "records_loaded": 0, "records_failed": 0}
-        by_env[env]["total"] += 1
-        if c.status == "completed":
-            by_env[env]["completed"] += 1
-        elif c.status == "failed":
-            by_env[env]["failed"] += 1
-        by_env[env]["records_loaded"] += c.records_loaded or 0
-        by_env[env]["records_failed"] += c.records_failed or 0
-
-    return jsonify({
-        "environments": by_env,
-        "total_cycles": len(cycles),
-    })
+    return jsonify(data_factory_service.compute_cycle_comparison(pid))

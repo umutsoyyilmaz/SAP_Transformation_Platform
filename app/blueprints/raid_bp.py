@@ -32,8 +32,6 @@ Endpoints summary:
 
 import logging
 
-from datetime import date, datetime, timezone
-
 from flask import Blueprint, jsonify, request
 
 from app.models import db
@@ -42,13 +40,10 @@ from app.models.raid import (
     Risk, Action, Issue, Decision,
     RISK_STATUSES, ACTION_STATUSES, ISSUE_STATUSES, DECISION_STATUSES,
     RISK_CATEGORIES, RISK_RESPONSES, PRIORITY_LEVELS, SEVERITY_LEVELS, ACTION_TYPES,
-    calculate_risk_score, risk_rag_status,
-    next_risk_code, next_action_code, next_issue_code, next_decision_code,
 )
-from app.models.notification import Notification
+from app.services import raid_service
 from app.services.notification import NotificationService
 from app.blueprints import paginate_query
-from app.utils.helpers import parse_date as _parse_date
 
 logger = logging.getLogger(__name__)
 
@@ -105,51 +100,13 @@ def create_risk(pid):
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
 
-    probability = int(data.get("probability", 3))
-    impact = int(data.get("impact", 3))
-    score = calculate_risk_score(probability, impact)
-    rag = risk_rag_status(score)
-
-    risk = Risk(
-        program_id=pid,
-        code=next_risk_code(),
-        title=data["title"],
-        description=data.get("description", ""),
-        status=data.get("status", "identified"),
-        owner=data.get("owner", ""),
-        owner_id=data.get("owner_id"),
-        priority=data.get("priority", "medium"),
-        probability=probability,
-        impact=impact,
-        risk_score=score,
-        rag_status=rag,
-        risk_category=data.get("risk_category", "technical"),
-        risk_response=data.get("risk_response", "mitigate"),
-        mitigation_plan=data.get("mitigation_plan", ""),
-        contingency_plan=data.get("contingency_plan", ""),
-        trigger_event=data.get("trigger_event", ""),
-        workstream_id=data.get("workstream_id"),
-        phase_id=data.get("phase_id"),
-        explore_requirement_id=data.get("explore_requirement_id"),
-        workshop_id=data.get("workshop_id"),
-    )
-    db.session.add(risk)
+    risk = raid_service.create_risk(pid, data)
     try:
         db.session.commit()
     except Exception:
         logger.exception("Database commit failed")
         db.session.rollback()
         return jsonify({"error": "Database error"}), 500
-
-    # Notify if high/critical
-    if score >= 10:
-        NotificationService.create(
-            title=f"New high-risk identified: {risk.code}",
-            message=f"{risk.title} — score {score} ({rag})",
-            category="risk", severity="warning",
-            program_id=pid, entity_type="risk", entity_id=risk.id,
-        )
-        db.session.commit()
 
     return jsonify(risk.to_dict()), 201
 
@@ -169,39 +126,14 @@ def update_risk(rid):
         return jsonify({"error": "Risk not found"}), 404
 
     data = request.get_json(silent=True) or {}
-    old_score = risk.risk_score
 
-    for field in ("title", "description", "status", "owner", "owner_id", "priority",
-                  "risk_category", "risk_response", "mitigation_plan",
-                  "contingency_plan", "trigger_event"):
-        if field in data:
-            setattr(risk, field, data[field])
-
-    if "probability" in data or "impact" in data:
-        risk.probability = int(data.get("probability", risk.probability))
-        risk.impact = int(data.get("impact", risk.impact))
-        risk.recalculate_score()
-
-    if "workstream_id" in data:
-        risk.workstream_id = data["workstream_id"]
-    if "phase_id" in data:
-        risk.phase_id = data["phase_id"]
-    if "explore_requirement_id" in data:
-        risk.explore_requirement_id = data["explore_requirement_id"]
-    if "workshop_id" in data:
-        risk.workshop_id = data["workshop_id"]
-
+    raid_service.update_risk(risk, data)
     try:
         db.session.commit()
     except Exception:
         logger.exception("Database commit failed")
         db.session.rollback()
         return jsonify({"error": "Database error"}), 500
-
-    # Notification on score change
-    if risk.risk_score != old_score:
-        NotificationService.notify_risk_score_change(risk, old_score, risk.risk_score)
-        db.session.commit()
 
     return jsonify(risk.to_dict())
 
@@ -227,17 +159,14 @@ def recalculate_risk_score(rid):
     risk = db.session.get(Risk, rid)
     if not risk:
         return jsonify({"error": "Risk not found"}), 404
-    old_score = risk.risk_score
-    risk.recalculate_score()
+
+    raid_service.recalculate_risk_score(risk)
     try:
         db.session.commit()
     except Exception:
         logger.exception("Database commit failed")
         db.session.rollback()
         return jsonify({"error": "Database error"}), 500
-    if risk.risk_score != old_score:
-        NotificationService.notify_risk_score_change(risk, old_score, risk.risk_score)
-        db.session.commit()
     return jsonify(risk.to_dict())
 
 
@@ -276,24 +205,7 @@ def create_action(pid):
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
 
-    action = Action(
-        program_id=pid,
-        code=next_action_code(),
-        title=data["title"],
-        description=data.get("description", ""),
-        status=data.get("status", "open"),
-        owner=data.get("owner", ""),
-        owner_id=data.get("owner_id"),
-        priority=data.get("priority", "medium"),
-        action_type=data.get("action_type", "corrective"),
-        due_date=_parse_date(data.get("due_date")),
-        completed_date=_parse_date(data.get("completed_date")),
-        linked_entity_type=data.get("linked_entity_type", ""),
-        linked_entity_id=data.get("linked_entity_id"),
-        workstream_id=data.get("workstream_id"),
-        phase_id=data.get("phase_id"),
-    )
-    db.session.add(action)
+    action = raid_service.create_action(pid, data)
     try:
         db.session.commit()
     except Exception:
@@ -318,24 +230,8 @@ def update_action(aid):
         return jsonify({"error": "Action not found"}), 404
 
     data = request.get_json(silent=True) or {}
-    for field in ("title", "description", "status", "owner", "owner_id", "priority",
-                  "action_type", "linked_entity_type", "linked_entity_id"):
-        if field in data:
-            setattr(action, field, data[field])
 
-    if "due_date" in data:
-        action.due_date = _parse_date(data["due_date"])
-    if "completed_date" in data:
-        action.completed_date = _parse_date(data["completed_date"])
-    if "workstream_id" in data:
-        action.workstream_id = data["workstream_id"]
-    if "phase_id" in data:
-        action.phase_id = data["phase_id"]
-
-    # Auto-set completed_date on completion
-    if data.get("status") == "completed" and not action.completed_date:
-        action.completed_date = date.today()
-
+    raid_service.update_action(action, data)
     try:
         db.session.commit()
     except Exception:
@@ -369,9 +265,8 @@ def patch_action_status(aid):
     new_status = data.get("status")
     if not new_status:
         return jsonify({"error": "status is required"}), 400
-    action.status = new_status
-    if new_status == "completed" and not action.completed_date:
-        action.completed_date = date.today()
+
+    raid_service.patch_action_status(action, new_status)
     try:
         db.session.commit()
     except Exception:
@@ -416,37 +311,13 @@ def create_issue(pid):
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
 
-    issue = Issue(
-        program_id=pid,
-        code=next_issue_code(),
-        title=data["title"],
-        description=data.get("description", ""),
-        status=data.get("status", "open"),
-        owner=data.get("owner", ""),
-        owner_id=data.get("owner_id"),
-        priority=data.get("priority", "medium"),
-        severity=data.get("severity", "moderate"),
-        escalation_path=data.get("escalation_path", ""),
-        root_cause=data.get("root_cause", ""),
-        resolution=data.get("resolution", ""),
-        resolution_date=_parse_date(data.get("resolution_date")),
-        workstream_id=data.get("workstream_id"),
-        phase_id=data.get("phase_id"),
-        explore_requirement_id=data.get("explore_requirement_id"),
-        workshop_id=data.get("workshop_id"),
-    )
-    db.session.add(issue)
+    issue = raid_service.create_issue(pid, data)
     try:
         db.session.commit()
     except Exception:
         logger.exception("Database commit failed")
         db.session.rollback()
         return jsonify({"error": "Database error"}), 500
-
-    # Auto-notify on critical issue
-    if issue.severity == "critical":
-        NotificationService.notify_critical_issue(issue)
-        db.session.commit()
 
     return jsonify(issue.to_dict()), 201
 
@@ -466,26 +337,8 @@ def update_issue(iid):
         return jsonify({"error": "Issue not found"}), 404
 
     data = request.get_json(silent=True) or {}
-    for field in ("title", "description", "status", "owner", "owner_id", "priority",
-                  "severity", "escalation_path", "root_cause", "resolution"):
-        if field in data:
-            setattr(issue, field, data[field])
 
-    if "resolution_date" in data:
-        issue.resolution_date = _parse_date(data["resolution_date"])
-    if "workstream_id" in data:
-        issue.workstream_id = data["workstream_id"]
-    if "phase_id" in data:
-        issue.phase_id = data["phase_id"]
-    if "explore_requirement_id" in data:
-        issue.explore_requirement_id = data["explore_requirement_id"]
-    if "workshop_id" in data:
-        issue.workshop_id = data["workshop_id"]
-
-    # Auto-set resolution_date on resolve
-    if data.get("status") in ("resolved", "closed") and not issue.resolution_date:
-        issue.resolution_date = date.today()
-
+    raid_service.update_issue(issue, data)
     try:
         db.session.commit()
     except Exception:
@@ -519,9 +372,8 @@ def patch_issue_status(iid):
     new_status = data.get("status")
     if not new_status:
         return jsonify({"error": "status is required"}), 400
-    issue.status = new_status
-    if new_status in ("resolved", "closed") and not issue.resolution_date:
-        issue.resolution_date = date.today()
+
+    raid_service.patch_issue_status(issue, new_status)
     try:
         db.session.commit()
     except Exception:
@@ -563,26 +415,7 @@ def create_decision(pid):
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
 
-    decision = Decision(
-        program_id=pid,
-        code=next_decision_code(),
-        title=data["title"],
-        description=data.get("description", ""),
-        status=data.get("status", "proposed"),
-        owner=data.get("owner", ""),
-        owner_id=data.get("owner_id"),
-        priority=data.get("priority", "medium"),
-        decision_date=_parse_date(data.get("decision_date")),
-        decision_owner=data.get("decision_owner", ""),
-        decision_owner_id=data.get("decision_owner_id"),
-        alternatives=data.get("alternatives", ""),
-        rationale=data.get("rationale", ""),
-        impact_description=data.get("impact_description", ""),
-        reversible=data.get("reversible", True),
-        workstream_id=data.get("workstream_id"),
-        phase_id=data.get("phase_id"),
-    )
-    db.session.add(decision)
+    decision = raid_service.create_decision(pid, data)
     try:
         db.session.commit()
     except Exception:
@@ -607,34 +440,14 @@ def update_decision(did):
         return jsonify({"error": "Decision not found"}), 404
 
     data = request.get_json(silent=True) or {}
-    old_status = decision.status
 
-    for field in ("title", "description", "status", "owner", "owner_id", "priority",
-                  "decision_owner", "decision_owner_id", "alternatives", "rationale",
-                  "impact_description"):
-        if field in data:
-            setattr(decision, field, data[field])
-
-    if "decision_date" in data:
-        decision.decision_date = _parse_date(data["decision_date"])
-    if "reversible" in data:
-        decision.reversible = bool(data["reversible"])
-    if "workstream_id" in data:
-        decision.workstream_id = data["workstream_id"]
-    if "phase_id" in data:
-        decision.phase_id = data["phase_id"]
-
+    raid_service.update_decision(decision, data)
     try:
         db.session.commit()
     except Exception:
         logger.exception("Database commit failed")
         db.session.rollback()
         return jsonify({"error": "Database error"}), 500
-
-    # Notify on approval
-    if data.get("status") == "approved" and old_status != "approved":
-        NotificationService.notify_decision_approved(decision)
-        db.session.commit()
 
     return jsonify(decision.to_dict())
 
@@ -663,19 +476,14 @@ def patch_decision_status(did):
     new_status = data.get("status")
     if not new_status:
         return jsonify({"error": "status is required"}), 400
-    old_status = decision.status
-    decision.status = new_status
-    if new_status == "approved":
-        decision.decision_date = decision.decision_date or date.today()
+
+    raid_service.patch_decision_status(decision, new_status)
     try:
         db.session.commit()
     except Exception:
         logger.exception("Database commit failed")
         db.session.rollback()
         return jsonify({"error": "Database error"}), 500
-    if new_status == "approved" and old_status != "approved":
-        NotificationService.notify_decision_approved(decision)
-        db.session.commit()
     return jsonify(decision.to_dict())
 
 
@@ -689,40 +497,7 @@ def raid_stats(pid):
     prog, err = _get_program_or_404(pid)
     if err:
         return err
-
-    risk_count = Risk.query.filter_by(program_id=pid).count()
-    open_risks = Risk.query.filter_by(program_id=pid).filter(Risk.status.notin_(["closed", "expired"])).count()
-    critical_risks = Risk.query.filter_by(program_id=pid, rag_status="red").count()
-
-    action_count = Action.query.filter_by(program_id=pid).count()
-    open_actions = Action.query.filter_by(program_id=pid).filter(Action.status.in_(["open", "in_progress"])).count()
-    overdue_actions = Action.query.filter_by(program_id=pid).filter(
-        Action.status.in_(["open", "in_progress"]),
-        Action.due_date < date.today()
-    ).count()
-
-    issue_count = Issue.query.filter_by(program_id=pid).count()
-    open_issues = Issue.query.filter_by(program_id=pid).filter(Issue.status.notin_(["resolved", "closed"])).count()
-    critical_issues = Issue.query.filter_by(program_id=pid, severity="critical").filter(
-        Issue.status.notin_(["resolved", "closed"])
-    ).count()
-
-    decision_count = Decision.query.filter_by(program_id=pid).count()
-    pending_decisions = Decision.query.filter_by(program_id=pid).filter(
-        Decision.status.in_(["proposed", "pending_approval"])
-    ).count()
-
-    return jsonify({
-        "program_id": pid,
-        "risks": {"total": risk_count, "open": open_risks, "critical": critical_risks},
-        "actions": {"total": action_count, "open": open_actions, "overdue": overdue_actions},
-        "issues": {"total": issue_count, "open": open_issues, "critical": critical_issues},
-        "decisions": {"total": decision_count, "pending": pending_decisions},
-        "summary": {
-            "total_items": risk_count + action_count + issue_count + decision_count,
-            "open_items": open_risks + open_actions + open_issues + pending_decisions,
-        },
-    })
+    return jsonify(raid_service.compute_raid_stats(pid))
 
 
 @raid_bp.route("/programs/<int:pid>/raid/heatmap", methods=["GET"])
@@ -731,26 +506,7 @@ def raid_heatmap(pid):
     prog, err = _get_program_or_404(pid)
     if err:
         return err
-
-    risks = Risk.query.filter_by(program_id=pid).filter(
-        Risk.status.notin_(["closed", "expired"])
-    ).all()
-
-    # Build 5×5 matrix
-    matrix = [[[] for _ in range(5)] for _ in range(5)]
-    for r in risks:
-        p = max(1, min(5, r.probability)) - 1
-        i = max(1, min(5, r.impact)) - 1
-        matrix[p][i].append({"id": r.id, "code": r.code, "title": r.title, "rag_status": r.rag_status})
-
-    return jsonify({
-        "program_id": pid,
-        "matrix": matrix,
-        "labels": {
-            "probability": ["Very Low", "Low", "Medium", "High", "Very High"],
-            "impact": ["Negligible", "Minor", "Moderate", "Major", "Severe"],
-        },
-    })
+    return jsonify(raid_service.compute_heatmap(pid))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
