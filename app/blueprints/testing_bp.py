@@ -89,30 +89,11 @@ from app.models.requirement import Requirement
 from app.models.explore import ExploreRequirement
 from app.blueprints import paginate_query
 from app.utils.helpers import get_or_404 as _get_or_404, parse_date as _parse_date
+from app.services import testing_service
 
 logger = logging.getLogger(__name__)
 
 testing_bp = Blueprint("testing", __name__, url_prefix="/api/v1")
-
-
-def _auto_code(model, prefix, program_id):
-    """Generate the next sequential code for a model within a program (race-safe)."""
-    full_prefix = f"{prefix}-"
-    last = (
-        model.query
-        .filter(model.program_id == program_id,
-                model.code.like(f"{full_prefix}%"))
-        .order_by(model.id.desc())
-        .first()
-    )
-    if last and last.code.startswith(full_prefix):
-        try:
-            next_num = int(last.code[len(full_prefix):]) + 1
-        except (ValueError, IndexError):
-            next_num = model.query.filter_by(program_id=program_id).count() + 1
-    else:
-        next_num = model.query.filter_by(program_id=program_id).count() + 1
-    return f"{full_prefix}{next_num:04d}"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -643,59 +624,7 @@ def create_defect(pid):
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
 
-    code = data.get("code") or _auto_code(Defect, "DEF", pid)
-
-    severity = data.get("severity", "S3")
-    priority = data.get("priority", "P3")
-
-    # ── SLA computation ──
-    sla_due_date = None
-    sla_key = (severity, priority)
-    sla_config = SLA_MATRIX.get(sla_key)
-    if sla_config and sla_config.get("resolution_hours"):
-        now = datetime.now(timezone.utc)
-        hours = sla_config["resolution_hours"]
-        if sla_config.get("calendar"):
-            # 7/24 calendar
-            sla_due_date = now + timedelta(hours=hours)
-        else:
-            # Business days: skip weekends (approximate: add extra days for weekends)
-            business_hours_per_day = 8
-            days_needed = hours / business_hours_per_day
-            # Add weekend days
-            total_days = days_needed
-            full_weeks = int(total_days) // 5
-            remaining = int(total_days) % 5
-            calendar_days = full_weeks * 7 + remaining
-            sla_due_date = now + timedelta(days=calendar_days)
-
-    defect = Defect(
-        program_id=pid,
-        code=code,
-        title=data["title"],
-        description=data.get("description", ""),
-        steps_to_reproduce=data.get("steps_to_reproduce", ""),
-        severity=severity,
-        priority=priority,
-        status=data.get("status", "new"),
-        module=data.get("module", ""),
-        environment=data.get("environment", ""),
-        reported_by=data.get("reported_by", ""),
-        assigned_to=data.get("assigned_to", ""),
-        found_in_cycle=data.get("found_in_cycle", ""),
-        reopen_count=data.get("reopen_count", 0),
-        resolution=data.get("resolution", ""),
-        root_cause=data.get("root_cause", ""),
-        transport_request=data.get("transport_request", ""),
-        notes=data.get("notes", ""),
-        test_case_id=data.get("test_case_id"),
-        backlog_item_id=data.get("backlog_item_id"),
-        config_item_id=data.get("config_item_id"),
-        linked_requirement_id=data.get("linked_requirement_id"),
-        explore_requirement_id=data.get("explore_requirement_id"),
-        sla_due_date=sla_due_date,
-    )
-    db.session.add(defect)
+    defect = testing_service.create_defect(pid, data)
     try:
         db.session.commit()
     except Exception:
@@ -723,52 +652,13 @@ def update_defect(defect_id):
         return err
 
     data = request.get_json(silent=True) or {}
-    old_status = defect.status
-    changed_by = data.pop("changed_by", "")
-
-    # ── Transition validation (9-status lifecycle) ──
-    new_status = data.get("status")
-    if new_status and new_status != old_status:
-        if not validate_defect_transition(old_status, new_status):
-            return jsonify({
-                "error": f"Invalid status transition: {old_status} → {new_status}",
-                "allowed": VALID_TRANSITIONS.get(old_status, []),
-            }), 400
-
-    tracked_fields = (
-        "code", "title", "description", "steps_to_reproduce",
-        "severity", "priority", "status", "module", "environment",
-        "reported_by", "assigned_to", "found_in_cycle",
-        "resolution", "root_cause", "transport_request", "notes",
-        "test_case_id", "backlog_item_id", "config_item_id",
-        "linked_requirement_id",
-        "explore_requirement_id",
-    )
-
-    for field in tracked_fields:
-        if field in data:
-            old_val = str(getattr(defect, field, "") or "")
-            new_val = str(data[field]) if data[field] is not None else ""
-            if old_val != new_val:
-                hist = DefectHistory(
-                    defect_id=defect.id,
-                    field=field,
-                    old_value=old_val,
-                    new_value=new_val,
-                    changed_by=changed_by,
-                )
-                db.session.add(hist)
-            setattr(defect, field, data[field])
-
-    # Auto-increment reopen_count
-    new_status = data.get("status")
-    if new_status == "reopened" and old_status != "reopened":
-        defect.reopen_count = (defect.reopen_count or 0) + 1
-        defect.resolved_at = None
-
-    # Auto-set resolved_at
-    if new_status in ("closed", "rejected") and old_status not in ("closed", "rejected"):
-        defect.resolved_at = datetime.now(timezone.utc)
+    try:
+        testing_service.update_defect(defect, data)
+    except ValueError as exc:
+        return jsonify({
+            "error": str(exc),
+            "allowed": VALID_TRANSITIONS.get(defect.status, []),
+        }), 400
 
     try:
         db.session.commit()
@@ -801,117 +691,14 @@ def delete_defect(defect_id):
 
 @testing_bp.route("/programs/<int:pid>/testing/traceability-matrix", methods=["GET"])
 def traceability_matrix(pid):
-    """
-    Build and return the full Requirement ↔ Test Case ↔ Defect traceability matrix.
-
-    Supports two modes:
-      - source=legacy (default): Uses old Requirement model
-      - source=explore: Uses ExploreRequirement model (Explore phase)
-      - source=both: Combines both sources
-    """
+    """Build and return the full Requirement ↔ Test Case ↔ Defect traceability matrix."""
     program, err = _get_or_404(Program, pid)
     if err:
         return err
 
     source = request.args.get("source", "both")
-    test_cases = TestCase.query.filter_by(program_id=pid).all()
-    defects = Defect.query.filter_by(program_id=pid).all()
-
-    # Group defects by test_case_id
-    def_by_tc = {}
-    for d in defects:
-        if d.test_case_id:
-            def_by_tc.setdefault(d.test_case_id, []).append(d)
-
-    def _build_tc_row(tc):
-        tc_defects = def_by_tc.get(tc.id, [])
-        return {
-            "id": tc.id, "code": tc.code, "title": tc.title,
-            "test_layer": tc.test_layer, "status": tc.status,
-            "defects": [
-                {"id": d.id, "code": d.code, "severity": d.severity, "status": d.status}
-                for d in tc_defects
-            ],
-        }
-
-    matrix = []
-
-    # ── Legacy requirements ──────────────────────────────────────────
-    if source in ("legacy", "both"):
-        requirements = Requirement.query.filter_by(program_id=pid).all()
-
-        tc_by_req = {}
-        for tc in test_cases:
-            if tc.requirement_id:
-                tc_by_req.setdefault(tc.requirement_id, []).append(tc)
-
-        for req in requirements:
-            linked_cases = tc_by_req.get(req.id, [])
-            row = {
-                "source": "legacy",
-                "requirement": {
-                    "id": req.id, "code": req.code, "title": req.title,
-                    "priority": req.priority, "status": req.status,
-                },
-                "test_cases": [_build_tc_row(tc) for tc in linked_cases],
-                "total_test_cases": len(linked_cases),
-                "total_defects": sum(len(def_by_tc.get(tc.id, [])) for tc in linked_cases),
-            }
-            matrix.append(row)
-
-    # ── Explore requirements ─────────────────────────────────────────
-    if source in ("explore", "both"):
-        explore_reqs = ExploreRequirement.query.filter_by(project_id=pid).all()
-
-        tc_by_ereq = {}
-        for tc in test_cases:
-            if tc.explore_requirement_id:
-                tc_by_ereq.setdefault(tc.explore_requirement_id, []).append(tc)
-
-        for req in explore_reqs:
-            linked_cases = tc_by_ereq.get(req.id, [])
-            row = {
-                "source": "explore",
-                "requirement": {
-                    "id": req.id, "code": req.code, "title": req.title,
-                    "priority": req.priority, "status": req.status,
-                    "process_area": req.process_area,
-                    "workshop_id": req.workshop_id,
-                    "impact": getattr(req, "impact", None),
-                    "business_criticality": getattr(req, "business_criticality", None),
-                },
-                "test_cases": [_build_tc_row(tc) for tc in linked_cases],
-                "total_test_cases": len(linked_cases),
-                "total_defects": sum(len(def_by_tc.get(tc.id, [])) for tc in linked_cases),
-            }
-            matrix.append(row)
-
-    # ── Unlinked test cases ──────────────────────────────────────────
-    tc_linked_ids = set()
-    for row in matrix:
-        for tc in row["test_cases"]:
-            tc_linked_ids.add(tc["id"])
-
-    tc_unlinked = [tc for tc in test_cases if tc.id not in tc_linked_ids]
-
-    # ── Summary ────────────────────────────────────────────────────
-    total_reqs = len(matrix)
-    reqs_with_tests = sum(1 for r in matrix if r["total_test_cases"] > 0)
-
-    return jsonify({
-        "program_id": pid,
-        "source": source,
-        "matrix": matrix,
-        "summary": {
-            "total_requirements": total_reqs,
-            "requirements_with_tests": reqs_with_tests,
-            "requirements_without_tests": total_reqs - reqs_with_tests,
-            "test_coverage_pct": round(reqs_with_tests / total_reqs * 100) if total_reqs > 0 else 0,
-            "total_test_cases": len(test_cases),
-            "unlinked_test_cases": len(tc_unlinked),
-            "total_defects": len(defects),
-        },
-    })
+    result = testing_service.compute_traceability_matrix(pid, source)
+    return jsonify(result)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -941,222 +728,11 @@ def regression_sets(pid):
 
 @testing_bp.route("/programs/<int:pid>/testing/dashboard", methods=["GET"])
 def testing_dashboard(pid):
-    """
-    Test Hub KPI dashboard data — SQL aggregate version (no full-table loads).
-    """
+    """Test Hub KPI dashboard data — delegated to testing_service."""
     program, err = _get_or_404(Program, pid)
     if err:
         return err
-
-    from collections import defaultdict
-
-    # ── Counts via SQL ────────────────────────────────────────────────────
-    total_test_cases = TestCase.query.filter_by(program_id=pid).count()
-    total_defects = Defect.query.filter_by(program_id=pid).count()
-    total_requirements = Requirement.query.filter_by(program_id=pid).count()
-
-    # Subquery for plan_ids → cycle_ids belonging to this program
-    plan_ids_sq = db.session.query(TestPlan.id).filter_by(program_id=pid).subquery()
-    cycle_q = TestCycle.query.filter(TestCycle.plan_id.in_(db.session.query(plan_ids_sq)))
-    cycle_ids_sq = (
-        db.session.query(TestCycle.id)
-        .filter(TestCycle.plan_id.in_(db.session.query(plan_ids_sq)))
-        .subquery()
-    )
-
-    total_executions = TestExecution.query.filter(
-        TestExecution.cycle_id.in_(db.session.query(cycle_ids_sq))
-    ).count()
-
-    # ── Pass Rate via aggregate ───────────────────────────────────────────
-    exec_counts = dict(
-        db.session.query(TestExecution.result, db.func.count(TestExecution.id))
-        .filter(TestExecution.cycle_id.in_(db.session.query(cycle_ids_sq)))
-        .group_by(TestExecution.result)
-        .all()
-    )
-    total_executed = sum(v for k, v in exec_counts.items() if k != "not_run")
-    total_passed = exec_counts.get("pass", 0)
-    pass_rate = round(total_passed / total_executed * 100, 1) if total_executed else 0
-
-    # ── Severity Distribution via aggregate ───────────────────────────────
-    sev_rows = dict(
-        db.session.query(Defect.severity, db.func.count(Defect.id))
-        .filter_by(program_id=pid)
-        .group_by(Defect.severity)
-        .all()
-    )
-    severity_dist = {s: sev_rows.get(s, 0) for s in ("S1", "S2", "S3", "S4")}
-
-    # ── Open defects + aging (top 20 only) ────────────────────────────────
-    open_defects_q = Defect.query.filter(
-        Defect.program_id == pid,
-        Defect.status.notin_(["closed", "rejected"]),
-    )
-    open_defect_count = open_defects_q.count()
-    aging_defects = open_defects_q.order_by(Defect.created_at.asc()).limit(20).all()
-    aging_list = [
-        {"id": d.id, "code": d.code, "title": d.title,
-         "severity": d.severity, "aging_days": d.aging_days}
-        for d in aging_defects
-    ]
-
-    # ── Reopen Rate ───────────────────────────────────────────────────────
-    total_reopens = db.session.query(
-        db.func.coalesce(db.func.sum(Defect.reopen_count), 0)
-    ).filter_by(program_id=pid).scalar()
-    reopen_rate = round(int(total_reopens) / total_defects * 100, 1) if total_defects else 0
-
-    # ── Test Layer Summary via aggregate ──────────────────────────────────
-    layer_total = dict(
-        db.session.query(TestCase.test_layer, db.func.count(TestCase.id))
-        .filter_by(program_id=pid)
-        .group_by(TestCase.test_layer)
-        .all()
-    )
-    # Execution results per layer
-    layer_exec = (
-        db.session.query(TestCase.test_layer, TestExecution.result, db.func.count(TestExecution.id))
-        .join(TestExecution, TestExecution.test_case_id == TestCase.id)
-        .filter(
-            TestCase.program_id == pid,
-            TestExecution.cycle_id.in_(db.session.query(cycle_ids_sq)),
-        )
-        .group_by(TestCase.test_layer, TestExecution.result)
-        .all()
-    )
-    layer_summary = {}
-    for layer, cnt in layer_total.items():
-        lkey = layer or "unknown"
-        layer_summary[lkey] = {"total": cnt, "passed": 0, "failed": 0, "not_run": 0}
-    for layer, result, cnt in layer_exec:
-        lkey = layer or "unknown"
-        if lkey not in layer_summary:
-            layer_summary[lkey] = {"total": 0, "passed": 0, "failed": 0, "not_run": 0}
-        if result == "pass":
-            layer_summary[lkey]["passed"] += cnt
-        elif result == "fail":
-            layer_summary[lkey]["failed"] += cnt
-
-    # ── Defect Velocity (last 12 weeks) ───────────────────────────────────
-    now_utc = datetime.now(timezone.utc)
-    velocity_buckets = defaultdict(int)
-    # Only load reported_at/created_at columns for velocity calc
-    velocity_rows = (
-        db.session.query(Defect.reported_at, Defect.created_at)
-        .filter_by(program_id=pid)
-        .all()
-    )
-    for reported_at, created_at in velocity_rows:
-        reported = reported_at or created_at
-        if reported:
-            if reported.tzinfo is None:
-                reported = reported.replace(tzinfo=timezone.utc)
-            delta_days = (now_utc - reported).days
-            week_ago = delta_days // 7
-            if week_ago < 12:
-                velocity_buckets[week_ago] += 1
-    defect_velocity = [
-        {"week": f"W-{w}" if w > 0 else "This week", "count": velocity_buckets.get(w, 0)}
-        for w in range(11, -1, -1)
-    ]
-
-    # ── Cycle Burndown ────────────────────────────────────────────────────
-    cycles = cycle_q.all()
-    cycle_ids_list = [c.id for c in cycles]
-    # Aggregate execution counts per cycle
-    burndown_rows = dict(
-        db.session.query(
-            TestExecution.cycle_id,
-            db.func.count(TestExecution.id),
-        )
-        .filter(TestExecution.cycle_id.in_(cycle_ids_list))
-        .group_by(TestExecution.cycle_id)
-        .all()
-    ) if cycle_ids_list else {}
-    done_rows = dict(
-        db.session.query(
-            TestExecution.cycle_id,
-            db.func.count(TestExecution.id),
-        )
-        .filter(
-            TestExecution.cycle_id.in_(cycle_ids_list),
-            TestExecution.result != "not_run",
-        )
-        .group_by(TestExecution.cycle_id)
-        .all()
-    ) if cycle_ids_list else {}
-    cycle_burndown = []
-    for c in cycles:
-        total = burndown_rows.get(c.id, 0)
-        done = done_rows.get(c.id, 0)
-        cycle_burndown.append({
-            "cycle_id": c.id, "cycle_name": c.name,
-            "test_layer": c.test_layer, "status": c.status,
-            "total_executions": total, "completed": done,
-            "remaining": total - done,
-            "progress_pct": round(done / total * 100, 1) if total else 0,
-        })
-
-    # ── Coverage ──────────────────────────────────────────────────────────
-    covered_count = (
-        db.session.query(db.func.count(db.distinct(TestCase.requirement_id)))
-        .filter(TestCase.program_id == pid, TestCase.requirement_id.isnot(None))
-        .scalar()
-    )
-    coverage_pct = round(covered_count / total_requirements * 100, 1) if total_requirements else 0
-
-    # ── Environment Stability via aggregate ───────────────────────────────
-    env_rows = (
-        db.session.query(Defect.environment, Defect.status, Defect.severity, db.func.count(Defect.id))
-        .filter_by(program_id=pid)
-        .group_by(Defect.environment, Defect.status, Defect.severity)
-        .all()
-    )
-    env_defects: dict = {}
-    for env, status, severity, cnt in env_rows:
-        env = env or "unknown"
-        if env not in env_defects:
-            env_defects[env] = {"total": 0, "open": 0, "closed": 0, "p1_p2": 0}
-        env_defects[env]["total"] += cnt
-        if status in ("closed", "rejected"):
-            env_defects[env]["closed"] += cnt
-        else:
-            env_defects[env]["open"] += cnt
-        if severity in ("S1", "S2"):
-            env_defects[env]["p1_p2"] += cnt
-
-    environment_stability = {}
-    for env, stats in env_defects.items():
-        environment_stability[env] = {
-            **stats,
-            "failure_rate": round(stats["open"] / stats["total"] * 100, 1) if stats["total"] else 0,
-        }
-
-    return jsonify({
-        "program_id": pid,
-        "pass_rate": pass_rate,
-        "total_test_cases": total_test_cases,
-        "total_executions": total_executions,
-        "total_executed": total_executed,
-        "total_passed": total_passed,
-        "total_defects": total_defects,
-        "open_defects": open_defect_count,
-        "severity_distribution": severity_dist,
-        "defect_aging": aging_list,
-        "reopen_rate": reopen_rate,
-        "total_reopens": int(total_reopens),
-        "test_layer_summary": layer_summary,
-        "defect_velocity": defect_velocity,
-        "cycle_burndown": cycle_burndown,
-        "coverage": {
-            "total_requirements": total_requirements,
-            "covered": covered_count,
-            "uncovered": total_requirements - covered_count,
-            "coverage_pct": coverage_pct,
-        },
-        "environment_stability": environment_stability,
-    })
+    return jsonify(testing_service.compute_dashboard(pid))
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1980,57 +1556,7 @@ def create_snapshot(pid):
     if err:
         return err
     data = request.get_json(silent=True) or {}
-    today = date.today()
-    snapshot_date = _parse_date(data.get("snapshot_date")) or today
-
-    cycle_id = data.get("test_cycle_id")
-
-    # Auto-compute from DB if counts not provided
-    total_cases = data.get("total_cases", TestCase.query.filter_by(program_id=pid).count())
-
-    # Compute execution stats
-    plan_ids_sq = db.session.query(TestPlan.id).filter_by(program_id=pid).subquery()
-    cycle_ids_sq = db.session.query(TestCycle.id).filter(
-        TestCycle.plan_id.in_(db.session.query(plan_ids_sq))
-    ).subquery()
-    exec_counts = dict(
-        db.session.query(TestExecution.result, db.func.count(TestExecution.id))
-        .filter(TestExecution.cycle_id.in_(db.session.query(cycle_ids_sq)))
-        .group_by(TestExecution.result).all()
-    )
-    passed = data.get("passed", exec_counts.get("pass", 0))
-    failed = data.get("failed", exec_counts.get("fail", 0))
-    blocked = data.get("blocked", exec_counts.get("blocked", 0))
-    not_run = data.get("not_run", exec_counts.get("not_run", 0))
-
-    # Defect counts by severity
-    def _count_open_sev(sev):
-        return Defect.query.filter(
-            Defect.program_id == pid,
-            Defect.severity == sev,
-            Defect.status.notin_(["closed", "rejected"]),
-        ).count()
-
-    snapshot = TestDailySnapshot(
-        snapshot_date=snapshot_date,
-        test_cycle_id=cycle_id,
-        program_id=pid,
-        wave=data.get("wave", ""),
-        total_cases=total_cases,
-        passed=passed,
-        failed=failed,
-        blocked=blocked,
-        not_run=not_run,
-        open_defects_s1=data.get("open_defects_s1", _count_open_sev("S1")),
-        open_defects_s2=data.get("open_defects_s2", _count_open_sev("S2")),
-        open_defects_s3=data.get("open_defects_s3", _count_open_sev("S3")),
-        open_defects_s4=data.get("open_defects_s4", _count_open_sev("S4")),
-        closed_defects=data.get("closed_defects", Defect.query.filter(
-            Defect.program_id == pid,
-            Defect.status.in_(["closed", "rejected"]),
-        ).count()),
-    )
-    db.session.add(snapshot)
+    snapshot = testing_service.create_snapshot(pid, data)
     try:
         db.session.commit()
     except Exception:
@@ -2071,122 +1597,11 @@ def get_defect_sla(defect_id):
 
 @testing_bp.route("/programs/<int:pid>/testing/dashboard/go-no-go", methods=["GET"])
 def go_no_go_scorecard(pid):
-    """
-    Go/No-Go scorecard — each criterion computed from real DB queries.
-    """
+    """Go/No-Go scorecard — delegated to testing_service."""
     program, err = _get_or_404(Program, pid)
     if err:
         return err
-
-    # Helpers
-    plan_ids_sq = db.session.query(TestPlan.id).filter_by(program_id=pid).subquery()
-    cycle_ids_sq = db.session.query(TestCycle.id).filter(
-        TestCycle.plan_id.in_(db.session.query(plan_ids_sq))
-    ).subquery()
-
-    def _pass_rate_for_layer(layer):
-        exec_q = (
-            db.session.query(TestExecution.result, db.func.count(TestExecution.id))
-            .join(TestCase, TestCase.id == TestExecution.test_case_id)
-            .filter(
-                TestCase.program_id == pid,
-                TestCase.test_layer == layer,
-                TestExecution.cycle_id.in_(db.session.query(cycle_ids_sq)),
-            )
-            .group_by(TestExecution.result)
-            .all()
-        )
-        counts = dict(exec_q)
-        total = sum(v for k, v in counts.items() if k != "not_run")
-        passed = counts.get("pass", 0)
-        return round(passed / total * 100, 1) if total else 100.0
-
-    # 1. Unit test pass rate
-    unit_pr = _pass_rate_for_layer("unit")
-    # 2. SIT pass rate
-    sit_pr = _pass_rate_for_layer("sit")
-    # 3. UAT happy path — UAT layer pass rate
-    uat_pr = _pass_rate_for_layer("uat")
-    # 4. UAT BPO sign-off %
-    total_signoffs = UATSignOff.query.join(TestCycle).filter(
-        TestCycle.plan_id.in_(db.session.query(plan_ids_sq))
-    ).count()
-    approved_signoffs = UATSignOff.query.join(TestCycle).filter(
-        TestCycle.plan_id.in_(db.session.query(plan_ids_sq)),
-        UATSignOff.status == "approved",
-    ).count()
-    signoff_pct = round(approved_signoffs / total_signoffs * 100, 1) if total_signoffs else 100.0
-
-    # 5. Open S1 defects
-    open_s1 = Defect.query.filter(
-        Defect.program_id == pid, Defect.severity == "S1",
-        Defect.status.notin_(["closed", "rejected"]),
-    ).count()
-    # 6. Open S2 defects
-    open_s2 = Defect.query.filter(
-        Defect.program_id == pid, Defect.severity == "S2",
-        Defect.status.notin_(["closed", "rejected"]),
-    ).count()
-    # 7. Open S3 defects
-    open_s3 = Defect.query.filter(
-        Defect.program_id == pid, Defect.severity == "S3",
-        Defect.status.notin_(["closed", "rejected"]),
-    ).count()
-    # 8. Regression pass rate
-    regression_pr = _pass_rate_for_layer("regression")
-    # 9. Performance target
-    perf_total = PerfTestResult.query.join(TestCase).filter(TestCase.program_id == pid).count()
-    perf_pass = PerfTestResult.query.join(TestCase).filter(
-        TestCase.program_id == pid
-    ).all()
-    perf_pass_count = sum(1 for p in perf_pass if p.pass_fail)
-    perf_pct = round(perf_pass_count / perf_total * 100, 1) if perf_total else 100.0
-
-    # 10. All critical (S1+S2) closed
-    total_critical = Defect.query.filter(
-        Defect.program_id == pid, Defect.severity.in_(["S1", "S2"]),
-    ).count()
-    closed_critical = Defect.query.filter(
-        Defect.program_id == pid, Defect.severity.in_(["S1", "S2"]),
-        Defect.status.in_(["closed", "rejected"]),
-    ).count()
-    critical_closed_pct = round(closed_critical / total_critical * 100, 1) if total_critical else 100.0
-
-    scorecard = [
-        {"criterion": "Unit test pass rate", "target": ">=95%",
-         "actual": unit_pr, "status": "green" if unit_pr >= 95 else ("yellow" if unit_pr >= 90 else "red")},
-        {"criterion": "SIT pass rate", "target": ">=95%",
-         "actual": sit_pr, "status": "green" if sit_pr >= 95 else ("yellow" if sit_pr >= 90 else "red")},
-        {"criterion": "UAT Happy Path 100%", "target": "100%",
-         "actual": uat_pr, "status": "green" if uat_pr >= 100 else ("yellow" if uat_pr >= 95 else "red")},
-        {"criterion": "UAT BPO Sign-off", "target": "100%",
-         "actual": signoff_pct, "status": "green" if signoff_pct >= 100 else ("yellow" if signoff_pct >= 80 else "red")},
-        {"criterion": "Open S1 defects", "target": "=0",
-         "actual": open_s1, "status": "green" if open_s1 == 0 else "red"},
-        {"criterion": "Open S2 defects", "target": "=0",
-         "actual": open_s2, "status": "green" if open_s2 == 0 else "red"},
-        {"criterion": "Open S3 defects", "target": "<=5",
-         "actual": open_s3, "status": "green" if open_s3 <= 5 else ("yellow" if open_s3 <= 10 else "red")},
-        {"criterion": "Regression pass rate", "target": "100%",
-         "actual": regression_pr, "status": "green" if regression_pr >= 100 else ("yellow" if regression_pr >= 95 else "red")},
-        {"criterion": "Performance target", "target": ">=95%",
-         "actual": perf_pct, "status": "green" if perf_pct >= 95 else ("yellow" if perf_pct >= 90 else "red")},
-        {"criterion": "All critical closed", "target": "100%",
-         "actual": critical_closed_pct, "status": "green" if critical_closed_pct >= 100 else ("yellow" if critical_closed_pct >= 90 else "red")},
-    ]
-
-    green_count = sum(1 for s in scorecard if s["status"] == "green")
-    red_count = sum(1 for s in scorecard if s["status"] == "red")
-    yellow_count = sum(1 for s in scorecard if s["status"] == "yellow")
-    overall = "go" if red_count == 0 else "no_go"
-
-    return jsonify({
-        "scorecard": scorecard,
-        "overall": overall,
-        "green_count": green_count,
-        "red_count": red_count,
-        "yellow_count": yellow_count,
-    })
+    return jsonify(testing_service.compute_go_no_go(pid))
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2279,86 +1694,21 @@ def validate_exit_criteria(cycle_id):
 
 @testing_bp.route("/testing/suites/<int:suite_id>/generate-from-wricef", methods=["POST"])
 def generate_from_wricef(suite_id):
-    """
-    Auto-generate test cases from WRICEF/Config items.
-    Request: {"wricef_item_ids": [1,2,3]} or {"scope_item_id": 5}
-    """
-    from app.models.backlog import BacklogItem, ConfigItem
-
+    """Auto-generate test cases from WRICEF/Config items."""
     suite, err = _get_or_404(TestSuite, suite_id)
     if err:
         return err
     data = request.get_json(silent=True) or {}
 
-    wricef_ids = data.get("wricef_item_ids", [])
-    config_ids = data.get("config_item_ids", [])
-    scope_item_id = data.get("scope_item_id")
-
-    items = []
-    # Gather backlog items
-    if wricef_ids:
-        items.extend(BacklogItem.query.filter(BacklogItem.id.in_(wricef_ids)).all())
-    if config_ids:
-        items.extend(ConfigItem.query.filter(ConfigItem.id.in_(config_ids)).all())
-    if scope_item_id:
-        # Gather all backlog items linked to scope item process
-        scope_items = BacklogItem.query.filter_by(process_id=scope_item_id).all()
-        items.extend(scope_items)
-
-    if not items:
-        return jsonify({"error": "No WRICEF/Config items found"}), 404
-
-    created_cases = []
-    for item in items:
-        is_backlog = isinstance(item, BacklogItem)
-        code_prefix = item.code if item.code else f"WRICEF-{item.id}"
-        title = f"UT — {code_prefix} — {item.title}"
-
-        tc = TestCase(
-            program_id=suite.program_id,
-            suite_id=suite.id,
-            code=f"TC-{code_prefix}-{TestCase.query.filter_by(program_id=suite.program_id).count() + 1:04d}",
-            title=title,
-            description=f"Auto-generated from {'WRICEF' if is_backlog else 'Config'} item: {item.title}",
-            test_layer="unit",
-            module=item.module if hasattr(item, "module") else "",
-            status="draft",
-            priority="medium",
-            backlog_item_id=item.id if is_backlog else None,
-            config_item_id=item.id if not is_backlog else None,
-            requirement_id=item.requirement_id if hasattr(item, "requirement_id") else None,
+    try:
+        created = testing_service.generate_from_wricef(
+            suite,
+            wricef_ids=data.get("wricef_item_ids", []),
+            config_ids=data.get("config_item_ids", []),
+            scope_item_id=data.get("scope_item_id"),
         )
-        db.session.add(tc)
-        db.session.flush()  # Get the ID
-
-        # Generate steps from technical_notes / acceptance_criteria
-        notes = ""
-        if hasattr(item, "technical_notes") and item.technical_notes:
-            notes = item.technical_notes
-        elif hasattr(item, "acceptance_criteria") and item.acceptance_criteria:
-            notes = item.acceptance_criteria
-
-        if notes:
-            steps = [line.strip() for line in notes.split("\n") if line.strip()]
-            for i, step_text in enumerate(steps[:10], 1):  # max 10 steps
-                ts = TestStep(
-                    test_case_id=tc.id,
-                    step_no=i,
-                    action=step_text,
-                    expected_result="Verify successful execution",
-                )
-                db.session.add(ts)
-        else:
-            # Default step
-            ts = TestStep(
-                test_case_id=tc.id,
-                step_no=1,
-                action=f"Execute {code_prefix} functionality",
-                expected_result=f"Verify {item.title} works as specified",
-            )
-            db.session.add(ts)
-
-        created_cases.append(tc)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
 
     try:
         db.session.commit()
@@ -2368,9 +1718,9 @@ def generate_from_wricef(suite_id):
         return jsonify({"error": "Database error"}), 500
 
     return jsonify({
-        "message": f"Generated {len(created_cases)} test cases",
-        "count": len(created_cases),
-        "test_case_ids": [tc.id for tc in created_cases],
+        "message": f"Generated {len(created)} test cases",
+        "count": len(created),
+        "test_case_ids": [tc.id for tc in created],
         "suite_id": suite.id,
     }), 201
 
@@ -2381,120 +1731,24 @@ def generate_from_wricef(suite_id):
 
 @testing_bp.route("/testing/suites/<int:suite_id>/generate-from-process", methods=["POST"])
 def generate_from_process(suite_id):
-    """
-    Auto-generate test cases from Explore process steps.
-    Request: {"scope_item_ids": [1,2], "test_level": "sit", "uat_category": "happy_path"}
-    """
-    from app.models.explore import ProcessLevel, ProcessStep
-
+    """Auto-generate test cases from Explore process steps."""
     suite, err = _get_or_404(TestSuite, suite_id)
     if err:
         return err
     data = request.get_json(silent=True) or {}
 
     scope_item_ids = data.get("scope_item_ids", [])
-    test_level = data.get("test_level", "sit")
-    uat_category = data.get("uat_category", "")
-
     if not scope_item_ids:
         return jsonify({"error": "scope_item_ids is required"}), 400
 
-    # Find L3 process levels by scope_item_code or ID
-    l3_items = ProcessLevel.query.filter(
-        ProcessLevel.id.in_([str(sid) for sid in scope_item_ids]),
-        ProcessLevel.level == 3,
-    ).all()
-
-    if not l3_items:
-        # Try matching by scope_item_code
-        l3_items = ProcessLevel.query.filter(
-            ProcessLevel.scope_item_code.in_([str(sid) for sid in scope_item_ids]),
-        ).all()
-
-    if not l3_items:
-        return jsonify({"error": "No matching L3 process levels found"}), 404
-
-    created_cases = []
-
-    for l3 in l3_items:
-        # Get workshop process steps for this L3 (through L4 children)
-        l4_children = ProcessLevel.query.filter_by(parent_id=l3.id, level=4).all()
-        l4_ids = [c.id for c in l4_children]
-
-        steps = []
-        if l4_ids:
-            steps = ProcessStep.query.filter(
-                ProcessStep.process_level_id.in_(l4_ids)
-            ).order_by(ProcessStep.sort_order).all()
-
-        # Filter to fit/partial_fit decisions
-        fit_steps = [s for s in steps if s.fit_decision in ("fit", "partial_fit")]
-
-        if not fit_steps:
-            fit_steps = steps  # Use all if no fit decisions
-
-        # Generate E2E scenario name
-        scope_code = l3.scope_item_code or l3.code or l3.name[:10]
-        scenario_name = f"E2E — {scope_code} — {l3.name}"
-
-        tc = TestCase(
-            program_id=suite.program_id,
-            suite_id=suite.id,
-            code=f"TC-{scope_code}-{TestCase.query.filter_by(program_id=suite.program_id).count() + 1:04d}",
-            title=scenario_name,
-            description=f"Auto-generated from process: {l3.name}. "
-                        f"Level: {test_level}. Category: {uat_category or 'N/A'}",
-            test_layer=test_level,
-            module=l3.process_area_code or "",
-            status="draft",
-            priority="high",
+    try:
+        created = testing_service.generate_from_process(
+            suite, scope_item_ids,
+            test_level=data.get("test_level", "sit"),
+            uat_category=data.get("uat_category", ""),
         )
-        db.session.add(tc)
-        db.session.flush()
-
-        for i, ps in enumerate(fit_steps, 1):
-            # Get L4 process level info
-            l4 = db.session.get(ProcessLevel, ps.process_level_id)
-            l4_name = l4.name if l4 else f"Step {i}"
-            module_code = l4.process_area_code if l4 else ""
-
-            # Detect cross-module checkpoint
-            is_checkpoint = False
-            if i > 1 and l4:
-                prev_ps = fit_steps[i - 2] if i > 1 else None
-                if prev_ps:
-                    prev_l4 = db.session.get(ProcessLevel, prev_ps.process_level_id)
-                    if prev_l4 and prev_l4.process_area_code != l4.process_area_code:
-                        is_checkpoint = True
-
-            action = f"Execute: {l4_name}"
-            notes_text = ""
-            if ps.fit_decision == "partial_fit":
-                notes_text = "⚠ PARTIAL FIT — requires custom development validation"
-            if is_checkpoint:
-                notes_text = (notes_text + " | " if notes_text else "") + "🔀 CROSS-MODULE CHECKPOINT"
-
-            step = TestStep(
-                test_case_id=tc.id,
-                step_no=i,
-                action=action,
-                expected_result=f"Process step '{l4_name}' completes successfully",
-                test_data=module_code,
-                notes=notes_text,
-            )
-            db.session.add(step)
-
-        if not fit_steps:
-            # Default step if no process steps found
-            step = TestStep(
-                test_case_id=tc.id,
-                step_no=1,
-                action=f"Execute E2E scenario for {l3.name}",
-                expected_result="End-to-end process completes successfully",
-            )
-            db.session.add(step)
-
-        created_cases.append(tc)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
 
     try:
         db.session.commit()
@@ -2504,9 +1758,9 @@ def generate_from_process(suite_id):
         return jsonify({"error": "Database error"}), 500
 
     return jsonify({
-        "message": f"Generated {len(created_cases)} test cases from process",
-        "count": len(created_cases),
-        "test_case_ids": [tc.id for tc in created_cases],
+        "message": f"Generated {len(created)} test cases from process",
+        "count": len(created),
+        "test_case_ids": [tc.id for tc in created],
         "suite_id": suite.id,
     }), 201
 
@@ -2611,68 +1865,15 @@ def delete_case_dependency(dep_id):
 # TEST CASE CLONE / COPY
 # ═════════════════════════════════════════════════════════════════════════════
 
-# Fields that are copied verbatim from the source test case during clone
-_CLONE_COPY_FIELDS = (
-    "program_id", "requirement_id", "explore_requirement_id",
-    "backlog_item_id", "config_item_id", "suite_id",
-    "description", "test_layer", "module",
-    "preconditions", "test_steps", "expected_result", "test_data_set",
-    "priority", "is_regression", "assigned_to", "assigned_to_id",
-)
-
-
-def _clone_single_test_case(source, overrides=None):
-    """
-    Clone a single TestCase, returning the new (uncommitted) instance.
-
-    - Status is always reset to 'draft'.
-    - Code is auto-generated.
-    - Optional overrides dict can set title, test_layer, suite_id,
-      assigned_to, priority, module.
-    """
-    overrides = overrides or {}
-
-    # Copy base fields
-    data = {f: getattr(source, f) for f in _CLONE_COPY_FIELDS}
-    # Apply overrides
-    for key in ("title", "test_layer", "suite_id", "assigned_to",
-                "assigned_to_id", "priority", "module"):
-        if key in overrides:
-            data[key] = overrides[key]
-
-    # Title defaults to "Copy of <original>"
-    if "title" not in overrides:
-        data["title"] = f"Copy of {source.title}"
-
-    # Auto-generate code
-    mod = data.get("module") or "GEN"
-    data["code"] = f"TC-{mod.upper()}-{TestCase.query.filter_by(program_id=source.program_id).count() + 1:04d}"
-
-    # Always start as draft, record lineage
-    data["status"] = "draft"
-    data["cloned_from_id"] = source.id
-
-    clone = TestCase(**data)
-    return clone
-
-
 @testing_bp.route("/testing/test-cases/<int:case_id>/clone", methods=["POST"])
 def clone_test_case(case_id):
-    """
-    Clone a single test case.
-
-    POST /api/v1/testing/test-cases/<id>/clone
-    Body (all optional):
-      { "title", "test_layer", "suite_id", "assigned_to", "priority", "module" }
-    Returns: 201 + cloned test case JSON.
-    """
+    """Clone a single test case."""
     source, err = _get_or_404(TestCase, case_id)
     if err:
         return err
 
     overrides = request.get_json(silent=True) or {}
-    clone = _clone_single_test_case(source, overrides)
-    db.session.add(clone)
+    clone = testing_service.clone_test_case(source, overrides)
     try:
         db.session.commit()
     except Exception:
@@ -2685,16 +1886,7 @@ def clone_test_case(case_id):
 
 @testing_bp.route("/testing/test-suites/<int:suite_id>/clone-cases", methods=["POST"])
 def clone_suite_cases(suite_id):
-    """
-    Bulk-clone all test cases from one suite into a target suite.
-
-    POST /api/v1/testing/test-suites/<suite_id>/clone-cases
-    Body:
-      { "target_suite_id": <int> }            ← required
-      Optional overrides applied to ALL clones:
-      { "test_layer", "assigned_to", "priority", "module" }
-    Returns: 201 + list of cloned test case dicts + count.
-    """
+    """Bulk-clone all test cases from one suite into a target suite."""
     source_suite, err = _get_or_404(TestSuite, suite_id)
     if err:
         return err
@@ -2708,22 +1900,15 @@ def clone_suite_cases(suite_id):
     if err:
         return err
 
-    # Ensure same program
     if source_suite.program_id != target_suite.program_id:
         return jsonify({"error": "Source and target suites must belong to the same program"}), 400
 
-    source_cases = TestCase.query.filter_by(suite_id=suite_id).all()
-    if not source_cases:
-        return jsonify({"error": "Source suite has no test cases to clone"}), 404
-
     overrides = {k: data[k] for k in ("test_layer", "assigned_to", "priority", "module") if k in data}
-    overrides["suite_id"] = target_suite_id
 
-    cloned = []
-    for tc in source_cases:
-        clone = _clone_single_test_case(tc, overrides)
-        db.session.add(clone)
-        cloned.append(clone)
+    try:
+        cloned = testing_service.bulk_clone_suite(suite_id, target_suite_id, overrides)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
 
     try:
         db.session.commit()
