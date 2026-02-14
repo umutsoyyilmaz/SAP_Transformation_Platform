@@ -2622,3 +2622,134 @@ def delete_case_dependency(dep_id):
         db.session.rollback()
         return jsonify({"error": "Database error"}), 500
     return jsonify({"message": "Dependency deleted"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST CASE CLONE / COPY
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Fields that are copied verbatim from the source test case during clone
+_CLONE_COPY_FIELDS = (
+    "program_id", "requirement_id", "explore_requirement_id",
+    "backlog_item_id", "config_item_id", "suite_id",
+    "description", "test_layer", "module",
+    "preconditions", "test_steps", "expected_result", "test_data_set",
+    "priority", "is_regression", "assigned_to", "assigned_to_id",
+)
+
+
+def _clone_single_test_case(source, overrides=None):
+    """
+    Clone a single TestCase, returning the new (uncommitted) instance.
+
+    - Status is always reset to 'draft'.
+    - Code is auto-generated.
+    - Optional overrides dict can set title, test_layer, suite_id,
+      assigned_to, priority, module.
+    """
+    overrides = overrides or {}
+
+    # Copy base fields
+    data = {f: getattr(source, f) for f in _CLONE_COPY_FIELDS}
+    # Apply overrides
+    for key in ("title", "test_layer", "suite_id", "assigned_to",
+                "assigned_to_id", "priority", "module"):
+        if key in overrides:
+            data[key] = overrides[key]
+
+    # Title defaults to "Copy of <original>"
+    if "title" not in overrides:
+        data["title"] = f"Copy of {source.title}"
+
+    # Auto-generate code
+    mod = data.get("module") or "GEN"
+    data["code"] = f"TC-{mod.upper()}-{TestCase.query.filter_by(program_id=source.program_id).count() + 1:04d}"
+
+    # Always start as draft, record lineage
+    data["status"] = "draft"
+    data["cloned_from_id"] = source.id
+
+    clone = TestCase(**data)
+    return clone
+
+
+@testing_bp.route("/testing/test-cases/<int:case_id>/clone", methods=["POST"])
+def clone_test_case(case_id):
+    """
+    Clone a single test case.
+
+    POST /api/v1/testing/test-cases/<id>/clone
+    Body (all optional):
+      { "title", "test_layer", "suite_id", "assigned_to", "priority", "module" }
+    Returns: 201 + cloned test case JSON.
+    """
+    source, err = _get_or_404(TestCase, case_id)
+    if err:
+        return err
+
+    overrides = request.get_json(silent=True) or {}
+    clone = _clone_single_test_case(source, overrides)
+    db.session.add(clone)
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Clone test case — DB commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+
+    return jsonify(clone.to_dict()), 201
+
+
+@testing_bp.route("/testing/test-suites/<int:suite_id>/clone-cases", methods=["POST"])
+def clone_suite_cases(suite_id):
+    """
+    Bulk-clone all test cases from one suite into a target suite.
+
+    POST /api/v1/testing/test-suites/<suite_id>/clone-cases
+    Body:
+      { "target_suite_id": <int> }            ← required
+      Optional overrides applied to ALL clones:
+      { "test_layer", "assigned_to", "priority", "module" }
+    Returns: 201 + list of cloned test case dicts + count.
+    """
+    source_suite, err = _get_or_404(TestSuite, suite_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    target_suite_id = data.get("target_suite_id")
+    if not target_suite_id:
+        return jsonify({"error": "target_suite_id is required"}), 400
+
+    target_suite, err = _get_or_404(TestSuite, target_suite_id)
+    if err:
+        return err
+
+    # Ensure same program
+    if source_suite.program_id != target_suite.program_id:
+        return jsonify({"error": "Source and target suites must belong to the same program"}), 400
+
+    source_cases = TestCase.query.filter_by(suite_id=suite_id).all()
+    if not source_cases:
+        return jsonify({"error": "Source suite has no test cases to clone"}), 404
+
+    overrides = {k: data[k] for k in ("test_layer", "assigned_to", "priority", "module") if k in data}
+    overrides["suite_id"] = target_suite_id
+
+    cloned = []
+    for tc in source_cases:
+        clone = _clone_single_test_case(tc, overrides)
+        db.session.add(clone)
+        cloned.append(clone)
+
+    try:
+        db.session.commit()
+    except Exception:
+        logger.exception("Bulk clone suite cases — DB commit failed")
+        db.session.rollback()
+        return jsonify({"error": "Database error"}), 500
+
+    return jsonify({
+        "cloned_count": len(cloned),
+        "items": [c.to_dict() for c in cloned],
+    }), 201

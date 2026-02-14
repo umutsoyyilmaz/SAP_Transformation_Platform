@@ -363,6 +363,12 @@ class TestCase(db.Model):
         nullable=True, comment="FK → team_members",
     )
 
+    # ── Clone tracking
+    cloned_from_id = db.Column(
+        db.Integer, db.ForeignKey("test_cases.id", ondelete="SET NULL"),
+        nullable=True, comment="Source test case this was cloned from",
+    )
+
     # ── Audit
     created_at = db.Column(
         db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
@@ -374,6 +380,11 @@ class TestCase(db.Model):
     )
 
     # ── Relationships
+    cloned_from = db.relationship(
+        "TestCase", remote_side="TestCase.id",
+        foreign_keys=[cloned_from_id],
+        uselist=False,
+    )
     executions = db.relationship(
         "TestExecution", backref="test_case", lazy="dynamic",
         cascade="all, delete-orphan",
@@ -424,6 +435,7 @@ class TestCase(db.Model):
             "assigned_to": self.assigned_to,
             "assigned_to_id": self.assigned_to_id,
             "assigned_to_member": self.assigned_member.to_dict() if self.assigned_to_id and self.assigned_member else None,
+            "cloned_from_id": self.cloned_from_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
