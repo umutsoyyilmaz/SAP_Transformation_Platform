@@ -55,28 +55,11 @@ from app.models.integration import (
 )
 from app.models.program import Program
 from app.blueprints import paginate_query
+from app.utils.helpers import get_or_404 as _get_or_404, parse_date as _parse_date
 
 logger = logging.getLogger(__name__)
 
 integration_bp = Blueprint("integration", __name__, url_prefix="/api/v1")
-
-
-# ── helpers ──────────────────────────────────────────────────────────────────
-
-def _get_or_404(model, pk):
-    obj = db.session.get(model, pk)
-    if not obj:
-        return None, (jsonify({"error": f"{model.__name__} not found"}), 404)
-    return obj, None
-
-
-def _parse_date(value):
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(value)
-    except (ValueError, TypeError):
-        return None
 
 
 # ═════════════════════════════════════════════════════════════════════════════

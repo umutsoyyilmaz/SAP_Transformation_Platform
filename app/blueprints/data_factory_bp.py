@@ -23,6 +23,7 @@ from app.models import db
 from app.models.data_factory import (
     DataObject, MigrationWave, CleansingTask, LoadCycle, Reconciliation,
 )
+from app.utils.helpers import get_or_404 as _get_or_404
 
 data_factory_bp = Blueprint(
     "data_factory", __name__, url_prefix="/api/v1/data-factory",
@@ -31,13 +32,6 @@ data_factory_bp = Blueprint(
 
 def _utcnow():
     return datetime.now(timezone.utc)
-
-
-def _get_or_404(model, pk, label="Resource"):
-    obj = db.session.get(model, pk)
-    if not obj:
-        return None, (jsonify({"error": f"{label} not found"}), 404)
-    return obj, None
 
 
 # ═════════════════════════════════════════════════════════════════════════

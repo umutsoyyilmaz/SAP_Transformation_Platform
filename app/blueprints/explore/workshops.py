@@ -41,24 +41,7 @@ from app.models.audit import write_audit
 
 from app.blueprints.explore import explore_bp
 from app.utils.errors import api_error, E
-
-
-# ── Helpers ──────────────────────────────────────────────────────────────────
-
-def _parse_date_input(value):
-    if not value:
-        return None
-    if isinstance(value, date):
-        return value
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        try:
-            return datetime.strptime(value, "%d.%m.%Y").date()
-        except ValueError as exc:
-            raise ValueError(
-                "Invalid date format. Use YYYY-MM-DD or DD.MM.YYYY."
-            ) from exc
+from app.utils.helpers import parse_date_input as _parse_date_input
 
 
 # ═════════════════════════════════════════════════════════════════════════════

@@ -57,30 +57,11 @@ from app.models.program import (
     Workstream,
 )
 
+from app.utils.helpers import get_or_404 as _get_or_404, parse_date as _parse_date
+
 logger = logging.getLogger(__name__)
 
 program_bp = Blueprint("program", __name__, url_prefix="/api/v1")
-
-
-# ── helpers ──────────────────────────────────────────────────────────────────
-
-def _parse_date(value):
-    """Parse ISO date string to date object, or None."""
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(value)
-    except (ValueError, TypeError):
-        return None
-
-
-def _get_or_404(model, pk):
-    """Fetch by primary key or return 404 JSON."""
-    obj = db.session.get(model, pk)
-    if not obj:
-        name = model.__name__
-        return None, (jsonify({"error": f"{name} not found"}), 404)
-    return obj, None
 
 
 # ═════════════════════════════════════════════════════════════════════════════

@@ -48,6 +48,7 @@ from app.models.raid import (
 from app.models.notification import Notification
 from app.services.notification import NotificationService
 from app.blueprints import paginate_query
+from app.utils.helpers import parse_date as _parse_date
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +56,6 @@ raid_bp = Blueprint("raid", __name__, url_prefix="/api/v1")
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
-
-def _parse_date(val):
-    if not val:
-        return None
-    try:
-        return datetime.fromisoformat(str(val)).date()
-    except (ValueError, TypeError):
-        return None
 
 
 def _get_program_or_404(pid):

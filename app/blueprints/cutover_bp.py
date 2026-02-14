@@ -54,6 +54,7 @@ from app.services.cutover_service import (
     transition_rehearsal,
     transition_task,
 )
+from app.utils.helpers import get_or_404 as _get_or_404
 
 cutover_bp = Blueprint(
     "cutover", __name__, url_prefix="/api/v1/cutover",
@@ -84,13 +85,6 @@ def _parse_dt(val):
                 continue
         return datetime.fromisoformat(val)
     return val
-
-
-def _get_or_404(model, pk, label="Resource"):
-    obj = db.session.get(model, pk)
-    if not obj:
-        return None, (jsonify({"error": f"{label} not found"}), 404)
-    return obj, None
 
 
 # ═════════════════════════════════════════════════════════════════════════════

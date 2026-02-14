@@ -88,28 +88,11 @@ from app.models.program import Program
 from app.models.requirement import Requirement
 from app.models.explore import ExploreRequirement
 from app.blueprints import paginate_query
+from app.utils.helpers import get_or_404 as _get_or_404, parse_date as _parse_date
 
 logger = logging.getLogger(__name__)
 
 testing_bp = Blueprint("testing", __name__, url_prefix="/api/v1")
-
-
-# ── helpers ──────────────────────────────────────────────────────────────────
-
-def _get_or_404(model, pk):
-    obj = db.session.get(model, pk)
-    if not obj:
-        return None, (jsonify({"error": f"{model.__name__} not found"}), 404)
-    return obj, None
-
-
-def _parse_date(value):
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(value)
-    except (ValueError, TypeError):
-        return None
 
 
 def _auto_code(model, prefix, program_id):
