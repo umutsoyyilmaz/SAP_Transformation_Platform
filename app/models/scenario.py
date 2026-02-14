@@ -171,6 +171,11 @@ class Scenario(db.Model):
 
 class Workshop(db.Model):
     """
+    .. deprecated:: Sprint-3
+        Legacy workshop model. New code should use
+        :class:`app.models.explore.workshop.ExploreWorkshop`
+        which supports the full SAP Activate workflow.
+
     Analysis / workshop session linked to a business scenario.
 
     Workshops are where requirements are gathered, fit-gap analysis is done,

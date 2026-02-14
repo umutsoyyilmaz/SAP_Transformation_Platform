@@ -39,6 +39,11 @@ OPEN_ITEM_PRIORITIES = {"critical", "high", "medium", "low"}
 
 class Requirement(db.Model):
     """
+    .. deprecated:: Sprint-3
+        Legacy requirement model. New code should use
+        :class:`app.models.explore.requirement.ExploreRequirement`
+        which supports the full SAP Activate workflow.
+
     Business / functional / technical requirement for an SAP transformation.
 
     Born from a Workshop or stakeholder request.
@@ -174,6 +179,11 @@ class Requirement(db.Model):
 
 class OpenItem(db.Model):
     """
+    .. deprecated:: Sprint-3
+        Legacy open-item model. New code should use
+        :class:`app.models.explore.requirement.ExploreOpenItem`
+        which supports the full SAP Activate workflow.
+
     Unresolved question / decision / dependency linked to a Requirement.
 
     Tracks parking-lot items from workshops — things that couldn't be
