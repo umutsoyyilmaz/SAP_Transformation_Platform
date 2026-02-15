@@ -20,7 +20,7 @@ DB_FILE  := instance/sap_platform_dev.db
 PORT     := 5001
 
 .PHONY: help setup venv deps db-init db-migrate db-upgrade seed seed-verbose seed-demo \
-	run test test-verbose lint format reset clean deploy status \
+	run test test-verbose lint lint-architecture format reset clean deploy status \
 	tenant-list tenant-create tenant-init tenant-seed tenant-status
 
 # ── Default ──────────────────────────────────────────────────────────────
@@ -37,6 +37,7 @@ help:
 	@echo "    make test           Tüm testleri çalıştır"
 	@echo "    make test-verbose   Detaylı test çıktısı"
 	@echo "    make lint           Kod kalite kontrolü (ruff)"
+	@echo "    make lint-architecture  Mimari kurallar (fat controller, duplicate utility)"
 	@echo "    make format         Kod formatlama (ruff format)"
 	@echo "    make seed           Demo verileri yükle (mevcut veriyi temizler)"
 	@echo "    make seed-verbose   Demo verileri yükle (detaylı çıktı)"
@@ -142,6 +143,40 @@ format: deps
 	@$(PYTHON) -m ruff --version >/dev/null 2>&1 || (echo "⚠️  ruff yüklü değil. 'pip install ruff' ile kurun."; exit 1)
 	@echo "✨ ruff format çalışıyor..."
 	@$(PYTHON) -m ruff format .
+
+# ── Architecture Lint ───────────────────────────────────────────────────
+lint-architecture:
+	@echo "🏗️  Mimari kurallar kontrol ediliyor..."
+	@echo ""
+	@echo "  1. Fat controller kontrolü (>1000 satır)..."
+	@FAT=0; \
+	for f in $$(find app/blueprints -name "*.py" -not -path "*/__pycache__/*"); do \
+		lines=$$(wc -l < "$$f"); \
+		if [ $$lines -gt 1000 ]; then \
+			echo "     ⚠️  $$f: $$lines satır (limit: 1000)"; \
+			FAT=$$((FAT+1)); \
+		fi; \
+	done; \
+	if [ $$FAT -eq 0 ]; then echo "     ✅ Tüm blueprint'ler 1000 satır altında"; fi
+	@echo ""
+	@echo "  2. Duplicate utility kontrolü..."
+	@if grep -rn "def _get_or_404\|def _parse_date" app/blueprints/ --include="*.py" 2>/dev/null | grep -v __pycache__; then \
+		echo "     ❌ Duplicate utility fonksiyonları bulundu!"; \
+		exit 1; \
+	else \
+		echo "     ✅ Duplicate utility yok (helpers.py kullanılıyor)"; \
+	fi
+	@echo ""
+	@echo "  3. Generic except Exception sayısı..."
+	@COUNT=$$(grep -rn "except Exception" app/blueprints/ --include="*.py" | grep -v __pycache__ | wc -l | tr -d ' '); \
+	echo "     ℹ️  $$COUNT adet 'except Exception' blok (hedef: <60)"; \
+	if [ $$COUNT -gt 60 ]; then \
+		echo "     ⚠️  Hedefin üzerinde!"; \
+	else \
+		echo "     ✅ Hedef dahilinde"; \
+	fi
+	@echo ""
+	@echo "  🏗️  Mimari kontrol tamamlandı."
 
 # ── Full Setup (first time) ────────────────────────────────────────────
 setup: deps db-init seed

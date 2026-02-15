@@ -20,13 +20,13 @@ traceability from requirements to test execution.
 | Metric | Value |
 |--------|-------|
 | DB Tables | 103 |
-| API Routes | ~450 |
-| Pytest Tests | 1 593+ |
-| Model Classes | 103 |
-| Blueprints | 17 |
-| Services | 15+ |
+| API Routes | ~570 |
+| Pytest Tests | 2,191 |
+| Model Classes | 114 |
+| Blueprints | 26 |
+| Service Modules | 42 |
 | AI Assistants | 13 |
-| Alembic Migrations | 11+ |
+| Alembic Migrations | 16 |
 
 ---
 
@@ -90,6 +90,31 @@ The platform architecture is defined in
 [`sap_transformation_platform_architecture_v2.md`](docs/specs/sap_transformation_platform_architecture_v2.md)
 and serves as the single source of truth for module boundaries, tech stack
 decisions, and directory structure.
+
+### Codebase Structure
+
+```
+app/
+├── blueprints/          # 26 Flask blueprints (API controllers)
+│   ├── explore/         # 5 domain-cohesive sub-modules (workshops, requirements, etc.)
+│   └── *.py             # Route handlers — thin controllers delegating to services
+├── services/            # 42 service modules (business logic layer)
+├── models/              # 114 SQLAlchemy model classes
+├── middleware/          # RBAC (blueprint_permissions, permission_required), audit
+├── ai/                  # AI provider abstraction (Gemini, OpenAI, Anthropic, Local)
+├── utils/               # Shared helpers (get_or_404, parse_date, db_commit_or_error)
+└── config.py            # Environment-based configuration
+tests/                   # 2,191 pytest tests
+static/                  # PWA frontend (Vanilla JS, Fiori Horizon CSS)
+templates/               # Jinja2 admin templates
+```
+
+### Key Patterns
+
+- **Centralized RBAC:** `blueprint_permissions.py` maps 17 blueprints to permission guards via `before_request`
+- **Service layer:** Business logic in `app/services/`, controllers remain thin
+- **Standardized error handling:** `db_commit_or_error()` helper replaces 115+ uniform try/except blocks
+- **Architecture linting:** `make lint-architecture` prevents fat controllers and duplicate utilities
 
 ---
 
@@ -171,7 +196,7 @@ make run
 
 ```bash
 make run              # Uygulamayı başlat (http://localhost:5001)
-make test             # 1593+ testi çalıştır
+make test             # 2191+ testi çalıştır
 make status           # Proje durumu + DB kayıt sayıları
 make seed             # Demo veriyi yeniden yükle (mevcut veriyi temizler)
 make seed-verbose     # Demo veri yükle (detaylı çıktı)
@@ -236,7 +261,7 @@ Seed script gerçekçi bir Türk otomotiv şirketi SAP dönüşüm projesi oluş
 | — | Final Polish v1.0 (S24) | ✅ Complete |
 
 Detaylı ilerleme raporu: [`PROGRESS_REPORT.md`](docs/plans/PROGRESS_REPORT.md)  
-Teknik borç: [`TECHNICAL_DEBT.md`](docs/plans/TECHNICAL_DEBT.md)  
+Teknik borç: [`perga_technical_debt_analysis_v2.0.md`](docs/plans/perga_technical_debt_analysis_v2.0.md)  
 Değişiklik geçmişi: [`CHANGELOG.md`](docs/plans/CHANGELOG.md)
 
 ---
