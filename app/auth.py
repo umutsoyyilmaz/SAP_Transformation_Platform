@@ -257,6 +257,9 @@ def init_auth(app):
         # Health sub-routes and metrics — no auth required
         if request.path.startswith("/api/v1/health/") or request.path.startswith("/api/v1/metrics/"):
             return None
+        # Auth endpoints (login, register, tenants, refresh) — public
+        if request.path.startswith("/api/v1/auth/"):
+            return None
         # OPTIONS pre-flight requests don't need auth
         if request.method == "OPTIONS":
             return None
@@ -272,12 +275,16 @@ def init_auth(app):
             g.api_key = "dev-mode"
             return None
 
-        # Same-origin SPA requests bypass API key requirement.
-        # The SPA is served by this same Flask server; if the user can
-        # see the page they are already "inside".  CSRF is mitigated by
-        # the Content-Type enforcement above (HTML forms cannot send
-        # application/json).  External API consumers still need X-API-Key.
+        # Same-origin SPA requests: if the user has a JWT token, it will
+        # be handled by jwt_auth middleware (which sets g.jwt_user_id).
+        # Same-origin requests without a JWT still get admin access for
+        # backward compatibility. Once all users authenticate via login,
+        # this fallback can be removed.
         if _is_same_origin_request():
+            # If JWT middleware already set identity, respect it
+            if getattr(g, "jwt_user_id", None):
+                # jwt_auth middleware already set g.current_user_role
+                return None
             g.current_user_role = "admin"
             g.api_key = "spa-session"
             return None

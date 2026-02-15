@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — SAP Transformation Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/login.css">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+    <meta name="theme-color" content="#354a5f">
+</head>
+<body>
+    <div class="login-page">
+        <div class="login-card">
+            <div class="login-card__header">
+                <div class="login-card__logo">
+                    SAP <span>Transformation Platform</span>
+                </div>
+                <p class="login-card__subtitle">Sign in to your account</p>
+            </div>
+
+            <form class="login-card__form" id="loginForm" autocomplete="on">
+                <!-- Tenant Selector -->
+                <div class="form-group">
+                    <label for="tenantSelect">Organization</label>
+                    <select id="tenantSelect" name="tenant" required>
+                        <option value="">Loading organizations...</option>
+                    </select>
+                </div>
+
+                <!-- Email -->
+                <div class="form-group">
+                    <label for="emailInput">Email</label>
+                    <input type="email" id="emailInput" name="email" required
+                           placeholder="you@company.com" autocomplete="email">
+                </div>
+
+                <!-- Password -->
+                <div class="form-group">
+                    <label for="passwordInput">Password</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="passwordInput" name="password" required
+                               placeholder="••••••••" autocomplete="current-password">
+                        <button type="button" class="password-toggle" id="passwordToggle" tabindex="-1">👁</button>
+                    </div>
+                </div>
+
+                <!-- Error message -->
+                <div class="login-card__error" id="loginError" role="alert"></div>
+
+                <!-- Submit -->
+                <button type="submit" class="login-card__submit" id="loginBtn">
+                    <span id="loginBtnText">Sign In</span>
+                    <span id="loginBtnSpinner" class="spinner-sm" hidden></span>
+                </button>
+            </form>
+
+            <div class="login-card__footer">
+                <p>Powered by <strong>Perga</strong></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (() => {
+        'use strict';
+
+        const form = document.getElementById('loginForm');
+        const tenantSelect = document.getElementById('tenantSelect');
+        const emailInput = document.getElementById('emailInput');
+        const passwordInput = document.getElementById('passwordInput');
+        const errorEl = document.getElementById('loginError');
+        const loginBtn = document.getElementById('loginBtn');
+        const btnText = document.getElementById('loginBtnText');
+        const btnSpinner = document.getElementById('loginBtnSpinner');
+        const passwordToggle = document.getElementById('passwordToggle');
+
+        // If already authenticated, redirect to app
+        const existingToken = localStorage.getItem('sap_access_token');
+        if (existingToken) {
+            window.location.href = '/';
+            return;
+        }
+
+        // Load tenants
+        async function loadTenants() {
+            try {
+                const res = await fetch('/api/v1/auth/tenants');
+                const tenants = await res.json();
+                tenantSelect.innerHTML = '';
+
+                if (!tenants.length) {
+                    tenantSelect.innerHTML = '<option value="">No organizations available</option>';
+                    return;
+                }
+
+                if (tenants.length === 1) {
+                    tenantSelect.innerHTML = `<option value="${tenants[0].slug}">${tenants[0].name}</option>`;
+                } else {
+                    tenantSelect.innerHTML = '<option value="">Select organization...</option>' +
+                        tenants.map(t => `<option value="${t.slug}">${t.name}</option>`).join('');
+                }
+
+                // Restore last used tenant
+                const lastTenant = localStorage.getItem('sap_last_tenant');
+                if (lastTenant) {
+                    tenantSelect.value = lastTenant;
+                }
+            } catch (err) {
+                tenantSelect.innerHTML = '<option value="">Failed to load organizations</option>';
+            }
+        }
+
+        // Password toggle
+        passwordToggle.addEventListener('click', () => {
+            const isPassword = passwordInput.type === 'password';
+            passwordInput.type = isPassword ? 'text' : 'password';
+            passwordToggle.textContent = isPassword ? '🙈' : '👁';
+        });
+
+        // Login
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorEl.textContent = '';
+            errorEl.hidden = true;
+
+            const tenant_slug = tenantSelect.value;
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
+
+            if (!tenant_slug) {
+                showError('Please select an organization');
+                return;
+            }
+
+            // Disable button
+            loginBtn.disabled = true;
+            btnText.textContent = 'Signing in...';
+            btnSpinner.hidden = false;
+
+            try {
+                const res = await fetch('/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, tenant_slug }),
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    showError(data.error || 'Login failed');
+                    return;
+                }
+
+                // Store tokens and user info
+                localStorage.setItem('sap_access_token', data.access_token);
+                localStorage.setItem('sap_refresh_token', data.refresh_token);
+                localStorage.setItem('sap_user', JSON.stringify(data.user));
+                localStorage.setItem('sap_last_tenant', tenant_slug);
+
+                // Redirect to app
+                window.location.href = '/';
+
+            } catch (err) {
+                showError('Network error. Please try again.');
+            } finally {
+                loginBtn.disabled = false;
+                btnText.textContent = 'Sign In';
+                btnSpinner.hidden = true;
+            }
+        });
+
+        function showError(msg) {
+            errorEl.textContent = msg;
+            errorEl.hidden = false;
+        }
+
+        // Handle Enter key in password field
+        passwordInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') form.requestSubmit();
+        });
+
+        // Init
+        loadTenants();
+        emailInput.focus();
+    })();
+    </script>
+</body>
+</html>

@@ -33,11 +33,28 @@
         </div>
         <div class="shell-header__actions">
             <button class="shell-header__icon-btn" title="Notifications">🔔</button>
-            <div class="user-switcher" id="userSwitcher">
-                <button class="user-switcher__btn" id="userSwitcherBtn" title="Switch demo user">
-                    👤 <span id="userSwitcherLabel">Guest</span> ▾
+            <div class="profile-dropdown" id="profileDropdown">
+                <button class="profile-dropdown__btn" id="profileBtn" title="User profile">
+                    <span class="profile-dropdown__avatar" id="profileAvatar">?</span>
+                    <span class="profile-dropdown__name" id="profileName">User</span>
+                    <span class="profile-dropdown__chevron">▾</span>
                 </button>
-                <div class="user-switcher__dropdown" id="userSwitcherDropdown"></div>
+                <div class="profile-dropdown__menu" id="profileMenu">
+                    <div class="profile-dropdown__user-info" id="profileUserInfo">
+                        <div class="profile-dropdown__full-name" id="profileFullName">—</div>
+                        <div class="profile-dropdown__email" id="profileEmail">—</div>
+                        <div class="profile-dropdown__role-badge" id="profileRole">—</div>
+                    </div>
+                    <div class="profile-dropdown__divider"></div>
+                    <div class="profile-dropdown__tenant" id="profileTenant">
+                        <span class="profile-dropdown__tenant-label">Organization</span>
+                        <span class="profile-dropdown__tenant-name" id="profileTenantName">—</span>
+                    </div>
+                    <div class="profile-dropdown__divider"></div>
+                    <button class="profile-dropdown__item" onclick="Auth.logout()">
+                        <span>🚪</span> Sign Out
+                    </button>
+                </div>
             </div>
         </div>
     </header>
@@ -149,6 +166,7 @@
     <script src="/static/js/error-handler.js"></script>
     <script src="/static/js/constants.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="/static/js/auth.js"></script>
     <script src="/static/js/api.js"></script>
     <script src="/static/js/views/program.js"></script>
     <script src="/static/js/views/backlog.js"></script>

@@ -322,6 +322,10 @@ def create_app(config_name=None):
     def index():
         return send_from_directory(app.template_folder, "index.html")
 
+    @app.route("/login")
+    def login_page():
+        return send_from_directory(app.template_folder, "login.html")
+
     # ── Health check (kept for backward compat — detailed version at /health/live) ──
     @app.route("/api/v1/health")
     def health():

@@ -1,6 +1,9 @@
 /**
  * SAP Transformation Management Platform
  * API Client Helper — fetch wrapper for all backend calls.
+ *
+ * Auth: Includes JWT Bearer token from Auth module when available.
+ * On 401: redirects to /login for re-authentication.
  */
 
 const API = (() => {
@@ -8,17 +11,17 @@ const API = (() => {
 
     /**
      * Inject current user context into mutating request bodies.
-     * Reads from RoleNav (sessionStorage) so every POST/PUT/PATCH
-     * carries user_id, user_name, created_by, changed_by automatically.
+     * Reads from Auth module (JWT user) for identity.
      */
     function _injectUser(body) {
         if (!body || typeof body !== 'object') return body;
-        // RoleNav is loaded before api.js — safe to call
-        const user = (typeof RoleNav !== 'undefined') ? RoleNav.getUser() : null;
+
+        // Use JWT-authenticated user from Auth module
+        const user = (typeof Auth !== 'undefined') ? Auth.getUser() : null;
         if (!user) return body;
 
-        const uid  = user.id   || 'system';
-        const uname = user.name || 'System';
+        const uid   = String(user.id || 'system');
+        const uname = user.full_name || user.name || 'System';
 
         // Only set if NOT already explicitly provided by caller
         if (!body.user_id)       body.user_id       = uid;
@@ -52,6 +55,14 @@ const API = (() => {
             headers: { 'Content-Type': 'application/json' },
         };
 
+        // ── JWT Authorization Header ────────────────────────────────
+        if (typeof Auth !== 'undefined') {
+            const token = Auth.getAccessToken();
+            if (token) {
+                opts.headers['Authorization'] = `Bearer ${token}`;
+            }
+        }
+
         // ── Context Middleware (POST/PUT/PATCH only) ────────────────
         if (body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
             body = _injectProjectContext(body);
@@ -61,6 +72,15 @@ const API = (() => {
         if (body) opts.body = JSON.stringify(body);
 
         const res = await fetch(`${BASE}${path}`, opts);
+
+        // ── 401 → redirect to login ────────────────────────────────
+        if (res.status === 401 && !path.startsWith('/auth/')) {
+            if (typeof Auth !== 'undefined') {
+                Auth.clearTokens();
+            }
+            window.location.href = '/login';
+            throw new Error('Session expired');
+        }
 
         let data;
         try {

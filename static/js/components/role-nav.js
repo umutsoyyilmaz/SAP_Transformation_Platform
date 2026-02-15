@@ -3,12 +3,11 @@
  * Role-Based Navigation Controller
  *
  * Manages current user context and permission-based UI controls:
- *   - Stores active user (id, name, role) in sessionStorage
+ *   - Gets active user from Auth module (JWT-based) or sessionStorage fallback
  *   - Fetches permissions from the backend
  *   - Provides helpers for conditional button rendering and disable/hide
  *
  * Usage:
- *   RoleNav.setUser({ id: 'user-1', name: 'Ahmet', default_role: 'pm' });
  *   const can = await RoleNav.can('req_approve');
  *   const html = RoleNav.guardedButton('Approve', 'req_approve', { onclick: '...' });
  */
@@ -21,9 +20,25 @@ const RoleNav = (() => {
     // ── User context ────────────────────────────────────────────────
 
     function getUser() {
+        // Primary: read from sessionStorage (set by app.js from Auth module)
         try {
-            return JSON.parse(sessionStorage.getItem(STORAGE_KEY) || 'null');
-        } catch { return null; }
+            const stored = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || 'null');
+            if (stored) return stored;
+        } catch { /* ignore */ }
+
+        // Fallback: read from Auth module directly
+        if (typeof Auth !== 'undefined') {
+            const jwtUser = Auth.getUser();
+            if (jwtUser) {
+                return {
+                    id: String(jwtUser.id),
+                    name: jwtUser.full_name || jwtUser.email || 'User',
+                    default_role: (jwtUser.roles && jwtUser.roles[0]) || 'viewer',
+                };
+            }
+        }
+
+        return null;
     }
 
     function setUser(user) {

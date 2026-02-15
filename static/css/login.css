@@ -1,0 +1,222 @@
+/* ── Login Page Styles ──────────────────────────────────────────── */
+:root {
+    --sap-blue: #354a5f;
+    --sap-blue-dark: #1b2d3e;
+    --sap-blue-light: #e8f0fe;
+    --sap-accent: #0a6ed1;
+    --sap-accent-hover: #0854a0;
+    --sap-text: #32363a;
+    --sap-text-secondary: #6a6d70;
+    --sap-border: #d9d9d9;
+    --sap-bg: #f7f7f7;
+    --sap-error: #bb0000;
+    --sap-error-bg: #fff2f2;
+    --radius: 8px;
+    --shadow: 0 2px 16px rgba(0,0,0,.1);
+    --transition: .2s ease;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: linear-gradient(135deg, var(--sap-blue-dark) 0%, var(--sap-blue) 50%, #4a6a7f 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--sap-text);
+}
+
+.login-page {
+    width: 100%;
+    max-width: 420px;
+    padding: 20px;
+}
+
+.login-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: var(--shadow), 0 8px 32px rgba(0,0,0,.15);
+    overflow: hidden;
+}
+
+.login-card__header {
+    background: var(--sap-blue);
+    color: #fff;
+    padding: 32px 32px 24px;
+    text-align: center;
+}
+
+.login-card__logo {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: .3px;
+}
+
+.login-card__logo span {
+    font-weight: 400;
+    opacity: .9;
+}
+
+.login-card__subtitle {
+    margin-top: 8px;
+    font-size: 14px;
+    opacity: .75;
+}
+
+.login-card__form {
+    padding: 32px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--sap-text);
+    margin-bottom: 6px;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    border: 1px solid var(--sap-border);
+    border-radius: var(--radius);
+    background: #fff;
+    color: var(--sap-text);
+    transition: border-color var(--transition), box-shadow var(--transition);
+    outline: none;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    border-color: var(--sap-accent);
+    box-shadow: 0 0 0 3px rgba(10,110,209,.15);
+}
+
+.form-group input::placeholder {
+    color: var(--sap-text-secondary);
+    opacity: .7;
+}
+
+.password-wrapper {
+    position: relative;
+}
+
+.password-wrapper input {
+    padding-right: 40px;
+}
+
+.password-toggle {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px;
+    opacity: .6;
+    transition: opacity var(--transition);
+}
+
+.password-toggle:hover {
+    opacity: 1;
+}
+
+.login-card__error {
+    background: var(--sap-error-bg);
+    color: var(--sap-error);
+    font-size: 13px;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    margin-bottom: 16px;
+    border: 1px solid rgba(187,0,0,.15);
+}
+
+.login-card__error[hidden] {
+    display: none;
+}
+
+.login-card__submit {
+    width: 100%;
+    padding: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    background: var(--sap-accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background var(--transition), transform var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.login-card__submit:hover:not(:disabled) {
+    background: var(--sap-accent-hover);
+}
+
+.login-card__submit:active:not(:disabled) {
+    transform: scale(.98);
+}
+
+.login-card__submit:disabled {
+    opacity: .7;
+    cursor: not-allowed;
+}
+
+.spinner-sm {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    display: inline-block;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.login-card__footer {
+    padding: 16px 32px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--sap-text-secondary);
+    border-top: 1px solid var(--sap-border);
+    background: var(--sap-bg);
+}
+
+.login-card__footer strong {
+    color: var(--sap-text);
+}
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 480px) {
+    .login-page {
+        padding: 12px;
+    }
+    .login-card__header {
+        padding: 24px 20px 20px;
+    }
+    .login-card__form {
+        padding: 24px 20px;
+    }
+}
