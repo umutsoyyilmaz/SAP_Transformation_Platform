@@ -110,6 +110,30 @@ BLUEPRINT_PERMISSIONS = {
     "audit": {
         "GET": "admin.audit",
     },
+    # ── Sprint 4: Previously skipped admin/utility blueprints ────────────
+    "feature_flag": {
+        "GET": "admin.settings",
+        "POST": "admin.settings",
+        "PUT": "admin.settings",
+        "PATCH": "admin.settings",
+        "DELETE": "admin.settings",
+    },
+    "dashboard": {
+        "GET": "admin.settings",
+    },
+    "tenant_export": {
+        "GET": "admin.settings",
+    },
+    "notification_bp": {
+        "GET": "admin.settings",
+        "POST": "admin.settings",
+        "PATCH": "admin.settings",
+        "DELETE": "admin.settings",
+    },
+    "onboarding": {
+        "GET": "admin.settings",
+        "POST": "admin.settings",
+    },
 }
 
 # Blueprints that are explicitly skipped:
@@ -119,21 +143,16 @@ BLUEPRINT_PERMISSIONS = {
 #   auth                  — auth endpoints must be open (login, register, etc.)
 #   ai                    — has @require_role on sensitive routes; general AI
 #                           access is open for all authenticated users
-#   notification_bp       — user-facing notifications, open for any auth user
 
 SKIP_BLUEPRINTS = {
     "health", "metrics", "pwa", "admin", "platform_admin",
-    "auth", "ai", "notification_bp", "static",
+    "auth", "ai", "static",
     "sso_bp", "sso_ui_bp",  # Sprint 7 — SSO has own @require_permission guards
     "scim_bp",              # Sprint 8 — SCIM uses bearer token auth
     "bulk_import_bp",       # Sprint 8 — has own @require_permission guards
     "custom_roles_bp",      # Sprint 8 — has own @require_permission guards
     "roles_ui_bp",          # Sprint 8 — UI route
-    "feature_flag",         # Sprint 9 — admin-only, platform admin guarded
-    "feature_flag_ui",      # Sprint 9 — UI route
-    "dashboard",            # Sprint 9 — admin dashboard
-    "onboarding",           # Sprint 9 — public onboarding flow
-    "tenant_export",        # Sprint 10 — admin data export
+    "feature_flag_ui",      # UI route, protected by same-origin auth
 }
 
 # Explore endpoints that should stay open (health / self-info)

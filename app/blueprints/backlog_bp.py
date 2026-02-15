@@ -50,7 +50,7 @@ from app.models.backlog import (
 from app.models.program import Program
 from app.blueprints import paginate_query
 from app.services import backlog_service
-from app.utils.helpers import get_or_404 as _get_or_404
+from app.utils.helpers import db_commit_or_error, get_or_404 as _get_or_404
 
 logger = logging.getLogger(__name__)
 
@@ -102,12 +102,9 @@ def create_backlog_item(program_id):
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(item.to_dict()), 201
 
 
@@ -133,12 +130,9 @@ def update_backlog_item(item_id):
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(item.to_dict()), 200
 
 
@@ -149,12 +143,9 @@ def delete_backlog_item(item_id):
     if err:
         return err
     db.session.delete(item)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": f"Backlog item '{item.title}' deleted"}), 200
 
 
@@ -170,12 +161,9 @@ def move_backlog_item(item_id):
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(item.to_dict()), 200
 
 
@@ -224,12 +212,9 @@ def create_sprint(program_id):
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(sprint.to_dict()), 201
 
 
@@ -254,12 +239,9 @@ def update_sprint(sprint_id):
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(sprint.to_dict()), 200
 
 
@@ -271,12 +253,9 @@ def delete_sprint(sprint_id):
         return err
 
     backlog_service.delete_sprint(sprint)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": f"Sprint '{sprint.name}' deleted"}), 200
 
 
@@ -313,12 +292,9 @@ def create_config_item(program_id):
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(item.to_dict()), 201
 
 
@@ -344,11 +320,9 @@ def update_config_item(item_id):
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
 
-    try:
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-        return jsonify({"error": "Database error while saving config item"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(item.to_dict()), 200
 
 
@@ -359,12 +333,9 @@ def delete_config_item(item_id):
     if err:
         return err
     db.session.delete(item)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": f"Config item '{item.title}' deleted"}), 200
 
 
@@ -386,12 +357,9 @@ def create_fs_for_backlog(item_id):
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(fs.to_dict()), 201
 
 
@@ -409,12 +377,9 @@ def create_fs_for_config(item_id):
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(fs.to_dict()), 201
 
 
@@ -444,12 +409,9 @@ def update_functional_spec(fs_id):
     if not fs.title:
         return jsonify({"error": "Functional spec title cannot be empty"}), 400
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(fs.to_dict()), 200
 
 
@@ -471,12 +433,9 @@ def create_technical_spec(fs_id):
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(ts.to_dict()), 201
 
 
@@ -507,12 +466,9 @@ def update_technical_spec(ts_id):
     if not ts.title:
         return jsonify({"error": "Technical spec title cannot be empty"}), 400
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(ts.to_dict()), 200
 
 

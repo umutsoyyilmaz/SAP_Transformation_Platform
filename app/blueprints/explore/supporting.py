@@ -20,7 +20,7 @@ reports, snapshots.
 
 import json
 
-from flask import jsonify, request
+from flask import current_app, jsonify, request
 
 from app.models import db
 from app.models.explore import (
@@ -470,9 +470,10 @@ def generate_minutes(workshop_id):
         return jsonify(doc), 201
     except ValueError as e:
         return api_error(E.NOT_FOUND, str(e))
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        return api_error(E.INTERNAL, str(e))
+        current_app.logger.exception("Minutes generation failed")
+        return api_error(E.INTERNAL, "Document generation failed")
 
 
 @explore_bp.route("/workshops/<workshop_id>/ai-summary", methods=["POST"])
@@ -489,9 +490,10 @@ def generate_ai_summary(workshop_id):
         return jsonify(doc), 201
     except ValueError as e:
         return api_error(E.NOT_FOUND, str(e))
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        return api_error(E.INTERNAL, str(e))
+        current_app.logger.exception("AI summary generation failed")
+        return api_error(E.INTERNAL, "AI summary generation failed")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -532,9 +534,10 @@ def capture_snapshot():
     try:
         snapshot = SnapshotService.capture(project_id, snapshot_date=snap_date)
         return jsonify(snapshot), 201
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        return api_error(E.INTERNAL, str(e))
+        current_app.logger.exception("Snapshot capture failed")
+        return api_error(E.INTERNAL, "Snapshot capture failed")
 
 
 @explore_bp.route("/snapshots", methods=["GET"])

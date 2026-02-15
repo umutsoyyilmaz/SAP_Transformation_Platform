@@ -88,7 +88,7 @@ from app.models.program import Program
 from app.models.requirement import Requirement
 from app.models.explore import ExploreRequirement
 from app.blueprints import paginate_query
-from app.utils.helpers import get_or_404 as _get_or_404, parse_date as _parse_date
+from app.utils.helpers import db_commit_or_error, get_or_404 as _get_or_404, parse_date as _parse_date
 from app.services import testing_service
 
 logger = logging.getLogger(__name__)
@@ -140,12 +140,9 @@ def create_test_plan(pid):
         end_date=_parse_date(data.get("end_date")),
     )
     db.session.add(plan)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(plan.to_dict()), 201
 
 
@@ -174,12 +171,9 @@ def update_test_plan(plan_id):
         if date_field in data:
             setattr(plan, date_field, _parse_date(data[date_field]))
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(plan.to_dict())
 
 
@@ -190,12 +184,9 @@ def delete_test_plan(plan_id):
     if err:
         return err
     db.session.delete(plan)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Test plan deleted"}), 200
 
 
@@ -243,12 +234,9 @@ def create_test_cycle(plan_id):
         order=data.get("order", max_order + 1),
     )
     db.session.add(cycle)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(cycle.to_dict()), 201
 
 
@@ -277,12 +265,9 @@ def update_test_cycle(cycle_id):
         if date_field in data:
             setattr(cycle, date_field, _parse_date(data[date_field]))
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(cycle.to_dict())
 
 
@@ -293,12 +278,9 @@ def delete_test_cycle(cycle_id):
     if err:
         return err
     db.session.delete(cycle)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Test cycle deleted"}), 200
 
 
@@ -400,12 +382,9 @@ def create_test_case(pid):
         suite_id=data.get("suite_id"),
     )
     db.session.add(tc)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(tc.to_dict()), 201
 
 
@@ -435,12 +414,9 @@ def update_test_case(case_id):
         if field in data:
             setattr(tc, field, data[field])
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(tc.to_dict())
 
 
@@ -451,12 +427,9 @@ def delete_test_case(case_id):
     if err:
         return err
     db.session.delete(tc)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Test case deleted"}), 200
 
 
@@ -509,12 +482,9 @@ def create_test_execution(cycle_id):
         evidence_url=data.get("evidence_url", ""),
     )
     db.session.add(exe)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(exe.to_dict()), 201
 
 
@@ -543,12 +513,9 @@ def update_test_execution(exec_id):
     if "result" in data and data["result"] != "not_run" and not exe.executed_at:
         exe.executed_at = datetime.now(timezone.utc)
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(exe.to_dict())
 
 
@@ -559,12 +526,9 @@ def delete_test_execution(exec_id):
     if err:
         return err
     db.session.delete(exe)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Test execution deleted"}), 200
 
 
@@ -625,12 +589,9 @@ def create_defect(pid):
         return jsonify({"error": "title is required"}), 400
 
     defect = testing_service.create_defect(pid, data)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(defect.to_dict()), 201
 
 
@@ -660,12 +621,9 @@ def update_defect(defect_id):
             "allowed": VALID_TRANSITIONS.get(defect.status, []),
         }), 400
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(defect.to_dict())
 
 
@@ -676,12 +634,9 @@ def delete_defect(defect_id):
     if err:
         return err
     db.session.delete(defect)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Defect deleted"}), 200
 
 
@@ -799,12 +754,9 @@ def create_test_suite(pid):
         tags=data.get("tags", ""),
     )
     db.session.add(suite)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(suite.to_dict()), 201
 
 
@@ -830,12 +782,9 @@ def update_test_suite(suite_id):
         if field in data:
             setattr(suite, field, data[field])
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(suite.to_dict())
 
 
@@ -848,12 +797,9 @@ def delete_test_suite(suite_id):
     # Unlink test cases from this suite before deletion
     TestCase.query.filter_by(suite_id=suite_id).update({"suite_id": None})
     db.session.delete(suite)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Test suite deleted"}), 200
 
 
@@ -895,12 +841,9 @@ def create_test_step(case_id):
         notes=data.get("notes", ""),
     )
     db.session.add(step)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(step.to_dict()), 201
 
 
@@ -916,12 +859,9 @@ def update_test_step(step_id):
         if field in data:
             setattr(step, field, data[field])
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(step.to_dict())
 
 
@@ -932,12 +872,9 @@ def delete_test_step(step_id):
     if err:
         return err
     db.session.delete(step)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Test step deleted"}), 200
 
 
@@ -976,12 +913,9 @@ def assign_suite_to_cycle(cycle_id):
         notes=data.get("notes", ""),
     )
     db.session.add(cs)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(cs.to_dict()), 201
 
 
@@ -993,12 +927,9 @@ def remove_suite_from_cycle(cycle_id, suite_id):
         return jsonify({"error": "Suite not assigned to this cycle"}), 404
 
     db.session.delete(cs)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Suite removed from cycle"}), 200
 
 
@@ -1055,12 +986,9 @@ def create_test_run(cycle_id):
         except (ValueError, TypeError):
             pass
     db.session.add(run)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(run.to_dict()), 201
 
 
@@ -1103,12 +1031,9 @@ def update_test_run(run_id):
     if data.get("status") in ("completed", "aborted") and not run.finished_at:
         run.finished_at = datetime.now(timezone.utc)
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(run.to_dict())
 
 
@@ -1119,12 +1044,9 @@ def delete_test_run(run_id):
     if err:
         return err
     db.session.delete(run)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Test run deleted"}), 200
 
 
@@ -1174,12 +1096,9 @@ def create_step_result(run_id):
         sr.executed_at = datetime.now(timezone.utc)
 
     db.session.add(sr)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(sr.to_dict()), 201
 
 
@@ -1193,12 +1112,9 @@ def update_step_result(sr_id):
     for field in ("result", "actual_result", "notes", "screenshot_url", "step_no"):
         if field in data:
             setattr(sr, field, data[field])
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(sr.to_dict())
 
 
@@ -1209,12 +1125,9 @@ def delete_step_result(sr_id):
     if err:
         return err
     db.session.delete(sr)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Step result deleted"}), 200
 
 
@@ -1249,12 +1162,9 @@ def create_defect_comment(defect_id):
         body=data["body"],
     )
     db.session.add(comment)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(comment.to_dict()), 201
 
 
@@ -1265,12 +1175,9 @@ def delete_defect_comment(comment_id):
     if err:
         return err
     db.session.delete(comment)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Comment deleted"}), 200
 
 
@@ -1336,12 +1243,9 @@ def create_defect_link(defect_id):
         notes=data.get("notes", ""),
     )
     db.session.add(link)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(link.to_dict()), 201
 
 
@@ -1352,12 +1256,9 @@ def delete_defect_link(link_id):
     if err:
         return err
     db.session.delete(link)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Defect link deleted"}), 200
 
 
@@ -1407,12 +1308,9 @@ def create_uat_signoff(cycle_id):
         except (ValueError, TypeError):
             pass
     db.session.add(signoff)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(signoff.to_dict()), 201
 
 
@@ -1444,12 +1342,9 @@ def update_uat_signoff(signoff_id):
     # Auto-set sign-off date on approval
     if data.get("status") == "approved" and not signoff.sign_off_date:
         signoff.sign_off_date = datetime.now(timezone.utc)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(signoff.to_dict())
 
 
@@ -1460,12 +1355,9 @@ def delete_uat_signoff(signoff_id):
     if err:
         return err
     db.session.delete(signoff)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "UAT sign-off deleted"}), 200
 
 
@@ -1506,12 +1398,9 @@ def create_perf_result(case_id):
         notes=data.get("notes", ""),
     )
     db.session.add(result)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(result.to_dict()), 201
 
 
@@ -1522,12 +1411,9 @@ def delete_perf_result(result_id):
     if err:
         return err
     db.session.delete(result)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Performance test result deleted"}), 200
 
 
@@ -1557,12 +1443,9 @@ def create_snapshot(pid):
         return err
     data = request.get_json(silent=True) or {}
     snapshot = testing_service.create_snapshot(pid, data)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(snapshot.to_dict()), 201
 
 
@@ -1633,12 +1516,9 @@ def validate_entry_criteria(cycle_id):
         cycle.status = "in_progress"
         if not cycle.start_date:
             cycle.start_date = date.today()
-        try:
-            db.session.commit()
-        except Exception:
-            logger.exception("Database commit failed")
-            db.session.rollback()
-            return jsonify({"error": "Database error"}), 500
+        err = db_commit_or_error()
+        if err:
+            return err
 
     result = {"valid": True, "cycle_status": cycle.status}
     if unmet and force:
@@ -1673,12 +1553,9 @@ def validate_exit_criteria(cycle_id):
         cycle.status = "completed"
         if not cycle.end_date:
             cycle.end_date = date.today()
-        try:
-            db.session.commit()
-        except Exception:
-            logger.exception("Database commit failed")
-            db.session.rollback()
-            return jsonify({"error": "Database error"}), 500
+        err = db_commit_or_error()
+        if err:
+            return err
 
     result = {"valid": True, "cycle_status": cycle.status}
     if unmet and force:
@@ -1710,12 +1587,9 @@ def generate_from_wricef(suite_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 404
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
 
     return jsonify({
         "message": f"Generated {len(created)} test cases",
@@ -1750,12 +1624,9 @@ def generate_from_process(suite_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 404
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
 
     return jsonify({
         "message": f"Generated {len(created)} test cases from process",
@@ -1836,12 +1707,9 @@ def create_case_dependency(case_id):
         notes=data.get("notes", ""),
     )
     db.session.add(dep)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(dep.to_dict()), 201
 
 
@@ -1852,12 +1720,9 @@ def delete_case_dependency(dep_id):
     if err:
         return err
     db.session.delete(dep)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Dependency deleted"}), 200
 
 
@@ -1874,12 +1739,9 @@ def clone_test_case(case_id):
 
     overrides = request.get_json(silent=True) or {}
     clone = testing_service.clone_test_case(source, overrides)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Clone test case — DB commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
 
     return jsonify(clone.to_dict()), 201
 
@@ -1910,12 +1772,9 @@ def clone_suite_cases(suite_id):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 404
 
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Bulk clone suite cases — DB commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
 
     return jsonify({
         "cloned_count": len(cloned),

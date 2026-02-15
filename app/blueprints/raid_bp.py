@@ -44,6 +44,7 @@ from app.models.raid import (
 from app.services import raid_service
 from app.services.notification import NotificationService
 from app.blueprints import paginate_query
+from app.utils.helpers import db_commit_or_error
 
 logger = logging.getLogger(__name__)
 
@@ -101,12 +102,9 @@ def create_risk(pid):
         return jsonify({"error": "title is required"}), 400
 
     risk = raid_service.create_risk(pid, data)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
 
     return jsonify(risk.to_dict()), 201
 
@@ -128,12 +126,9 @@ def update_risk(rid):
     data = request.get_json(silent=True) or {}
 
     raid_service.update_risk(risk, data)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
 
     return jsonify(risk.to_dict())
 
@@ -144,12 +139,9 @@ def delete_risk(rid):
     if not risk:
         return jsonify({"error": "Risk not found"}), 404
     db.session.delete(risk)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Risk deleted"}), 200
 
 
@@ -161,12 +153,9 @@ def recalculate_risk_score(rid):
         return jsonify({"error": "Risk not found"}), 404
 
     raid_service.recalculate_risk_score(risk)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(risk.to_dict())
 
 
@@ -206,12 +195,9 @@ def create_action(pid):
         return jsonify({"error": "title is required"}), 400
 
     action = raid_service.create_action(pid, data)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(action.to_dict()), 201
 
 
@@ -232,12 +218,9 @@ def update_action(aid):
     data = request.get_json(silent=True) or {}
 
     raid_service.update_action(action, data)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(action.to_dict())
 
 
@@ -247,12 +230,9 @@ def delete_action(aid):
     if not action:
         return jsonify({"error": "Action not found"}), 404
     db.session.delete(action)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Action deleted"}), 200
 
 
@@ -267,12 +247,9 @@ def patch_action_status(aid):
         return jsonify({"error": "status is required"}), 400
 
     raid_service.patch_action_status(action, new_status)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(action.to_dict())
 
 
@@ -312,12 +289,9 @@ def create_issue(pid):
         return jsonify({"error": "title is required"}), 400
 
     issue = raid_service.create_issue(pid, data)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
 
     return jsonify(issue.to_dict()), 201
 
@@ -339,12 +313,9 @@ def update_issue(iid):
     data = request.get_json(silent=True) or {}
 
     raid_service.update_issue(issue, data)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(issue.to_dict())
 
 
@@ -354,12 +325,9 @@ def delete_issue(iid):
     if not issue:
         return jsonify({"error": "Issue not found"}), 404
     db.session.delete(issue)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Issue deleted"}), 200
 
 
@@ -374,12 +342,9 @@ def patch_issue_status(iid):
         return jsonify({"error": "status is required"}), 400
 
     raid_service.patch_issue_status(issue, new_status)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(issue.to_dict())
 
 
@@ -416,12 +381,9 @@ def create_decision(pid):
         return jsonify({"error": "title is required"}), 400
 
     decision = raid_service.create_decision(pid, data)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(decision.to_dict()), 201
 
 
@@ -442,12 +404,9 @@ def update_decision(did):
     data = request.get_json(silent=True) or {}
 
     raid_service.update_decision(decision, data)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
 
     return jsonify(decision.to_dict())
 
@@ -458,12 +417,9 @@ def delete_decision(did):
     if not decision:
         return jsonify({"error": "Decision not found"}), 404
     db.session.delete(decision)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Decision deleted"}), 200
 
 
@@ -478,12 +434,9 @@ def patch_decision_status(did):
         return jsonify({"error": "status is required"}), 400
 
     raid_service.patch_decision_status(decision, new_status)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(decision.to_dict())
 
 
@@ -547,12 +500,9 @@ def mark_notification_read(nid):
     notif = NotificationService.mark_read(nid)
     if not notif:
         return jsonify({"error": "Notification not found"}), 404
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(notif.to_dict())
 
 
@@ -562,10 +512,7 @@ def mark_all_notifications_read():
     recipient = data.get("recipient", "all")
     program_id = data.get("program_id")
     count = NotificationService.mark_all_read(recipient=recipient, program_id=program_id)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"marked_read": count})

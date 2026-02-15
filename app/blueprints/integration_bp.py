@@ -53,7 +53,7 @@ from app.models.integration import (
 from app.models.program import Program
 from app.services import integration_service
 from app.blueprints import paginate_query
-from app.utils.helpers import get_or_404 as _get_or_404
+from app.utils.helpers import db_commit_or_error, get_or_404 as _get_or_404
 
 logger = logging.getLogger(__name__)
 
@@ -113,12 +113,9 @@ def create_interface(program_id):
     iface, err = integration_service.create_interface(program_id, data)
     if err:
         return jsonify({"error": err["error"]}), err["status"]
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(iface.to_dict(include_children=True)), 201
 
 
@@ -143,12 +140,9 @@ def update_interface(interface_id):
     iface, svc_err = integration_service.update_interface(iface, data)
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(iface.to_dict(include_children=True))
 
 
@@ -159,12 +153,9 @@ def delete_interface(interface_id):
     if err:
         return err
     db.session.delete(iface)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Interface deleted", "id": interface_id})
 
 
@@ -183,12 +174,9 @@ def update_interface_status(interface_id):
     iface, svc_err = integration_service.update_interface_status(iface, new_status)
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(iface.to_dict())
 
 
@@ -230,12 +218,9 @@ def create_wave(program_id):
     wave, svc_err = integration_service.create_wave(program_id, data)
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(wave.to_dict()), 201
 
 
@@ -260,12 +245,9 @@ def update_wave(wave_id):
     wave, svc_err = integration_service.update_wave(wave, data)
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(wave.to_dict(include_interfaces=True))
 
 
@@ -277,12 +259,9 @@ def delete_wave(wave_id):
         return err
 
     integration_service.delete_wave(wave)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Wave deleted", "id": wave_id})
 
 
@@ -302,12 +281,9 @@ def assign_wave(interface_id):
             return err
 
     iface.wave_id = wave_id
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(iface.to_dict())
 
 
@@ -340,12 +316,9 @@ def create_connectivity_test(interface_id):
     test, svc_err = integration_service.create_connectivity_test(interface_id, data)
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(test.to_dict()), 201
 
 
@@ -365,12 +338,9 @@ def delete_connectivity_test(test_id):
     if err:
         return err
     db.session.delete(test)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Connectivity test deleted", "id": test_id})
 
 
@@ -403,12 +373,9 @@ def create_switch_plan(interface_id):
     plan, svc_err = integration_service.create_switch_plan(interface_id, data)
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(plan.to_dict()), 201
 
 
@@ -424,12 +391,9 @@ def update_switch_plan(plan_id):
     plan, svc_err = integration_service.update_switch_plan(plan, data)
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(plan.to_dict())
 
 
@@ -440,12 +404,9 @@ def delete_switch_plan(plan_id):
     if err:
         return err
     db.session.delete(plan)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Switch plan entry deleted", "id": plan_id})
 
 
@@ -458,12 +419,9 @@ def execute_switch_plan(plan_id):
 
     data = request.get_json(silent=True) or {}
     integration_service.execute_switch_plan(plan, data)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(plan.to_dict())
 
 
@@ -498,12 +456,9 @@ def add_checklist_item(interface_id):
     item, svc_err = integration_service.create_checklist_item(interface_id, data)
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(item.to_dict()), 201
 
 
@@ -517,12 +472,9 @@ def update_checklist_item(item_id):
     data = request.get_json(silent=True) or {}
 
     integration_service.update_checklist_item(item, data)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify(item.to_dict())
 
 
@@ -533,10 +485,7 @@ def delete_checklist_item(item_id):
     if err:
         return err
     db.session.delete(item)
-    try:
-        db.session.commit()
-    except Exception:
-        logger.exception("Database commit failed")
-        db.session.rollback()
-        return jsonify({"error": "Database error"}), 500
+    err = db_commit_or_error()
+    if err:
+        return err
     return jsonify({"message": "Checklist item deleted", "id": item_id})

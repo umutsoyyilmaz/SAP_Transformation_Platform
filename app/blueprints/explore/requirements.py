@@ -19,7 +19,7 @@ ALM sync, stats, coverage matrix, conversion, workshop documents.
   - POST               /workshops/<id>/documents/generate
 """
 
-from flask import jsonify, request
+from flask import current_app, jsonify, request
 from sqlalchemy import func, or_
 
 from app.models import db
@@ -659,9 +659,10 @@ def generate_workshop_document(workshop_id):
         return jsonify(doc), 201
     except ValueError as e:
         return api_error(E.VALIDATION_INVALID, str(e))
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        return api_error(E.INTERNAL, f"Generation failed: {str(e)}")
+        current_app.logger.exception("Document generation failed")
+        return api_error(E.INTERNAL, "Document generation failed")
 
 
 # ── Linked Items ─────────────────────────────────────────────

@@ -24,7 +24,7 @@ sign-off, readiness, milestones, BPMN, fit propagation.
 
 from datetime import datetime, timezone
 
-from flask import jsonify, request
+from flask import current_app, jsonify, request
 from sqlalchemy import func
 
 from app.models import db
@@ -926,6 +926,7 @@ def run_fit_propagation():
         recalculate_project_hierarchy(project_id)
         db.session.commit()
         return jsonify({"status": "ok", "message": "Fit propagation completed"})
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        return api_error(E.INTERNAL, str(e))
+        current_app.logger.exception("Fit propagation failed for project %s", project_id)
+        return api_error(E.INTERNAL, "Fit propagation failed")
