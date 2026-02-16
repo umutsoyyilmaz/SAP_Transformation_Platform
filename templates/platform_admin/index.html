@@ -304,6 +304,9 @@
         ...(token ? {'Authorization': `Bearer ${token}`} : {}),
     };
 
+    // Platform owner tenant slug — cannot be frozen
+    const OWNER_SLUG = 'perga';
+
     async function loadDashboard() {
         try {
             const res = await fetch(`${API}/dashboard`, {headers});
@@ -403,7 +406,9 @@
                         <td><span class="badge ${t.is_active ? 'badge-active' : 'badge-frozen'}">${t.is_active ? 'Active' : 'Frozen'}</span></td>
                         <td class="actions-cell">
                             ${t.is_active
-                                ? `<button class="btn btn-sm btn-danger" onclick="freezeTenant(${t.id})">Freeze</button>`
+                                ? (t.slug === OWNER_SLUG
+                                    ? `<span style="color:var(--text-muted);font-size:0.85em">Owner</span>`
+                                    : `<button class="btn btn-sm btn-danger" onclick="freezeTenant(${t.id})">Freeze</button>`)
                                 : `<button class="btn btn-sm btn-success" onclick="unfreezeTenant(${t.id})">Unfreeze</button>`
                             }
                         </td>
@@ -432,14 +437,28 @@
     }
 
     async function freezeTenant(id) {
-        if (!confirm('Freeze this tenant?')) return;
-        await fetch(`${API}/tenants/${id}/freeze`, {method:'POST', headers});
-        loadAll();
+        if (!confirm('Freeze this tenant? Users in this tenant will lose access.')) return;
+        try {
+            const res = await fetch(`${API}/tenants/${id}/freeze`, {method:'POST', headers});
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.error || `Freeze failed (${res.status})`);
+                return;
+            }
+            loadAll();
+        } catch(e) { console.error('Freeze error:', e); alert('Freeze request failed'); }
     }
 
     async function unfreezeTenant(id) {
-        await fetch(`${API}/tenants/${id}/unfreeze`, {method:'POST', headers});
-        loadAll();
+        try {
+            const res = await fetch(`${API}/tenants/${id}/unfreeze`, {method:'POST', headers});
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.error || `Unfreeze failed (${res.status})`);
+                return;
+            }
+            loadAll();
+        } catch(e) { console.error('Unfreeze error:', e); alert('Unfreeze request failed'); }
     }
 
     function loadAll() { loadDashboard(); loadHealth(); loadTenants(); }

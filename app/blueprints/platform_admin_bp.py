@@ -51,16 +51,39 @@ platform_admin_bp = Blueprint("platform_admin", __name__)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+# Perga is the platform owner tenant — only its admins access Platform Admin
+PLATFORM_OWNER_SLUG = "perga"
+
+
 def _require_platform_admin():
-    """Check that the current user has platform admin privileges."""
+    """Check that the current user is a Perga platform admin.
+
+    Rules:
+      - User must be authenticated via JWT
+      - User must belong to the Perga (owner) tenant
+      - User must have the 'platform_admin' role
+
+    Customer tenant admins (tenant_admin) do NOT get access here —
+    they manage their own tenant via /admin (Tenant Admin panel).
+    """
     user_id = getattr(g, "jwt_user_id", None)
     if user_id is None:
-        # Legacy auth — allow (will be blocked by Basic Auth middleware)
+        # Legacy auth (Basic Auth) — allow through for backward compat
         return None
 
+    # Must belong to the Perga (owner) tenant
+    jwt_tenant_id = getattr(g, "jwt_tenant_id", None)
+    if jwt_tenant_id:
+        owner_tenant = db.session.execute(
+            db.select(Tenant).where(Tenant.slug == PLATFORM_OWNER_SLUG)
+        ).scalar_one_or_none()
+        if not owner_tenant or jwt_tenant_id != owner_tenant.id:
+            return jsonify({"error": "Platform Admin is restricted to Perga administrators"}), 403
+
+    # Must have platform_admin role (not just tenant_admin)
     from app.services.permission_service import get_user_role_names
     roles = get_user_role_names(user_id)
-    if "platform_admin" in roles or "tenant_admin" in roles:
+    if "platform_admin" in roles:
         return None
 
     return jsonify({"error": "Platform Admin access required"}), 403
@@ -333,10 +356,9 @@ def freeze_tenant(tenant_id):
     if not tenant.is_active:
         return jsonify({"message": "Tenant already frozen"}), 200
 
-    # Prevent freezing own tenant (would lock out the admin)
-    jwt_tenant_id = getattr(g, "jwt_tenant_id", None)
-    if jwt_tenant_id and jwt_tenant_id == tenant.id:
-        return jsonify({"error": "Cannot freeze your own tenant. Use another platform admin account."}), 400
+    # Prevent freezing the platform owner tenant (Perga)
+    if tenant.slug == PLATFORM_OWNER_SLUG:
+        return jsonify({"error": "Cannot freeze the platform owner tenant"}), 400
 
     tenant.is_active = False
     write_audit(
