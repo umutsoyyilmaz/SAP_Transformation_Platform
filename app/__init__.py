@@ -317,6 +317,15 @@ def create_app(config_name=None):
     from app.middleware.blueprint_permissions import apply_all_blueprint_permissions
     apply_all_blueprint_permissions(app)
 
+    # ── CLI commands ─────────────────────────────────────────────────────
+    @app.cli.command("seed-spec-templates")
+    def seed_spec_templates_cmd():
+        """Seed default FS/TS spec templates (12 templates for 6 WRICEF types)."""
+        from app.services.spec_template_service import seed_default_templates
+        count = seed_default_templates()
+        db.session.commit()
+        print(f"Seeded {count} new spec templates.")
+
     # ── SPA catch-all ────────────────────────────────────────────────────
     @app.route("/")
     def index():

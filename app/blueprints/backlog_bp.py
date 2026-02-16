@@ -31,6 +31,12 @@ Endpoints (Sprint 4 scope — aligned with master plan):
         GET    /api/v1/technical-specs/<id>                   — Detail
         PUT    /api/v1/technical-specs/<id>                   — Update
 
+    Spec Templates:
+        POST   /api/v1/backlog/<id>/generate-specs           — Generate FS+TS from template
+        POST   /api/v1/config-items/<id>/generate-specs      — Generate FS+TS for config
+        GET    /api/v1/spec-templates                        — List templates
+        PUT    /api/v1/spec-templates/<id>                   — Update template
+
     Sprints:
         GET    /api/v1/programs/<pid>/sprints                — List sprints
         POST   /api/v1/programs/<pid>/sprints                — Create sprint
@@ -45,7 +51,7 @@ from flask import Blueprint, jsonify, request
 
 from app.models import db
 from app.models.backlog import (
-    BacklogItem, ConfigItem, FunctionalSpec, TechnicalSpec, Sprint,
+    BacklogItem, ConfigItem, FunctionalSpec, TechnicalSpec, Sprint, SpecTemplate,
 )
 from app.models.program import Program
 from app.blueprints import paginate_query
@@ -187,6 +193,111 @@ def backlog_stats(program_id):
     if err:
         return err
     return jsonify(backlog_service.compute_stats(program_id)), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# SPEC GENERATION (Template-Driven)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@backlog_bp.route("/backlog/<int:item_id>/generate-specs", methods=["POST"])
+def generate_specs_for_backlog(item_id):
+    """Generate FS + TS drafts from templates matching the item's wricef_type.
+
+    Skips generation if FS or TS already exists (409 for both existing).
+    Returns the generation result with created/skipped status for each spec.
+    """
+    from app.services.spec_template_service import generate_specs_for_backlog_item
+
+    item, err = _get_or_404(BacklogItem, item_id)
+    if err:
+        return err
+
+    # If both specs already exist, nothing to generate
+    if item.functional_spec and item.functional_spec.technical_spec:
+        return jsonify({
+            "error": "Both FS and TS already exist for this item",
+            "fs_id": item.functional_spec.id,
+            "ts_id": item.functional_spec.technical_spec.id,
+        }), 409
+
+    result, svc_err = generate_specs_for_backlog_item(item_id)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
+
+    err = db_commit_or_error()
+    if err:
+        return err
+
+    return jsonify(result), 201
+
+
+@backlog_bp.route("/config-items/<int:item_id>/generate-specs", methods=["POST"])
+def generate_specs_for_config(item_id):
+    """Generate FS + TS drafts for a config item."""
+    from app.services.spec_template_service import generate_specs_for_config_item
+
+    item, err = _get_or_404(ConfigItem, item_id)
+    if err:
+        return err
+
+    if item.functional_spec and item.functional_spec.technical_spec:
+        return jsonify({
+            "error": "Both FS and TS already exist for this item",
+            "fs_id": item.functional_spec.id,
+            "ts_id": item.functional_spec.technical_spec.id,
+        }), 409
+
+    result, svc_err = generate_specs_for_config_item(item_id)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
+
+    err = db_commit_or_error()
+    if err:
+        return err
+
+    return jsonify(result), 201
+
+
+@backlog_bp.route("/spec-templates", methods=["GET"])
+def list_spec_templates():
+    """List all spec templates, optionally filtered by wricef_type and/or spec_kind."""
+    q = SpecTemplate.query
+
+    wricef_type = request.args.get("wricef_type")
+    if wricef_type:
+        q = q.filter_by(wricef_type=wricef_type.lower())
+
+    spec_kind = request.args.get("spec_kind")
+    if spec_kind:
+        q = q.filter_by(spec_kind=spec_kind.upper())
+
+    active_only = request.args.get("active_only", "true").lower() == "true"
+    if active_only:
+        q = q.filter_by(is_active=True)
+
+    templates = q.order_by(SpecTemplate.wricef_type, SpecTemplate.spec_kind).all()
+    return jsonify([t.to_dict() for t in templates]), 200
+
+
+@backlog_bp.route("/spec-templates/<int:tpl_id>", methods=["PUT"])
+def update_spec_template(tpl_id):
+    """Update a spec template's content or metadata."""
+    tpl, err = _get_or_404(SpecTemplate, tpl_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    for field in ["title", "content_template", "is_active", "version"]:
+        if field in data:
+            val = data[field]
+            if isinstance(val, str):
+                val = val.strip()
+            setattr(tpl, field, val)
+
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify(tpl.to_dict()), 200
 
 
 # ═════════════════════════════════════════════════════════════════════════════

@@ -479,6 +479,16 @@ class FunctionalSpec(db.Model):
     approved_by = db.Column(db.String(100), default="")
     approved_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
+    # ── Template origin
+    template_id = db.Column(
+        db.Integer, db.ForeignKey("spec_templates.id", ondelete="SET NULL"),
+        nullable=True, comment="Template used to generate this draft",
+    )
+    template_version = db.Column(
+        db.String(20), nullable=True,
+        comment="Template version at generation time",
+    )
+
     created_at = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -511,6 +521,8 @@ class FunctionalSpec(db.Model):
             "reviewer": self.reviewer,
             "approved_by": self.approved_by,
             "approved_at": self.approved_at.isoformat() if self.approved_at else None,
+            "template_id": self.template_id,
+            "template_version": self.template_version,
             "has_technical_spec": self.technical_spec is not None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
@@ -557,6 +569,16 @@ class TechnicalSpec(db.Model):
     approved_by = db.Column(db.String(100), default="")
     approved_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
+    # ── Template origin
+    template_id = db.Column(
+        db.Integer, db.ForeignKey("spec_templates.id", ondelete="SET NULL"),
+        nullable=True, comment="Template used to generate this draft",
+    )
+    template_version = db.Column(
+        db.String(20), nullable=True,
+        comment="Template version at generation time",
+    )
+
     # ── Technical details
     objects_list = db.Column(
         db.Text, default="",
@@ -590,6 +612,8 @@ class TechnicalSpec(db.Model):
             "reviewer": self.reviewer,
             "approved_by": self.approved_by,
             "approved_at": self.approved_at.isoformat() if self.approved_at else None,
+            "template_id": self.template_id,
+            "template_version": self.template_version,
             "objects_list": self.objects_list,
             "unit_test_evidence": self.unit_test_evidence,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -598,3 +622,72 @@ class TechnicalSpec(db.Model):
 
     def __repr__(self):
         return f"<TechnicalSpec {self.id}: {self.title[:40]}>"
+
+
+class SpecTemplate(db.Model):
+    """
+    Template registry for auto-generating FS/TS draft documents.
+
+    Each WRICEF type (W/R/I/C/E/F) has a dedicated FS template and TS template.
+    Templates contain Markdown with Jinja2-style {{variable}} placeholders
+    that get resolved at generation time using backlog item context.
+
+    Templates are global (not tenant-specific) — shared across all programs.
+    """
+
+    __tablename__ = "spec_templates"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "wricef_type", "spec_kind", "version",
+            name="uq_spec_template_type_kind_ver",
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    wricef_type = db.Column(
+        db.String(20), nullable=False,
+        comment="workflow | report | interface | conversion | enhancement | form",
+    )
+    spec_kind = db.Column(
+        db.String(5), nullable=False,
+        comment="FS | TS",
+    )
+    version = db.Column(db.String(20), nullable=False, default="1.0")
+    title = db.Column(
+        db.String(200), nullable=False,
+        comment="Human-readable name, e.g. 'Interface — FS Template v1.0'",
+    )
+    content_template = db.Column(
+        db.Text, nullable=False, default="",
+        comment="Markdown body with {{variable}} placeholders",
+    )
+    is_active = db.Column(
+        db.Boolean, default=True, nullable=False,
+        comment="Only one active template per (wricef_type, spec_kind) pair",
+    )
+
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "wricef_type": self.wricef_type,
+            "spec_kind": self.spec_kind,
+            "version": self.version,
+            "title": self.title,
+            "content_template": self.content_template,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self):
+        return f"<SpecTemplate {self.id}: {self.wricef_type}/{self.spec_kind} v{self.version}>"

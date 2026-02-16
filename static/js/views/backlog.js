@@ -848,6 +848,8 @@ const BacklogView = (() => {
     function _renderDetailSpecs(i) {
         const fs = i.functional_spec;
         const ts = fs ? fs.technical_spec : null;
+        const hasAnySpec = fs || ts;
+        const needsGeneration = !fs || !ts;
 
         const fsActions = fs ? `
             <div style="display:flex;gap:8px;margin-top:12px">
@@ -855,7 +857,7 @@ const BacklogView = (() => {
                 ${fs.status === 'in_review' ? `<button class="btn btn-sm btn-success" onclick="BacklogView.updateSpecStatus('fs', ${fs.id}, 'approved')">✅ Approve</button>
                     <button class="btn btn-sm btn-warning" onclick="BacklogView.updateSpecStatus('fs', ${fs.id}, 'rework')">🔄 Rework</button>` : ''}
                 ${fs.status === 'rework' ? `<button class="btn btn-sm btn-primary" onclick="BacklogView.updateSpecStatus('fs', ${fs.id}, 'in_review')">📤 Resubmit</button>` : ''}
-                <button class="btn btn-sm btn-secondary" onclick="BacklogView.downloadSpec('fs', ${fs.id}, '${escHtml(fs.title)}')">⬇️ Download</button>
+                <button class="btn btn-sm btn-secondary" onclick="BacklogView.downloadSpec('fs', ${fs.id}, '${escHtml(fs.title)}')">📥 Download</button>
                 <button class="btn btn-sm btn-secondary" onclick="BacklogView.editSpec('fs', ${fs.id})">✏️ Edit</button>
             </div>
         ` : '';
@@ -866,12 +868,19 @@ const BacklogView = (() => {
                 ${ts.status === 'in_review' ? `<button class="btn btn-sm btn-success" onclick="BacklogView.updateSpecStatus('ts', ${ts.id}, 'approved')">✅ Approve</button>
                     <button class="btn btn-sm btn-warning" onclick="BacklogView.updateSpecStatus('ts', ${ts.id}, 'rework')">🔄 Rework</button>` : ''}
                 ${ts.status === 'rework' ? `<button class="btn btn-sm btn-primary" onclick="BacklogView.updateSpecStatus('ts', ${ts.id}, 'in_review')">📤 Resubmit</button>` : ''}
-                <button class="btn btn-sm btn-secondary" onclick="BacklogView.downloadSpec('ts', ${ts.id}, '${escHtml(ts.title)}')">⬇️ Download</button>
+                <button class="btn btn-sm btn-secondary" onclick="BacklogView.downloadSpec('ts', ${ts.id}, '${escHtml(ts.title)}')">📥 Download</button>
                 <button class="btn btn-sm btn-secondary" onclick="BacklogView.editSpec('ts', ${ts.id})">✏️ Edit</button>
             </div>
         ` : '';
 
         document.getElementById('detailTabContent').innerHTML = `
+            ${needsGeneration ? `
+            <div style="margin-top:12px;margin-bottom:16px;text-align:right">
+                <button class="btn btn-primary" onclick="BacklogView._generateSpecs(${i.id})" id="btnGenerateSpecs">
+                    ✨ Generate Draft from Template
+                </button>
+            </div>` : ''}
+
             <div class="card" style="margin-top:12px">
                 <h3>📘 Functional Specification</h3>
                 ${fs ? `
@@ -883,10 +892,18 @@ const BacklogView = (() => {
                         <dt>Reviewer</dt><dd>${escHtml(fs.reviewer || '—')}</dd>
                         <dt>Approved By</dt><dd>${escHtml(fs.approved_by || '—')}</dd>
                     </dl>
+                    ${fs.template_version ? `
+                        <div style="margin-top:8px">
+                            <span class="badge" style="background:#e8f4fd;color:#1a73e8;font-size:11px">
+                                📋 Generated from template v${escHtml(fs.template_version)}
+                            </span>
+                        </div>
+                    ` : ''}
                     ${fsActions}
-                    ${fs.content ? `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">📄 FS Content (click to expand)</summary><div style="margin-top:8px;white-space:pre-wrap;background:var(--sap-bg-secondary);padding:12px;border-radius:8px;font-family:monospace;font-size:13px">${escHtml(fs.content)}</div></details>` : ''}
+                    ${fs.content ? `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">📄 FS Content (click to expand)</summary><div style="margin-top:8px;white-space:pre-wrap;background:var(--sap-bg-secondary);padding:12px;border-radius:8px;font-family:monospace;font-size:13px;max-height:500px;overflow-y:auto">${escHtml(fs.content)}</div></details>` : ''}
                 ` : '<p style="color:var(--sap-text-secondary)">No functional specification linked yet.</p>'}
             </div>
+
             <div class="card" style="margin-top:16px">
                 <h3>📙 Technical Specification</h3>
                 ${ts ? `
@@ -897,11 +914,39 @@ const BacklogView = (() => {
                         <dt>Author</dt><dd>${escHtml(ts.author || '—')}</dd>
                         <dt>Approved By</dt><dd>${escHtml(ts.approved_by || '—')}</dd>
                     </dl>
+                    ${ts.template_version ? `
+                        <div style="margin-top:8px">
+                            <span class="badge" style="background:#e8f4fd;color:#1a73e8;font-size:11px">
+                                📋 Generated from template v${escHtml(ts.template_version)}
+                            </span>
+                        </div>
+                    ` : ''}
                     ${tsActions}
-                    ${ts.content ? `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">📄 TS Content (click to expand)</summary><div style="margin-top:8px;white-space:pre-wrap;background:var(--sap-bg-secondary);padding:12px;border-radius:8px;font-family:monospace;font-size:13px">${escHtml(ts.content)}</div></details>` : ''}
+                    ${ts.content ? `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">📄 TS Content (click to expand)</summary><div style="margin-top:8px;white-space:pre-wrap;background:var(--sap-bg-secondary);padding:12px;border-radius:8px;font-family:monospace;font-size:13px;max-height:500px;overflow-y:auto">${escHtml(ts.content)}</div></details>` : ''}
                 ` : `<p style="color:var(--sap-text-secondary)">${fs ? 'Technical spec will be auto-created when FS is approved.' : 'No technical specification linked yet.'}</p>`}
             </div>
         `;
+    }
+
+    async function _generateSpecs(itemId) {
+        const btn = document.getElementById('btnGenerateSpecs');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '⏳ Generating...';
+        }
+        try {
+            const result = await API.post(`/backlog/${itemId}/generate-specs`);
+            App.toast('FS/TS drafts generated successfully!', 'success');
+            // Reload detail to show generated specs
+            await openDetail(currentItem.id);
+            switchDetailTab('specs');
+        } catch (err) {
+            App.toast(err.message || 'Failed to generate specs', 'error');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '✨ Generate Draft from Template';
+            }
+        }
     }
 
     async function _renderDetailTests(i) {
@@ -1508,5 +1553,6 @@ const BacklogView = (() => {
         showCreateConfigModal, showEditConfigModal, saveConfigItem, deleteConfigItem,
         openConfigDetail,
         updateSpecStatus, downloadSpec, editSpec, saveSpec,
+        _generateSpecs,
     };
 })();
