@@ -33,6 +33,7 @@ TENANT_SKIP_PREFIXES = (
     "/api/v1/auth/tenants",
     "/api/v1/health",
     "/api/v1/metrics",
+    "/api/v1/platform-admin/",
     "/static/",
 )
 
@@ -66,8 +67,12 @@ def init_tenant_context(app):
             return jsonify({"error": "Tenant not found"}), 403
 
         if not tenant.is_active:
-            logger.warning("JWT tenant_id %d is deactivated", tenant_id)
-            return jsonify({"error": "Tenant account is deactivated"}), 403
+            # Platform admins can still operate even if their tenant is frozen
+            roles = getattr(g, "jwt_roles", [])
+            if "platform_admin" not in roles:
+                logger.warning("JWT tenant_id %d is deactivated", tenant_id)
+                return jsonify({"error": "Tenant account is deactivated"}), 403
+            logger.info("Frozen tenant %d — allowing platform_admin bypass", tenant_id)
 
         # Set tenant in request context
         g.tenant = tenant

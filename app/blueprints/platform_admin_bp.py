@@ -333,6 +333,11 @@ def freeze_tenant(tenant_id):
     if not tenant.is_active:
         return jsonify({"message": "Tenant already frozen"}), 200
 
+    # Prevent freezing own tenant (would lock out the admin)
+    jwt_tenant_id = getattr(g, "jwt_tenant_id", None)
+    if jwt_tenant_id and jwt_tenant_id == tenant.id:
+        return jsonify({"error": "Cannot freeze your own tenant. Use another platform admin account."}), 400
+
     tenant.is_active = False
     write_audit(
         entity_type="Tenant", entity_id=str(tenant.id),
