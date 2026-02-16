@@ -164,7 +164,11 @@ def move_backlog_item(item_id):
     err = db_commit_or_error()
     if err:
         return err
-    return jsonify(item.to_dict()), 200
+    result = item.to_dict(include_specs=True)
+    side_effects = getattr(item, "_move_side_effects", {})
+    if side_effects:
+        result["_side_effects"] = side_effects
+    return jsonify(result), 200
 
 
 @backlog_bp.route("/programs/<int:program_id>/backlog/board", methods=["GET"])
@@ -394,12 +398,17 @@ def get_functional_spec(fs_id):
 
 @backlog_bp.route("/functional-specs/<int:fs_id>", methods=["PUT"])
 def update_functional_spec(fs_id):
-    """Update a functional spec."""
+    """Update a functional spec.
+
+    Side-effect: when status → approved, auto-creates draft TechnicalSpec.
+    """
     fs, err = _get_or_404(FunctionalSpec, fs_id)
     if err:
         return err
 
     data = request.get_json(silent=True) or {}
+    old_status = fs.status
+
     for field in ["title", "description", "content", "version", "status",
                    "author", "reviewer", "approved_by"]:
         if field in data:
@@ -409,10 +418,19 @@ def update_functional_spec(fs_id):
     if not fs.title:
         return jsonify({"error": "Functional spec title cannot be empty"}), 400
 
+    # ── Side-effect hook: FS approved → auto-create TS ──
+    side_effects = {}
+    new_status = fs.status
+    if old_status != new_status:
+        side_effects = backlog_service.on_spec_status_change(fs, old_status, new_status)
+
     err = db_commit_or_error()
     if err:
         return err
-    return jsonify(fs.to_dict()), 200
+    result = fs.to_dict(include_ts=True)
+    if side_effects:
+        result["_side_effects"] = side_effects
+    return jsonify(result), 200
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -450,12 +468,17 @@ def get_technical_spec(ts_id):
 
 @backlog_bp.route("/technical-specs/<int:ts_id>", methods=["PUT"])
 def update_technical_spec(ts_id):
-    """Update a technical spec."""
+    """Update a technical spec.
+
+    Side-effect: when status → approved, auto-moves parent BacklogItem to 'build'.
+    """
     ts, err = _get_or_404(TechnicalSpec, ts_id)
     if err:
         return err
 
     data = request.get_json(silent=True) or {}
+    old_status = ts.status
+
     for field in ["title", "description", "content", "version", "status",
                    "author", "reviewer", "approved_by", "objects_list",
                    "unit_test_evidence"]:
@@ -466,10 +489,19 @@ def update_technical_spec(ts_id):
     if not ts.title:
         return jsonify({"error": "Technical spec title cannot be empty"}), 400
 
+    # ── Side-effect hook: TS approved → auto-move to build ──
+    side_effects = {}
+    new_status = ts.status
+    if old_status != new_status:
+        side_effects = backlog_service.on_spec_status_change(ts, old_status, new_status)
+
     err = db_commit_or_error()
     if err:
         return err
-    return jsonify(ts.to_dict()), 200
+    result = ts.to_dict()
+    if side_effects:
+        result["_side_effects"] = side_effects
+    return jsonify(result), 200
 
 
 # ═════════════════════════════════════════════════════════════════════════════

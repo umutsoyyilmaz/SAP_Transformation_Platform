@@ -7,19 +7,24 @@ Extracted operations:
 - Sprint validation
 - Backlog item creation with validation
 - Backlog item update with validation
-- Backlog item move (status / sprint / board_order)
+- Backlog item move (status / sprint / board_order) — **state machine enforced**
 - Kanban board computation
 - Aggregated statistics
 - Sprint deletion with item unassignment
 - Functional spec creation (for backlog + config items)
 - Technical spec creation
+- Side-effect hooks:
+    - design  → auto-create draft FunctionalSpec
+    - test    → auto-generate unit test cases from WRICEF
+    - FS approved  → auto-create draft TechnicalSpec
+    - TS approved  → auto-move backlog item to build
 """
 import logging
 
 from app.models import db
 from app.models.backlog import (
     BacklogItem, ConfigItem, FunctionalSpec, TechnicalSpec, Sprint,
-    BACKLOG_STATUSES, WRICEF_TYPES,
+    BACKLOG_STATUSES, BACKLOG_TRANSITIONS, WRICEF_TYPES,
 )
 from app.utils.helpers import parse_date
 
@@ -172,10 +177,25 @@ def update_backlog_item(item, data):
 def move_backlog_item(item, data):
     """Move a backlog item — change status, sprint assignment, or board order.
 
+    State machine enforced:
+        new → design | cancelled
+        design → build (requires TS approved) | blocked | cancelled
+        build → test | blocked | cancelled
+        test → deploy | design | blocked
+        deploy → closed | blocked
+        blocked → new | design | build | test
+        closed / cancelled → terminal (no moves)
+
+    Side-effects on status change:
+        → design:  auto-create draft FunctionalSpec if none exists
+        → test:    auto-generate unit test cases from WRICEF via FS test steps
+
     Returns:
         (BacklogItem, None) on success
         (None, error_dict) on validation failure.
     """
+    side_effects = {}
+
     if "status" in data:
         new_status = data["status"]
         if new_status not in VALID_STATUSES:
@@ -183,7 +203,85 @@ def move_backlog_item(item, data):
                 "error": f"status must be one of: {', '.join(sorted(VALID_STATUSES))}",
                 "status": 400,
             }
-        item.status = new_status
+
+        old_status = item.status
+        if new_status != old_status:
+            # ── Transition guard ──
+            allowed = BACKLOG_TRANSITIONS.get(old_status, set())
+            if new_status not in allowed:
+                return None, {
+                    "error": (
+                        f"Invalid transition: {old_status} → {new_status}. "
+                        f"Allowed: {', '.join(sorted(allowed)) or 'none (terminal state)'}"
+                    ),
+                    "status": 422,
+                }
+
+            # ── Precondition: design → build requires TS approved ──
+            if new_status == "build":
+                fs = item.functional_spec
+                if not fs or not fs.technical_spec:
+                    return None, {
+                        "error": "Cannot move to build: Technical Spec must exist and be approved",
+                        "status": 422,
+                    }
+                if fs.technical_spec.status != "approved":
+                    return None, {
+                        "error": (
+                            f"Cannot move to build: Technical Spec status is "
+                            f"'{fs.technical_spec.status}', must be 'approved'"
+                        ),
+                        "status": 422,
+                    }
+
+            # ── Precondition: test → deploy requires all unit tests passed ──
+            if new_status == "deploy":
+                from app.models.testing import TestCase
+                unit_tests = TestCase.query.filter_by(
+                    backlog_item_id=item.id, test_layer="unit",
+                ).all()
+                if unit_tests:
+                    not_passed = [t for t in unit_tests if t.status != "passed"]
+                    if not_passed:
+                        return None, {
+                            "error": (
+                                f"Cannot move to deploy: {len(not_passed)} of "
+                                f"{len(unit_tests)} unit test(s) not yet passed"
+                            ),
+                            "status": 422,
+                        }
+
+            item.status = new_status
+
+            # ── Side-effect: auto-create draft FS on → design ──
+            if new_status == "design" and not item.functional_spec:
+                fs = FunctionalSpec(
+                    backlog_item_id=item.id,
+                    tenant_id=item.tenant_id,
+                    title=f"FS — {item.code or item.title}",
+                    description=(
+                        f"Functional Specification for {item.wricef_type.upper()} item: "
+                        f"{item.title}"
+                    ),
+                    content=_generate_fs_template(item),
+                    version="1.0",
+                    status="draft",
+                    author="",
+                )
+                db.session.add(fs)
+                db.session.flush()
+                side_effects["functional_spec_created"] = fs.id
+
+            # ── Side-effect: auto-generate unit test cases on → test ──
+            if new_status == "test":
+                from app.models.testing import TestCase
+                existing = TestCase.query.filter_by(
+                    backlog_item_id=item.id, test_layer="unit",
+                ).count()
+                if existing == 0:
+                    created_ids = _auto_generate_unit_tests(item)
+                    if created_ids:
+                        side_effects["unit_tests_created"] = created_ids
 
     if "sprint_id" in data:
         sprint_id = data["sprint_id"]
@@ -198,7 +296,212 @@ def move_backlog_item(item, data):
         item.board_order = data["board_order"]
 
     db.session.flush()
+
+    # Attach side_effects to response dict (caller can include in JSON)
+    item._move_side_effects = side_effects
     return item, None
+
+
+def _generate_fs_template(item):
+    """Generate a Markdown functional spec template for a WRICEF item."""
+    return f"""# Functional Specification: {item.code or 'TBD'}
+
+## 1. Overview
+**Title:** {item.title}
+**WRICEF Type:** {item.wricef_type.upper()}
+**Module:** {item.module or 'TBD'}
+**Priority:** {item.priority}
+
+## 2. Business Requirement
+{item.description or '_To be documented_'}
+
+## 3. Acceptance Criteria
+{item.acceptance_criteria or '_To be documented_'}
+
+## 4. Functional Design
+_To be documented — describe the functional solution design._
+
+## 5. Process Flow
+_To be documented — describe the process flow / decision logic._
+
+## 6. Test Scenarios
+_Define test steps that will be used for Unit Test case generation:_
+
+1. _Test step 1 — expected result_
+2. _Test step 2 — expected result_
+3. _Test step 3 — expected result_
+
+## 7. Dependencies & Interfaces
+{item.technical_notes or '_To be documented_'}
+
+## 8. Open Items
+_None_
+
+---
+_AI FS Generator: Ready — content can be auto-generated in future releases._
+"""
+
+
+def _generate_ts_template(fs, item):
+    """Generate a Markdown technical spec template from FS."""
+    item_title = item.title if item else "N/A"
+    item_code = item.code if item else "N/A"
+    module = (item.module if item else "") or "TBD"
+    return f"""# Technical Specification: {item_code}
+
+## 1. Overview
+**FS Reference:** {fs.title}
+**Title:** {item_title}
+**Module:** {module}
+
+## 2. Technical Design
+_To be documented — describe the technical approach, objects, classes, function modules._
+
+## 3. Object List
+_List all ABAP / BTP objects to be created or modified:_
+
+| Object Type | Object Name | Description |
+|---|---|---|
+| _e.g. Class_ | _ZCL_EXAMPLE_ | _Description_ |
+
+## 4. Data Model Changes
+_To be documented_
+
+## 5. Authorization Concept
+_To be documented_
+
+## 6. Error Handling
+_To be documented_
+
+## 7. Unit Test Plan
+_Define unit test scenarios that will be auto-generated as test cases:_
+
+1. _Positive scenario — expected result_
+2. _Negative scenario — expected result_
+3. _Boundary condition — expected result_
+
+---
+_AI TS Generator: Ready — content can be auto-generated in future releases._
+_ABAP AI Generator: Ready — code stubs can be auto-generated in future releases._
+"""
+
+
+def _auto_generate_unit_tests(item):
+    """Auto-generate unit test cases from WRICEF item FS test steps.
+
+    Reads test scenarios from FS content (section 6) or falls back
+    to acceptance_criteria / technical_notes.
+    Returns list of created TestCase IDs.
+    """
+    from app.models.testing import TestCase, TestStep
+
+    # Try to extract test steps from FS
+    test_steps = []
+    if item.functional_spec and item.functional_spec.content:
+        content = item.functional_spec.content
+        # Parse numbered list items from section 6 (Test Scenarios)
+        in_test_section = False
+        for line in content.split("\n"):
+            stripped = line.strip()
+            if "test scenario" in stripped.lower() or "test step" in stripped.lower():
+                in_test_section = True
+                continue
+            if in_test_section:
+                if stripped.startswith("#"):
+                    break  # next section
+                if stripped and stripped[0].isdigit() and "." in stripped[:4]:
+                    step_text = stripped.split(".", 1)[1].strip().strip("_")
+                    if step_text and step_text != "Test step":
+                        test_steps.append(step_text)
+
+    # Fallback to acceptance criteria / technical notes
+    if not test_steps:
+        source = item.acceptance_criteria or item.technical_notes or ""
+        test_steps = [s.strip() for s in source.split("\n") if s.strip()]
+
+    if not test_steps:
+        test_steps = [f"Verify {item.title} functions correctly"]
+
+    code_prefix = item.code if item.code else f"WRICEF-{item.id}"
+    tc = TestCase(
+        program_id=item.program_id,
+        tenant_id=item.tenant_id,
+        code=f"TC-{code_prefix}-UT",
+        title=f"UT — {code_prefix} — {item.title}",
+        description=f"Auto-generated unit test from WRICEF: {item.title}",
+        test_layer="unit",
+        module=item.module or "",
+        status="draft",
+        priority="medium",
+        backlog_item_id=item.id,
+        requirement_id=item.requirement_id,
+        explore_requirement_id=getattr(item, "explore_requirement_id", None),
+    )
+    db.session.add(tc)
+    db.session.flush()
+
+    for i, step_text in enumerate(test_steps[:10], 1):
+        # Split on " — " to separate action from expected result
+        if " — " in step_text:
+            action, expected = step_text.split(" — ", 1)
+        elif " - " in step_text:
+            action, expected = step_text.split(" - ", 1)
+        else:
+            action = step_text
+            expected = "Verify successful execution"
+        db.session.add(TestStep(
+            test_case_id=tc.id,
+            step_no=i,
+            action=action.strip(),
+            expected_result=expected.strip(),
+        ))
+
+    return [tc.id]
+
+
+def on_spec_status_change(spec, old_status, new_status):
+    """React to FunctionalSpec / TechnicalSpec status changes.
+
+    Called by the blueprint PUT endpoints for FS and TS.
+
+    Side-effects:
+        FS → approved: auto-create draft TechnicalSpec if none exists
+        TS → approved: auto-move parent BacklogItem to 'build'
+
+    Returns:
+        dict of side_effects (may be empty).
+    """
+    side_effects = {}
+
+    if isinstance(spec, FunctionalSpec) and new_status == "approved":
+        # Auto-create TechnicalSpec
+        if not spec.technical_spec:
+            parent_item = spec.backlog_item or spec.config_item
+            ts = TechnicalSpec(
+                functional_spec_id=spec.id,
+                tenant_id=spec.tenant_id,
+                title=f"TS — {spec.title.replace('FS — ', '')}",
+                description=f"Technical Specification derived from: {spec.title}",
+                content=_generate_ts_template(spec, parent_item),
+                version="1.0",
+                status="draft",
+                author="",
+            )
+            db.session.add(ts)
+            db.session.flush()
+            side_effects["technical_spec_created"] = ts.id
+
+    elif isinstance(spec, TechnicalSpec) and new_status == "approved":
+        # Auto-move parent BacklogItem to build
+        fs = spec.functional_spec
+        if fs and fs.backlog_item:
+            item = fs.backlog_item
+            if item.status == "design":
+                item.status = "build"
+                db.session.flush()
+                side_effects["backlog_item_moved_to_build"] = item.id
+
+    return side_effects
 
 
 def compute_board(program_id):

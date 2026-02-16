@@ -296,7 +296,7 @@ class WorkshopDocumentService:
         # Conversion coverage (W-3 linkage)
         converted = sum(
             1 for r in requirements
-            if r.backlog_item_id or r.config_item_id
+            if r.is_converted
         )
         conv_pct = round(converted / len(requirements) * 100) if requirements else 0
 
@@ -424,15 +424,13 @@ class WorkshopDocumentService:
         uncovered_reqs = []
 
         for req in requirements:
-            # BacklogItem link
-            bl = None
-            if req.backlog_item_id:
-                bl = db.session.get(BacklogItem, req.backlog_item_id)
+            # BacklogItem link via relationship
+            bl_items = req.linked_backlog_items
+            bl = bl_items[0] if bl_items else None
 
-            # ConfigItem link
-            ci = None
-            if req.config_item_id:
-                ci = db.session.get(ConfigItem, req.config_item_id)
+            # ConfigItem link via relationship
+            ci_items = req.linked_config_items
+            ci = ci_items[0] if ci_items else None
 
             # TestCases linked via explore_requirement_id (W-6)
             test_cases = TestCase.query.filter_by(

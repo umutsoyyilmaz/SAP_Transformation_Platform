@@ -773,8 +773,8 @@ def generate_from_wricef(suite, wricef_ids=None, config_ids=None, scope_item_id=
         items.extend(BacklogItem.query.filter(BacklogItem.id.in_(wricef_ids)).all())
     if config_ids:
         items.extend(ConfigItem.query.filter(ConfigItem.id.in_(config_ids)).all())
-    if scope_item_id:
-        items.extend(BacklogItem.query.filter_by(process_id=scope_item_id).all())
+    # NOTE: process_id-based lookup removed — WRICEF items trace via Requirement,
+    # not directly via L3 process. Use requirement→backlog_item chain instead.
 
     if not items:
         raise ValueError("No WRICEF/Config items found")

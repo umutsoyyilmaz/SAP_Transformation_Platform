@@ -20,9 +20,10 @@ ALM sync, stats, coverage matrix, conversion, workshop documents.
 """
 
 from flask import current_app, jsonify, request
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, exists, select
 
 from app.models import db
+from app.models.backlog import BacklogItem, ConfigItem
 from app.models.explore import (
     CloudALMSyncLog,
     ExploreOpenItem,
@@ -444,17 +445,26 @@ def requirement_stats():
     alm_synced_count = base.filter_by(alm_synced=True).count()
 
     # W-5: Coverage & Readiness KPIs
-    with_backlog = base.filter(ExploreRequirement.backlog_item_id != None).count()  # noqa: E711
-    with_config = base.filter(ExploreRequirement.config_item_id != None).count()  # noqa: E711
+    # Use exists() subqueries since backlog_item_id/config_item_id columns
+    # were removed from ExploreRequirement (ADR: WRICEF traces via Requirement)
+    _has_backlog = exists(
+        select(BacklogItem.id).where(
+            BacklogItem.explore_requirement_id == ExploreRequirement.id
+        )
+    )
+    _has_config = exists(
+        select(ConfigItem.id).where(
+            ConfigItem.explore_requirement_id == ExploreRequirement.id
+        )
+    )
+    with_backlog = base.filter(_has_backlog).count()
+    with_config = base.filter(_has_config).count()
     converted_total = with_backlog + with_config
 
     wricef_candidates = base.filter(ExploreRequirement.wricef_candidate == True).count()  # noqa: E712
     wricef_converted = base.filter(
         ExploreRequirement.wricef_candidate == True,  # noqa: E712
-        or_(
-            ExploreRequirement.backlog_item_id != None,  # noqa: E711
-            ExploreRequirement.config_item_id != None,  # noqa: E711
-        )
+        or_(_has_backlog, _has_config),
     ).count()
 
     by_criticality = {}
@@ -554,8 +564,16 @@ def requirement_coverage_matrix():
         .filter_by(project_id=project_id)
         .filter(
             or_(
-                ExploreRequirement.backlog_item_id != None,  # noqa: E711
-                ExploreRequirement.config_item_id != None,  # noqa: E711
+                exists(
+                    select(BacklogItem.id).where(
+                        BacklogItem.explore_requirement_id == ExploreRequirement.id
+                    )
+                ),
+                exists(
+                    select(ConfigItem.id).where(
+                        ConfigItem.explore_requirement_id == ExploreRequirement.id
+                    )
+                ),
             )
         )
         .group_by(field)

@@ -725,7 +725,7 @@ const BacklogView = (() => {
     // ── Detail View ──────────────────────────────────────────────────────
     async function openDetail(id) {
         try {
-            currentItem = await API.get(`/backlog/${id}`);
+            currentItem = await API.get(`/backlog/${id}?include_specs=true`);
         } catch (err) { App.toast(err.message, 'error'); return; }
         renderDetail();
     }
@@ -848,6 +848,29 @@ const BacklogView = (() => {
     function _renderDetailSpecs(i) {
         const fs = i.functional_spec;
         const ts = fs ? fs.technical_spec : null;
+
+        const fsActions = fs ? `
+            <div style="display:flex;gap:8px;margin-top:12px">
+                ${fs.status === 'draft' ? `<button class="btn btn-sm btn-primary" onclick="BacklogView.updateSpecStatus('fs', ${fs.id}, 'in_review')">📤 Submit for Review</button>` : ''}
+                ${fs.status === 'in_review' ? `<button class="btn btn-sm btn-success" onclick="BacklogView.updateSpecStatus('fs', ${fs.id}, 'approved')">✅ Approve</button>
+                    <button class="btn btn-sm btn-warning" onclick="BacklogView.updateSpecStatus('fs', ${fs.id}, 'rework')">🔄 Rework</button>` : ''}
+                ${fs.status === 'rework' ? `<button class="btn btn-sm btn-primary" onclick="BacklogView.updateSpecStatus('fs', ${fs.id}, 'in_review')">📤 Resubmit</button>` : ''}
+                <button class="btn btn-sm btn-secondary" onclick="BacklogView.downloadSpec('fs', ${fs.id}, '${escHtml(fs.title)}')">⬇️ Download</button>
+                <button class="btn btn-sm btn-secondary" onclick="BacklogView.editSpec('fs', ${fs.id})">✏️ Edit</button>
+            </div>
+        ` : '';
+
+        const tsActions = ts ? `
+            <div style="display:flex;gap:8px;margin-top:12px">
+                ${ts.status === 'draft' ? `<button class="btn btn-sm btn-primary" onclick="BacklogView.updateSpecStatus('ts', ${ts.id}, 'in_review')">📤 Submit for Review</button>` : ''}
+                ${ts.status === 'in_review' ? `<button class="btn btn-sm btn-success" onclick="BacklogView.updateSpecStatus('ts', ${ts.id}, 'approved')">✅ Approve</button>
+                    <button class="btn btn-sm btn-warning" onclick="BacklogView.updateSpecStatus('ts', ${ts.id}, 'rework')">🔄 Rework</button>` : ''}
+                ${ts.status === 'rework' ? `<button class="btn btn-sm btn-primary" onclick="BacklogView.updateSpecStatus('ts', ${ts.id}, 'in_review')">📤 Resubmit</button>` : ''}
+                <button class="btn btn-sm btn-secondary" onclick="BacklogView.downloadSpec('ts', ${ts.id}, '${escHtml(ts.title)}')">⬇️ Download</button>
+                <button class="btn btn-sm btn-secondary" onclick="BacklogView.editSpec('ts', ${ts.id})">✏️ Edit</button>
+            </div>
+        ` : '';
+
         document.getElementById('detailTabContent').innerHTML = `
             <div class="card" style="margin-top:12px">
                 <h3>📘 Functional Specification</h3>
@@ -856,10 +879,12 @@ const BacklogView = (() => {
                         <dt>Title</dt><dd>${escHtml(fs.title)}</dd>
                         <dt>Status</dt><dd><span class="badge badge-${fs.status}">${fs.status}</span></dd>
                         <dt>Version</dt><dd>${fs.version || '—'}</dd>
-                        <dt>Prepared By</dt><dd>${escHtml(fs.prepared_by || '—')}</dd>
+                        <dt>Author</dt><dd>${escHtml(fs.author || '—')}</dd>
+                        <dt>Reviewer</dt><dd>${escHtml(fs.reviewer || '—')}</dd>
                         <dt>Approved By</dt><dd>${escHtml(fs.approved_by || '—')}</dd>
                     </dl>
-                    ${fs.content ? `<div style="margin-top:12px;white-space:pre-wrap;background:var(--sap-bg-secondary);padding:12px;border-radius:8px">${escHtml(fs.content)}</div>` : ''}
+                    ${fsActions}
+                    ${fs.content ? `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">📄 FS Content (click to expand)</summary><div style="margin-top:8px;white-space:pre-wrap;background:var(--sap-bg-secondary);padding:12px;border-radius:8px;font-family:monospace;font-size:13px">${escHtml(fs.content)}</div></details>` : ''}
                 ` : '<p style="color:var(--sap-text-secondary)">No functional specification linked yet.</p>'}
             </div>
             <div class="card" style="margin-top:16px">
@@ -869,10 +894,12 @@ const BacklogView = (() => {
                         <dt>Title</dt><dd>${escHtml(ts.title)}</dd>
                         <dt>Status</dt><dd><span class="badge badge-${ts.status}">${ts.status}</span></dd>
                         <dt>Version</dt><dd>${ts.version || '—'}</dd>
-                        <dt>Prepared By</dt><dd>${escHtml(ts.prepared_by || '—')}</dd>
+                        <dt>Author</dt><dd>${escHtml(ts.author || '—')}</dd>
+                        <dt>Approved By</dt><dd>${escHtml(ts.approved_by || '—')}</dd>
                     </dl>
-                    ${ts.content ? `<div style="margin-top:12px;white-space:pre-wrap;background:var(--sap-bg-secondary);padding:12px;border-radius:8px">${escHtml(ts.content)}</div>` : ''}
-                ` : '<p style="color:var(--sap-text-secondary)">No technical specification linked yet.</p>'}
+                    ${tsActions}
+                    ${ts.content ? `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">📄 TS Content (click to expand)</summary><div style="margin-top:8px;white-space:pre-wrap;background:var(--sap-bg-secondary);padding:12px;border-radius:8px;font-family:monospace;font-size:13px">${escHtml(ts.content)}</div></details>` : ''}
+                ` : `<p style="color:var(--sap-text-secondary)">${fs ? 'Technical spec will be auto-created when FS is approved.' : 'No technical specification linked yet.'}</p>`}
             </div>
         `;
     }
@@ -1224,14 +1251,30 @@ const BacklogView = (() => {
     }
 
     // ── Move Modal ───────────────────────────────────────────────────────
+    const TRANSITIONS = {
+        'new':       ['design', 'cancelled'],
+        'design':    ['build', 'blocked', 'cancelled'],
+        'build':     ['test', 'blocked', 'cancelled'],
+        'test':      ['deploy', 'design', 'blocked'],
+        'deploy':    ['closed', 'blocked'],
+        'blocked':   ['new', 'design', 'build', 'test'],
+        'closed':    [],
+        'cancelled': [],
+    };
+
     function showMoveModal() {
         if (!currentItem) return;
+        const allowed = TRANSITIONS[currentItem.status] || [];
+        if (allowed.length === 0) {
+            App.toast('This item is in a terminal state and cannot be moved', 'error');
+            return;
+        }
         App.openModal(`
             <h2>Move Item</h2>
             <div class="form-group"><label>Status</label>
                 <select id="moveStatus" class="form-input">
-                    ${Object.entries(STATUS_LABELS).map(([k, v]) =>
-                        `<option value="${k}" ${currentItem.status === k ? 'selected' : ''}>${v}</option>`
+                    ${allowed.map(k =>
+                        `<option value="${k}">${STATUS_LABELS[k] || k}</option>`
                     ).join('')}
                 </select>
             </div>
@@ -1250,13 +1293,22 @@ const BacklogView = (() => {
 
     async function doMove() {
         try {
-            await API.patch(`/backlog/${currentItem.id}/move`, {
+            const result = await API.patch(`/backlog/${currentItem.id}/move`, {
                 status: document.getElementById('moveStatus').value,
                 sprint_id: parseInt(document.getElementById('moveSprint').value) || null,
             });
-            App.toast('Item moved', 'success');
             App.closeModal();
-            await render();
+            // Show side-effect info
+            const fx = result._side_effects || {};
+            if (fx.functional_spec_created) {
+                App.toast('Moved to Design — Draft FS created automatically', 'success');
+            } else if (fx.unit_tests_created) {
+                App.toast('Moved to Test — Unit test cases generated', 'success');
+            } else {
+                App.toast('Item moved', 'success');
+            }
+            // Re-open detail with specs to show FS/TS
+            await openDetail(currentItem.id);
         } catch (err) { App.toast(err.message, 'error'); }
     }
 
@@ -1348,6 +1400,101 @@ const BacklogView = (() => {
         return el.innerHTML;
     }
 
+    // ── Spec Actions (FS/TS) ─────────────────────────────────────────────
+
+    async function updateSpecStatus(specType, specId, newStatus) {
+        const endpoint = specType === 'fs'
+            ? `/functional-specs/${specId}`
+            : `/technical-specs/${specId}`;
+        const label = specType === 'fs' ? 'Functional Spec' : 'Technical Spec';
+
+        try {
+            const result = await API.put(endpoint, { status: newStatus });
+            const fx = result._side_effects || {};
+
+            if (fx.technical_spec_created) {
+                App.toast(`${label} approved — Draft TS created automatically`, 'success');
+            } else if (fx.backlog_item_moved_to_build) {
+                App.toast(`${label} approved — Item moved to Build`, 'success');
+            } else {
+                App.toast(`${label} status → ${newStatus}`, 'success');
+            }
+
+            // Re-fetch item with specs and re-render detail
+            await openDetail(currentItem.id);
+            switchDetailTab('specs');
+        } catch (err) { App.toast(err.message, 'error'); }
+    }
+
+    function downloadSpec(specType, specId, title) {
+        const item = currentItem;
+        const fs = item.functional_spec;
+        const spec = specType === 'fs' ? fs : (fs ? fs.technical_spec : null);
+        if (!spec || !spec.content) {
+            App.toast('No content to download', 'error');
+            return;
+        }
+
+        const filename = `${title.replace(/[^a-zA-Z0-9_-]/g, '_')}.md`;
+        const blob = new Blob([spec.content], { type: 'text/markdown;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    async function editSpec(specType, specId) {
+        const item = currentItem;
+        const fs = item.functional_spec;
+        const spec = specType === 'fs' ? fs : (fs ? fs.technical_spec : null);
+        if (!spec) return;
+
+        const label = specType === 'fs' ? 'Functional Specification' : 'Technical Specification';
+
+        App.openModal(`
+            <h2>Edit ${label}</h2>
+            <div class="form-group"><label>Title</label>
+                <input id="specTitle" class="form-input" value="${escHtml(spec.title)}">
+            </div>
+            <div class="form-group"><label>Author</label>
+                <input id="specAuthor" class="form-input" value="${escHtml(spec.author || '')}">
+            </div>
+            <div class="form-group"><label>Reviewer</label>
+                <input id="specReviewer" class="form-input" value="${escHtml(spec.reviewer || '')}">
+            </div>
+            <div class="form-group"><label>Content (Markdown)</label>
+                <textarea id="specContent" class="form-input" rows="15" style="font-family:monospace;font-size:13px">${escHtml(spec.content || '')}</textarea>
+            </div>
+            <div style="text-align:right;margin-top:16px">
+                <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="BacklogView.saveSpec('${specType}', ${specId})">Save</button>
+            </div>
+        `);
+    }
+
+    async function saveSpec(specType, specId) {
+        const endpoint = specType === 'fs'
+            ? `/functional-specs/${specId}`
+            : `/technical-specs/${specId}`;
+
+        const payload = {
+            title: document.getElementById('specTitle').value,
+            author: document.getElementById('specAuthor').value,
+            reviewer: document.getElementById('specReviewer').value,
+            content: document.getElementById('specContent').value,
+        };
+
+        try {
+            await API.put(endpoint, payload);
+            App.toast('Spec saved', 'success');
+            App.closeModal();
+            await openDetail(currentItem.id);
+            switchDetailTab('specs');
+        } catch (err) { App.toast(err.message, 'error'); }
+    }
+
     // Public API
     return {
         render, switchTab, applyListFilter, setListSearch, onListFilterChange,
@@ -1360,5 +1507,6 @@ const BacklogView = (() => {
         showCreateSprintModal, showEditSprintModal, saveSprint, deleteSprint,
         showCreateConfigModal, showEditConfigModal, saveConfigItem, deleteConfigItem,
         openConfigDetail,
+        updateSpecStatus, downloadSpec, editSpec, saveSpec,
     };
 })();

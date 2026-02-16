@@ -190,7 +190,7 @@ def transition_requirement(
         req.rejection_reason = None
     elif action == "push_to_alm":
         # ADR-1: Convert must be explicit. Block push_to_alm if not yet converted.
-        if not req.backlog_item_id and not req.config_item_id:
+        if not req.is_converted:
             raise TransitionError(
                 req.code, action, req.status,
                 "Requirement must be converted before moving to backlog. "
@@ -272,7 +272,7 @@ def _map_wricef_type(req_type: str | None, title: str, description: str) -> str:
 
 def _ensure_backlog_item(req: ExploreRequirement, *, target_type=None, wricef_type=None, module_override=None) -> None:
     """Create BacklogItem or ConfigItem from an ExploreRequirement, with codes and FK link."""
-    if req.backlog_item_id or req.config_item_id:
+    if req.is_converted:
         return
 
     # target_type override: "config" or "backlog" from frontend
@@ -300,7 +300,7 @@ def _ensure_backlog_item(req: ExploreRequirement, *, target_type=None, wricef_ty
         )
         db.session.add(config)
         db.session.flush()
-        req.config_item_id = config.id
+        # Canonical link: config.explore_requirement_id already set above
     else:
         wricef = wricef_type if wricef_type else _map_wricef_type(req.type, title, description)
         code = generate_backlog_item_code(req.project_id, wricef)
@@ -316,7 +316,7 @@ def _ensure_backlog_item(req: ExploreRequirement, *, target_type=None, wricef_ty
         )
         db.session.add(backlog)
         db.session.flush()
-        req.backlog_item_id = backlog.id
+        # Canonical link: backlog.explore_requirement_id already set above
 
 
 def convert_requirement(requirement_id: str, user_id: str, project_id: int,
@@ -338,24 +338,36 @@ def convert_requirement(requirement_id: str, user_id: str, project_id: int,
             f"current status: {req.status}"
         )
 
-    if req.backlog_item_id or req.config_item_id:
+    if req.is_converted:
+        # Gather IDs from the canonical relationship
+        backlog_ids = [bi.id for bi in req.linked_backlog_items]
+        config_ids = [ci.id for ci in req.linked_config_items]
         return {
             "requirement_id": req.id,
             "code": req.code,
             "status": "already_converted",
-            "backlog_item_id": req.backlog_item_id,
-            "config_item_id": req.config_item_id,
+            "backlog_item_id": backlog_ids[0] if backlog_ids else None,
+            "config_item_id": config_ids[0] if config_ids else None,
+            "backlog_item_ids": backlog_ids,
+            "config_item_ids": config_ids,
         }
 
     _ensure_backlog_item(req, target_type=target_type, wricef_type=wricef_type, module_override=module_override)
     db.session.flush()
 
+    # Refresh relationship cache after flush
+    db.session.expire(req)
+    backlog_ids = [bi.id for bi in req.linked_backlog_items]
+    config_ids = [ci.id for ci in req.linked_config_items]
+
     return {
         "requirement_id": req.id,
         "code": req.code,
         "status": "converted",
-        "backlog_item_id": req.backlog_item_id,
-        "config_item_id": req.config_item_id,
+        "backlog_item_id": backlog_ids[0] if backlog_ids else None,
+        "config_item_id": config_ids[0] if config_ids else None,
+        "backlog_item_ids": backlog_ids,
+        "config_item_ids": config_ids,
     }
 
 
@@ -399,7 +411,7 @@ def get_available_transitions(requirement: ExploreRequirement) -> list[str]:
     for action, rule in REQUIREMENT_TRANSITIONS.items():
         if requirement.status in rule["from"]:
             # unconvert only shows if actually converted
-            if action == "unconvert" and not (requirement.backlog_item_id or requirement.config_item_id):
+            if action == "unconvert" and not requirement.is_converted:
                 continue
             actions.append(action)
     return actions
@@ -444,15 +456,15 @@ def unconvert_requirement(
             raise PermissionDenied(user_id, perm)
 
     # Must have a backlog or config item link to unconvert
-    if not req.backlog_item_id and not req.config_item_id:
+    if not req.is_converted:
         raise TransitionError(
             req.code, "unconvert", req.status,
             "Requirement is not converted (no backlog/config item linked)",
         )
 
     # Collect linked items
-    linked_backlog = BacklogItem.query.filter_by(explore_requirement_id=requirement_id).all()
-    linked_config = ConfigItem.query.filter_by(explore_requirement_id=requirement_id).all()
+    linked_backlog = list(req.linked_backlog_items)
+    linked_config = list(req.linked_config_items)
     all_linked = linked_backlog + linked_config
 
     if not all_linked:
@@ -553,10 +565,13 @@ def unconvert_requirement(
 
     # ── Reset requirement ──
     previous_status = req.status
-    req.backlog_item_id = None
-    req.config_item_id = None
+    # No backlog_item_id/config_item_id columns to clear — items are already deleted
     req.status = "approved"
     req.alm_sync_status = None
+
+    # Capture deleted item info for audit log
+    deleted_backlog_ids = [item.id for item in linked_backlog]
+    deleted_config_ids = [item.id for item in linked_config]
 
     # Audit log
     try:
@@ -568,8 +583,8 @@ def unconvert_requirement(
             program_id=project_id,
             diff={
                 "status": {"old": previous_status, "new": "approved"},
-                "backlog_item_id": {"old": req.backlog_item_id, "new": None},
-                "config_item_id": {"old": req.config_item_id, "new": None},
+                "deleted_backlog_ids": deleted_backlog_ids,
+                "deleted_config_ids": deleted_config_ids,
                 "deleted_items": deleted_items,
                 "force": force,
             },

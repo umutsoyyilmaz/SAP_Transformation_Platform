@@ -22,6 +22,20 @@ BACKLOG_STATUSES = {
     "new", "design", "build", "test", "deploy", "closed", "blocked", "cancelled",
 }
 
+# State machine — enforced on move_backlog_item.
+# Design → Build requires TS approved (precondition checked in service layer).
+# Test → Deploy requires all linked unit tests passed (checked in service layer).
+BACKLOG_TRANSITIONS = {
+    "new":       {"design", "cancelled"},
+    "design":    {"build", "blocked", "cancelled"},
+    "build":     {"test", "blocked", "cancelled"},
+    "test":      {"deploy", "design", "blocked"},
+    "deploy":    {"closed", "blocked"},
+    "blocked":   {"new", "design", "build", "test"},
+    "closed":    set(),        # terminal
+    "cancelled": set(),        # terminal
+}
+
 WRICEF_TYPES = {
     "workflow", "report", "interface", "conversion", "enhancement", "form",
 }
@@ -142,12 +156,10 @@ class BacklogItem(db.Model):
         db.String(36),
         db.ForeignKey("explore_requirements.id", ondelete="SET NULL", use_alter=True),
         nullable=True,
-        comment="Link to explore-phase requirement",
+        comment="Link to explore-phase requirement (canonical FK: N WRICEF → 1 Requirement)",
     )
-    process_id = db.Column(
-        db.Integer, db.ForeignKey("processes.id", ondelete="SET NULL"),
-        nullable=True, comment="L3 process step that generated this WRICEF (gap)",
-    )
+    # NOTE: process_id removed — WRICEF must trace via Requirement, never directly to L3/L4.
+    # Traceability: L4 → ProcessStep → Requirement → BacklogItem (WRICEF)
 
     # ── Identification
     code = db.Column(
@@ -248,7 +260,6 @@ class BacklogItem(db.Model):
             "sprint_id": self.sprint_id,
             "requirement_id": self.requirement_id,
             "explore_requirement_id": self.explore_requirement_id,
-            "process_id": self.process_id,
             "code": self.code,
             "title": self.title,
             "description": self.description,

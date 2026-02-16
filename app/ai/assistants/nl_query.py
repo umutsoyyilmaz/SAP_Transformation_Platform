@@ -103,7 +103,7 @@ requirement_process_mappings (id, requirement_id, process_id, coverage_type, not
 
 -- Backlog & Development
 sprints (id, program_id, name, goal, status, start_date, end_date, capacity_points, velocity, "order", created_at, updated_at)
-backlog_items (id, program_id, sprint_id, requirement_id, process_id, code, title, description, wricef_type, sub_type, module, transaction_code, package, transport_request, status, priority, assigned_to, story_points, estimated_hours, actual_hours, complexity, board_order, acceptance_criteria, technical_notes, notes, created_at, updated_at)
+backlog_items (id, program_id, sprint_id, requirement_id, explore_requirement_id, code, title, description, wricef_type, sub_type, module, transaction_code, package, transport_request, status, priority, assigned_to, story_points, estimated_hours, actual_hours, complexity, board_order, acceptance_criteria, technical_notes, notes, created_at, updated_at)
 config_items (id, program_id, requirement_id, code, title, description, module, config_key, transaction_code, transport_request, status, priority, assigned_to, complexity, estimated_hours, actual_hours, acceptance_criteria, notes, created_at, updated_at)
 functional_specs (id, backlog_item_id, config_item_id, title, description, content, version, status, author, reviewer, approved_by, approved_at, created_at, updated_at)
 technical_specs (id, functional_spec_id, title, description, content, version, status, author, reviewer, approved_by, approved_at, objects_list, unit_test_evidence, created_at, updated_at)
@@ -133,7 +133,7 @@ Key relationships:
 - workshops.scenario_id → scenarios.id
 - requirements.workshop_id → workshops.id
 - processes.scenario_id → scenarios.id
-- backlog_items.process_id → processes.id
+- backlog_items.explore_requirement_id → explore_requirements.id
 - analyses.process_id → processes.id
 - requirements.process_id → processes.id
 - requirement_process_mappings.requirement_id → requirements.id

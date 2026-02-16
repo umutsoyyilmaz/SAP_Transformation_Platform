@@ -411,15 +411,10 @@ class ExploreRequirement(db.Model):
         comment="pending | synced | sync_error | out_of_sync",
     )
 
-    # Backlog linkage (WRICEF or Config)
-    backlog_item_id = db.Column(
-        db.Integer, db.ForeignKey("backlog_items.id", ondelete="SET NULL"),
-        nullable=True, comment="Linked WRICEF backlog item",
-    )
-    config_item_id = db.Column(
-        db.Integer, db.ForeignKey("config_items.id", ondelete="SET NULL"),
-        nullable=True, comment="Linked config backlog item",
-    )
+    # Backlog linkage — REMOVED (ADR: WRICEF traces via BacklogItem.explore_requirement_id)
+    # Canonical direction: BacklogItem.explore_requirement_id → ExploreRequirement.id (N:1)
+    # Previously: backlog_item_id, config_item_id columns here (bidirectional 1:1). Removed
+    # to enforce Requirement 1→N WRICEF architecture.
 
     # Deferred / Rejected
     deferred_to_phase = db.Column(db.String(50), nullable=True)
@@ -465,6 +460,37 @@ class ExploreRequirement(db.Model):
     workshop = db.relationship(
         "ExploreWorkshop", foreign_keys=[workshop_id], uselist=False,
     )
+
+    # ── 1:N Backlog/Config relationships (canonical direction) ────────
+    # N WRICEFs can point to 1 Requirement via BacklogItem.explore_requirement_id
+    linked_backlog_items = db.relationship(
+        "BacklogItem",
+        foreign_keys="BacklogItem.explore_requirement_id",
+        lazy="select",
+    )
+    linked_config_items = db.relationship(
+        "ConfigItem",
+        foreign_keys="ConfigItem.explore_requirement_id",
+        lazy="select",
+    )
+
+    # ── Computed properties for backward compatibility ─────────────────
+    @property
+    def is_converted(self):
+        """Check if this requirement has been converted to backlog/config items."""
+        return bool(self.linked_backlog_items or self.linked_config_items)
+
+    @property
+    def backlog_item_id(self):
+        """Backward compat: returns first linked backlog item ID."""
+        items = self.linked_backlog_items
+        return items[0].id if items else None
+
+    @property
+    def config_item_id(self):
+        """Backward compat: returns first linked config item ID."""
+        items = self.linked_config_items
+        return items[0].id if items else None
 
     def to_dict(self, include_links=False):
         # Resolve workshop code
@@ -527,6 +553,8 @@ class ExploreRequirement(db.Model):
             "alm_sync_status": self.alm_sync_status,
             "backlog_item_id": self.backlog_item_id,
             "config_item_id": self.config_item_id,
+            "backlog_item_ids": [bi.id for bi in self.linked_backlog_items],
+            "config_item_ids": [ci.id for ci in self.linked_config_items],
             "deferred_to_phase": self.deferred_to_phase,
             "rejection_reason": self.rejection_reason,
             "created_at": self.created_at.isoformat() if self.created_at else None,

@@ -180,9 +180,8 @@ class Process(db.Model):
         "RequirementProcessMapping", backref="process", lazy="dynamic",
         cascade="all, delete-orphan",
     )
-    backlog_items = db.relationship(
-        "BacklogItem", backref="process", lazy="dynamic",
-    )
+    # NOTE: backlog_items relationship removed — WRICEF traces via Requirement,
+    # not directly via Process. BacklogItem.process_id column was removed (ADR).
 
     def to_dict(self, include_children=False):
         result = {
