@@ -51,36 +51,18 @@ platform_admin_bp = Blueprint("platform_admin", __name__)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-# Perga is the platform owner tenant — only its admins access Platform Admin
-PLATFORM_OWNER_SLUG = "perga"
-
-
 def _require_platform_admin():
-    """Check that the current user is a Perga platform admin.
+    """Check that the current user is a platform admin.
 
-    Rules:
-      - User must be authenticated via JWT
-      - User must belong to the Perga (owner) tenant
-      - User must have the 'platform_admin' role
-
-    Customer tenant admins (tenant_admin) do NOT get access here —
-    they manage their own tenant via /admin (Tenant Admin panel).
+    Platform admins are tenant-independent users (tenant_id=NULL)
+    with the 'platform_admin' role. They are NOT tied to any customer tenant.
     """
     user_id = getattr(g, "jwt_user_id", None)
     if user_id is None:
-        # Legacy auth (Basic Auth) — allow through for backward compat
+        # Legacy auth (Basic Auth) — allow through
         return None
 
-    # Must belong to the Perga (owner) tenant
-    jwt_tenant_id = getattr(g, "jwt_tenant_id", None)
-    if jwt_tenant_id:
-        owner_tenant = db.session.execute(
-            db.select(Tenant).where(Tenant.slug == PLATFORM_OWNER_SLUG)
-        ).scalar_one_or_none()
-        if not owner_tenant or jwt_tenant_id != owner_tenant.id:
-            return jsonify({"error": "Platform Admin is restricted to Perga administrators"}), 403
-
-    # Must have platform_admin role (not just tenant_admin)
+    # Must have platform_admin role
     from app.services.permission_service import get_user_role_names
     roles = get_user_role_names(user_id)
     if "platform_admin" in roles:
@@ -355,10 +337,6 @@ def freeze_tenant(tenant_id):
 
     if not tenant.is_active:
         return jsonify({"message": "Tenant already frozen"}), 200
-
-    # Prevent freezing the platform owner tenant (Perga)
-    if tenant.slug == PLATFORM_OWNER_SLUG:
-        return jsonify({"error": "Cannot freeze the platform owner tenant"}), 400
 
     tenant.is_active = False
     write_audit(

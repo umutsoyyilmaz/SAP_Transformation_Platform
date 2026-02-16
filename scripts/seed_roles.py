@@ -277,35 +277,15 @@ def seed_roles():
     return created_roles
 
 
-def seed_default_tenant():
-    """Create a default tenant if none exists."""
-    if Tenant.query.count() > 0:
-        print("  Default tenant: already exists")
-        return Tenant.query.first()
-
-    tenant = Tenant(
-        name="Perga Platform",
-        slug="perga",
-        plan="enterprise",
-        max_users=100,
-        max_projects=50,
-        is_active=True,
-    )
-    db.session.add(tenant)
-    db.session.commit()
-    print(f"  Default tenant: created (id={tenant.id}, slug=perga)")
-    return tenant
-
-
-def seed_admin_user(tenant):
-    """Create a default admin user if none exists."""
-    existing = User.query.filter_by(tenant_id=tenant.id, email="admin@perga.io").first()
+def seed_platform_admin():
+    """Create the platform admin user (tenant-free)."""
+    existing = User.query.filter_by(tenant_id=None, email="admin@perga.io").first()
     if existing:
-        print(f"  Admin user: already exists (id={existing.id})")
+        print(f"  Platform admin: already exists (id={existing.id})")
         return existing
 
     user = User(
-        tenant_id=tenant.id,
+        tenant_id=None,  # Platform admin — not tied to any tenant
         email="admin@perga.io",
         password_hash=hash_password("Perga2026!"),
         full_name="Platform Admin",
@@ -320,7 +300,7 @@ def seed_admin_user(tenant):
         db.session.add(UserRole(user_id=user.id, role_id=role.id))
 
     db.session.commit()
-    print(f"  Admin user: created (id={user.id}, email=admin@perga.io, password=Perga2026!)")
+    print(f"  Platform admin: created (id={user.id}, email=admin@perga.io, password=Perga2026!)")
     return user
 
 
@@ -343,11 +323,8 @@ def main():
         print("\n👥 Seeding roles...")
         seed_roles()
 
-        print("\n🏢 Seeding default tenant...")
-        tenant = seed_default_tenant()
-
-        print("\n🔑 Seeding admin user...")
-        seed_admin_user(tenant)
+        print("\n🔑 Seeding platform admin...")
+        seed_platform_admin()
 
         # Summary
         print("\n" + "=" * 60)

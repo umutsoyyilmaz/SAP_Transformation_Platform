@@ -103,11 +103,9 @@ def _seed_admin_data():
     seed_permissions()
     seed_roles()
 
-    # ── Tenants ────────────────────────────────────────────────
+    # ── Tenants (customer tenants only — no Perga) ──────────────
     print("\n🏢 Seeding demo tenants...")
     DEMO_TENANTS = [
-        {"name": "Perga Platform", "slug": "perga", "plan": "enterprise",
-         "max_users": 100, "max_projects": 50, "is_active": True},
         {"name": "Anadolu Gıda A.Ş.", "slug": "anadolu-gida", "plan": "premium",
          "max_users": 50, "max_projects": 20, "is_active": True},
         {"name": "Demo Şirket", "slug": "demo", "plan": "trial",
@@ -127,13 +125,29 @@ def _seed_admin_data():
             tenants[t_data["slug"]] = t
             print(f"   ✅ Tenant '{t.name}' created (id={t.id})")
 
-    # ── Users ──────────────────────────────────────────────────
+    # ── Platform Admin (tenant-independent) ────────────────────
+    print("\n👑 Seeding platform admin...")
+    existing_admin = User.query.filter_by(email="admin@perga.io", tenant_id=None).first()
+    if not existing_admin:
+        admin_user = User(
+            tenant_id=None,
+            email="admin@perga.io",
+            password_hash=hash_password("Perga2026!"),
+            full_name="Platform Admin",
+            status="active",
+        )
+        db.session.add(admin_user)
+        db.session.flush()
+        role = Role.query.filter_by(name="platform_admin", tenant_id=None).first()
+        if role:
+            db.session.add(UserRole(user_id=admin_user.id, role_id=role.id))
+        print(f"   ✅ Platform admin 'admin@perga.io' created (tenant_id=None, pw=Perga2026!)")
+    else:
+        print(f"   ⏩ Platform admin 'admin@perga.io' already exists")
+
+    # ── Tenant Users ───────────────────────────────────────────
     print("\n👤 Seeding demo users...")
     DEMO_USERS = [
-        # Perga platform admin
-        {"tenant_slug": "perga", "email": "admin@perga.io",
-         "full_name": "Platform Admin", "password": "Perga2026!",
-         "role": "platform_admin"},
         # Anadolu tenant admin
         {"tenant_slug": "anadolu-gida", "email": "admin@anadolu.com",
          "full_name": "Anadolu Admin", "password": "Anadolu2026!",

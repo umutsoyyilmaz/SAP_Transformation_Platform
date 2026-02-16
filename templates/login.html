@@ -100,6 +100,7 @@
                     tenantSelect.innerHTML = `<option value="${tenants[0].slug}">${tenants[0].name}</option>`;
                 } else {
                     tenantSelect.innerHTML = '<option value="">Select organization...</option>' +
+                        '<option value="__platform_admin__">Platform Admin</option>' +
                         tenants.map(t => `<option value="${t.slug}">${t.name}</option>`).join('');
                 }
 
@@ -135,6 +136,12 @@
                 return;
             }
 
+            // Platform admin login (no tenant)
+            const isPlatformAdmin = tenant_slug === '__platform_admin__';
+            const loginBody = isPlatformAdmin
+                ? { email, password }
+                : { email, password, tenant_slug };
+
             // Disable button
             loginBtn.disabled = true;
             btnText.textContent = 'Signing in...';
@@ -144,7 +151,7 @@
                 const res = await fetch('/api/v1/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password, tenant_slug }),
+                    body: JSON.stringify(loginBody),
                 });
 
                 const data = await res.json();
@@ -158,10 +165,10 @@
                 localStorage.setItem('sap_access_token', data.access_token);
                 localStorage.setItem('sap_refresh_token', data.refresh_token);
                 localStorage.setItem('sap_user', JSON.stringify(data.user));
-                localStorage.setItem('sap_last_tenant', tenant_slug);
+                if (!isPlatformAdmin) localStorage.setItem('sap_last_tenant', tenant_slug);
 
-                // Redirect to app
-                window.location.href = '/';
+                // Redirect: platform admin → platform admin panel, others → app
+                window.location.href = isPlatformAdmin ? '/platform-admin' : '/';
 
             } catch (err) {
                 showError('Network error. Please try again.');

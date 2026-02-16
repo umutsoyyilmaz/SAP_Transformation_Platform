@@ -47,22 +47,23 @@ def _get_refresh_expires():
 # ═══════════════════════════════════════════════════════════════
 # Token Generation
 # ═══════════════════════════════════════════════════════════════
-def generate_access_token(user_id: int, tenant_id: int, roles: list[str]) -> str:
+def generate_access_token(user_id: int, tenant_id: int | None, roles: list[str]) -> str:
     """Generate a short-lived access token."""
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
-        "tenant_id": tenant_id,
         "roles": roles,
         "type": "access",
         "iat": now,
         "exp": now + timedelta(seconds=_get_access_expires()),
         "jti": str(uuid.uuid4()),
     }
+    if tenant_id is not None:
+        payload["tenant_id"] = tenant_id
     return jwt.encode(payload, _get_secret(), algorithm=ALGORITHM)
 
 
-def generate_refresh_token(user_id: int, tenant_id: int) -> tuple[str, str, datetime]:
+def generate_refresh_token(user_id: int, tenant_id: int | None) -> tuple[str, str, datetime]:
     """
     Generate a long-lived refresh token.
     Returns: (raw_token, token_hash, expires_at)
@@ -71,18 +72,19 @@ def generate_refresh_token(user_id: int, tenant_id: int) -> tuple[str, str, date
     expires_at = now + timedelta(seconds=_get_refresh_expires())
     payload = {
         "sub": user_id,
-        "tenant_id": tenant_id,
         "type": "refresh",
         "iat": now,
         "exp": expires_at,
         "jti": str(uuid.uuid4()),
     }
+    if tenant_id is not None:
+        payload["tenant_id"] = tenant_id
     raw_token = jwt.encode(payload, _get_secret(), algorithm=ALGORITHM)
     token_hash = hash_token(raw_token)
     return raw_token, token_hash, expires_at
 
 
-def generate_token_pair(user_id: int, tenant_id: int, roles: list[str]) -> dict:
+def generate_token_pair(user_id: int, tenant_id: int | None, roles: list[str]) -> dict:
     """Generate both access + refresh tokens."""
     access_token = generate_access_token(user_id, tenant_id, roles)
     refresh_token, token_hash, expires_at = generate_refresh_token(user_id, tenant_id)

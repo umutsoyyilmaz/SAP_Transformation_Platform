@@ -28,6 +28,7 @@ from app.services.user_service import (
     authenticate_user,
     get_user_by_id,
 )
+from app.utils.crypto import verify_password
 
 auth_bp = Blueprint("auth_bp", __name__, url_prefix="/api/v1/auth")
 
@@ -50,9 +51,49 @@ def login():
     if not email or not password:
         return jsonify({"error": "Email and password are required"}), 400
 
+    # ── Platform admin login (no tenant required) ──────────────
     if not tenant_slug:
-        return jsonify({"error": "Tenant slug is required"}), 400
+        # Try tenant-free login: only platform_admin users with tenant_id=NULL
+        user = User.query.filter_by(email=email, tenant_id=None).first()
+        if not user:
+            return jsonify({"error": "Tenant slug is required"}), 400
 
+        if user.status != "active":
+            return jsonify({"error": f"Account is {user.status}"}), 403
+
+        if not user.password_hash or not verify_password(password, user.password_hash):
+            return jsonify({"error": "Invalid email or password"}), 401
+
+        # Must have platform_admin role
+        from app.services.permission_service import get_user_role_names
+        roles = get_user_role_names(user.id)
+        if "platform_admin" not in roles:
+            return jsonify({"error": "Tenant slug is required"}), 400
+
+        # Generate token pair WITHOUT tenant_id
+        user.last_login_at = datetime.now(timezone.utc)
+        db.session.commit()
+        tokens = generate_token_pair(user.id, None, list(roles))
+
+        session = Session(
+            user_id=user.id,
+            token_hash=tokens["token_hash"],
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get("User-Agent", "")[:500],
+            expires_at=tokens["expires_at"],
+        )
+        db.session.add(session)
+        db.session.commit()
+
+        return jsonify({
+            "access_token": tokens["access_token"],
+            "refresh_token": tokens["refresh_token"],
+            "token_type": tokens["token_type"],
+            "expires_in": tokens["expires_in"],
+            "user": user.to_dict(include_roles=True),
+        }), 200
+
+    # ── Standard tenant login ─────────────────────────────────
     # Find tenant
     tenant = Tenant.query.filter_by(slug=tenant_slug, is_active=True).first()
     if not tenant:

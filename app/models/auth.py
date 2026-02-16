@@ -65,8 +65,8 @@ class User(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(
-        db.Integer, db.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
-    )
+        db.Integer, db.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True
+    )  # NULL = platform admin (not tied to any tenant)
     email = db.Column(db.String(200), nullable=False)
     password_hash = db.Column(db.String(256))  # NULL for SSO/invited-pending users
     full_name = db.Column(db.String(200))

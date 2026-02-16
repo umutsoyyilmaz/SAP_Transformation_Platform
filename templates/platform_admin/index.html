@@ -304,8 +304,8 @@
         ...(token ? {'Authorization': `Bearer ${token}`} : {}),
     };
 
-    // Platform owner tenant slug — cannot be frozen
-    const OWNER_SLUG = 'perga';
+    // Platform owner slug — not used for access control, just for UI display
+    // All tenants are customer tenants; platform admin has no tenant
 
     async function loadDashboard() {
         try {
@@ -406,9 +406,7 @@
                         <td><span class="badge ${t.is_active ? 'badge-active' : 'badge-frozen'}">${t.is_active ? 'Active' : 'Frozen'}</span></td>
                         <td class="actions-cell">
                             ${t.is_active
-                                ? (t.slug === OWNER_SLUG
-                                    ? `<span style="color:var(--text-muted);font-size:0.85em">Owner</span>`
-                                    : `<button class="btn btn-sm btn-danger" onclick="freezeTenant(${t.id})">Freeze</button>`)
+                                ? `<button class="btn btn-sm btn-danger" onclick="freezeTenant(${t.id})">Freeze</button>`
                                 : `<button class="btn btn-sm btn-success" onclick="unfreezeTenant(${t.id})">Unfreeze</button>`
                             }
                         </td>
