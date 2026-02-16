@@ -255,22 +255,28 @@ def move_backlog_item(item, data):
 
             # ── Side-effect: auto-create draft FS on → design ──
             if new_status == "design" and not item.functional_spec:
-                fs = FunctionalSpec(
-                    backlog_item_id=item.id,
-                    tenant_id=item.tenant_id,
-                    title=f"FS — {item.code or item.title}",
-                    description=(
-                        f"Functional Specification for {item.wricef_type.upper()} item: "
-                        f"{item.title}"
-                    ),
-                    content=_generate_fs_template(item),
-                    version="1.0",
-                    status="draft",
-                    author="",
-                )
+                # Try template-driven generation first
+                fs = _create_fs_from_template(item)
+                if not fs:
+                    # Fallback to old hardcoded template
+                    fs = FunctionalSpec(
+                        backlog_item_id=item.id,
+                        tenant_id=item.tenant_id,
+                        title=f"FS — {item.code or item.title}",
+                        description=(
+                            f"Functional Specification for {item.wricef_type.upper()} item: "
+                            f"{item.title}"
+                        ),
+                        content=_generate_fs_template(item),
+                        version="1.0",
+                        status="draft",
+                        author="",
+                    )
                 db.session.add(fs)
                 db.session.flush()
                 side_effects["functional_spec_created"] = fs.id
+                if getattr(fs, 'template_id', None):
+                    side_effects["template_used"] = fs.template_version or "1.0"
 
             # ── Side-effect: auto-generate unit test cases on → test ──
             if new_status == "test":
@@ -459,6 +465,75 @@ def _auto_generate_unit_tests(item):
     return [tc.id]
 
 
+def _create_fs_from_template(item):
+    """Try to create a FunctionalSpec using the SpecTemplate system.
+
+    Returns FunctionalSpec instance (not yet added to session) or None if no template found.
+    """
+    try:
+        from app.services.spec_template_service import (
+            find_active_template, build_template_context, render_template,
+        )
+        wtype = (item.wricef_type or "enhancement").lower()
+        fs_tpl = find_active_template(wtype, "FS")
+        if not fs_tpl:
+            return None
+
+        context = build_template_context(item)
+        fs_content = render_template(fs_tpl.content_template, context)
+        return FunctionalSpec(
+            backlog_item_id=item.id,
+            tenant_id=item.tenant_id,
+            title=f"FS — {item.code or item.title}",
+            description=f"Auto-generated from {fs_tpl.title}",
+            content=fs_content,
+            version="0.1",
+            status="draft",
+            author="",
+            template_id=fs_tpl.id,
+            template_version=fs_tpl.version,
+        )
+    except Exception as e:
+        logger.warning(f"Template-based FS creation failed, falling back: {e}")
+        return None
+
+
+def _create_ts_from_template(fs, parent_item):
+    """Try to create a TechnicalSpec using the SpecTemplate system.
+
+    Returns TechnicalSpec instance (not yet added to session) or None if no template found.
+    """
+    try:
+        from app.services.spec_template_service import (
+            find_active_template, build_template_context, render_template,
+        )
+        if not parent_item:
+            return None
+
+        wtype = (getattr(parent_item, "wricef_type", None) or "enhancement").lower()
+        ts_tpl = find_active_template(wtype, "TS")
+        if not ts_tpl:
+            return None
+
+        context = build_template_context(parent_item)
+        ts_content = render_template(ts_tpl.content_template, context)
+        return TechnicalSpec(
+            functional_spec_id=fs.id,
+            tenant_id=fs.tenant_id,
+            title=f"TS — {fs.title.replace('FS — ', '')}",
+            description=f"Auto-generated from {ts_tpl.title}",
+            content=ts_content,
+            version="0.1",
+            status="draft",
+            author="",
+            template_id=ts_tpl.id,
+            template_version=ts_tpl.version,
+        )
+    except Exception as e:
+        logger.warning(f"Template-based TS creation failed, falling back: {e}")
+        return None
+
+
 def on_spec_status_change(spec, old_status, new_status):
     """React to FunctionalSpec / TechnicalSpec status changes.
 
@@ -477,16 +552,20 @@ def on_spec_status_change(spec, old_status, new_status):
         # Auto-create TechnicalSpec
         if not spec.technical_spec:
             parent_item = spec.backlog_item or spec.config_item
-            ts = TechnicalSpec(
-                functional_spec_id=spec.id,
-                tenant_id=spec.tenant_id,
-                title=f"TS — {spec.title.replace('FS — ', '')}",
-                description=f"Technical Specification derived from: {spec.title}",
-                content=_generate_ts_template(spec, parent_item),
-                version="1.0",
-                status="draft",
-                author="",
-            )
+            # Try template-driven generation first
+            ts = _create_ts_from_template(spec, parent_item)
+            if not ts:
+                # Fallback to old hardcoded template
+                ts = TechnicalSpec(
+                    functional_spec_id=spec.id,
+                    tenant_id=spec.tenant_id,
+                    title=f"TS — {spec.title.replace('FS — ', '')}",
+                    description=f"Technical Specification derived from: {spec.title}",
+                    content=_generate_ts_template(spec, parent_item),
+                    version="1.0",
+                    status="draft",
+                    author="",
+                )
             db.session.add(ts)
             db.session.flush()
             side_effects["technical_spec_created"] = ts.id
