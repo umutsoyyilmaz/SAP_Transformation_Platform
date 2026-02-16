@@ -298,7 +298,7 @@
 
     <script>
     const API = '/api/v1/platform-admin';
-    const token = localStorage.getItem('perga_access_token') || localStorage.getItem('admin_access_token') || '';
+    const token = localStorage.getItem('sap_access_token') || localStorage.getItem('perga_access_token') || localStorage.getItem('admin_access_token') || '';
     const headers = {
         'Content-Type': 'application/json',
         ...(token ? {'Authorization': `Bearer ${token}`} : {}),

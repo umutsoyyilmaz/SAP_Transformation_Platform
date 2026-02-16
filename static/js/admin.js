@@ -11,7 +11,7 @@ const AdminAuth = {
     _refreshTimer: null,
 
     getToken() {
-        return localStorage.getItem(this.TOKEN_KEY);
+        return localStorage.getItem(this.TOKEN_KEY) || localStorage.getItem('sap_access_token');
     },
 
     getUser() {
