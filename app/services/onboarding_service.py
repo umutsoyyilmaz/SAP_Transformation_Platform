@@ -11,7 +11,7 @@ Multi-step new tenant onboarding flow:
 import logging
 from datetime import datetime, timezone
 
-from werkzeug.security import generate_password_hash
+from app.utils.crypto import hash_password
 
 from app.models import db
 from app.models.auth import Tenant, User, Role, UserRole
@@ -72,7 +72,7 @@ def create_first_admin(tenant_id, data):
     user = User(
         tenant_id=tenant_id,
         email=data["email"],
-        password_hash=generate_password_hash(data["password"]),
+        password_hash=hash_password(data["password"]),
         full_name=data.get("full_name", ""),
         status="active",
         auth_provider="local",
