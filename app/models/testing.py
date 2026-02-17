@@ -134,6 +134,20 @@ DEFECT_LINK_TYPES = {
     "blocks",      # this defect blocks fixing target
 }
 
+# ── Test Data Bridge constants ─────────────────────────────────────────────
+PLAN_TYPES = {
+    "sit", "uat", "regression", "e2e",
+    "cutover_rehearsal", "performance",
+}
+
+CYCLE_DATA_STATUSES = {
+    "not_checked", "ready", "stale", "refresh_needed",
+}
+
+SCOPE_TYPES = {
+    "l3_process", "scenario", "requirement",
+}
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # TEST PLAN
@@ -170,6 +184,14 @@ class TestPlan(db.Model):
     exit_criteria = db.Column(db.Text, default="", comment="Conditions to close this plan")
     start_date = db.Column(db.Date, nullable=True)
     end_date = db.Column(db.Date, nullable=True)
+    plan_type = db.Column(
+        db.String(30), default="sit",
+        comment="sit | uat | regression | e2e | cutover_rehearsal | performance",
+    )
+    environment = db.Column(
+        db.String(10), nullable=True,
+        comment="DEV | QAS | PRE | PRD",
+    )
 
     created_at = db.Column(
         db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
@@ -185,6 +207,14 @@ class TestPlan(db.Model):
         "TestCycle", backref="plan", lazy="dynamic",
         cascade="all, delete-orphan", order_by="TestCycle.order",
     )
+    plan_data_sets = db.relationship(
+        "PlanDataSet", backref="plan", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    scopes = db.relationship(
+        "PlanScope", backref="plan", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
 
     def to_dict(self, include_cycles=False):
         result = {
@@ -193,6 +223,8 @@ class TestPlan(db.Model):
             "name": self.name,
             "description": self.description,
             "status": self.status,
+            "plan_type": self.plan_type,
+            "environment": self.environment,
             "test_strategy": self.test_strategy,
             "entry_criteria": self.entry_criteria,
             "exit_criteria": self.exit_criteria,
@@ -246,6 +278,14 @@ class TestCycle(db.Model):
     start_date = db.Column(db.Date, nullable=True)
     end_date = db.Column(db.Date, nullable=True)
     order = db.Column(db.Integer, default=0, comment="Sort order within plan")
+    environment = db.Column(
+        db.String(10), nullable=True,
+        comment="DEV | QAS | PRE | PRD",
+    )
+    build_tag = db.Column(
+        db.String(50), default="",
+        comment="Transport request or build label, e.g. TR-12345",
+    )
 
     # ── Entry/Exit Criteria (TS-Sprint 3)
     entry_criteria = db.Column(
@@ -272,6 +312,12 @@ class TestCycle(db.Model):
         cascade="all, delete-orphan",
     )
 
+    # ── Relationships
+    cycle_data_sets = db.relationship(
+        "CycleDataSet", backref="cycle", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+
     def to_dict(self, include_executions=False):
         result = {
             "id": self.id,
@@ -283,6 +329,8 @@ class TestCycle(db.Model):
             "start_date": self.start_date.isoformat() if self.start_date else None,
             "end_date": self.end_date.isoformat() if self.end_date else None,
             "order": self.order,
+            "environment": self.environment,
+            "build_tag": self.build_tag,
             "entry_criteria": self.entry_criteria,
             "exit_criteria": self.exit_criteria,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -361,6 +409,14 @@ class TestCase(db.Model):
     test_steps = db.Column(db.Text, default="", comment="Step-by-step test procedure")
     expected_result = db.Column(db.Text, default="", comment="Expected outcome")
     test_data_set = db.Column(db.Text, default="", comment="Test data description or reference")
+    transaction_code = db.Column(
+        db.String(20), default="",
+        comment="SAP transaction code, e.g. VA01, ME21N, FB01",
+    )
+    data_set_id = db.Column(
+        db.Integer, db.ForeignKey("test_data_sets.id", ondelete="SET NULL"),
+        nullable=True, comment="Linked test data set from Data Factory",
+    )
 
     # ── Status
     status = db.Column(
@@ -447,6 +503,8 @@ class TestCase(db.Model):
             "test_steps": self.test_steps,
             "expected_result": self.expected_result,
             "test_data_set": self.test_data_set,
+            "transaction_code": self.transaction_code,
+            "data_set_id": self.data_set_id,
             "status": self.status,
             "priority": self.priority,
             "is_regression": self.is_regression,
@@ -627,7 +685,12 @@ class Defect(db.Model):
     # ── Assignment & tracking
     reported_by = db.Column(db.String(100), default="")
     assigned_to = db.Column(db.String(100), default="")
-    found_in_cycle = db.Column(db.String(100), default="", comment="Which test cycle found it")
+    found_in_cycle = db.Column(db.String(100), default="", comment="Which test cycle found it (legacy text)")
+    found_in_cycle_id = db.Column(
+        db.Integer, db.ForeignKey("test_cycles.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+        comment="FK to test cycle where defect was found",
+    )
 
     # ── Aging & reopen tracking
     reported_at = db.Column(
@@ -734,6 +797,7 @@ class Defect(db.Model):
             "reported_by": self.reported_by,
             "assigned_to": self.assigned_to,
             "found_in_cycle": self.found_in_cycle,
+            "found_in_cycle_id": self.found_in_cycle_id,
             "reported_at": self.reported_at.isoformat() if self.reported_at else None,
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
             "sla_due_date": self.sla_due_date.isoformat() if self.sla_due_date else None,
@@ -1602,4 +1666,184 @@ class TestDailySnapshot(db.Model):
 
     def __repr__(self):
         return f"<TestDailySnapshot {self.id}: {self.snapshot_date}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PLAN DATA SET  (Data Bridge)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class PlanDataSet(db.Model):
+    """Bridge: TestPlan ↔ TestDataSet (N:M).
+
+    Declares which data sets a test plan requires.
+    is_mandatory = True means testing must not start without this data.
+    """
+
+    __tablename__ = "plan_data_sets"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    plan_id = db.Column(
+        db.Integer, db.ForeignKey("test_plans.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    data_set_id = db.Column(
+        db.Integer, db.ForeignKey("test_data_sets.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    is_mandatory = db.Column(
+        db.Boolean, default=True,
+        comment="True = test must not start without this data set",
+    )
+    notes = db.Column(db.Text, default="")
+
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint("plan_id", "data_set_id", name="uq_plan_dataset"),
+    )
+
+    data_set = db.relationship("TestDataSet", foreign_keys=[data_set_id])
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "plan_id": self.plan_id,
+            "data_set_id": self.data_set_id,
+            "data_set_name": self.data_set.name if self.data_set else None,
+            "data_set_status": self.data_set.status if self.data_set else None,
+            "is_mandatory": self.is_mandatory,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<PlanDataSet {self.id}: plan#{self.plan_id} ↔ ds#{self.data_set_id}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# CYCLE DATA SET  (Data Bridge)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class CycleDataSet(db.Model):
+    """Bridge: TestCycle ↔ TestDataSet (N:M).
+
+    Tracks which data sets are active in a cycle and their
+    readiness status.  Supports per-cycle data refresh tracking.
+    """
+
+    __tablename__ = "cycle_data_sets"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    cycle_id = db.Column(
+        db.Integer, db.ForeignKey("test_cycles.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    data_set_id = db.Column(
+        db.Integer, db.ForeignKey("test_data_sets.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    data_status = db.Column(
+        db.String(20), default="not_checked",
+        comment="not_checked | ready | stale | refresh_needed",
+    )
+    data_refreshed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    notes = db.Column(db.Text, default="")
+
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint("cycle_id", "data_set_id", name="uq_cycle_dataset"),
+    )
+
+    data_set = db.relationship("TestDataSet", foreign_keys=[data_set_id])
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "cycle_id": self.cycle_id,
+            "data_set_id": self.data_set_id,
+            "data_set_name": self.data_set.name if self.data_set else None,
+            "data_set_version": self.data_set.version if self.data_set else None,
+            "data_status": self.data_status,
+            "data_refreshed_at": self.data_refreshed_at.isoformat() if self.data_refreshed_at else None,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<CycleDataSet {self.id}: cycle#{self.cycle_id} ↔ ds#{self.data_set_id} [{self.data_status}]>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PLAN SCOPE  (Test Coverage)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class PlanScope(db.Model):
+    """Scope item within a test plan.
+
+    Defines which L3 processes, scenarios, or requirements
+    a plan covers.  Used for coverage reporting.
+    """
+
+    __tablename__ = "plan_scopes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    plan_id = db.Column(
+        db.Integer, db.ForeignKey("test_plans.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    scope_type = db.Column(
+        db.String(30), nullable=False,
+        comment="l3_process | scenario | requirement",
+    )
+    scope_ref_id = db.Column(
+        db.String(36), nullable=True,
+        comment="Reference ID (explore_requirements.id, process ID, etc.)",
+    )
+    scope_label = db.Column(
+        db.String(200), nullable=False,
+        comment="Human-readable label, e.g. 'OTC-010 Sales Order Processing'",
+    )
+    notes = db.Column(db.Text, default="")
+
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint("plan_id", "scope_type", "scope_ref_id", name="uq_plan_scope"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "plan_id": self.plan_id,
+            "scope_type": self.scope_type,
+            "scope_ref_id": self.scope_ref_id,
+            "scope_label": self.scope_label,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<PlanScope {self.id}: [{self.scope_type}] {self.scope_label}>"
 

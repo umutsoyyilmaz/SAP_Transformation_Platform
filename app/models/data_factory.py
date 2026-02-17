@@ -1,12 +1,14 @@
 """
 Data Factory Module — Models for data migration lifecycle [Sprint 10]
 
-5 models:
+7 models:
   - DataObject: Master data objects to migrate
   - MigrationWave: Phased migration batches
   - CleansingTask: Data quality rules per object
   - LoadCycle: ETL execution records
   - Reconciliation: Source-target reconciliation checks
+  - TestDataSet: Named test data packages (bridge to Testing)
+  - TestDataSetItem: Data objects within a test data set
 """
 
 from datetime import datetime, timezone
@@ -24,6 +26,19 @@ RECONCILIATION_STATUSES = {"pending", "matched", "variance", "failed"}
 RULE_TYPES = {"not_null", "unique", "range", "regex", "lookup", "custom"}
 LOAD_TYPES = {"initial", "delta", "full_reload", "mock"}
 ENVIRONMENTS = {"DEV", "QAS", "PRE", "PRD"}
+
+# ── Test Data Set constants ──────────────────────────────────────────────
+DATA_SET_STATUSES = {"draft", "loading", "ready", "stale", "archived"}
+DATA_SET_ITEM_STATUSES = {"needed", "loaded", "verified", "missing"}
+REFRESH_STRATEGIES = {"manual", "per_cycle", "per_run"}
+
+DATA_SET_TRANSITIONS = {
+    "draft":    {"loading", "archived"},
+    "loading":  {"ready", "draft"},
+    "ready":    {"stale", "archived"},
+    "stale":    {"loading", "archived"},
+    "archived": set(),
+}
 
 
 def _utcnow():
@@ -322,3 +337,170 @@ class Reconciliation(db.Model):
 
     def __repr__(self):
         return f"<Reconciliation lc={self.load_cycle_id} v={self.variance}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# 6. TestDataSet
+# ═════════════════════════════════════════════════════════════════════════
+
+class TestDataSet(db.Model):
+    """Named test data package — groups DataObjects for test planning.
+
+    Bridges Data Factory and Testing modules.  A TestDataSet like
+    "OTC Happy Path Data v1" contains specific DataObject subsets
+    (via TestDataSetItem) and is linked to TestPlans (PlanDataSet)
+    and TestCycles (CycleDataSet).
+
+    Status FSM: draft → loading → ready → stale → loading (cycle)
+                  │        │                 │
+                  │        └→ draft (fail)    └→ archived
+                  └→ archived
+    """
+
+    __tablename__ = "test_data_sets"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    program_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    name = db.Column(db.String(200), nullable=False, comment="e.g. OTC Happy Path Data")
+    description = db.Column(db.Text, default="")
+    version = db.Column(db.String(20), default="v1", comment="Data set version")
+
+    # ── Environment & status
+    environment = db.Column(
+        db.String(10), default="QAS",
+        comment="DEV | QAS | PRE | PRD",
+    )
+    status = db.Column(
+        db.String(20), default="draft",
+        comment="draft | loading | ready | stale | archived",
+    )
+    refresh_strategy = db.Column(
+        db.String(20), default="manual",
+        comment="manual | per_cycle | per_run",
+    )
+
+    # ── Tracking
+    last_loaded_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    last_verified_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    loaded_by = db.Column(db.String(100), default="")
+
+    # ── Audit
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+    updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow)
+
+    # ── Relationships
+    items = db.relationship(
+        "TestDataSetItem", backref="data_set", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+
+    def to_dict(self, include_items=False):
+        result = {
+            "id": self.id,
+            "program_id": self.program_id,
+            "name": self.name,
+            "description": self.description,
+            "version": self.version,
+            "environment": self.environment,
+            "status": self.status,
+            "refresh_strategy": self.refresh_strategy,
+            "last_loaded_at": self.last_loaded_at.isoformat() if self.last_loaded_at else None,
+            "last_verified_at": self.last_verified_at.isoformat() if self.last_verified_at else None,
+            "loaded_by": self.loaded_by,
+            "item_count": self.items.count() if self.id else 0,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_items:
+            result["items"] = [i.to_dict() for i in self.items]
+        return result
+
+    def __repr__(self):
+        return f"<TestDataSet {self.id}: {self.name} [{self.status}]>"
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# 7. TestDataSetItem
+# ═════════════════════════════════════════════════════════════════════════
+
+class TestDataSetItem(db.Model):
+    """Data object entry within a TestDataSet.
+
+    Links to an existing DataObject and optionally to the LoadCycle
+    that provisioned the data.  Tracks expected vs actual record counts.
+    """
+
+    __tablename__ = "test_data_set_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    data_set_id = db.Column(
+        db.Integer, db.ForeignKey("test_data_sets.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    data_object_id = db.Column(
+        db.Integer, db.ForeignKey("data_objects.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+
+    # ── Filter & scope
+    record_filter = db.Column(
+        db.Text, default="",
+        comment="Free-text filter, e.g. 'Company Code 1000, Customers 100000-100010'. v2: consider JSON",
+    )
+    expected_records = db.Column(db.Integer, nullable=True, comment="Expected record count")
+
+    # ── Readiness
+    status = db.Column(
+        db.String(20), default="needed",
+        comment="needed | loaded | verified | missing",
+    )
+    load_cycle_id = db.Column(
+        db.Integer, db.ForeignKey("load_cycles.id", ondelete="SET NULL"),
+        nullable=True, comment="Which LoadCycle provisioned this data",
+    )
+    actual_records = db.Column(db.Integer, nullable=True, comment="Actually loaded record count")
+    notes = db.Column(db.Text, default="")
+
+    # ── Audit
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+
+    # ── Constraints
+    __table_args__ = (
+        db.UniqueConstraint("data_set_id", "data_object_id", name="uq_dataset_object"),
+    )
+
+    # ── Relationships
+    data_object = db.relationship("DataObject", foreign_keys=[data_object_id])
+    load_cycle = db.relationship("LoadCycle", foreign_keys=[load_cycle_id])
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "data_set_id": self.data_set_id,
+            "data_object_id": self.data_object_id,
+            "data_object_name": self.data_object.name if self.data_object else None,
+            "record_filter": self.record_filter,
+            "expected_records": self.expected_records,
+            "status": self.status,
+            "load_cycle_id": self.load_cycle_id,
+            "actual_records": self.actual_records,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<TestDataSetItem {self.id}: set#{self.data_set_id} obj#{self.data_object_id} [{self.status}]>"
