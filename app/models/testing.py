@@ -148,6 +148,14 @@ SCOPE_TYPES = {
     "l3_process", "scenario", "requirement",
 }
 
+TC_ADDED_METHODS = {
+    "manual", "scope_suggest", "suite_import", "ai_suggest",
+}
+
+COVERAGE_STATUSES = {
+    "not_covered", "partial", "covered",
+}
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # TEST PLAN
@@ -213,6 +221,10 @@ class TestPlan(db.Model):
     )
     scopes = db.relationship(
         "PlanScope", backref="plan", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    plan_test_cases = db.relationship(
+        "PlanTestCase", backref="plan", lazy="dynamic",
         cascade="all, delete-orphan",
     )
 
@@ -556,6 +568,15 @@ class TestExecution(db.Model):
         db.String(20), default="not_run",
         comment="not_run | pass | fail | blocked | deferred",
     )
+    assigned_to = db.Column(
+        db.String(100), default="",
+        comment="Pre-assigned tester name (before execution)",
+    )
+    assigned_to_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Pre-assigned tester FK → team_members",
+    )
     executed_by = db.Column(db.String(100), default="", comment="Tester name")
     executed_by_id = db.Column(
         db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
@@ -574,6 +595,7 @@ class TestExecution(db.Model):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+    assigned_member = db.relationship("TeamMember", foreign_keys=[assigned_to_id])
     executed_by_member = db.relationship("TeamMember", foreign_keys=[executed_by_id])
 
     def to_dict(self):
@@ -582,6 +604,9 @@ class TestExecution(db.Model):
             "cycle_id": self.cycle_id,
             "test_case_id": self.test_case_id,
             "result": self.result,
+            "assigned_to": self.assigned_to,
+            "assigned_to_id": self.assigned_to_id,
+            "assigned_to_member": self.assigned_member.to_dict() if self.assigned_to_id and self.assigned_member else None,
             "executed_by": self.executed_by,
             "executed_by_id": self.executed_by_id,
             "executed_by_member": self.executed_by_member.to_dict() if self.executed_by_id and self.executed_by_member else None,
@@ -1823,6 +1848,18 @@ class PlanScope(db.Model):
         db.String(200), nullable=False,
         comment="Human-readable label, e.g. 'OTC-010 Sales Order Processing'",
     )
+    priority = db.Column(
+        db.String(20), default="medium",
+        comment="low | medium | high | critical — scope item priority",
+    )
+    risk_level = db.Column(
+        db.String(20), default="medium",
+        comment="low | medium | high — risk classification for coverage weighting",
+    )
+    coverage_status = db.Column(
+        db.String(20), default="not_covered",
+        comment="not_covered | partial | covered — auto-computed by coverage service",
+    )
     notes = db.Column(db.Text, default="")
 
     created_at = db.Column(
@@ -1840,10 +1877,101 @@ class PlanScope(db.Model):
             "scope_type": self.scope_type,
             "scope_ref_id": self.scope_ref_id,
             "scope_label": self.scope_label,
+            "priority": self.priority,
+            "risk_level": self.risk_level,
+            "coverage_status": self.coverage_status,
             "notes": self.notes,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
     def __repr__(self):
         return f"<PlanScope {self.id}: [{self.scope_type}] {self.scope_label}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PLAN TEST CASE  (TC Pool)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class PlanTestCase(db.Model):
+    """Bridge: TestPlan ↔ TestCase (N:M) — the TC Pool.
+
+    Tracks which test cases are assigned to a plan, how they
+    were added, priority within the plan, tester assignment,
+    and execution ordering.
+    """
+
+    __tablename__ = "plan_test_cases"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    plan_id = db.Column(
+        db.Integer, db.ForeignKey("test_plans.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    test_case_id = db.Column(
+        db.Integer, db.ForeignKey("test_cases.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    added_method = db.Column(
+        db.String(30), default="manual",
+        comment="manual | scope_suggest | suite_import | ai_suggest",
+    )
+    priority = db.Column(
+        db.String(20), default="medium",
+        comment="low | medium | high | critical — priority within this plan",
+    )
+    estimated_effort = db.Column(
+        db.Integer, nullable=True,
+        comment="Estimated execution effort in minutes",
+    )
+    planned_tester = db.Column(
+        db.String(100), default="",
+        comment="Planned tester name",
+    )
+    planned_tester_id = db.Column(
+        db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Planned tester FK → team_members",
+    )
+    execution_order = db.Column(
+        db.Integer, default=0,
+        comment="Execution sequence within the plan",
+    )
+    notes = db.Column(db.Text, default="")
+
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint("plan_id", "test_case_id", name="uq_plan_testcase"),
+    )
+
+    test_case = db.relationship("TestCase", foreign_keys=[test_case_id])
+    planned_member = db.relationship("TeamMember", foreign_keys=[planned_tester_id])
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "plan_id": self.plan_id,
+            "test_case_id": self.test_case_id,
+            "test_case_code": self.test_case.code if self.test_case else None,
+            "test_case_title": self.test_case.title if self.test_case else None,
+            "added_method": self.added_method,
+            "priority": self.priority,
+            "estimated_effort": self.estimated_effort,
+            "planned_tester": self.planned_tester,
+            "planned_tester_id": self.planned_tester_id,
+            "planned_tester_member": self.planned_member.to_dict() if self.planned_tester_id and self.planned_member else None,
+            "execution_order": self.execution_order,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<PlanTestCase {self.id}: plan#{self.plan_id} ↔ tc#{self.test_case_id}>"
 
