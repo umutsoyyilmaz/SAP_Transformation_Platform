@@ -501,11 +501,12 @@ def create_test_execution(cycle_id):
 
 @testing_bp.route("/testing/executions/<int:exec_id>", methods=["GET"])
 def get_test_execution(exec_id):
-    """Get execution detail."""
+    """Get execution detail, optionally including step results."""
     exe, err = _get_or_404(TestExecution, exec_id)
     if err:
         return err
-    return jsonify(exe.to_dict())
+    include_steps = request.args.get("include_step_results", "0") in ("1", "true")
+    return jsonify(exe.to_dict(include_step_results=include_steps))
 
 
 @testing_bp.route("/testing/executions/<int:exec_id>", methods=["PUT"])
@@ -516,9 +517,14 @@ def update_test_execution(exec_id):
         return err
 
     data = request.get_json(silent=True) or {}
-    for field in ("result", "executed_by", "executed_by_id", "duration_minutes", "notes", "evidence_url"):
+    for field in ("result", "executed_by", "executed_by_id", "duration_minutes",
+                  "notes", "evidence_url", "attempt_number", "test_run_id"):
         if field in data:
             setattr(exe, field, data[field])
+
+    # Auto-derive result from step results if requested
+    if data.get("derive_from_steps"):
+        exe.result = exe.derive_result_from_steps()
 
     # Auto-set executed_at if result is being recorded
     if "result" in data and data["result"] != "not_run" and not exe.executed_at:
@@ -1005,12 +1011,11 @@ def create_test_run(cycle_id):
 
 @testing_bp.route("/testing/runs/<int:run_id>", methods=["GET"])
 def get_test_run(run_id):
-    """Get test run detail, optionally including step results."""
+    """Get test run detail."""
     run, err = _get_or_404(TestRun, run_id)
     if err:
         return err
-    include_steps = request.args.get("include_step_results", "0") in ("1", "true")
-    return jsonify(run.to_dict(include_step_results=include_steps))
+    return jsonify(run.to_dict())
 
 
 @testing_bp.route("/testing/runs/<int:run_id>", methods=["PUT"])
@@ -1062,24 +1067,24 @@ def delete_test_run(run_id):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# TEST STEP RESULTS  (TS-Sprint 2)
+# TEST STEP RESULTS  (ADR-FINAL: under Executions, not Runs)
 # ═════════════════════════════════════════════════════════════════════════════
 
-@testing_bp.route("/testing/runs/<int:run_id>/step-results", methods=["GET"])
-def list_step_results(run_id):
-    """List step results within a test run, ordered by step_no."""
-    run, err = _get_or_404(TestRun, run_id)
+@testing_bp.route("/testing/executions/<int:exec_id>/step-results", methods=["GET"])
+def list_step_results(exec_id):
+    """List step results within a test execution, ordered by step_no."""
+    exe, err = _get_or_404(TestExecution, exec_id)
     if err:
         return err
-    results = TestStepResult.query.filter_by(run_id=run_id)\
+    results = TestStepResult.query.filter_by(execution_id=exec_id)\
         .order_by(TestStepResult.step_no).all()
     return jsonify([sr.to_dict() for sr in results])
 
 
-@testing_bp.route("/testing/runs/<int:run_id>/step-results", methods=["POST"])
-def create_step_result(run_id):
-    """Record a step-level result within a test run."""
-    run, err = _get_or_404(TestRun, run_id)
+@testing_bp.route("/testing/executions/<int:exec_id>/step-results", methods=["POST"])
+def create_step_result(exec_id):
+    """Record a step-level result within a test execution."""
+    exe, err = _get_or_404(TestExecution, exec_id)
     if err:
         return err
     data = request.get_json(silent=True) or {}
@@ -1090,7 +1095,7 @@ def create_step_result(run_id):
         return jsonify({"error": "step_no is required"}), 400
 
     sr = TestStepResult(
-        run_id=run_id,
+        execution_id=exec_id,
         step_id=data.get("step_id"),
         step_no=step_no,
         result=data.get("result", "not_run"),
@@ -1140,6 +1145,35 @@ def delete_step_result(sr_id):
     if err:
         return err
     return jsonify({"message": "Step result deleted"}), 200
+
+
+@testing_bp.route("/testing/executions/<int:exec_id>/derive-result", methods=["POST"])
+def derive_execution_result(exec_id):
+    """Auto-derive execution result from step results (ADR-FINAL).
+
+    Rules:
+    - All steps pass → execution pass
+    - Any step fail → execution fail
+    - Any step blocked (no fail) → execution blocked
+    """
+    exe, err = _get_or_404(TestExecution, exec_id)
+    if err:
+        return err
+
+    old_result = exe.result
+    exe.result = exe.derive_result_from_steps()
+
+    if exe.result != "not_run" and not exe.executed_at:
+        exe.executed_at = datetime.now(timezone.utc)
+
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify({
+        "old_result": old_result,
+        "new_result": exe.result,
+        "execution": exe.to_dict(),
+    })
 
 
 # ═════════════════════════════════════════════════════════════════════════════

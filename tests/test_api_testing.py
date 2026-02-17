@@ -570,7 +570,7 @@ class TestTraceabilityMatrix:
         res = client.get(f"/api/v1/programs/{p['id']}/testing/traceability-matrix")
         data = res.get_json()
         assert data["summary"]["requirements_with_tests"] == 1
-        assert data["summary"]["coverage_pct"] == 100
+        assert data["summary"]["test_coverage_pct"] == 100
 
     def test_matrix_with_defects(self, client):
         p = _create_program(client)
@@ -587,7 +587,7 @@ class TestTraceabilityMatrix:
         res = client.get(f"/api/v1/programs/{p['id']}/testing/traceability-matrix")
         data = res.get_json()
         assert data["summary"]["requirements_without_tests"] == 1
-        assert data["summary"]["coverage_pct"] == 0
+        assert data["summary"]["test_coverage_pct"] == 0
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1050,11 +1050,11 @@ def _create_run(client, cycle_id, case_id, **overrides):
     return res.get_json()
 
 
-def _create_step_result(client, run_id, step_no=1, **overrides):
+def _create_step_result(client, exec_id, step_no=1, **overrides):
     payload = {"step_no": step_no, "result": "pass",
                "actual_result": "OK"}
     payload.update(overrides)
-    res = client.post(f"/api/v1/testing/runs/{run_id}/step-results", json=payload)
+    res = client.post(f"/api/v1/testing/executions/{exec_id}/step-results", json=payload)
     assert res.status_code == 201
     return res.get_json()
 
@@ -1139,11 +1139,11 @@ class TestTestRuns:
     def test_get_run_include_step_results(self, client):
         pid, cycle, tc = _setup_run_env(client)
         run = _create_run(client, cycle["id"], tc["id"])
-        _create_step_result(client, run["id"], step_no=1)
+        # Step results are now under executions, not runs
+        # TestRun no longer has step_results relationship
         res = client.get(f"/api/v1/testing/runs/{run['id']}?include_step_results=1")
         data = res.get_json()
-        assert "step_results" in data
-        assert len(data["step_results"]) == 1
+        assert data["id"] == run["id"]
 
     def test_update_run(self, client):
         pid, cycle, tc = _setup_run_env(client)
@@ -1183,44 +1183,53 @@ class TestTestRuns:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# TEST STEP RESULTS  (TS-Sprint 2)
+# TEST STEP RESULTS  (ADR-FINAL: under Executions)
 # ═════════════════════════════════════════════════════════════════════════════
+
+def _create_execution(client, cycle_id, case_id, **overrides):
+    payload = {"test_case_id": case_id, "result": "not_run"}
+    payload.update(overrides)
+    res = client.post(f"/api/v1/testing/cycles/{cycle_id}/executions", json=payload)
+    assert res.status_code == 201
+    return res.get_json()
+
 
 class TestStepResults:
     def test_create_step_result(self, client):
         pid, cycle, tc = _setup_run_env(client)
-        run = _create_run(client, cycle["id"], tc["id"])
-        sr = _create_step_result(client, run["id"], step_no=1)
+        exe = _create_execution(client, cycle["id"], tc["id"])
+        sr = _create_step_result(client, exe["id"], step_no=1)
         assert sr["result"] == "pass"
         assert sr["step_no"] == 1
+        assert sr["execution_id"] == exe["id"]
 
     def test_create_step_result_no_step_no(self, client):
         pid, cycle, tc = _setup_run_env(client)
-        run = _create_run(client, cycle["id"], tc["id"])
-        res = client.post(f"/api/v1/testing/runs/{run['id']}/step-results",
+        exe = _create_execution(client, cycle["id"], tc["id"])
+        res = client.post(f"/api/v1/testing/executions/{exe['id']}/step-results",
                           json={"result": "pass"})
         assert res.status_code == 400
 
     def test_list_step_results(self, client):
         pid, cycle, tc = _setup_run_env(client)
-        run = _create_run(client, cycle["id"], tc["id"])
-        _create_step_result(client, run["id"], step_no=1)
-        _create_step_result(client, run["id"], step_no=2, result="fail")
-        res = client.get(f"/api/v1/testing/runs/{run['id']}/step-results")
+        exe = _create_execution(client, cycle["id"], tc["id"])
+        _create_step_result(client, exe["id"], step_no=1)
+        _create_step_result(client, exe["id"], step_no=2, result="fail")
+        res = client.get(f"/api/v1/testing/executions/{exe['id']}/step-results")
         assert res.status_code == 200
         data = res.get_json()
         assert len(data) == 2
         assert data[0]["step_no"] == 1
         assert data[1]["step_no"] == 2
 
-    def test_list_step_results_run_not_found(self, client):
-        res = client.get("/api/v1/testing/runs/99999/step-results")
+    def test_list_step_results_exec_not_found(self, client):
+        res = client.get("/api/v1/testing/executions/99999/step-results")
         assert res.status_code == 404
 
     def test_update_step_result(self, client):
         pid, cycle, tc = _setup_run_env(client)
-        run = _create_run(client, cycle["id"], tc["id"])
-        sr = _create_step_result(client, run["id"])
+        exe = _create_execution(client, cycle["id"], tc["id"])
+        sr = _create_step_result(client, exe["id"])
         res = client.put(f"/api/v1/testing/step-results/{sr['id']}",
                          json={"result": "fail", "actual_result": "Error found"})
         assert res.status_code == 200
@@ -1233,14 +1242,51 @@ class TestStepResults:
 
     def test_delete_step_result(self, client):
         pid, cycle, tc = _setup_run_env(client)
-        run = _create_run(client, cycle["id"], tc["id"])
-        sr = _create_step_result(client, run["id"])
+        exe = _create_execution(client, cycle["id"], tc["id"])
+        sr = _create_step_result(client, exe["id"])
         res = client.delete(f"/api/v1/testing/step-results/{sr['id']}")
         assert res.status_code == 200
 
     def test_delete_step_result_not_found(self, client):
         res = client.delete("/api/v1/testing/step-results/99999")
         assert res.status_code == 404
+
+    def test_derive_result_all_pass(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        exe = _create_execution(client, cycle["id"], tc["id"])
+        _create_step_result(client, exe["id"], step_no=1, result="pass")
+        _create_step_result(client, exe["id"], step_no=2, result="pass")
+        res = client.post(f"/api/v1/testing/executions/{exe['id']}/derive-result")
+        assert res.status_code == 200
+        assert res.get_json()["new_result"] == "pass"
+
+    def test_derive_result_any_fail(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        exe = _create_execution(client, cycle["id"], tc["id"])
+        _create_step_result(client, exe["id"], step_no=1, result="pass")
+        _create_step_result(client, exe["id"], step_no=2, result="fail")
+        res = client.post(f"/api/v1/testing/executions/{exe['id']}/derive-result")
+        assert res.status_code == 200
+        assert res.get_json()["new_result"] == "fail"
+
+    def test_derive_result_blocked(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        exe = _create_execution(client, cycle["id"], tc["id"])
+        _create_step_result(client, exe["id"], step_no=1, result="pass")
+        _create_step_result(client, exe["id"], step_no=2, result="blocked")
+        res = client.post(f"/api/v1/testing/executions/{exe['id']}/derive-result")
+        assert res.status_code == 200
+        assert res.get_json()["new_result"] == "blocked"
+
+    def test_execution_includes_step_results(self, client):
+        pid, cycle, tc = _setup_run_env(client)
+        exe = _create_execution(client, cycle["id"], tc["id"])
+        _create_step_result(client, exe["id"], step_no=1)
+        res = client.get(f"/api/v1/testing/executions/{exe['id']}?include_step_results=1")
+        data = res.get_json()
+        assert "step_results" in data
+        assert len(data["step_results"]) == 1
+        assert data["step_result_count"] == 1
 
 
 # ═════════════════════════════════════════════════════════════════════════════

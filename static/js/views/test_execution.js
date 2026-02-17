@@ -272,16 +272,18 @@ const TestExecutionView = (() => {
                 </div>
                 ${execs.length === 0 ? '<p style="color:#999">No executions yet. Add test case executions to this cycle.</p>' : `
                 <table class="data-table">
-                    <thead><tr><th>Test Case</th><th>Result</th><th>Tester</th><th>Duration</th><th>Notes</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Test Case</th><th>Result</th><th>Steps</th><th>Attempt</th><th>Tester</th><th>Duration</th><th>Actions</th></tr></thead>
                     <tbody>
                         ${execs.map(e => `<tr>
                             <td>TC#${e.test_case_id}</td>
                             <td>${resultBadge(e.result)}</td>
+                            <td>${e.step_result_count > 0 ? `<span style="color:#0070f3">${e.step_result_count} steps</span>` : '<span style="color:#999">—</span>'}</td>
+                            <td>${e.attempt_number || 1}</td>
                             <td>${e.executed_by || '-'}</td>
                             <td>${e.duration_minutes ? e.duration_minutes + 'min' : '-'}</td>
-                            <td>${e.notes ? e.notes.substring(0, 50) : '-'}</td>
                             <td>
-                                <button class="btn btn-sm" onclick="TestExecutionView.showExecEditModal(${e.id}, ${cycleId})">Edit</button>
+                                <button class="btn btn-sm btn-primary" onclick="TestExecutionView.openExecStepExecution(${e.id}, ${cycleId})">▶ Execute</button>
+                                <button class="btn btn-sm" onclick="TestExecutionView.showExecEditModal(${e.id}, ${cycleId})">✏️</button>
                                 <button class="btn btn-sm btn-danger" onclick="TestExecutionView.deleteExec(${e.id}, ${cycleId})">🗑</button>
                             </td>
                         </tr>`).join('')}
@@ -582,7 +584,169 @@ const TestExecutionView = (() => {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // TEST RUNS
+    // STEP-BY-STEP EXECUTION (ADR-FINAL: under Executions, not Runs)
+    // ═══════════════════════════════════════════════════════════════════════
+    async function openExecStepExecution(execId, cycleId) {
+        const exe = await API.get(`/testing/executions/${execId}?include_step_results=1`);
+        const stepResults = exe.step_results || [];
+        let steps = [];
+        try {
+            const tc = await API.get(`/testing/catalog/${exe.test_case_id}`);
+            steps = tc.steps || [];
+        } catch(e) { /* test case may not have steps */ }
+
+        const overlay = document.getElementById('modalOverlay');
+        const modal = document.getElementById('modalContainer');
+
+        const resultBadge = (r) => {
+            const c = {pass:'#107e3e',fail:'#c4314b',blocked:'#e9730c',not_run:'#888',skipped:'#6a4fa0',deferred:'#6a4fa0'};
+            return `<span class="badge" style="background:${c[r]||'#888'};color:#fff">${r}</span>`;
+        };
+
+        const resultMap = {};
+        stepResults.forEach(sr => { resultMap[sr.step_no] = sr; });
+
+        let stepRowsHtml = '';
+        const stepList = steps.length > 0 ? steps : [];
+
+        if (stepList.length > 0) {
+            stepRowsHtml = stepList.map((s, idx) => {
+                const no = idx + 1;
+                const sr = resultMap[no];
+                const currentResult = sr ? sr.result : 'not_run';
+                const actualResult = sr ? (sr.actual_result || '') : '';
+                const notes = sr ? (sr.notes || '') : '';
+                return `<tr data-step-no="${no}" data-step-id="${s.id || ''}" data-sr-id="${sr ? sr.id : ''}">
+                    <td><strong>${no}</strong></td>
+                    <td>${esc(s.action || s.description || '-')}</td>
+                    <td>${esc(s.expected_result || '-')}</td>
+                    <td>
+                        <select class="form-control exec-step-result" style="width:110px" data-step-no="${no}">
+                            ${['not_run','pass','fail','blocked','skipped'].map(r =>
+                                `<option value="${r}" ${r===currentResult?'selected':''}>${r.replace('_',' ').toUpperCase()}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td><input class="form-control exec-step-actual" style="width:100%" value="${esc(actualResult)}" data-step-no="${no}" placeholder="Actual result..."></td>
+                    <td><input class="form-control exec-step-notes" style="width:100%" value="${esc(notes)}" data-step-no="${no}" placeholder="Notes..."></td>
+                </tr>`;
+            }).join('');
+        } else if (stepResults.length > 0) {
+            stepRowsHtml = stepResults.map(sr => `<tr data-step-no="${sr.step_no}" data-sr-id="${sr.id}">
+                <td><strong>${sr.step_no}</strong></td>
+                <td>—</td><td>—</td>
+                <td>
+                    <select class="form-control exec-step-result" style="width:110px" data-step-no="${sr.step_no}">
+                        ${['not_run','pass','fail','blocked','skipped'].map(r =>
+                            `<option value="${r}" ${r===sr.result?'selected':''}>${r.replace('_',' ').toUpperCase()}</option>`).join('')}
+                    </select>
+                </td>
+                <td><input class="form-control exec-step-actual" style="width:100%" value="${esc(sr.actual_result||'')}" data-step-no="${sr.step_no}"></td>
+                <td><input class="form-control exec-step-notes" style="width:100%" value="${esc(sr.notes||'')}" data-step-no="${sr.step_no}"></td>
+            </tr>`).join('');
+        } else {
+            stepRowsHtml = `<tr data-step-no="1" data-sr-id="">
+                <td><strong>1</strong></td><td>—</td><td>—</td>
+                <td><select class="form-control exec-step-result" data-step-no="1">
+                    ${['not_run','pass','fail','blocked','skipped'].map(r => `<option value="${r}">${r.replace('_',' ').toUpperCase()}</option>`).join('')}
+                </select></td>
+                <td><input class="form-control exec-step-actual" data-step-no="1" placeholder="Actual result..."></td>
+                <td><input class="form-control exec-step-notes" data-step-no="1" placeholder="Notes..."></td>
+            </tr>`;
+        }
+
+        modal.innerHTML = `
+            <div class="modal-header">
+                <h2>▶ Execution #${exe.id} — TC#${exe.test_case_id} ${resultBadge(exe.result)}</h2>
+                <button class="modal-close" onclick="App.closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+                <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+                    <span><strong>Tester:</strong> ${exe.executed_by || '-'}</span>
+                    <span><strong>Attempt:</strong> #${exe.attempt_number || 1}</span>
+                    ${exe.executed_at ? `<span><strong>Executed:</strong> ${new Date(exe.executed_at).toLocaleString()}</span>` : ''}
+                    ${exe.duration_minutes ? `<span><strong>Duration:</strong> ${exe.duration_minutes} min</span>` : ''}
+                </div>
+
+                <h3 style="margin-bottom:8px">Step-by-Step Execution</h3>
+                <table class="data-table" id="execStepsTable">
+                    <thead><tr><th style="width:40px">#</th><th>Action</th><th>Expected</th><th style="width:120px">Result</th><th>Actual Result</th><th>Notes</th></tr></thead>
+                    <tbody>${stepRowsHtml}</tbody>
+                </table>
+                <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+                    <button class="btn btn-primary btn-sm" onclick="TestExecutionView.saveExecStepResults(${exe.id}, ${cycleId})">💾 Save & Auto-Derive Result</button>
+                    <button class="btn btn-sm" onclick="TestExecutionView.addExecStepRow()">+ Add Step Row</button>
+                    <button class="btn btn-sm" style="background:#107e3e;color:#fff" onclick="TestExecutionView.quickSetAllSteps('pass')">✅ All Pass</button>
+                    <button class="btn btn-sm" style="background:#c4314b;color:#fff" onclick="TestExecutionView.quickSetAllSteps('fail')">❌ All Fail</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="TestExecutionView.viewCycleExecs(${cycleId})">← Back to Executions</button>
+                <button class="btn" onclick="App.closeModal()">Close</button>
+            </div>`;
+        overlay.classList.add('open');
+    }
+
+    function addExecStepRow() {
+        const tbody = document.querySelector('#execStepsTable tbody');
+        if (!tbody) return;
+        const rows = tbody.querySelectorAll('tr');
+        const nextNo = rows.length + 1;
+        const tr = document.createElement('tr');
+        tr.setAttribute('data-step-no', nextNo);
+        tr.setAttribute('data-sr-id', '');
+        tr.innerHTML = `
+            <td><strong>${nextNo}</strong></td><td>—</td><td>—</td>
+            <td><select class="form-control exec-step-result" data-step-no="${nextNo}">
+                ${['not_run','pass','fail','blocked','skipped'].map(r => `<option value="${r}">${r.replace('_',' ').toUpperCase()}</option>`).join('')}
+            </select></td>
+            <td><input class="form-control exec-step-actual" data-step-no="${nextNo}" placeholder="Actual result..."></td>
+            <td><input class="form-control exec-step-notes" data-step-no="${nextNo}" placeholder="Notes..."></td>`;
+        tbody.appendChild(tr);
+    }
+
+    function quickSetAllSteps(result) {
+        document.querySelectorAll('#execStepsTable .exec-step-result').forEach(sel => {
+            sel.value = result;
+        });
+    }
+
+    async function saveExecStepResults(execId, cycleId) {
+        const rows = document.querySelectorAll('#execStepsTable tbody tr');
+        for (const row of rows) {
+            const stepNo = parseInt(row.dataset.stepNo);
+            const srId = row.dataset.srId;
+            const stepId = row.dataset.stepId || null;
+            const result = row.querySelector('.exec-step-result')?.value || 'not_run';
+            const actualResult = row.querySelector('.exec-step-actual')?.value || '';
+            const notes = row.querySelector('.exec-step-notes')?.value || '';
+
+            const body = {
+                step_no: stepNo,
+                result: result,
+                actual_result: actualResult,
+                notes: notes,
+            };
+            if (stepId) body.step_id = parseInt(stepId);
+
+            if (srId) {
+                await API.put(`/testing/step-results/${srId}`, body);
+            } else {
+                const created = await API.post(`/testing/executions/${execId}/step-results`, body);
+                row.dataset.srId = created.id;
+            }
+        }
+
+        // Auto-derive execution result from step results (ADR-FINAL)
+        try {
+            await API.post(`/testing/executions/${execId}/derive-result`);
+        } catch(e) { /* ignore */ }
+
+        App.toast('Step results saved — result auto-derived', 'success');
+        await openExecStepExecution(execId, cycleId);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // TEST RUNS (Optional metadata — ADR-FINAL)
     // ═══════════════════════════════════════════════════════════════════════
     async function viewCycleRuns(cycleId) {
         const _rres = await API.get(`/testing/cycles/${cycleId}/runs`);
@@ -1031,7 +1195,9 @@ const TestExecutionView = (() => {
         showPlanModal, savePlan, deletePlan,
         showCycleModal, saveCycle, deleteCycle,
         viewCycleExecs, showExecModal, saveExec, showExecEditModal, updateExec, deleteExec,
-        // Runs
+        // Step-by-step execution (ADR-FINAL: under Executions)
+        openExecStepExecution, addExecStepRow, quickSetAllSteps, saveExecStepResults,
+        // Runs (optional metadata)
         viewCycleRuns, showNewRunModal, saveNewRun, openRunExecution,
         addStepResultRow, saveStepResults, updateRunStatus, completeRun, deleteRun,
         // Sign-off & Criteria

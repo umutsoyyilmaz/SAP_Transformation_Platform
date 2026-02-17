@@ -398,6 +398,11 @@ class TestCase(db.Model):
         db.Integer, db.ForeignKey("config_items.id", ondelete="SET NULL"),
         nullable=True, index=True, comment="Linked config item",
     )
+    process_level_id = db.Column(
+        db.String(36), db.ForeignKey("process_levels.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+        comment="ADR-FINAL: Direct FK to L3/L4 process for scope tracing",
+    )
     suite_id = db.Column(
         db.Integer, db.ForeignKey("test_suites.id", ondelete="SET NULL"),
         nullable=True, index=True, comment="Linked test suite",
@@ -505,6 +510,7 @@ class TestCase(db.Model):
             "explore_requirement_id": self.explore_requirement_id,
             "backlog_item_id": self.backlog_item_id,
             "config_item_id": self.config_item_id,
+            "process_level_id": self.process_level_id,
             "suite_id": self.suite_id,
             "code": self.code,
             "title": self.title,
@@ -587,6 +593,17 @@ class TestExecution(db.Model):
     notes = db.Column(db.Text, default="", comment="Execution notes / evidence")
     evidence_url = db.Column(db.String(500), default="", comment="Screenshot / log URL")
 
+    # ── ADR-FINAL: Execution unification fields
+    attempt_number = db.Column(
+        db.Integer, default=1,
+        comment="Attempt number — retest tracking (carry-forward increments)",
+    )
+    test_run_id = db.Column(
+        db.Integer, db.ForeignKey("test_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Optional link to TestRun metadata (who/when/environment)",
+    )
+
     created_at = db.Column(
         db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
     )
@@ -598,8 +615,38 @@ class TestExecution(db.Model):
     assigned_member = db.relationship("TeamMember", foreign_keys=[assigned_to_id])
     executed_by_member = db.relationship("TeamMember", foreign_keys=[executed_by_id])
 
-    def to_dict(self):
-        return {
+    # ── ADR-FINAL: Step results live under execution (SSOT)
+    step_results = db.relationship(
+        "TestStepResult", backref="execution", lazy="dynamic",
+        cascade="all, delete-orphan",
+        order_by="TestStepResult.step_no",
+    )
+
+    def derive_result_from_steps(self):
+        """Auto-derive execution result from step results.
+
+        Rules:
+        - All steps pass → execution pass
+        - Any step fail → execution fail
+        - Any step blocked (no fail) → execution blocked
+        - Otherwise → not_run
+        """
+        steps = self.step_results.all()
+        if not steps:
+            return self.result  # No steps, keep current
+        results = [s.result for s in steps]
+        if all(r == "pass" for r in results):
+            return "pass"
+        if any(r == "fail" for r in results):
+            return "fail"
+        if any(r == "blocked" for r in results):
+            return "blocked"
+        if all(r == "not_run" for r in results):
+            return "not_run"
+        return self.result
+
+    def to_dict(self, include_step_results=False):
+        d = {
             "id": self.id,
             "cycle_id": self.cycle_id,
             "test_case_id": self.test_case_id,
@@ -614,9 +661,15 @@ class TestExecution(db.Model):
             "duration_minutes": self.duration_minutes,
             "notes": self.notes,
             "evidence_url": self.evidence_url,
+            "attempt_number": self.attempt_number,
+            "test_run_id": self.test_run_id,
+            "step_result_count": self.step_results.count() if self.id else 0,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+        if include_step_results:
+            d["step_results"] = [sr.to_dict() for sr in self.step_results.all()]
+        return d
 
     def __repr__(self):
         return f"<TestExecution {self.id}: case#{self.test_case_id} → {self.result}>"
@@ -1187,12 +1240,7 @@ class TestRun(db.Model):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    # ── Relationships
-    step_results = db.relationship(
-        "TestStepResult", backref="run", lazy="dynamic",
-        cascade="all, delete-orphan",
-        order_by="TestStepResult.step_no",
-    )
+    # ── Relationships (TestRun is now optional metadata — step_results moved to TestExecution)
 
     @property
     def computed_duration(self):
@@ -1204,7 +1252,7 @@ class TestRun(db.Model):
             return int(delta.total_seconds() / 60)
         return None
 
-    def to_dict(self, include_step_results=False):
+    def to_dict(self):
         d = {
             "id": self.id,
             "cycle_id": self.cycle_id,
@@ -1219,12 +1267,9 @@ class TestRun(db.Model):
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "finished_at": self.finished_at.isoformat() if self.finished_at else None,
             "duration_minutes": self.computed_duration,
-            "step_result_count": self.step_results.count() if self.id else 0,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
-        if include_step_results:
-            d["step_results"] = [sr.to_dict() for sr in self.step_results.all()]
         return d
 
     def __repr__(self):
@@ -1237,10 +1282,11 @@ class TestRun(db.Model):
 
 class TestStepResult(db.Model):
     """
-    Step-level result within a test run.
+    Step-level result within a test execution (ADR-FINAL).
 
     Records pass/fail/blocked at individual step granularity, enabling
-    precise failure pinpointing.
+    precise failure pinpointing.  Linked to TestExecution (SSOT),
+    not to TestRun (which is optional metadata).
     """
 
     __tablename__ = "test_step_results"
@@ -1252,9 +1298,10 @@ class TestStepResult(db.Model):
         nullable=True,
         index=True,
     )
-    run_id = db.Column(
-        db.Integer, db.ForeignKey("test_runs.id", ondelete="CASCADE"),
+    execution_id = db.Column(
+        db.Integer, db.ForeignKey("test_executions.id", ondelete="CASCADE"),
         nullable=False, index=True,
+        comment="Parent execution — SSOT (ADR-FINAL)",
     )
     step_id = db.Column(
         db.Integer, db.ForeignKey("test_steps.id", ondelete="CASCADE"),
@@ -1279,7 +1326,7 @@ class TestStepResult(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
-            "run_id": self.run_id,
+            "execution_id": self.execution_id,
             "step_id": self.step_id,
             "step_no": self.step_no,
             "result": self.result,
@@ -1291,7 +1338,7 @@ class TestStepResult(db.Model):
         }
 
     def __repr__(self):
-        return f"<TestStepResult {self.id}: run#{self.run_id} step#{self.step_no} → {self.result}>"
+        return f"<TestStepResult {self.id}: exec#{self.execution_id} step#{self.step_no} → {self.result}>"
 
 
 # ═════════════════════════════════════════════════════════════════════════════

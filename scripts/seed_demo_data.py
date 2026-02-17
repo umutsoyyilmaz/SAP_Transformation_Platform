@@ -795,6 +795,7 @@ def seed_all(app, append=False, verbose=False):
 
         # ── 18. Test Executions ──────────────────────────────────────────
         print("\n▶️  Creating test executions...")
+        exec_objs = []
         exec_count = 0
         sit_cycle = cycle_objs[0] if cycle_objs else None
         if sit_cycle:
@@ -809,7 +810,11 @@ def seed_all(app, append=False, verbose=False):
                         notes=ex_d.get("notes", ""),
                     )
                     db.session.add(exe)
+                    db.session.flush()
+                    exec_objs.append(exe)
                     exec_count += 1
+                else:
+                    exec_objs.append(None)
         print(f"   ✅ {exec_count} executions")
 
         # ── 19. Defects ──────────────────────────────────────────────────
@@ -863,15 +868,15 @@ def seed_all(app, append=False, verbose=False):
                 run_objs.append(None)
         print(f"   ✅ {sum(1 for r in run_objs if r)} test runs")
 
-        # ── 19c. Step Results  (TS-Sprint 2) ─────────────────────────────
+        # ── 19c. Step Results  (ADR-FINAL: under Executions) ──────────
         print("\n📋 Creating step results...")
         sr_count = 0
         for sr_d in STEP_RESULT_DATA:
-            idx = sr_d["run_index"]
-            run = run_objs[idx] if idx < len(run_objs) else None
-            if run:
+            idx = sr_d["exec_index"]
+            exe = exec_objs[idx] if idx < len(exec_objs) else None
+            if exe:
                 sr = TestStepResult(
-                    run_id=run.id,
+                    execution_id=exe.id,
                     step_no=sr_d["step_no"],
                     result=sr_d.get("result", "not_run"),
                     actual_result=sr_d.get("actual_result", ""),

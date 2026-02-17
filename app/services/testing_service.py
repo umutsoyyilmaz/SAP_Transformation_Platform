@@ -874,6 +874,7 @@ def generate_from_process(suite, scope_item_ids, test_level="sit", uat_category=
             module=l3.process_area_code or "",
             status="draft",
             priority="high",
+            process_level_id=l3.id,  # ADR-FINAL: Direct FK for scope tracing
         )
         db.session.add(tc)
         db.session.flush()

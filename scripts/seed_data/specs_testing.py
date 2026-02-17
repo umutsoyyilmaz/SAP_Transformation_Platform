@@ -634,26 +634,31 @@ TEST_RUN_DATA = [
 # ═════════════════════════════════════════════════════════════════════════════
 
 STEP_RESULT_DATA = [
-    # Run 1 (TC-FI-001, pass) — 2 adım
-    {"run_index": 0, "step_no": 1, "result": "pass",
+    # Exec 0 (TC-FI-001, pass) — 2 steps
+    {"exec_index": 0, "step_no": 1, "result": "pass",
      "actual_result": "Hesap planı doğru yüklendi, bakiyeler tutarlı"},
-    {"run_index": 0, "step_no": 2, "result": "pass",
+    {"exec_index": 0, "step_no": 2, "result": "pass",
      "actual_result": "BKPF/BSEG kayıtları doğrulandı"},
-    # Run 2 (TC-FI-002, fail) — 2 adım
-    {"run_index": 1, "step_no": 1, "result": "pass",
+    # Exec 1 (TC-FI-002, pass) — 2 steps
+    {"exec_index": 1, "step_no": 1, "result": "pass",
      "actual_result": "Fatura oluşturuldu"},
-    {"run_index": 1, "step_no": 2, "result": "fail",
-     "actual_result": "KDV farkı: beklenen %10, gelen %18",
-     "notes": "Gıda kategorisi hatalı eşlendi"},
-    # Run 3 (TC-MM-001, pass) — 2 adım
-    {"run_index": 2, "step_no": 1, "result": "pass",
+    {"exec_index": 1, "step_no": 2, "result": "pass",
+     "actual_result": "KDV hesaplaması doğru"},
+    # Exec 2 (TC-FI-003, fail) — 2 steps
+    {"exec_index": 2, "step_no": 1, "result": "pass",
+     "actual_result": "Konsolide bilanço raporu çalıştı"},
+    {"exec_index": 2, "step_no": 2, "result": "fail",
+     "actual_result": "2. şirket kodu döviz çevrimi hatalı — kur farkı var",
+     "notes": "DEF-FI-001 açıldı"},
+    # Exec 3 (TC-MM-001, pass) — 2 steps
+    {"exec_index": 3, "step_no": 1, "result": "pass",
      "actual_result": "PR otomatik oluşturuldu, tutar limiti doğru"},
-    {"run_index": 2, "step_no": 2, "result": "pass",
+    {"exec_index": 3, "step_no": 2, "result": "pass",
      "actual_result": "PO onay akışı 4 kademe tamamlandı"},
-    # Run 4 (TC-SD-001 automated, pass) — 2 adım
-    {"run_index": 3, "step_no": 1, "result": "pass",
+    # Exec 6 (TC-SD-001, pass) — 2 steps
+    {"exec_index": 6, "step_no": 1, "result": "pass",
      "actual_result": "Siparişten teslimata akış başarılı"},
-    {"run_index": 3, "step_no": 2, "result": "pass",
+    {"exec_index": 6, "step_no": 2, "result": "pass",
      "actual_result": "Fatura ve muhasebe kayıtları eşleşti"},
 ]
 
