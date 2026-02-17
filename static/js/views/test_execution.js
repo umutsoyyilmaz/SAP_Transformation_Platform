@@ -92,6 +92,7 @@ const TestExecutionView = (() => {
                             <span class="badge" style="background:${statusColor[plan.status] || '#888'};color:#fff;margin-left:8px">${plan.status}</span>
                         </div>
                         <div style="display:flex;gap:6px">
+                            <button class="btn btn-sm" style="background:#C08B5C;color:#fff" onclick="TestPlanDetailView.open(${plan.id})">📊 Detail</button>
                             <button class="btn btn-sm" onclick="TestExecutionView.showCycleModal(${plan.id})">+ Cycle</button>
                             <button class="btn btn-sm btn-danger" onclick="TestExecutionView.deletePlan(${plan.id})">🗑</button>
                         </div>
