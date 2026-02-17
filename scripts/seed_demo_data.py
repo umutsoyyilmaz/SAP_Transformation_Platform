@@ -31,6 +31,7 @@ from app.models.testing import (
     TestPlan, TestCycle, TestCase, TestExecution, Defect,
     TestSuite, TestStep, TestCaseDependency, TestCycleSuite,
     TestRun, TestStepResult, DefectComment, DefectHistory, DefectLink,
+    PlanScope, PlanTestCase, PlanDataSet,
 )
 from app.models.scope import Process, RequirementProcessMapping, Analysis
 from app.models.raid import (
@@ -629,6 +630,7 @@ def seed_all(app, append=False, verbose=False):
         # ── 17. Test Plans, Cycles, Cases ────────────────────────────────
         print("\n🧪 Creating test plans, cycles, cases...")
         cycle_objs = []
+        plan_objs = []
         for tp_d in TEST_PLAN_DATA:
             cycles_d = tp_d.pop("cycles", [])
             plan = TestPlan(
@@ -642,6 +644,7 @@ def seed_all(app, append=False, verbose=False):
             )
             db.session.add(plan)
             db.session.flush()
+            plan_objs.append(plan)
             for i, c_d in enumerate(cycles_d):
                 cycle = TestCycle(
                     plan_id=plan.id, name=c_d["name"],
@@ -700,6 +703,60 @@ def seed_all(app, append=False, verbose=False):
                     tc.suite_id = suite.id
             s_d["tc_codes"] = tc_codes  # restore
         print(f"   ✅ {len(SUITE_DATA)} suites")
+
+        # ── 17b2. PlanScope + PlanTestCase (populate plan detail tabs) ──
+        print("\n📋 Populating plan scopes and plan test cases...")
+        ps_count = 0
+        ptc_count = 0
+        if plan_objs:
+            first_plan = plan_objs[0]
+            # Add scope items based on requirements that have test cases
+            req_code_list = list(req_ids.keys())[:5]  # first 5 requirements
+            for i, rcode in enumerate(req_code_list):
+                rid = req_ids[rcode]
+                scope = PlanScope(
+                    plan_id=first_plan.id,
+                    scope_type="requirement",
+                    scope_ref_id=str(rid),
+                    scope_label=f"{rcode} — Requirement scope item",
+                    priority=["high", "medium", "critical", "medium", "low"][i % 5],
+                    risk_level=["high", "medium", "low", "medium", "high"][i % 5],
+                    coverage_status=["covered", "partial", "not_covered", "covered", "partial"][i % 5],
+                )
+                db.session.add(scope)
+                ps_count += 1
+
+            # Add all test cases to the first plan
+            tc_list = list(tc_objs.values())
+            for i, tc in enumerate(tc_list):
+                ptc = PlanTestCase(
+                    plan_id=first_plan.id,
+                    test_case_id=tc.id,
+                    added_method=["manual", "scope_suggest", "suite_import", "manual"][i % 4],
+                    priority=tc.priority or "medium",
+                    estimated_effort=[30, 45, 60, 20, 15][i % 5],
+                    execution_order=i + 1,
+                )
+                db.session.add(ptc)
+                ptc_count += 1
+
+            # If there's a second plan, add a subset of test cases
+            if len(plan_objs) > 1:
+                second_plan = plan_objs[1]
+                for i, tc in enumerate(tc_list[:5]):
+                    ptc = PlanTestCase(
+                        plan_id=second_plan.id,
+                        test_case_id=tc.id,
+                        added_method="suite_import",
+                        priority="high",
+                        estimated_effort=45,
+                        execution_order=i + 1,
+                    )
+                    db.session.add(ptc)
+                    ptc_count += 1
+
+            db.session.flush()
+        print(f"   ✅ {ps_count} plan scopes, {ptc_count} plan test cases")
 
         # ── 17c. Test Steps ──────────────────────────────────────────────
         print("\n🪜 Creating test steps...")

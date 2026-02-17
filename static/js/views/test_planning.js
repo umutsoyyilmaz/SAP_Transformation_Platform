@@ -84,21 +84,21 @@ const TestPlanningView = (() => {
             container.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state__icon">📅</div>
-                    <div class="empty-state__title">Henüz test planı yok</div>
-                    <p>İlk test planınızı oluşturun, sonra scope (L3 süreç, senaryo, gereksinim) ekleyin.</p><br>
-                    <button class="btn btn-primary" onclick="TestPlanningView.showPlanModal()">+ Yeni Test Planı</button>
+                    <div class="empty-state__title">No test plans yet</div>
+                    <p>Create your first test plan, then add scope (L3 process, scenario, requirement).</p><br>
+                    <button class="btn btn-primary" onclick="TestPlanningView.showPlanModal()">+ New Test Plan</button>
                 </div>`;
             return;
         }
 
         let html = `
             <div style="display:flex;justify-content:space-between;margin-bottom:16px">
-                <h3 style="margin:0">Test Planları (${plans.length})</h3>
-                <button class="btn btn-primary" onclick="TestPlanningView.showPlanModal()">+ Yeni Test Planı</button>
+                <h3 style="margin:0">Test Plans (${plans.length})</h3>
+                <button class="btn btn-primary" onclick="TestPlanningView.showPlanModal()">+ New Test Plan</button>
             </div>
             <table class="data-table">
                 <thead><tr>
-                    <th>Plan Adı</th><th>Tip</th><th>Ortam</th><th>Durum</th><th>Başlangıç</th><th>Bitiş</th><th>İşlemler</th>
+                    <th>Plan Name</th><th>Type</th><th>Environment</th><th>Status</th><th>Start</th><th>End</th><th>Actions</th>
                 </tr></thead>
                 <tbody>
                     ${plans.map(p => `<tr>
@@ -109,7 +109,7 @@ const TestPlanningView = (() => {
                         <td>${p.start_date || '—'}</td>
                         <td>${p.end_date || '—'}</td>
                         <td style="display:flex;gap:4px">
-                            <button class="btn btn-sm" style="background:#C08B5C;color:#fff" onclick="TestPlanDetailView.open(${p.id})" title="Plan detayı: Scope, TC, Data, Cycles">📊 Detay</button>
+                            <button class="btn btn-sm" style="background:#C08B5C;color:#fff" onclick="TestPlanDetailView.open(${p.id}, {from:'planning'})" title="Plan detail: Scope, TCs, Data, Cycles">📊 Detail</button>
                             <button class="btn btn-sm btn-danger" onclick="TestPlanningView.deletePlan(${p.id})">🗑</button>
                         </td>
                     </tr>`).join('')}
@@ -122,15 +122,15 @@ const TestPlanningView = (() => {
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modalContainer');
         modal.innerHTML = `
-            <div class="modal-header"><h2>Yeni Test Planı</h2>
+            <div class="modal-header"><h2>New Test Plan</h2>
                 <button class="modal-close" onclick="App.closeModal()">&times;</button></div>
             <div class="modal-body">
-                <div class="form-group"><label>Plan Adı *</label>
-                    <input id="planName" class="form-control" placeholder="ör. SIT Master Plan"></div>
-                <div class="form-group"><label>Açıklama</label>
+                <div class="form-group"><label>Plan Name *</label>
+                    <input id="planName" class="form-control" placeholder="e.g. SIT Master Plan"></div>
+                <div class="form-group"><label>Description</label>
                     <textarea id="planDesc" class="form-control" rows="2"></textarea></div>
                 <div class="form-row">
-                    <div class="form-group"><label>Plan Tipi *</label>
+                    <div class="form-group"><label>Plan Type *</label>
                         <select id="planType" class="form-control">
                             <option value="sit">SIT — System Integration Test</option>
                             <option value="uat">UAT — User Acceptance Test</option>
@@ -139,9 +139,9 @@ const TestPlanningView = (() => {
                             <option value="cutover_rehearsal">Cutover Rehearsal</option>
                             <option value="performance">Performance</option>
                         </select></div>
-                    <div class="form-group"><label>Ortam</label>
+                    <div class="form-group"><label>Environment</label>
                         <select id="planEnv" class="form-control">
-                            <option value="">— Seçin —</option>
+                            <option value="">— Select —</option>
                             <option value="DEV">DEV</option>
                             <option value="QAS">QAS</option>
                             <option value="PRE">PRE-PROD</option>
@@ -149,19 +149,19 @@ const TestPlanningView = (() => {
                         </select></div>
                 </div>
                 <div class="form-row">
-                    <div class="form-group"><label>Başlangıç Tarihi</label>
+                    <div class="form-group"><label>Start Date</label>
                         <input id="planStart" type="date" class="form-control"></div>
-                    <div class="form-group"><label>Bitiş Tarihi</label>
+                    <div class="form-group"><label>End Date</label>
                         <input id="planEnd" type="date" class="form-control"></div>
                 </div>
-                <div class="form-group"><label>Giriş Kriterleri</label>
-                    <textarea id="planEntry" class="form-control" rows="2" placeholder="Test başlamadan önce sağlanması gereken koşullar"></textarea></div>
-                <div class="form-group"><label>Çıkış Kriterleri</label>
-                    <textarea id="planExit" class="form-control" rows="2" placeholder="Test planını kapatmak için gereken koşullar"></textarea></div>
+                <div class="form-group"><label>Entry Criteria</label>
+                    <textarea id="planEntry" class="form-control" rows="2" placeholder="Conditions that must be met before testing begins"></textarea></div>
+                <div class="form-group"><label>Exit Criteria</label>
+                    <textarea id="planExit" class="form-control" rows="2" placeholder="Conditions to close this test plan"></textarea></div>
             </div>
             <div class="modal-footer">
-                <button class="btn" onclick="App.closeModal()">İptal</button>
-                <button class="btn btn-primary" onclick="TestPlanningView.savePlan()">Oluştur</button>
+                <button class="btn" onclick="App.closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="TestPlanningView.savePlan()">Create</button>
             </div>
         `;
         overlay.classList.add('open');
@@ -179,22 +179,22 @@ const TestPlanningView = (() => {
             entry_criteria: document.getElementById('planEntry').value,
             exit_criteria: document.getElementById('planExit').value,
         };
-        if (!body.name) return App.toast('Plan adı zorunludur', 'error');
+        if (!body.name) return App.toast('Plan name is required', 'error');
         try {
             const created = await API.post(`/programs/${pid}/testing/plans`, body);
-            App.toast('Test planı oluşturuldu! Şimdi scope ekleyebilirsiniz.', 'success');
+            App.toast('Test plan created! Redirecting to detail view to add scope…', 'success');
             App.closeModal();
             // Auto-navigate to plan detail so user can add scope
-            TestPlanDetailView.open(created.id);
+            TestPlanDetailView.open(created.id, {from:'planning'});
         } catch (e) {
-            App.toast(e.message || 'Plan oluşturulamadı', 'error');
+            App.toast(e.message || 'Failed to create plan', 'error');
         }
     }
 
     async function deletePlan(id) {
-        if (!confirm('Bu test planını ve tüm cycle\'larını silmek istediğinize emin misiniz?')) return;
+        if (!confirm('Delete this test plan and all its cycles?')) return;
         await API.delete(`/testing/plans/${id}`);
-        App.toast('Test planı silindi', 'success');
+        App.toast('Test plan deleted', 'success');
         await renderPlans();
     }
 

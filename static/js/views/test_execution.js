@@ -92,7 +92,7 @@ const TestExecutionView = (() => {
                             <span class="badge" style="background:${statusColor[plan.status] || '#888'};color:#fff;margin-left:8px">${plan.status}</span>
                         </div>
                         <div style="display:flex;gap:6px">
-                            <button class="btn btn-sm" style="background:#C08B5C;color:#fff" onclick="TestPlanDetailView.open(${plan.id})">📊 Detail</button>
+                            <button class="btn btn-sm" style="background:#C08B5C;color:#fff" onclick="TestPlanDetailView.open(${plan.id}, {from:'execution'})">📊 Detail</button>
                             <button class="btn btn-sm" onclick="TestExecutionView.showCycleModal(${plan.id})">+ Cycle</button>
                             <button class="btn btn-sm btn-danger" onclick="TestExecutionView.deletePlan(${plan.id})">🗑</button>
                         </div>
@@ -123,15 +123,15 @@ const TestExecutionView = (() => {
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modalContainer');
         modal.innerHTML = `
-            <div class="modal-header"><h2>Yeni Test Planı</h2>
+            <div class="modal-header"><h2>New Test Plan</h2>
                 <button class="modal-close" onclick="App.closeModal()">&times;</button></div>
             <div class="modal-body">
-                <div class="form-group"><label>Plan Adı *</label>
-                    <input id="planName" class="form-control" placeholder="ör. SIT Master Plan"></div>
-                <div class="form-group"><label>Açıklama</label>
+                <div class="form-group"><label>Plan Name *</label>
+                    <input id="planName" class="form-control" placeholder="e.g. SIT Master Plan"></div>
+                <div class="form-group"><label>Description</label>
                     <textarea id="planDesc" class="form-control" rows="2"></textarea></div>
                 <div class="form-row">
-                    <div class="form-group"><label>Plan Tipi *</label>
+                    <div class="form-group"><label>Plan Type *</label>
                         <select id="planType" class="form-control">
                             <option value="sit">SIT — System Integration Test</option>
                             <option value="uat">UAT — User Acceptance Test</option>
@@ -140,9 +140,9 @@ const TestExecutionView = (() => {
                             <option value="cutover_rehearsal">Cutover Rehearsal</option>
                             <option value="performance">Performance</option>
                         </select></div>
-                    <div class="form-group"><label>Ortam</label>
+                    <div class="form-group"><label>Environment</label>
                         <select id="planEnv" class="form-control">
-                            <option value="">— Seçin —</option>
+                            <option value="">— Select —</option>
                             <option value="DEV">DEV</option>
                             <option value="QAS">QAS</option>
                             <option value="PRE">PRE-PROD</option>
@@ -150,19 +150,19 @@ const TestExecutionView = (() => {
                         </select></div>
                 </div>
                 <div class="form-row">
-                    <div class="form-group"><label>Başlangıç Tarihi</label>
+                    <div class="form-group"><label>Start Date</label>
                         <input id="planStart" type="date" class="form-control"></div>
-                    <div class="form-group"><label>Bitiş Tarihi</label>
+                    <div class="form-group"><label>End Date</label>
                         <input id="planEnd" type="date" class="form-control"></div>
                 </div>
-                <div class="form-group"><label>Giriş Kriterleri</label>
-                    <textarea id="planEntry" class="form-control" rows="2" placeholder="Test başlamadan önce sağlanması gereken koşullar"></textarea></div>
-                <div class="form-group"><label>Çıkış Kriterleri</label>
-                    <textarea id="planExit" class="form-control" rows="2" placeholder="Test planını kapatmak için gereken koşullar"></textarea></div>
+                <div class="form-group"><label>Entry Criteria</label>
+                    <textarea id="planEntry" class="form-control" rows="2" placeholder="Conditions that must be met before testing begins"></textarea></div>
+                <div class="form-group"><label>Exit Criteria</label>
+                    <textarea id="planExit" class="form-control" rows="2" placeholder="Conditions to close this test plan"></textarea></div>
             </div>
             <div class="modal-footer">
-                <button class="btn" onclick="App.closeModal()">İptal</button>
-                <button class="btn btn-primary" onclick="TestExecutionView.savePlan()">Oluştur</button>
+                <button class="btn" onclick="App.closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="TestExecutionView.savePlan()">Create</button>
             </div>
         `;
         overlay.classList.add('open');
@@ -180,15 +180,14 @@ const TestExecutionView = (() => {
             entry_criteria: document.getElementById('planEntry').value,
             exit_criteria: document.getElementById('planExit').value,
         };
-        if (!body.name) return App.toast('Plan adı zorunludur', 'error');
+        if (!body.name) return App.toast('Plan name is required', 'error');
         try {
             const created = await API.post(`/programs/${pid}/testing/plans`, body);
-            App.toast('Test planı oluşturuldu! Scope eklemek için detay sayfasına yönlendiriliyorsunuz.', 'success');
+            App.toast('Test plan created! Redirecting to detail view…', 'success');
             App.closeModal();
-            // Auto-navigate to plan detail
-            TestPlanDetailView.open(created.id);
+            TestPlanDetailView.open(created.id, {from:'execution'});
         } catch (e) {
-            App.toast(e.message || 'Plan oluşturulamadı', 'error');
+            App.toast(e.message || 'Failed to create plan', 'error');
         }
     }
 
@@ -448,7 +447,7 @@ const TestExecutionView = (() => {
     // ── UAT Sign-off ─────────────────────────────────────────────────────
     async function _loadUatSignoffs(cycleId) {
         try {
-            const signoffs = await API.get(`/testing/uat-signoffs?cycle_id=${cycleId}`);
+            const signoffs = await API.get(`/testing/cycles/${cycleId}/uat-signoffs`);
             const el = document.getElementById(`uatSignoffList_${cycleId}`);
             if (!el) return;
             if (signoffs.length === 0) {
@@ -683,7 +682,7 @@ const TestExecutionView = (() => {
         const stepResults = await API.get(`/testing/runs/${runId}/step-results`);
         let steps = [];
         try {
-            const tc = await API.get(`/testing/test-cases/${run.test_case_id}`);
+            const tc = await API.get(`/testing/catalog/${run.test_case_id}`);
             steps = tc.steps || [];
         } catch(e) { /* test case may not have steps */ }
 

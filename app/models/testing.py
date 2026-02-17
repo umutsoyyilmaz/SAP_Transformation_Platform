@@ -1955,18 +1955,22 @@ class PlanTestCase(db.Model):
     planned_member = db.relationship("TeamMember", foreign_keys=[planned_tester_id])
 
     def to_dict(self):
+        tc = self.test_case
         return {
             "id": self.id,
             "plan_id": self.plan_id,
             "test_case_id": self.test_case_id,
-            "test_case_code": self.test_case.code if self.test_case else None,
-            "test_case_title": self.test_case.title if self.test_case else None,
+            "test_case_code": tc.code if tc else None,
+            "test_case_title": tc.title if tc else None,
+            "test_case_layer": tc.test_layer if tc else None,
+            "test_case_module": tc.module if tc else None,
+            "test_case_status": tc.status if tc else None,
             "added_method": self.added_method,
             "priority": self.priority,
             "estimated_effort": self.estimated_effort,
             "planned_tester": self.planned_tester,
             "planned_tester_id": self.planned_tester_id,
-            "planned_tester_member": self.planned_member.to_dict() if self.planned_tester_id and self.planned_member else None,
+            "planned_tester_name": self.planned_member.name if self.planned_tester_id and self.planned_member else None,
             "execution_order": self.execution_order,
             "notes": self.notes,
             "created_at": self.created_at.isoformat() if self.created_at else None,
