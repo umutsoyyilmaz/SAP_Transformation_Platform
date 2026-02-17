@@ -37,6 +37,7 @@ const TestPlanningView = (() => {
             <div class="tabs" id="testPlanningTabs">
                 <div class="tab active" data-tab="catalog" onclick="TestPlanningView.switchTab('catalog')">📋 Test Cases</div>
                 <div class="tab" data-tab="suites" onclick="TestPlanningView.switchTab('suites')">📦 Test Suites</div>
+                <div class="tab" data-tab="plans" onclick="TestPlanningView.switchTab('plans')">📅 Test Plans</div>
             </div>
             <div class="card" id="testContent">
                 <div style="text-align:center;padding:40px"><div class="spinner"></div></div>
@@ -60,10 +61,141 @@ const TestPlanningView = (() => {
             switch (currentTab) {
                 case 'catalog': await renderCatalog(); break;
                 case 'suites': await renderSuites(); break;
+                case 'plans': await renderPlans(); break;
             }
         } catch (e) {
             container.innerHTML = `<div class="empty-state"><p>⚠️ ${e.message}</p></div>`;
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // TEST PLANS TAB
+    // ═══════════════════════════════════════════════════════════════════════
+    async function renderPlans() {
+        const pid = TestingShared.pid;
+        const res = await API.get(`/programs/${pid}/testing/plans`);
+        const plans = res.items || res || [];
+        const container = document.getElementById('testContent');
+
+        const STATUS_CLR = { draft: '#888', active: '#0070f3', completed: '#107e3e', cancelled: '#c4314b' };
+        const TYPE_LBL = { sit: 'SIT', uat: 'UAT', regression: 'Regression', e2e: 'E2E', cutover_rehearsal: 'Cutover', performance: 'Performance' };
+
+        if (plans.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state__icon">📅</div>
+                    <div class="empty-state__title">Henüz test planı yok</div>
+                    <p>İlk test planınızı oluşturun, sonra scope (L3 süreç, senaryo, gereksinim) ekleyin.</p><br>
+                    <button class="btn btn-primary" onclick="TestPlanningView.showPlanModal()">+ Yeni Test Planı</button>
+                </div>`;
+            return;
+        }
+
+        let html = `
+            <div style="display:flex;justify-content:space-between;margin-bottom:16px">
+                <h3 style="margin:0">Test Planları (${plans.length})</h3>
+                <button class="btn btn-primary" onclick="TestPlanningView.showPlanModal()">+ Yeni Test Planı</button>
+            </div>
+            <table class="data-table">
+                <thead><tr>
+                    <th>Plan Adı</th><th>Tip</th><th>Ortam</th><th>Durum</th><th>Başlangıç</th><th>Bitiş</th><th>İşlemler</th>
+                </tr></thead>
+                <tbody>
+                    ${plans.map(p => `<tr>
+                        <td><strong>${esc(p.name)}</strong>${p.description ? `<div style="color:#666;font-size:12px">${esc(p.description)}</div>` : ''}</td>
+                        <td><span class="badge" style="background:#0070f3;color:#fff">${TYPE_LBL[p.plan_type] || p.plan_type || '—'}</span></td>
+                        <td>${p.environment ? `<span class="badge" style="background:#6a4fa0;color:#fff">${esc(p.environment)}</span>` : '—'}</td>
+                        <td><span class="badge" style="background:${STATUS_CLR[p.status] || '#888'};color:#fff">${esc(p.status)}</span></td>
+                        <td>${p.start_date || '—'}</td>
+                        <td>${p.end_date || '—'}</td>
+                        <td style="display:flex;gap:4px">
+                            <button class="btn btn-sm" style="background:#C08B5C;color:#fff" onclick="TestPlanDetailView.open(${p.id})" title="Plan detayı: Scope, TC, Data, Cycles">📊 Detay</button>
+                            <button class="btn btn-sm btn-danger" onclick="TestPlanningView.deletePlan(${p.id})">🗑</button>
+                        </td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>`;
+        container.innerHTML = html;
+    }
+
+    function showPlanModal() {
+        const overlay = document.getElementById('modalOverlay');
+        const modal = document.getElementById('modalContainer');
+        modal.innerHTML = `
+            <div class="modal-header"><h2>Yeni Test Planı</h2>
+                <button class="modal-close" onclick="App.closeModal()">&times;</button></div>
+            <div class="modal-body">
+                <div class="form-group"><label>Plan Adı *</label>
+                    <input id="planName" class="form-control" placeholder="ör. SIT Master Plan"></div>
+                <div class="form-group"><label>Açıklama</label>
+                    <textarea id="planDesc" class="form-control" rows="2"></textarea></div>
+                <div class="form-row">
+                    <div class="form-group"><label>Plan Tipi *</label>
+                        <select id="planType" class="form-control">
+                            <option value="sit">SIT — System Integration Test</option>
+                            <option value="uat">UAT — User Acceptance Test</option>
+                            <option value="regression">Regression</option>
+                            <option value="e2e">E2E — End-to-End</option>
+                            <option value="cutover_rehearsal">Cutover Rehearsal</option>
+                            <option value="performance">Performance</option>
+                        </select></div>
+                    <div class="form-group"><label>Ortam</label>
+                        <select id="planEnv" class="form-control">
+                            <option value="">— Seçin —</option>
+                            <option value="DEV">DEV</option>
+                            <option value="QAS">QAS</option>
+                            <option value="PRE">PRE-PROD</option>
+                            <option value="PRD">PRD</option>
+                        </select></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Başlangıç Tarihi</label>
+                        <input id="planStart" type="date" class="form-control"></div>
+                    <div class="form-group"><label>Bitiş Tarihi</label>
+                        <input id="planEnd" type="date" class="form-control"></div>
+                </div>
+                <div class="form-group"><label>Giriş Kriterleri</label>
+                    <textarea id="planEntry" class="form-control" rows="2" placeholder="Test başlamadan önce sağlanması gereken koşullar"></textarea></div>
+                <div class="form-group"><label>Çıkış Kriterleri</label>
+                    <textarea id="planExit" class="form-control" rows="2" placeholder="Test planını kapatmak için gereken koşullar"></textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="App.closeModal()">İptal</button>
+                <button class="btn btn-primary" onclick="TestPlanningView.savePlan()">Oluştur</button>
+            </div>
+        `;
+        overlay.classList.add('open');
+    }
+
+    async function savePlan() {
+        const pid = TestingShared.pid;
+        const body = {
+            name: document.getElementById('planName').value,
+            description: document.getElementById('planDesc').value,
+            plan_type: document.getElementById('planType').value,
+            environment: document.getElementById('planEnv').value || null,
+            start_date: document.getElementById('planStart').value || null,
+            end_date: document.getElementById('planEnd').value || null,
+            entry_criteria: document.getElementById('planEntry').value,
+            exit_criteria: document.getElementById('planExit').value,
+        };
+        if (!body.name) return App.toast('Plan adı zorunludur', 'error');
+        try {
+            const created = await API.post(`/programs/${pid}/testing/plans`, body);
+            App.toast('Test planı oluşturuldu! Şimdi scope ekleyebilirsiniz.', 'success');
+            App.closeModal();
+            // Auto-navigate to plan detail so user can add scope
+            TestPlanDetailView.open(created.id);
+        } catch (e) {
+            App.toast(e.message || 'Plan oluşturulamadı', 'error');
+        }
+    }
+
+    async function deletePlan(id) {
+        if (!confirm('Bu test planını ve tüm cycle\'larını silmek istediğinize emin misiniz?')) return;
+        await API.delete(`/testing/plans/${id}`);
+        App.toast('Test planı silindi', 'success');
+        await renderPlans();
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1192,6 +1324,8 @@ const TestPlanningView = (() => {
     return {
         render,
         switchTab,
+        // Plans
+        showPlanModal, savePlan, deletePlan,
         // Catalog
         showCaseModal, saveCase, showCaseDetail, deleteCase, filterCatalog,
         setCatalogSearch, onCatalogFilterChange,

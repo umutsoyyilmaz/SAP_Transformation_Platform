@@ -123,27 +123,46 @@ const TestExecutionView = (() => {
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modalContainer');
         modal.innerHTML = `
-            <div class="modal-header"><h2>New Test Plan</h2>
+            <div class="modal-header"><h2>Yeni Test Planı</h2>
                 <button class="modal-close" onclick="App.closeModal()">&times;</button></div>
             <div class="modal-body">
-                <div class="form-group"><label>Name *</label>
-                    <input id="planName" class="form-control" placeholder="e.g. SIT Master Plan"></div>
-                <div class="form-group"><label>Description</label>
+                <div class="form-group"><label>Plan Adı *</label>
+                    <input id="planName" class="form-control" placeholder="ör. SIT Master Plan"></div>
+                <div class="form-group"><label>Açıklama</label>
                     <textarea id="planDesc" class="form-control" rows="2"></textarea></div>
                 <div class="form-row">
-                    <div class="form-group"><label>Start Date</label>
+                    <div class="form-group"><label>Plan Tipi *</label>
+                        <select id="planType" class="form-control">
+                            <option value="sit">SIT — System Integration Test</option>
+                            <option value="uat">UAT — User Acceptance Test</option>
+                            <option value="regression">Regression</option>
+                            <option value="e2e">E2E — End-to-End</option>
+                            <option value="cutover_rehearsal">Cutover Rehearsal</option>
+                            <option value="performance">Performance</option>
+                        </select></div>
+                    <div class="form-group"><label>Ortam</label>
+                        <select id="planEnv" class="form-control">
+                            <option value="">— Seçin —</option>
+                            <option value="DEV">DEV</option>
+                            <option value="QAS">QAS</option>
+                            <option value="PRE">PRE-PROD</option>
+                            <option value="PRD">PRD</option>
+                        </select></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Başlangıç Tarihi</label>
                         <input id="planStart" type="date" class="form-control"></div>
-                    <div class="form-group"><label>End Date</label>
+                    <div class="form-group"><label>Bitiş Tarihi</label>
                         <input id="planEnd" type="date" class="form-control"></div>
                 </div>
-                <div class="form-group"><label>Entry Criteria</label>
-                    <textarea id="planEntry" class="form-control" rows="2"></textarea></div>
-                <div class="form-group"><label>Exit Criteria</label>
-                    <textarea id="planExit" class="form-control" rows="2"></textarea></div>
+                <div class="form-group"><label>Giriş Kriterleri</label>
+                    <textarea id="planEntry" class="form-control" rows="2" placeholder="Test başlamadan önce sağlanması gereken koşullar"></textarea></div>
+                <div class="form-group"><label>Çıkış Kriterleri</label>
+                    <textarea id="planExit" class="form-control" rows="2" placeholder="Test planını kapatmak için gereken koşullar"></textarea></div>
             </div>
             <div class="modal-footer">
-                <button class="btn" onclick="App.closeModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="TestExecutionView.savePlan()">Create</button>
+                <button class="btn" onclick="App.closeModal()">İptal</button>
+                <button class="btn btn-primary" onclick="TestExecutionView.savePlan()">Oluştur</button>
             </div>
         `;
         overlay.classList.add('open');
@@ -154,16 +173,23 @@ const TestExecutionView = (() => {
         const body = {
             name: document.getElementById('planName').value,
             description: document.getElementById('planDesc').value,
+            plan_type: document.getElementById('planType').value,
+            environment: document.getElementById('planEnv').value || null,
             start_date: document.getElementById('planStart').value || null,
             end_date: document.getElementById('planEnd').value || null,
             entry_criteria: document.getElementById('planEntry').value,
             exit_criteria: document.getElementById('planExit').value,
         };
-        if (!body.name) return App.toast('Name is required', 'error');
-        await API.post(`/programs/${pid}/testing/plans`, body);
-        App.toast('Test plan created', 'success');
-        App.closeModal();
-        await renderPlans();
+        if (!body.name) return App.toast('Plan adı zorunludur', 'error');
+        try {
+            const created = await API.post(`/programs/${pid}/testing/plans`, body);
+            App.toast('Test planı oluşturuldu! Scope eklemek için detay sayfasına yönlendiriliyorsunuz.', 'success');
+            App.closeModal();
+            // Auto-navigate to plan detail
+            TestPlanDetailView.open(created.id);
+        } catch (e) {
+            App.toast(e.message || 'Plan oluşturulamadı', 'error');
+        }
     }
 
     async function deletePlan(id) {
