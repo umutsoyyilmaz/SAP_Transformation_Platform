@@ -19,6 +19,7 @@ from flask import Blueprint, jsonify, request
 from app.models import db
 from app.models.data_factory import (
     DataObject, MigrationWave, CleansingTask, LoadCycle, Reconciliation,
+    TestDataSet, TestDataSetItem,
 )
 from app.services import data_factory_service
 from app.utils.helpers import get_or_404 as _get_or_404
@@ -458,3 +459,153 @@ def cycle_comparison_dashboard():
     if not pid:
         return jsonify({"error": "program_id is required"}), 400
     return jsonify(data_factory_service.compute_cycle_comparison(pid))
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# TestDataSet CRUD  (TP-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════
+
+@data_factory_bp.route("/test-data-sets", methods=["GET"])
+def list_test_data_sets():
+    """List test data sets.
+
+    Filters: ?program_id=X&status=ready&environment=QAS
+    """
+    q = TestDataSet.query
+    pid = request.args.get("program_id", type=int)
+    if pid:
+        q = q.filter_by(program_id=pid)
+    status = request.args.get("status")
+    if status:
+        q = q.filter_by(status=status)
+    environment = request.args.get("environment")
+    if environment:
+        q = q.filter_by(environment=environment)
+    datasets = q.order_by(TestDataSet.updated_at.desc()).all()
+    return jsonify({"items": [ds.to_dict() for ds in datasets], "total": len(datasets)})
+
+
+@data_factory_bp.route("/test-data-sets", methods=["POST"])
+def create_test_data_set():
+    """Create a new test data set.
+
+    Body: {program_id, name, version?, description?, environment?, refresh_strategy?}
+    """
+    data = request.get_json(silent=True) or {}
+    if not data.get("name") or not data.get("program_id"):
+        return jsonify({"error": "name and program_id are required"}), 400
+
+    ds = TestDataSet(
+        program_id=data["program_id"],
+        name=data["name"],
+        version=data.get("version", "1.0"),
+        description=data.get("description", ""),
+        environment=data.get("environment", "QAS"),
+        status="draft",
+        refresh_strategy=data.get("refresh_strategy", "manual"),
+    )
+    db.session.add(ds)
+    db.session.commit()
+    return jsonify(ds.to_dict()), 201
+
+
+@data_factory_bp.route("/test-data-sets/<int:ds_id>", methods=["GET"])
+def get_test_data_set(ds_id):
+    """Get data set detail with items."""
+    ds, err = _get_or_404(TestDataSet, ds_id, "TestDataSet")
+    if err:
+        return err
+    result = ds.to_dict()
+    result["items"] = [item.to_dict() for item in ds.items]
+    return jsonify(result)
+
+
+@data_factory_bp.route("/test-data-sets/<int:ds_id>", methods=["PUT"])
+def update_test_data_set(ds_id):
+    """Update data set metadata or status."""
+    ds, err = _get_or_404(TestDataSet, ds_id, "TestDataSet")
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    for field in ("name", "version", "description", "environment", "status",
+                  "refresh_strategy"):
+        if field in data:
+            setattr(ds, field, data[field])
+    db.session.commit()
+    return jsonify(ds.to_dict())
+
+
+@data_factory_bp.route("/test-data-sets/<int:ds_id>", methods=["DELETE"])
+def delete_test_data_set(ds_id):
+    """Delete a data set (cascades to items)."""
+    ds, err = _get_or_404(TestDataSet, ds_id, "TestDataSet")
+    if err:
+        return err
+    db.session.delete(ds)
+    db.session.commit()
+    return jsonify({"message": "Data set deleted"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# TestDataSetItem CRUD  (TP-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════
+
+@data_factory_bp.route("/test-data-sets/<int:ds_id>/items", methods=["GET"])
+def list_data_set_items(ds_id):
+    """List items in a data set."""
+    ds, err = _get_or_404(TestDataSet, ds_id, "TestDataSet")
+    if err:
+        return err
+    items = TestDataSetItem.query.filter_by(data_set_id=ds_id).all()
+    return jsonify([i.to_dict() for i in items])
+
+
+@data_factory_bp.route("/test-data-sets/<int:ds_id>/items", methods=["POST"])
+def add_data_set_item(ds_id):
+    """Add a DataObject reference to data set.
+
+    Body: {data_object_id?, record_filter?, expected_records?, notes?}
+    """
+    ds, err = _get_or_404(TestDataSet, ds_id, "TestDataSet")
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+
+    item = TestDataSetItem(
+        data_set_id=ds_id,
+        data_object_id=data.get("data_object_id"),
+        record_filter=data.get("record_filter"),
+        expected_records=data.get("expected_records"),
+        notes=data.get("notes", ""),
+        status="pending",
+    )
+    db.session.add(item)
+    db.session.commit()
+    return jsonify(item.to_dict()), 201
+
+
+@data_factory_bp.route("/test-data-set-items/<int:item_id>", methods=["PUT"])
+def update_data_set_item(item_id):
+    """Update data set item (status, actual_records, etc.)."""
+    item, err = _get_or_404(TestDataSetItem, item_id, "TestDataSetItem")
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    for field in ("data_object_id", "record_filter",
+                  "expected_records", "actual_records", "status",
+                  "load_cycle_id", "notes"):
+        if field in data:
+            setattr(item, field, data[field])
+    db.session.commit()
+    return jsonify(item.to_dict())
+
+
+@data_factory_bp.route("/test-data-set-items/<int:item_id>", methods=["DELETE"])
+def delete_data_set_item(item_id):
+    """Remove item from data set."""
+    item, err = _get_or_404(TestDataSetItem, item_id, "TestDataSetItem")
+    if err:
+        return err
+    db.session.delete(item)
+    db.session.commit()
+    return jsonify({"message": "Item removed"}), 200

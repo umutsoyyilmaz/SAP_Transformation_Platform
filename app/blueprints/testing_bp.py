@@ -76,6 +76,7 @@ from app.models.testing import (
     TestSuite, TestStep, TestCaseDependency, TestCycleSuite,
     TestRun, TestStepResult, DefectComment, DefectHistory, DefectLink,
     UATSignOff, PerfTestResult, TestDailySnapshot,
+    PlanScope, PlanTestCase, PlanDataSet, CycleDataSet,
     TEST_LAYERS, TEST_CASE_STATUSES, EXECUTION_RESULTS,
     DEFECT_SEVERITIES, DEFECT_PRIORITIES, DEFECT_STATUSES,
     CYCLE_STATUSES, PLAN_STATUSES,
@@ -83,7 +84,10 @@ from app.models.testing import (
     RUN_TYPES, RUN_STATUSES, STEP_RESULTS, DEFECT_LINK_TYPES,
     VALID_TRANSITIONS, validate_defect_transition,
     SLA_MATRIX, UAT_SIGNOFF_STATUSES,
+    PLAN_TYPES, SCOPE_TYPES, TC_ADDED_METHODS, COVERAGE_STATUSES,
+    CYCLE_DATA_STATUSES,
 )
+from app.models.data_factory import TestDataSet
 from app.models.program import Program
 from app.models.requirement import Requirement
 from app.models.explore import ExploreRequirement
@@ -112,6 +116,9 @@ def list_test_plans(pid):
     status = request.args.get("status")
     if status:
         q = q.filter(TestPlan.status == status)
+    plan_type = request.args.get("plan_type")
+    if plan_type:
+        q = q.filter(TestPlan.plan_type == plan_type)
 
     plans = q.order_by(TestPlan.created_at.desc()).all()
     return jsonify([p.to_dict() for p in plans])
@@ -133,6 +140,8 @@ def create_test_plan(pid):
         name=data["name"],
         description=data.get("description", ""),
         status=data.get("status", "draft"),
+        plan_type=data.get("plan_type", "sit"),
+        environment=data.get("environment"),
         test_strategy=data.get("test_strategy", ""),
         entry_criteria=data.get("entry_criteria", ""),
         exit_criteria=data.get("exit_criteria", ""),
@@ -164,7 +173,7 @@ def update_test_plan(plan_id):
 
     data = request.get_json(silent=True) or {}
     for field in ("name", "description", "status", "test_strategy",
-                  "entry_criteria", "exit_criteria"):
+                  "entry_criteria", "exit_criteria", "plan_type", "environment"):
         if field in data:
             setattr(plan, field, data[field])
     for date_field in ("start_date", "end_date"):
@@ -229,6 +238,8 @@ def create_test_cycle(plan_id):
         description=data.get("description", ""),
         status=data.get("status", "planning"),
         test_layer=data.get("test_layer", "sit"),
+        environment=data.get("environment"),
+        build_tag=data.get("build_tag", ""),
         start_date=_parse_date(data.get("start_date")),
         end_date=_parse_date(data.get("end_date")),
         order=data.get("order", max_order + 1),
@@ -258,7 +269,7 @@ def update_test_cycle(cycle_id):
 
     data = request.get_json(silent=True) or {}
     for field in ("name", "description", "status", "test_layer", "order",
-                  "entry_criteria", "exit_criteria"):
+                  "entry_criteria", "exit_criteria", "environment", "build_tag"):
         if field in data:
             setattr(cycle, field, data[field])
     for date_field in ("start_date", "end_date"):
@@ -1780,3 +1791,406 @@ def clone_suite_cases(suite_id):
         "cloned_count": len(cloned),
         "items": [c.to_dict() for c in cloned],
     }), 201
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PLAN SCOPE  (TP-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/plans/<int:plan_id>/scopes", methods=["GET"])
+def list_plan_scopes(plan_id):
+    """List all scope items for a test plan."""
+    plan, err = _get_or_404(TestPlan, plan_id)
+    if err:
+        return err
+    scopes = PlanScope.query.filter_by(plan_id=plan_id)\
+        .order_by(PlanScope.scope_type, PlanScope.scope_label).all()
+    return jsonify([s.to_dict() for s in scopes])
+
+
+@testing_bp.route("/testing/plans/<int:plan_id>/scopes", methods=["POST"])
+def create_plan_scope(plan_id):
+    """Add a scope item to a plan.
+
+    Body: {scope_type, scope_ref_id, scope_label, priority?, risk_level?, notes?}
+    """
+    plan, err = _get_or_404(TestPlan, plan_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    if not data.get("scope_type") or not data.get("scope_label"):
+        return jsonify({"error": "scope_type and scope_label are required"}), 400
+
+    # Duplicate check
+    existing = PlanScope.query.filter_by(
+        plan_id=plan_id,
+        scope_type=data["scope_type"],
+        scope_ref_id=data.get("scope_ref_id"),
+    ).first()
+    if existing:
+        return jsonify({"error": "This scope item is already in the plan"}), 409
+
+    scope = PlanScope(
+        plan_id=plan_id,
+        scope_type=data["scope_type"],
+        scope_ref_id=data.get("scope_ref_id"),
+        scope_label=data["scope_label"],
+        priority=data.get("priority", "medium"),
+        risk_level=data.get("risk_level", "medium"),
+        notes=data.get("notes", ""),
+    )
+    db.session.add(scope)
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify(scope.to_dict()), 201
+
+
+@testing_bp.route("/testing/plan-scopes/<int:scope_id>", methods=["PUT"])
+def update_plan_scope(scope_id):
+    """Update a plan scope item."""
+    scope, err = _get_or_404(PlanScope, scope_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    for field in ("priority", "risk_level", "coverage_status",
+                  "scope_label", "notes"):
+        if field in data:
+            setattr(scope, field, data[field])
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify(scope.to_dict())
+
+
+@testing_bp.route("/testing/plan-scopes/<int:scope_id>", methods=["DELETE"])
+def delete_plan_scope(scope_id):
+    """Remove a scope item from plan."""
+    scope, err = _get_or_404(PlanScope, scope_id)
+    if err:
+        return err
+    db.session.delete(scope)
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify({"message": "Scope item removed"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PLAN TEST CASE — TC Pool  (TP-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/plans/<int:plan_id>/test-cases", methods=["GET"])
+def list_plan_test_cases(plan_id):
+    """List all test cases in a plan's TC pool."""
+    plan, err = _get_or_404(TestPlan, plan_id)
+    if err:
+        return err
+
+    q = PlanTestCase.query.filter_by(plan_id=plan_id)
+    # Optional filters
+    priority = request.args.get("priority")
+    if priority:
+        q = q.filter(PlanTestCase.priority == priority)
+    added_method = request.args.get("added_method")
+    if added_method:
+        q = q.filter(PlanTestCase.added_method == added_method)
+
+    ptcs = q.order_by(PlanTestCase.execution_order, PlanTestCase.id).all()
+    return jsonify([p.to_dict() for p in ptcs])
+
+
+@testing_bp.route("/testing/plans/<int:plan_id>/test-cases", methods=["POST"])
+def add_test_case_to_plan(plan_id):
+    """Add a test case to plan's TC pool.
+
+    Body: {test_case_id, added_method?, priority?, planned_tester?,
+           planned_tester_id?, estimated_effort?, execution_order?, notes?}
+    """
+    plan, err = _get_or_404(TestPlan, plan_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    tc_id = data.get("test_case_id")
+    if not tc_id:
+        return jsonify({"error": "test_case_id is required"}), 400
+
+    tc, err = _get_or_404(TestCase, tc_id)
+    if err:
+        return err
+
+    existing = PlanTestCase.query.filter_by(
+        plan_id=plan_id, test_case_id=tc_id,
+    ).first()
+    if existing:
+        return jsonify({"error": "This test case is already in the plan"}), 409
+
+    ptc = PlanTestCase(
+        plan_id=plan_id,
+        test_case_id=tc_id,
+        added_method=data.get("added_method", "manual"),
+        priority=data.get("priority", "medium"),
+        planned_tester=data.get("planned_tester", ""),
+        planned_tester_id=data.get("planned_tester_id"),
+        estimated_effort=data.get("estimated_effort"),
+        execution_order=data.get("execution_order", 0),
+        notes=data.get("notes", ""),
+    )
+    db.session.add(ptc)
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify(ptc.to_dict()), 201
+
+
+@testing_bp.route("/testing/plans/<int:plan_id>/test-cases/bulk", methods=["POST"])
+def bulk_add_test_cases_to_plan(plan_id):
+    """Bulk-add test cases to plan's TC pool.
+
+    Body: {test_case_ids: [1,2,3], added_method?, priority?}
+    """
+    plan, err = _get_or_404(TestPlan, plan_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    tc_ids = data.get("test_case_ids", [])
+    if not tc_ids:
+        return jsonify({"error": "test_case_ids is required"}), 400
+
+    existing_ids = {
+        ptc.test_case_id
+        for ptc in PlanTestCase.query.filter_by(plan_id=plan_id).all()
+    }
+
+    added = []
+    skipped = []
+    for tc_id in tc_ids:
+        if tc_id in existing_ids:
+            skipped.append(tc_id)
+            continue
+        tc = db.session.get(TestCase, tc_id)
+        if not tc:
+            skipped.append(tc_id)
+            continue
+        ptc = PlanTestCase(
+            plan_id=plan_id,
+            test_case_id=tc_id,
+            added_method=data.get("added_method", "manual"),
+            priority=data.get("priority", "medium"),
+        )
+        db.session.add(ptc)
+        added.append(tc_id)
+
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify({
+        "added_count": len(added),
+        "skipped_count": len(skipped),
+        "added_ids": added,
+        "skipped_ids": skipped,
+    }), 201
+
+
+@testing_bp.route("/testing/plan-test-cases/<int:ptc_id>", methods=["PUT"])
+def update_plan_test_case(ptc_id):
+    """Update plan TC metadata (priority, tester, effort, order)."""
+    ptc, err = _get_or_404(PlanTestCase, ptc_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    for field in ("priority", "planned_tester", "planned_tester_id",
+                  "estimated_effort", "execution_order", "added_method", "notes"):
+        if field in data:
+            setattr(ptc, field, data[field])
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify(ptc.to_dict())
+
+
+@testing_bp.route("/testing/plan-test-cases/<int:ptc_id>", methods=["DELETE"])
+def remove_test_case_from_plan(ptc_id):
+    """Remove a TC from plan."""
+    ptc, err = _get_or_404(PlanTestCase, ptc_id)
+    if err:
+        return err
+    db.session.delete(ptc)
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify({"message": "Test case removed from plan"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PLAN DATA SET  (TP-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/plans/<int:plan_id>/data-sets", methods=["GET"])
+def list_plan_data_sets(plan_id):
+    """List data sets linked to a plan."""
+    plan, err = _get_or_404(TestPlan, plan_id)
+    if err:
+        return err
+    pds_list = PlanDataSet.query.filter_by(plan_id=plan_id).all()
+    return jsonify([pds.to_dict() for pds in pds_list])
+
+
+@testing_bp.route("/testing/plans/<int:plan_id>/data-sets", methods=["POST"])
+def link_data_set_to_plan(plan_id):
+    """Link a data set to a plan.
+
+    Body: {data_set_id, is_mandatory?, notes?}
+    """
+    plan, err = _get_or_404(TestPlan, plan_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    ds_id = data.get("data_set_id")
+    if not ds_id:
+        return jsonify({"error": "data_set_id is required"}), 400
+
+    ds = db.session.get(TestDataSet, ds_id)
+    if not ds:
+        return jsonify({"error": f"TestDataSet {ds_id} not found"}), 404
+
+    existing = PlanDataSet.query.filter_by(
+        plan_id=plan_id, data_set_id=ds_id,
+    ).first()
+    if existing:
+        return jsonify({"error": "Data set already linked to plan"}), 409
+
+    pds = PlanDataSet(
+        plan_id=plan_id,
+        data_set_id=ds_id,
+        is_mandatory=data.get("is_mandatory", False),
+        notes=data.get("notes", ""),
+    )
+    db.session.add(pds)
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify(pds.to_dict()), 201
+
+
+@testing_bp.route("/testing/plan-data-sets/<int:pds_id>", methods=["PUT"])
+def update_plan_data_set(pds_id):
+    """Update plan-data-set link (is_mandatory, notes)."""
+    pds, err = _get_or_404(PlanDataSet, pds_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    for field in ("is_mandatory", "notes"):
+        if field in data:
+            setattr(pds, field, data[field])
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify(pds.to_dict())
+
+
+@testing_bp.route("/testing/plan-data-sets/<int:pds_id>", methods=["DELETE"])
+def unlink_data_set_from_plan(pds_id):
+    """Unlink data set from plan."""
+    pds, err = _get_or_404(PlanDataSet, pds_id)
+    if err:
+        return err
+    db.session.delete(pds)
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify({"message": "Data set unlinked from plan"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# CYCLE DATA SET  (TP-Sprint 2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@testing_bp.route("/testing/cycles/<int:cycle_id>/data-sets", methods=["GET"])
+def list_cycle_data_sets(cycle_id):
+    """List data sets linked to a cycle."""
+    cycle, err = _get_or_404(TestCycle, cycle_id)
+    if err:
+        return err
+    cds_list = CycleDataSet.query.filter_by(cycle_id=cycle_id).all()
+    return jsonify([cds.to_dict() for cds in cds_list])
+
+
+@testing_bp.route("/testing/cycles/<int:cycle_id>/data-sets", methods=["POST"])
+def link_data_set_to_cycle(cycle_id):
+    """Link a data set to a cycle.
+
+    Body: {data_set_id, data_status?, notes?}
+    """
+    cycle, err = _get_or_404(TestCycle, cycle_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    ds_id = data.get("data_set_id")
+    if not ds_id:
+        return jsonify({"error": "data_set_id is required"}), 400
+
+    ds = db.session.get(TestDataSet, ds_id)
+    if not ds:
+        return jsonify({"error": f"TestDataSet {ds_id} not found"}), 404
+
+    existing = CycleDataSet.query.filter_by(
+        cycle_id=cycle_id, data_set_id=ds_id,
+    ).first()
+    if existing:
+        return jsonify({"error": "Data set already linked to cycle"}), 409
+
+    cds = CycleDataSet(
+        cycle_id=cycle_id,
+        data_set_id=ds_id,
+        data_status=data.get("data_status", "not_checked"),
+        notes=data.get("notes", ""),
+    )
+    db.session.add(cds)
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify(cds.to_dict()), 201
+
+
+@testing_bp.route("/testing/cycle-data-sets/<int:cds_id>", methods=["PUT"])
+def update_cycle_data_set(cds_id):
+    """Update cycle-data-set link (status, refresh, notes)."""
+    cds, err = _get_or_404(CycleDataSet, cds_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    for field in ("data_status", "notes"):
+        if field in data:
+            setattr(cds, field, data[field])
+    if "data_refreshed_at" in data:
+        if data["data_refreshed_at"] == "now":
+            cds.data_refreshed_at = datetime.now(timezone.utc)
+        else:
+            cds.data_refreshed_at = data["data_refreshed_at"]
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify(cds.to_dict())
+
+
+@testing_bp.route("/testing/cycle-data-sets/<int:cds_id>", methods=["DELETE"])
+def unlink_data_set_from_cycle(cds_id):
+    """Unlink data set from cycle."""
+    cds, err = _get_or_404(CycleDataSet, cds_id)
+    if err:
+        return err
+    db.session.delete(cds)
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify({"message": "Data set unlinked from cycle"}), 200
