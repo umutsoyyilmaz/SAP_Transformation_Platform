@@ -2194,3 +2194,92 @@ def unlink_data_set_from_cycle(cds_id):
     if err:
         return err
     return jsonify({"message": "Data set unlinked from cycle"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TP-SPRINT 3 — SMART SERVICE ENDPOINTS
+# ═════════════════════════════════════════════════════════════════════════════
+
+from app.services.test_planning_service import (
+    suggest_test_cases,
+    import_from_suite,
+    populate_cycle_from_plan,
+    populate_cycle_from_previous,
+    calculate_scope_coverage,
+    check_data_readiness,
+    evaluate_exit_criteria,
+)
+
+
+@testing_bp.route("/testing/plans/<int:plan_id>/suggest-test-cases", methods=["POST"])
+def api_suggest_test_cases(plan_id):
+    """Auto-suggest TCs from PlanScope traversal."""
+    result, status = suggest_test_cases(plan_id)
+    if status == 200:
+        db.session.commit()
+    return jsonify(result), status
+
+
+@testing_bp.route("/testing/plans/<int:plan_id>/import-suite/<int:suite_id>", methods=["POST"])
+def api_import_from_suite(plan_id, suite_id):
+    """Bulk import TCs from a TestSuite into the plan's TC pool."""
+    result, status = import_from_suite(plan_id, suite_id)
+    if status == 200:
+        err = db_commit_or_error()
+        if err:
+            return err
+    return jsonify(result), status
+
+
+@testing_bp.route("/testing/cycles/<int:cycle_id>/populate", methods=["POST"])
+def api_populate_cycle(cycle_id):
+    """Populate cycle with TestExecution records from PlanTestCase pool."""
+    result, status = populate_cycle_from_plan(cycle_id)
+    if status == 200:
+        err = db_commit_or_error()
+        if err:
+            return err
+    return jsonify(result), status
+
+
+@testing_bp.route(
+    "/testing/cycles/<int:cycle_id>/populate-from-cycle/<int:prev_id>",
+    methods=["POST"],
+)
+def api_populate_from_previous(cycle_id, prev_id):
+    """Carry forward failed/blocked executions from a previous cycle."""
+    filter_status = request.args.get("filter", "failed_blocked")
+    result, status = populate_cycle_from_previous(cycle_id, prev_id, filter_status)
+    if status == 200:
+        err = db_commit_or_error()
+        if err:
+            return err
+    return jsonify(result), status
+
+
+@testing_bp.route("/testing/plans/<int:plan_id>/coverage", methods=["GET"])
+def api_coverage(plan_id):
+    """Calculate test coverage per scope item."""
+    result, status = calculate_scope_coverage(plan_id)
+    if status == 200:
+        err = db_commit_or_error()
+        if err:
+            return err
+    return jsonify(result), status
+
+
+@testing_bp.route("/testing/cycles/<int:cycle_id>/data-check", methods=["GET"])
+def api_data_check(cycle_id):
+    """Check data readiness for the cycle's parent plan."""
+    cycle = db.session.get(TestCycle, cycle_id)
+    if not cycle:
+        return jsonify({"error": "Cycle not found"}), 404
+    result, status = check_data_readiness(cycle.plan_id)
+    return jsonify(result), status
+
+
+@testing_bp.route("/testing/plans/<int:plan_id>/evaluate-exit", methods=["POST"])
+def api_evaluate_exit(plan_id):
+    """Evaluate plan exit criteria gates."""
+    result, status = evaluate_exit_criteria(plan_id)
+    return jsonify(result), status
