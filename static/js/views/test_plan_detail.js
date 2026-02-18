@@ -215,16 +215,21 @@ const TestPlanDetailView = (() => {
                 }));
             } else if (scopeType === 'l3_process') {
                 try {
-                    const res = await API.get(`/explore/process-levels?project_id=${pid}&per_page=200`);
+                    const res = await API.get(`/explore/process-levels?project_id=${pid}&level=3&flat=true&per_page=200`);
                     items = (res.items || res || []).map(p => ({
-                        id: p.id, label: `${p.level_id || ''} — ${p.name}`, type: `L${p.level || 3}`
+                        id: p.id,
+                        label: `${p.code || ''} — ${p.name}`,
+                        type: p.process_area_code ? `L3 · ${p.process_area_code}` : 'L3'
                     }));
                 } catch(e) { items = []; }
             } else if (scopeType === 'scenario') {
                 try {
                     const res = await API.get(`/explore/workshops?project_id=${pid}&per_page=200`);
+                    const typeLabels = { fit_to_standard: 'F2S', deep_dive: 'Deep Dive', follow_up: 'Follow-Up', delta_design: 'Delta' };
                     items = (res.items || res || []).map(w => ({
-                        id: w.id, label: w.name || w.title, type: 'Scenario'
+                        id: w.id,
+                        label: `${w.code || ''} — ${w.name || w.title}`,
+                        type: `${w.process_area || ''} ${typeLabels[w.type] || w.type || 'Workshop'}`.trim()
                     }));
                 } catch(e) { items = []; }
             }
