@@ -390,6 +390,7 @@ def create_test_case(pid):
         explore_requirement_id=data.get("explore_requirement_id"),
         backlog_item_id=data.get("backlog_item_id"),
         config_item_id=data.get("config_item_id"),
+        process_level_id=data.get("process_level_id"),
         suite_id=data.get("suite_id"),
     )
     db.session.add(tc)
@@ -421,7 +422,8 @@ def update_test_case(case_id):
                   "preconditions", "test_steps", "expected_result", "test_data_set",
                   "status", "priority", "is_regression", "assigned_to",
                   "assigned_to_id",
-                  "requirement_id", "explore_requirement_id", "backlog_item_id", "config_item_id", "suite_id"):
+                  "requirement_id", "explore_requirement_id", "backlog_item_id",
+                  "config_item_id", "process_level_id", "suite_id"):
         if field in data:
             setattr(tc, field, data[field])
 

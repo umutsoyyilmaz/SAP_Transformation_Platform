@@ -407,6 +407,36 @@ const TestPlanningView = (() => {
                             <option value="">— No Suite —</option>
                         </select></div>
                 </div>
+
+                <!-- ── Traceability Links ─────────────────────────── -->
+                <div style="border:1px solid #e0ddd8;border-radius:8px;padding:14px 16px;margin:12px 0;background:#FDFCFA">
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+                        <span style="font-size:15px">🔗</span>
+                        <strong style="font-size:13px;color:#0B1623">Traceability Links</strong>
+                        <span style="font-size:11px;color:#999;margin-left:auto">Link to process, requirement, WRICEF or config item</span>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>L3 Process</label>
+                            <select id="tcProcessLevelId" class="form-control">
+                                <option value="">— Select L3 Process —</option>
+                            </select></div>
+                        <div class="form-group"><label>Explore Requirement</label>
+                            <select id="tcExploreReqId" class="form-control">
+                                <option value="">— Select Requirement —</option>
+                            </select></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>WRICEF / Backlog Item</label>
+                            <select id="tcBacklogItemId" class="form-control">
+                                <option value="">— Select WRICEF —</option>
+                            </select></div>
+                        <div class="form-group"><label>Config Item</label>
+                            <select id="tcConfigItemId" class="form-control">
+                                <option value="">— Select Config Item —</option>
+                            </select></div>
+                    </div>
+                </div>
+
                 <div class="form-group"><label>Description</label>
                     <textarea id="tcDesc" class="form-control" rows="2">${isEdit ? (tc.description || '') : ''}</textarea></div>
                 <div class="form-group"><label>Preconditions</label>
@@ -500,6 +530,9 @@ const TestPlanningView = (() => {
         // Load suite options
         _loadSuiteOptions(isEdit ? tc.suite_id : null);
 
+        // Load traceability picker options
+        _loadTraceabilityOptions(isEdit ? tc : null);
+
         // Load structured steps for existing cases
         if (isEdit) {
             _loadSteps(tc.id);
@@ -525,6 +558,76 @@ const TestPlanningView = (() => {
         } catch (e) {
             console.warn('Could not load suites for selector:', e);
         }
+    }
+
+    // ── Traceability Picker Loaders ────────────────────────────────────
+    async function _loadTraceabilityOptions(tc) {
+        const pid = TestingShared.pid;
+        // Load all 4 pickers in parallel
+        await Promise.allSettled([
+            _loadProcessLevels(pid, tc ? tc.process_level_id : null),
+            _loadExploreRequirements(pid, tc ? tc.explore_requirement_id : null),
+            _loadBacklogItems(pid, tc ? tc.backlog_item_id : null),
+            _loadConfigItems(pid, tc ? tc.config_item_id : null),
+        ]);
+    }
+
+    function _fillSelect(elId, items, selectedVal) {
+        const sel = document.getElementById(elId);
+        if (!sel) return;
+        items.forEach(it => {
+            const opt = document.createElement('option');
+            opt.value = it.value;
+            opt.textContent = it.label;
+            if (selectedVal && String(it.value) === String(selectedVal)) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    }
+
+    async function _loadProcessLevels(pid, selectedId) {
+        try {
+            const res = await API.get(`/explore/process-levels?project_id=${pid}&level=3&flat=true`);
+            const items = (res.items || []).map(p => ({
+                value: p.id,
+                label: `${p.code} — ${p.name}${p.process_area_code ? ' (' + p.process_area_code + ')' : ''}`
+            }));
+            _fillSelect('tcProcessLevelId', items, selectedId);
+        } catch (e) { console.warn('Could not load L3 processes:', e); }
+    }
+
+    async function _loadExploreRequirements(pid, selectedId) {
+        try {
+            const res = await API.get(`/explore/requirements?project_id=${pid}&per_page=500`);
+            const items = (res.items || []).map(r => ({
+                value: r.id,
+                label: `${r.code || 'REQ'} — ${r.title}${r.type ? ' [' + r.type + ']' : ''}`
+            }));
+            _fillSelect('tcExploreReqId', items, selectedId);
+        } catch (e) { console.warn('Could not load explore requirements:', e); }
+    }
+
+    async function _loadBacklogItems(pid, selectedId) {
+        try {
+            const res = await API.get(`/programs/${pid}/backlog?per_page=500`);
+            const items = (res.items || []).map(b => ({
+                value: b.id,
+                label: `${b.code || 'BL'} — ${b.title}${b.wricef_type ? ' [' + b.wricef_type + ']' : ''}`
+            }));
+            _fillSelect('tcBacklogItemId', items, selectedId);
+        } catch (e) { console.warn('Could not load backlog items:', e); }
+    }
+
+    async function _loadConfigItems(pid, selectedId) {
+        try {
+            const res = await API.get(`/programs/${pid}/config-items`);
+            // config-items returns bare array
+            const arr = Array.isArray(res) ? res : (res.items || []);
+            const items = arr.map(c => ({
+                value: c.id,
+                label: `${c.code || 'CFG'} — ${c.title}${c.module ? ' [' + c.module + ']' : ''}`
+            }));
+            _fillSelect('tcConfigItemId', items, selectedId);
+        } catch (e) { console.warn('Could not load config items:', e); }
     }
 
     // ── Structured Step Management ─────────────────────────────────────
@@ -864,6 +967,7 @@ const TestPlanningView = (() => {
 
     async function saveCase(id) {
         const pid = TestingShared.pid;
+        const _selVal = (elId) => { const el = document.getElementById(elId); return el ? el.value : ''; };
         const body = {
             title: document.getElementById('tcTitle').value,
             test_layer: document.getElementById('tcLayer').value,
@@ -878,6 +982,10 @@ const TestPlanningView = (() => {
             assigned_to_id: document.getElementById('tcAssigned').value || null,
             is_regression: document.getElementById('tcRegression').checked,
             suite_id: parseInt(document.getElementById('tcSuiteId').value) || null,
+            process_level_id: _selVal('tcProcessLevelId') || null,
+            explore_requirement_id: _selVal('tcExploreReqId') || null,
+            backlog_item_id: parseInt(_selVal('tcBacklogItemId')) || null,
+            config_item_id: parseInt(_selVal('tcConfigItemId')) || null,
         };
         if (!body.title) return App.toast('Title is required', 'error');
 
