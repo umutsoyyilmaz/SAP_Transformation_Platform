@@ -15,9 +15,9 @@ export default defineConfig({
     { name: 'chromium', use: { browserName: 'chromium' } },
   ],
   webServer: {
-    command: 'cd .. && .venv/bin/flask run --port 5001',
+    command: 'cd .. && APP_ENV=development DATABASE_URL=sqlite:////Users/umutsoyyilmaz/Downloads/SAP_Transformation_Platform-main/instance/sap_platform_dev.db API_AUTH_ENABLED=false .venv/bin/flask run --port 5001',
     url: 'http://localhost:5001/api/v1/health',
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 30_000,
   },
 })

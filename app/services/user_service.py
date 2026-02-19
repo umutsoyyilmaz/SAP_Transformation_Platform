@@ -324,3 +324,67 @@ def authenticate_user(tenant_id: int, email: str, password: str) -> User:
     user.last_login_at = datetime.now(timezone.utc)
     db.session.commit()
     return user
+
+
+def update_last_login(user_id: int) -> None:
+    """
+    Stamp the user's last_login_at with the current UTC time.
+
+    Extracted so platform-admin login path and other callers can
+    record login time without issuing db.session.commit() in a blueprint.
+    """
+    user = get_user_by_id(user_id)
+    if user:
+        user.last_login_at = datetime.now(timezone.utc)
+        db.session.commit()
+
+
+def change_user_password(user_id: int, new_password: str) -> None:
+    """
+    Replace a user's hashed password with a newly hashed value.
+
+    Blueprint callers must validate the current password *before*
+    invoking this function. This function only handles persistence.
+
+    Args:
+        user_id: The user whose password is being changed.
+        new_password: Plain-text new password (will be hashed here).
+
+    Raises:
+        UserServiceError: If the user does not exist.
+    """
+    user = get_user_by_id(user_id)
+    if not user:
+        raise UserServiceError("User not found", 404)
+    user.password_hash = hash_password(new_password)
+    db.session.commit()
+
+
+def get_platform_admin_by_email(email: str) -> "User | None":
+    """
+    Retrieve a platform-admin user (tenant_id=NULL) by email.
+
+    Platform admins are not tied to any tenant; this lookup is specifically
+    for the tenant-free login flow.
+    """
+    return User.query.filter_by(email=email, tenant_id=None).first()
+
+
+def get_tenant_by_slug(slug: str) -> "Tenant | None":
+    """
+    Retrieve an active tenant by its URL slug.
+
+    Used during tenant login to resolve the target tenant before
+    authenticating the user.
+    """
+    return Tenant.query.filter_by(slug=slug, is_active=True).first()
+
+
+def list_active_tenants() -> list:
+    """
+    Return all active tenants ordered by name.
+
+    Used by the login page tenant-selector endpoint so blueprints
+    never query Tenant directly.
+    """
+    return Tenant.query.filter_by(is_active=True).order_by(Tenant.name).all()

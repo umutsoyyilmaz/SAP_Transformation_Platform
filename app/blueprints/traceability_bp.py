@@ -17,7 +17,12 @@ functions — does NOT modify them.
 
 from flask import Blueprint, jsonify, request
 
-from app.services.traceability import get_chain, trace_explore_requirement
+from app.services.traceability import (
+    build_explore_lateral,
+    build_lateral_links,
+    get_chain,
+    trace_explore_requirement,
+)
 
 traceability_bp = Blueprint("traceability", __name__, url_prefix="/api/v1")
 
@@ -251,117 +256,13 @@ def _walk_process_level_hierarchy(process_level_id, upstream):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _build_explore_lateral(requirement_id):
-    """Get Open Items and Decisions linked to an ExploreRequirement."""
-    from app.models import db
-    from app.models.explore import (
-        RequirementOpenItemLink,
-        ExploreOpenItem,
-        ExploreDecision,
-        ExploreRequirement,
-        ProcessStep,
-    )
-
-    lateral = {"open_items": [], "decisions": []}
-
-    # ── Open Items (M:N via RequirementOpenItemLink) ─────────────────────
-    links = RequirementOpenItemLink.query.filter_by(
-        requirement_id=requirement_id,
-    ).all()
-    for lnk in links:
-        oi = db.session.get(ExploreOpenItem, lnk.open_item_id)
-        if oi:
-            lateral["open_items"].append({
-                "id": oi.id,
-                "code": oi.code,
-                "title": oi.title,
-                "status": oi.status,
-                "priority": oi.priority,
-                "link_type": lnk.link_type,
-            })
-
-    # ── Decisions (via ProcessStep) ──────────────────────────────────────
-    req = db.session.get(ExploreRequirement, requirement_id)
-    if req and req.process_step_id:
-        ps = db.session.get(ProcessStep, req.process_step_id)
-        if ps:
-            decisions = ExploreDecision.query.filter_by(
-                process_step_id=ps.id,
-            ).all()
-            for d in decisions:
-                lateral["decisions"].append({
-                    "id": d.id,
-                    "code": d.code,
-                    "text": d.text,
-                    "decided_by": d.decided_by,
-                    "category": d.category,
-                    "status": d.status,
-                })
-
-    return lateral
+    """Delegate to service layer — kept for backward-compatibility with existing callers."""
+    return build_explore_lateral(requirement_id)
 
 
 def _build_lateral_links(entity_type, entity_id):
-    """Build lateral links for standard entities (non-explore)."""
-    lateral = {}
-
-    if entity_type == "requirement":
-        from app.models import db
-        from app.models.requirement import Requirement
-        req = db.session.get(Requirement, entity_id)
-        if req:
-            try:
-                from app.models.explore import RequirementOpenItemLink, ExploreOpenItem
-                links = RequirementOpenItemLink.query.filter_by(
-                    requirement_id=str(entity_id),
-                ).all()
-                lateral["open_items"] = []
-                for lnk in links:
-                    oi = db.session.get(ExploreOpenItem, lnk.open_item_id)
-                    if oi:
-                        lateral["open_items"].append({
-                            "id": oi.id,
-                            "code": oi.code,
-                            "title": oi.title,
-                            "status": oi.status,
-                        })
-            except Exception:
-                pass
-
-    elif entity_type == "backlog_item":
-        from app.models.integration import Interface
-        interfaces = Interface.query.filter_by(backlog_item_id=entity_id).all()
-        lateral["interfaces"] = [
-            {
-                "id": i.id,
-                "code": i.code,
-                "name": i.name,
-                "direction": i.direction,
-                "status": i.status,
-            }
-            for i in interfaces
-        ]
-
-    elif entity_type == "interface":
-        from app.models.integration import ConnectivityTest, SwitchPlan
-        lateral["connectivity_tests"] = [
-            {
-                "id": ct.id,
-                "environment": ct.environment,
-                "result": ct.result,
-            }
-            for ct in ConnectivityTest.query.filter_by(interface_id=entity_id).all()
-        ]
-        lateral["switch_plans"] = [
-            {
-                "id": sp.id,
-                "action": sp.action,
-                "status": sp.status,
-                "sequence": sp.sequence,
-            }
-            for sp in SwitchPlan.query.filter_by(interface_id=entity_id).all()
-        ]
-
-    return lateral
+    """Delegate to service layer — kept for backward-compatibility with existing callers."""
+    return build_lateral_links(entity_type, entity_id)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

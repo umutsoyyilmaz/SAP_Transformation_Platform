@@ -23,6 +23,7 @@ from app.models import db
 from app.models.testing import (
     TestPlan, TestCycle, TestCase, TestExecution, Defect,
     TestSuite, TestStep, TestCaseDependency, TestCycleSuite,
+    TestCaseSuiteLink,
     TestRun, TestStepResult, DefectComment, DefectHistory, DefectLink,
     UATSignOff, PerfTestResult, TestDailySnapshot,
     SLA_MATRIX, VALID_TRANSITIONS, validate_defect_transition,
@@ -214,7 +215,7 @@ def update_defect(defect, data):
 
 _CLONE_COPY_FIELDS = (
     "program_id", "requirement_id", "explore_requirement_id",
-    "backlog_item_id", "config_item_id", "suite_id",
+    "backlog_item_id", "config_item_id",
     "description", "test_layer", "module",
     "preconditions", "test_steps", "expected_result", "test_data_set",
     "priority", "is_regression", "assigned_to", "assigned_to_id",
@@ -229,7 +230,7 @@ def clone_test_case(source, overrides=None):
     overrides = overrides or {}
     field_data = {f: getattr(source, f) for f in _CLONE_COPY_FIELDS}
 
-    for key in ("title", "test_layer", "suite_id", "assigned_to",
+    for key in ("title", "test_layer", "assigned_to",
                 "assigned_to_id", "priority", "module"):
         if key in overrides:
             field_data[key] = overrides[key]
@@ -248,6 +249,26 @@ def clone_test_case(source, overrides=None):
     clone = TestCase(**field_data)
     db.session.add(clone)
     db.session.flush()
+
+    target_suite_ids = []
+    if "suite_ids" in overrides and overrides.get("suite_ids") is not None:
+        target_suite_ids = [int(sid) for sid in (overrides.get("suite_ids") or []) if sid is not None]
+    elif "suite_id" in overrides and overrides.get("suite_id") is not None:
+        target_suite_ids = [int(overrides.get("suite_id"))]
+    else:
+        source_suite_ids = [link.suite_id for link in source.suite_links]
+        if not source_suite_ids and source.suite_id:
+            source_suite_ids = [source.suite_id]
+        target_suite_ids = source_suite_ids
+
+    for sid in set(target_suite_ids):
+        db.session.add(TestCaseSuiteLink(
+            test_case_id=clone.id,
+            suite_id=sid,
+            added_method="clone",
+            tenant_id=clone.tenant_id,
+        ))
+
     return clone
 
 
@@ -258,11 +279,17 @@ def bulk_clone_suite(source_suite_id, target_suite_id, overrides=None):
     Raises ValueError if validation fails.
     """
     overrides = overrides or {}
-    source_cases = TestCase.query.filter_by(suite_id=source_suite_id).all()
+    source_case_ids = {
+        link.test_case_id
+        for link in TestCaseSuiteLink.query.filter_by(suite_id=source_suite_id).all()
+    }
+
+    source_cases = TestCase.query.filter(TestCase.id.in_(source_case_ids)).all() if source_case_ids else []
     if not source_cases:
         raise ValueError("Source suite has no test cases to clone")
 
-    overrides["suite_id"] = target_suite_id
+    overrides.pop("suite_id", None)
+    overrides["suite_ids"] = [target_suite_id]
     cloned = []
     for tc in source_cases:
         c = clone_test_case(tc, overrides)
@@ -767,6 +794,7 @@ def generate_from_wricef(suite, wricef_ids=None, config_ids=None, scope_item_id=
     Raises ValueError if no items found.
     """
     from app.models.backlog import BacklogItem, ConfigItem
+    from app.services.scope_resolution import resolve_l3_for_tc
 
     items = []
     if wricef_ids:
@@ -785,9 +813,14 @@ def generate_from_wricef(suite, wricef_ids=None, config_ids=None, scope_item_id=
         code_prefix = item.code if item.code else f"WRICEF-{item.id}"
         title = f"UT — {code_prefix} — {item.title}"
 
+        tc_data = {
+            "backlog_item_id": item.id if is_backlog else None,
+            "config_item_id": item.id if not is_backlog else None,
+        }
+        resolved_l3 = resolve_l3_for_tc(tc_data)
+
         tc = TestCase(
             program_id=suite.program_id,
-            suite_id=suite.id,
             code=f"TC-{code_prefix}-{TestCase.query.filter_by(program_id=suite.program_id).count() + 1:04d}",
             title=title,
             description=f"Auto-generated from {'WRICEF' if is_backlog else 'Config'} item: {item.title}",
@@ -797,10 +830,18 @@ def generate_from_wricef(suite, wricef_ids=None, config_ids=None, scope_item_id=
             priority="medium",
             backlog_item_id=item.id if is_backlog else None,
             config_item_id=item.id if not is_backlog else None,
+            process_level_id=resolved_l3,
             requirement_id=item.requirement_id if hasattr(item, "requirement_id") else None,
         )
         db.session.add(tc)
         db.session.flush()
+
+        db.session.add(TestCaseSuiteLink(
+            test_case_id=tc.id,
+            suite_id=suite.id,
+            added_method="auto_wricef",
+            tenant_id=suite.tenant_id,
+        ))
 
         notes = ""
         if hasattr(item, "technical_notes") and item.technical_notes:
@@ -866,7 +907,6 @@ def generate_from_process(suite, scope_item_ids, test_level="sit", uat_category=
 
         tc = TestCase(
             program_id=suite.program_id,
-            suite_id=suite.id,
             code=f"TC-{scope_code}-{TestCase.query.filter_by(program_id=suite.program_id).count() + 1:04d}",
             title=f"E2E — {scope_code} — {l3.name}",
             description=f"Auto-generated from process: {l3.name}. Level: {test_level}. Category: {uat_category or 'N/A'}",
@@ -878,6 +918,13 @@ def generate_from_process(suite, scope_item_ids, test_level="sit", uat_category=
         )
         db.session.add(tc)
         db.session.flush()
+
+        db.session.add(TestCaseSuiteLink(
+            test_case_id=tc.id,
+            suite_id=suite.id,
+            added_method="auto_process",
+            tenant_id=suite.tenant_id,
+        ))
 
         for i, ps in enumerate(fit_steps, 1):
             l4 = db.session.get(ProcessLevel, ps.process_level_id)

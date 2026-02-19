@@ -1,3 +1,4 @@
+
 # PERGA — Multi-Tenant Admin Panel Architecture Design Document
 
 **NAVIGATE COMPLEXITY**

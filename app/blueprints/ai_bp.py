@@ -79,28 +79,65 @@ Endpoints:
     ORCHESTRATOR   /api/v1/ai/workflows                      GET  (Sprint 21)
                    /api/v1/ai/workflows/<name>/execute       POST (Sprint 21)
                    /api/v1/ai/workflows/tasks/<id>           GET  (Sprint 21)
+
+    F4 AI PIPELINE /api/v1/ai/smart-search                   POST (F4)
+                   /api/v1/ai/programs/<pid>/flaky-tests     GET  (F4)
+                   /api/v1/ai/programs/<pid>/predictive-coverage GET (F4)
+                   /api/v1/ai/testing/cycles/<cid>/optimize-suite POST (F4)
+                   /api/v1/ai/programs/<pid>/tc-maintenance  GET  (F4)
 """
 
-from datetime import datetime, timezone
+import logging
+from datetime import UTC, datetime
 
 from flask import Blueprint, g, jsonify, request
 
-from app.auth import require_role
+from app.ai.assistants import (
+    DataMigrationAdvisor,
+    DefectTriage,
+    FlakyTestDetector,
+    IntegrationAnalyst,
+    NLQueryAssistant,
+    PredictiveCoverage,
+    RequirementAnalyst,
+    SmartSearch,
+    SuiteOptimizer,
+    TCMaintenance,
+    sanitize_sql,
+    validate_sql,
+)
+from app.ai.gateway import LLMGateway
+from app.ai.prompt_registry import PromptRegistry
+from app.ai.rag import RAGPipeline
+from app.ai.suggestion_queue import SuggestionQueue
+from app.middleware.permission_required import require_permission
 from app.models import db
 from app.models.ai import (
-    AIUsageLog, AIAuditLog, AISuggestion, AIEmbedding,
-    AIResponseCache, AITokenBudget, AIFeedbackMetric, AITask,
-    calculate_cost,
+    AIAuditLog,
+    AISuggestion,
+    AIUsageLog,
 )
-from app.ai.suggestion_queue import SuggestionQueue
-from app.ai.rag import RAGPipeline
-from app.ai.prompt_registry import PromptRegistry
-from app.ai.gateway import LLMGateway
-from app.ai.assistants import (
-    NLQueryAssistant, RequirementAnalyst, DefectTriage,
-    DataMigrationAdvisor, IntegrationAnalyst,
-    validate_sql, sanitize_sql,
+from app.services.ai_admin_service import get_admin_dashboard_stats
+from app.services.ai_kb_service import (
+    activate_kb_version as activate_kb_version_service,
 )
+from app.services.ai_kb_service import (
+    archive_kb_version as archive_kb_version_service,
+)
+from app.services.ai_kb_service import (
+    create_kb_version as create_kb_version_service,
+)
+from app.services.ai_kb_service import (
+    diff_kb_versions as diff_kb_versions_service,
+)
+from app.services.ai_kb_service import (
+    get_kb_version_with_stats as get_kb_version_with_stats_service,
+)
+from app.services.ai_kb_service import (
+    list_kb_versions as list_kb_versions_service,
+)
+
+logger = logging.getLogger(__name__)
 
 ai_bp = Blueprint("ai", __name__, url_prefix="/api/v1/ai")
 
@@ -113,8 +150,10 @@ _ai_query_limit = limiter.shared_limit("60/minute", scope="ai_query")
 
 # ── Lazy singletons stored on Flask app (test-isolation safe) ───────────────
 
+
 def _get_gateway():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_gateway"):
         current_app._ai_gateway = LLMGateway()
     return current_app._ai_gateway
@@ -122,6 +161,7 @@ def _get_gateway():
 
 def _get_rag():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_rag"):
         current_app._ai_rag = RAGPipeline(gateway=_get_gateway())
     return current_app._ai_rag
@@ -129,6 +169,7 @@ def _get_rag():
 
 def _get_prompt_registry():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_prompt_registry"):
         current_app._ai_prompt_registry = PromptRegistry()
     return current_app._ai_prompt_registry
@@ -136,6 +177,7 @@ def _get_prompt_registry():
 
 def _get_nl_query():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_nl_query"):
         current_app._ai_nl_query = NLQueryAssistant(
             gateway=_get_gateway(),
@@ -146,6 +188,7 @@ def _get_nl_query():
 
 def _get_req_analyst():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_req_analyst"):
         current_app._ai_req_analyst = RequirementAnalyst(
             gateway=_get_gateway(),
@@ -157,6 +200,7 @@ def _get_req_analyst():
 
 def _get_defect_triage():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_defect_triage"):
         current_app._ai_defect_triage = DefectTriage(
             gateway=_get_gateway(),
@@ -168,6 +212,7 @@ def _get_defect_triage():
 
 def _get_data_migration():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_data_migration"):
         current_app._ai_data_migration = DataMigrationAdvisor(
             gateway=_get_gateway(),
@@ -180,6 +225,7 @@ def _get_data_migration():
 
 def _get_integration_analyst():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_integration_analyst"):
         current_app._ai_integration_analyst = IntegrationAnalyst(
             gateway=_get_gateway(),
@@ -192,32 +238,40 @@ def _get_integration_analyst():
 
 def _get_feedback_pipeline():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_feedback_pipeline"):
         from app.ai.feedback import FeedbackPipeline
+
         current_app._ai_feedback_pipeline = FeedbackPipeline()
     return current_app._ai_feedback_pipeline
 
 
 def _get_task_runner():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_task_runner"):
         from app.ai.task_runner import TaskRunner
+
         current_app._ai_task_runner = TaskRunner()
     return current_app._ai_task_runner
 
 
 def _get_doc_exporter():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_doc_exporter"):
         from app.ai.export import AIDocExporter
+
         current_app._ai_doc_exporter = AIDocExporter()
     return current_app._ai_doc_exporter
 
 
 def _get_orchestrator():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_orchestrator"):
         from app.ai.orchestrator import AIOrchestrator
+
         assistants = {
             "data_migration": _get_data_migration(),
             "integration_analyst": _get_integration_analyst(),
@@ -232,6 +286,7 @@ def _get_orchestrator():
 # ══════════════════════════════════════════════════════════════════════════════
 # SUGGESTIONS
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @ai_bp.route("/suggestions", methods=["GET"])
 def list_suggestions():
@@ -359,6 +414,7 @@ def modify_suggestion(sid):
 # USAGE & COST
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @ai_bp.route("/usage", methods=["GET"])
 def usage_stats():
     """Get token usage statistics."""
@@ -371,50 +427,53 @@ def usage_stats():
 
     # Calculate cutoff date
     from datetime import timedelta
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    cutoff = datetime.now(UTC) - timedelta(days=days)
     q = q.filter(AIUsageLog.created_at >= cutoff)
 
     logs = q.all()
 
-    total_prompt = sum(l.prompt_tokens for l in logs)
-    total_completion = sum(l.completion_tokens for l in logs)
-    total_cost = sum(l.cost_usd for l in logs)
+    total_prompt = sum(entry.prompt_tokens for entry in logs)
+    total_completion = sum(entry.completion_tokens for entry in logs)
+    total_cost = sum(entry.cost_usd for entry in logs)
     total_calls = len(logs)
-    avg_latency = sum(l.latency_ms for l in logs) / max(total_calls, 1)
-    error_count = sum(1 for l in logs if not l.success)
+    avg_latency = sum(entry.latency_ms for entry in logs) / max(total_calls, 1)
+    error_count = sum(1 for entry in logs if not entry.success)
 
     # Group by model
     by_model = {}
-    for l in logs:
-        if l.model not in by_model:
-            by_model[l.model] = {"calls": 0, "tokens": 0, "cost": 0.0}
-        by_model[l.model]["calls"] += 1
-        by_model[l.model]["tokens"] += l.total_tokens
-        by_model[l.model]["cost"] += l.cost_usd
+    for entry in logs:
+        if entry.model not in by_model:
+            by_model[entry.model] = {"calls": 0, "tokens": 0, "cost": 0.0}
+        by_model[entry.model]["calls"] += 1
+        by_model[entry.model]["tokens"] += entry.total_tokens
+        by_model[entry.model]["cost"] += entry.cost_usd
 
     # Group by purpose
     by_purpose = {}
-    for l in logs:
-        p = l.purpose or "other"
+    for entry in logs:
+        p = entry.purpose or "other"
         if p not in by_purpose:
             by_purpose[p] = {"calls": 0, "tokens": 0, "cost": 0.0}
         by_purpose[p]["calls"] += 1
-        by_purpose[p]["tokens"] += l.total_tokens
-        by_purpose[p]["cost"] += l.cost_usd
+        by_purpose[p]["tokens"] += entry.total_tokens
+        by_purpose[p]["cost"] += entry.cost_usd
 
-    return jsonify({
-        "period_days": days,
-        "total_calls": total_calls,
-        "total_prompt_tokens": total_prompt,
-        "total_completion_tokens": total_completion,
-        "total_tokens": total_prompt + total_completion,
-        "total_cost_usd": round(total_cost, 4),
-        "avg_latency_ms": round(avg_latency),
-        "error_count": error_count,
-        "error_rate": round(error_count / max(total_calls, 1) * 100, 1),
-        "by_model": {k: {**v, "cost": round(v["cost"], 4)} for k, v in by_model.items()},
-        "by_purpose": {k: {**v, "cost": round(v["cost"], 4)} for k, v in by_purpose.items()},
-    })
+    return jsonify(
+        {
+            "period_days": days,
+            "total_calls": total_calls,
+            "total_prompt_tokens": total_prompt,
+            "total_completion_tokens": total_completion,
+            "total_tokens": total_prompt + total_completion,
+            "total_cost_usd": round(total_cost, 4),
+            "avg_latency_ms": round(avg_latency),
+            "error_count": error_count,
+            "error_rate": round(error_count / max(total_calls, 1) * 100, 1),
+            "by_model": {k: {**v, "cost": round(v["cost"], 4)} for k, v in by_model.items()},
+            "by_purpose": {k: {**v, "cost": round(v["cost"], 4)} for k, v in by_purpose.items()},
+        }
+    )
 
 
 @ai_bp.route("/usage/cost", methods=["GET"])
@@ -431,14 +490,14 @@ def cost_summary():
 
     # Group by date
     daily = {}
-    for l in logs:
-        if l.created_at:
-            day = l.created_at.strftime("%Y-%m-%d")
+    for entry in logs:
+        if entry.created_at:
+            day = entry.created_at.strftime("%Y-%m-%d")
             if day not in daily:
                 daily[day] = {"date": day, "calls": 0, "tokens": 0, "cost": 0.0}
             daily[day]["calls"] += 1
-            daily[day]["tokens"] += l.total_tokens
-            daily[day]["cost"] += l.cost_usd
+            daily[day]["tokens"] += entry.total_tokens
+            daily[day]["cost"] += entry.cost_usd
 
     timeline = sorted(daily.values(), key=lambda x: x["date"])
     for entry in timeline:
@@ -446,16 +505,19 @@ def cost_summary():
 
     total_cost = sum(e["cost"] for e in timeline)
 
-    return jsonify({
-        "granularity": granularity,
-        "total_cost_usd": round(total_cost, 4),
-        "timeline": timeline,
-    })
+    return jsonify(
+        {
+            "granularity": granularity,
+            "total_cost_usd": round(total_cost, 4),
+            "timeline": timeline,
+        }
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # AUDIT LOG
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @ai_bp.route("/audit-log", methods=["GET"])
 def audit_log():
@@ -478,17 +540,20 @@ def audit_log():
     total = q.count()
     items = q.offset((page - 1) * per_page).limit(per_page).all()
 
-    return jsonify({
-        "items": [l.to_dict() for l in items],
-        "total": total,
-        "page": page,
-        "per_page": per_page,
-    })
+    return jsonify(
+        {
+            "items": [entry.to_dict() for entry in items],
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+        }
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # EMBEDDINGS / SEARCH
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @ai_bp.route("/embeddings/search", methods=["POST"])
 def embedding_search():
@@ -538,56 +603,20 @@ def index_entities():
 # ADMIN DASHBOARD
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @ai_bp.route("/admin/dashboard", methods=["GET"])
-@require_role("admin")
+@require_permission("ai.admin")
 def admin_dashboard():
-    """Comprehensive AI admin dashboard data."""
+    """Return AI admin dashboard stats via service layer (ARCH-01 compliant)."""
     pid = request.args.get("program_id", type=int)
-
-    # Usage stats
-    total_calls = AIUsageLog.query.count()
-    total_tokens = db.session.query(db.func.sum(AIUsageLog.total_tokens)).scalar() or 0
-    total_cost = db.session.query(db.func.sum(AIUsageLog.cost_usd)).scalar() or 0.0
-    avg_latency = db.session.query(db.func.avg(AIUsageLog.latency_ms)).scalar() or 0.0
-    error_count = AIUsageLog.query.filter(AIUsageLog.success.is_(False)).count()
-
-    # Suggestion stats
-    suggestion_stats = SuggestionQueue.get_stats(program_id=pid)
-
-    # Embedding stats
-    embedding_stats = RAGPipeline.get_index_stats(program_id=pid)
-
-    # Recent activity (last 10 audit entries)
-    recent = AIAuditLog.query.order_by(AIAuditLog.created_at.desc()).limit(10).all()
-
-    # Provider breakdown
-    provider_stats = {}
-    for row in db.session.query(
-        AIUsageLog.provider,
-        db.func.count(AIUsageLog.id),
-        db.func.sum(AIUsageLog.cost_usd),
-    ).group_by(AIUsageLog.provider).all():
-        provider_stats[row[0]] = {"calls": row[1], "cost": round(float(row[2] or 0), 4)}
-
-    return jsonify({
-        "usage": {
-            "total_calls": total_calls,
-            "total_tokens": total_tokens,
-            "total_cost_usd": round(float(total_cost), 4),
-            "avg_latency_ms": round(float(avg_latency)),
-            "error_count": error_count,
-            "error_rate": round(error_count / max(total_calls, 1) * 100, 1),
-            "by_provider": provider_stats,
-        },
-        "suggestions": suggestion_stats,
-        "embeddings": embedding_stats,
-        "recent_activity": [a.to_dict() for a in recent],
-    })
+    stats = get_admin_dashboard_stats(tenant_id=g.tenant_id, program_id=pid)
+    return jsonify(stats)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PROMPTS
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @ai_bp.route("/prompts", methods=["GET"])
 def list_prompts():
@@ -599,6 +628,7 @@ def list_prompts():
 # ══════════════════════════════════════════════════════════════════════════════
 # NL QUERY ASSISTANT (Sprint 8 — Tasks 8.1 + 8.4)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @ai_bp.route("/query/natural-language", methods=["POST"])
 @_ai_generate_limit
@@ -621,7 +651,7 @@ def nl_query():
 
 
 @ai_bp.route("/query/execute-sql", methods=["POST"])
-@require_role("admin")
+@require_permission("ai.admin")
 @_ai_generate_limit
 def execute_validated_sql():
     """Manually execute a previously generated SQL query (read-only SELECT only).
@@ -633,9 +663,6 @@ def execute_validated_sql():
         4. Read-only DB connection via begin() — no implicit commit
         5. Error messages never leak internal DB details
     """
-    import logging
-    logger = logging.getLogger(__name__)
-
     data = request.get_json(silent=True) or {}
     sql = data.get("sql", "").strip()
     if not sql:
@@ -654,20 +681,38 @@ def execute_validated_sql():
     # ── Layer 3: Deep DML/DDL detection ──────────────────────────────
     # Normalise for detection: collapse whitespace, remove string literals
     import re
-    _detect_sql = re.sub(r"'[^']*'", "''", final_sql)           # neutralise string contents
-    _detect_sql = re.sub(r'"[^"]*"', '""', _detect_sql)       # neutralise identifiers
-    _detect_upper = re.sub(r'\s+', ' ', _detect_sql).upper()
+
+    _detect_sql = re.sub(r"'[^']*'", "''", final_sql)  # neutralise string contents
+    _detect_sql = re.sub(r'"[^"]*"', '""', _detect_sql)  # neutralise identifiers
+    _detect_upper = re.sub(r"\s+", " ", _detect_sql).upper()
 
     # Forbidden keywords anywhere in normalised SQL (not just split tokens)
     _FORBIDDEN_KW = (
-        "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE",
-        "TRUNCATE", "EXEC", "EXECUTE", "GRANT", "REVOKE",
-        "MERGE", "UPSERT", "REPLACE", "CALL", "SET ",
-        "COPY", "LOAD", "VACUUM", "REINDEX", "CLUSTER",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "DROP",
+        "ALTER",
+        "CREATE",
+        "TRUNCATE",
+        "EXEC",
+        "EXECUTE",
+        "GRANT",
+        "REVOKE",
+        "MERGE",
+        "UPSERT",
+        "REPLACE",
+        "CALL",
+        "SET ",
+        "COPY",
+        "LOAD",
+        "VACUUM",
+        "REINDEX",
+        "CLUSTER",
     )
     for kw in _FORBIDDEN_KW:
         # Use word-boundary detection to avoid false positives in column names
-        if re.search(r'\b' + kw.strip() + r'\b', _detect_upper):
+        if re.search(r"\b" + kw.strip() + r"\b", _detect_upper):
             logger.warning("SQL rejected — forbidden keyword '%s' in: %s", kw.strip(), final_sql[:200])
             return jsonify({"error": "Only read-only SELECT queries are allowed"}), 403
 
@@ -681,22 +726,21 @@ def execute_validated_sql():
         with db.session.begin_nested():
             result = db.session.execute(db.text(final_sql))
             columns = list(result.keys()) if result.returns_rows else []
-            rows = (
-                [dict(zip(columns, row)) for row in result.fetchmany(MAX_ROWS)]
-                if result.returns_rows else []
-            )
+            rows = [dict(zip(columns, row)) for row in result.fetchmany(MAX_ROWS)] if result.returns_rows else []
         # Explicitly rollback to guarantee read-only (no accidental commit)
         db.session.rollback()
 
-        return jsonify({
-            "sql": final_sql,
-            "columns": columns,
-            "results": rows,
-            "row_count": len(rows),
-            "truncated": len(rows) >= MAX_ROWS,
-            "executed": True,
-        })
-    except Exception as e:
+        return jsonify(
+            {
+                "sql": final_sql,
+                "columns": columns,
+                "results": rows,
+                "row_count": len(rows),
+                "truncated": len(rows) >= MAX_ROWS,
+                "executed": True,
+            }
+        )
+    except Exception:
         db.session.rollback()
         logger.exception("SQL execution failed for query: %s", final_sql[:200])
         # ── Layer 5: Never leak internal DB error details ────────────
@@ -706,6 +750,7 @@ def execute_validated_sql():
 # ══════════════════════════════════════════════════════════════════════════════
 # REQUIREMENT ANALYST (Sprint 8 — Tasks 8.5 + 8.7)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @ai_bp.route("/analyst/requirement/<int:req_id>", methods=["POST"])
 @_ai_generate_limit
@@ -742,6 +787,7 @@ def analyse_requirements_batch():
 # DEFECT TRIAGE (Sprint 8 — Tasks 8.8 + 8.10)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @ai_bp.route("/triage/defect/<int:defect_id>", methods=["POST"])
 @_ai_generate_limit
 def triage_defect(defect_id):
@@ -777,6 +823,7 @@ def triage_defects_batch():
 # RISK ASSESSMENT (Sprint 12)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @ai_bp.route("/assess/risk/<int:program_id>", methods=["POST"])
 @_ai_generate_limit
 def assess_risk(program_id):
@@ -807,6 +854,7 @@ def risk_signals(program_id):
 # ══════════════════════════════════════════════════════════════════════════════
 # TEST CASE GENERATOR (Sprint 12)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @ai_bp.route("/generate/test-cases", methods=["POST"])
 @_ai_generate_limit
@@ -869,6 +917,7 @@ def generate_test_cases_batch():
 # CHANGE IMPACT ANALYZER (Sprint 12)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @ai_bp.route("/analyze/change-impact", methods=["POST"])
 @_ai_generate_limit
 def analyze_change_impact():
@@ -898,6 +947,7 @@ def analyze_change_impact():
 # ══════════════════════════════════════════════════════════════════════════════
 # CUTOVER AI (Sprint 15)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @ai_bp.route("/cutover/optimize/<int:plan_id>", methods=["POST"])
 @_ai_generate_limit
@@ -942,6 +992,7 @@ def cutover_go_nogo(plan_id):
 # ══════════════════════════════════════════════════════════════════════════════
 # MEETING MINUTES (Sprint 15)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @ai_bp.route("/meeting-minutes/generate", methods=["POST"])
 @_ai_generate_limit
@@ -996,114 +1047,47 @@ def extract_meeting_actions():
 # KB VERSIONING (Sprint 9.5 — P9)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @ai_bp.route("/kb/versions", methods=["GET"])
 def list_kb_versions():
     """List all KB versions."""
-    from app.models.ai import KBVersion
-    versions = KBVersion.query.order_by(KBVersion.created_at.desc()).all()
-    return jsonify([v.to_dict() for v in versions])
+    return jsonify(list_kb_versions_service())
 
 
 @ai_bp.route("/kb/versions", methods=["POST"])
 def create_kb_version():
     """Create a new KB version."""
-    from app.models.ai import KBVersion
     data = request.get_json(silent=True) or {}
-    version = data.get("version")
-    if not version:
-        return jsonify({"error": "version is required"}), 400
-
-    existing = KBVersion.query.filter_by(version=version).first()
-    if existing:
-        return jsonify({"error": f"Version {version} already exists"}), 409
-
-    kbv = KBVersion(
-        version=version,
-        description=data.get("description", ""),
-        embedding_model=data.get("embedding_model"),
-        embedding_dim=data.get("embedding_dim"),
-        created_by=data.get("created_by", "system"),
-    )
-    db.session.add(kbv)
-    db.session.commit()
-    return jsonify(kbv.to_dict()), 201
+    payload, status_code = create_kb_version_service(data)
+    return jsonify(payload), status_code
 
 
 @ai_bp.route("/kb/versions/<int:vid>", methods=["GET"])
 def get_kb_version(vid):
     """Get a specific KB version with stats."""
-    from app.models.ai import KBVersion, AIEmbedding
-    kbv = db.session.get(KBVersion, vid)
-    if not kbv:
-        return jsonify({"error": "KB version not found"}), 404
-
-    # Count chunks for this version
-    chunk_count = AIEmbedding.query.filter_by(
-        kb_version=kbv.version, is_active=True,
-    ).count()
-
-    entity_count = db.session.query(
-        db.func.count(db.distinct(
-            db.func.concat(AIEmbedding.entity_type, "-", AIEmbedding.entity_id)
-        ))
-    ).filter_by(kb_version=kbv.version, is_active=True).scalar() or 0
-
-    result = kbv.to_dict()
-    result["live_chunks"] = chunk_count
-    result["live_entities"] = entity_count
-    return jsonify(result)
+    payload, status_code = get_kb_version_with_stats_service(vid)
+    return jsonify(payload), status_code
 
 
 @ai_bp.route("/kb/versions/<int:vid>/activate", methods=["PATCH"])
 def activate_kb_version(vid):
     """Activate a KB version (archives the currently active one)."""
-    from app.models.ai import KBVersion, AIEmbedding
-    kbv = db.session.get(KBVersion, vid)
-    if not kbv:
-        return jsonify({"error": "KB version not found"}), 404
-
-    # Deactivate embeddings from other versions
-    old_active = KBVersion.query.filter(
-        KBVersion.status == "active", KBVersion.id != kbv.id,
-    ).first()
-    if old_active:
-        AIEmbedding.query.filter_by(
-            kb_version=old_active.version, is_active=True,
-        ).update({"is_active": False})
-
-    # Activate embeddings from this version
-    AIEmbedding.query.filter_by(
-        kb_version=kbv.version,
-    ).update({"is_active": True})
-
-    kbv.activate()
-    db.session.commit()
-    return jsonify(kbv.to_dict())
+    payload, status_code = activate_kb_version_service(vid)
+    return jsonify(payload), status_code
 
 
 @ai_bp.route("/kb/versions/<int:vid>/archive", methods=["PATCH"])
 def archive_kb_version(vid):
     """Archive a KB version."""
-    from app.models.ai import KBVersion, AIEmbedding
-    kbv = db.session.get(KBVersion, vid)
-    if not kbv:
-        return jsonify({"error": "KB version not found"}), 404
-
-    if kbv.status == "active":
-        return jsonify({"error": "Cannot archive the active version. Activate another version first."}), 400
-
-    # Deactivate associated embeddings
-    AIEmbedding.query.filter_by(kb_version=kbv.version).update({"is_active": False})
-
-    kbv.archive()
-    db.session.commit()
-    return jsonify(kbv.to_dict())
+    payload, status_code = archive_kb_version_service(vid)
+    return jsonify(payload), status_code
 
 
 @ai_bp.route("/kb/stale", methods=["GET"])
 def find_stale_embeddings():
     """Find embeddings without content hashes (potential staleness)."""
     from app.ai.rag import RAGPipeline
+
     program_id = request.args.get("program_id", type=int)
     rag = RAGPipeline()
     stale = rag.find_stale_embeddings(program_id)
@@ -1113,57 +1097,20 @@ def find_stale_embeddings():
 @ai_bp.route("/kb/diff/<version_a>/<version_b>", methods=["GET"])
 def diff_kb_versions(version_a, version_b):
     """Compare two KB versions — entities added, removed, changed."""
-    from app.models.ai import AIEmbedding
-
-    entities_a = set()
-    for row in db.session.query(
-        AIEmbedding.entity_type, AIEmbedding.entity_id, AIEmbedding.content_hash,
-    ).filter_by(kb_version=version_a).distinct().all():
-        entities_a.add((row[0], row[1], row[2]))
-
-    entities_b = set()
-    for row in db.session.query(
-        AIEmbedding.entity_type, AIEmbedding.entity_id, AIEmbedding.content_hash,
-    ).filter_by(kb_version=version_b).distinct().all():
-        entities_b.add((row[0], row[1], row[2]))
-
-    # Extract entity keys (type, id)
-    keys_a = {(e[0], e[1]) for e in entities_a}
-    keys_b = {(e[0], e[1]) for e in entities_b}
-
-    added = keys_b - keys_a
-    removed = keys_a - keys_b
-    common = keys_a & keys_b
-
-    # Check for content changes in common entities
-    hash_a = {(e[0], e[1]): e[2] for e in entities_a}
-    hash_b = {(e[0], e[1]): e[2] for e in entities_b}
-    changed = [k for k in common if hash_a.get(k) != hash_b.get(k)]
-
-    return jsonify({
-        "version_a": version_a,
-        "version_b": version_b,
-        "added": [{"entity_type": k[0], "entity_id": k[1]} for k in added],
-        "removed": [{"entity_type": k[0], "entity_id": k[1]} for k in removed],
-        "changed": [{"entity_type": k[0], "entity_id": k[1]} for k in changed],
-        "unchanged": len(common) - len(changed),
-        "summary": {
-            "added_count": len(added),
-            "removed_count": len(removed),
-            "changed_count": len(changed),
-            "unchanged_count": len(common) - len(changed),
-        },
-    })
+    return jsonify(diff_kb_versions_service(version_a, version_b))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SPRINT 19 — DOC GEN ENDPOINTS
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _get_steering_pack():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_steering_pack"):
         from app.ai.assistants.steering_pack import SteeringPackGenerator
+
         current_app._ai_steering_pack = SteeringPackGenerator(
             gateway=_get_gateway(),
             rag=_get_rag(),
@@ -1175,8 +1122,10 @@ def _get_steering_pack():
 
 def _get_wricef_spec():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_wricef_spec"):
         from app.ai.assistants.wricef_spec import WRICEFSpecDrafter
+
         current_app._ai_wricef_spec = WRICEFSpecDrafter(
             gateway=_get_gateway(),
             rag=_get_rag(),
@@ -1188,8 +1137,10 @@ def _get_wricef_spec():
 
 def _get_data_quality():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_data_quality"):
         from app.ai.assistants.data_quality import DataQualityGuardian
+
         current_app._ai_data_quality = DataQualityGuardian(
             gateway=_get_gateway(),
             rag=_get_rag(),
@@ -1266,10 +1217,13 @@ def analyze_data_quality():
 # SPRINT 19 — MULTI-TURN CONVERSATION ENDPOINTS
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def _get_conversation_manager():
     from flask import current_app
+
     if not hasattr(current_app, "_ai_conversation_mgr"):
         from app.ai.conversation import ConversationManager
+
         current_app._ai_conversation_mgr = ConversationManager(
             gateway=_get_gateway(),
             prompt_registry=_get_prompt_registry(),
@@ -1349,19 +1303,24 @@ def close_conversation(conv_id):
 
 # ── S20: Performance Dashboard ───────────────────────────────────────────────
 
+
 @ai_bp.route("/performance/dashboard", methods=["GET"])
 def performance_dashboard():
     """
     Aggregated AI performance metrics: latency, cost, cache stats, top models.
     Query params: days (int, default 7), program_id (int, optional).
     """
-    from sqlalchemy import func as sqla_func
+
     days = request.args.get("days", 7, type=int)
     program_id = request.args.get("program_id", type=int)
-    cutoff = datetime.now(timezone.utc).replace(
-        hour=0, minute=0, second=0, microsecond=0,
+    cutoff = datetime.now(UTC).replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
     )
     from datetime import timedelta
+
     cutoff = cutoff - timedelta(days=days)
 
     q = AIUsageLog.query.filter(AIUsageLog.created_at >= cutoff)
@@ -1370,55 +1329,59 @@ def performance_dashboard():
 
     logs = q.all()
     if not logs:
-        return jsonify({
-            "period_days": days,
-            "total_requests": 0,
-            "avg_latency_ms": 0,
-            "total_cost_usd": 0.0,
-            "cache_hit_rate_pct": 0.0,
-            "success_rate_pct": 0.0,
-            "by_model": {},
-            "by_purpose": {},
-        })
+        return jsonify(
+            {
+                "period_days": days,
+                "total_requests": 0,
+                "avg_latency_ms": 0,
+                "total_cost_usd": 0.0,
+                "cache_hit_rate_pct": 0.0,
+                "success_rate_pct": 0.0,
+                "by_model": {},
+                "by_purpose": {},
+            }
+        )
 
     total = len(logs)
-    successes = sum(1 for l in logs if l.success)
-    cache_hits = sum(1 for l in logs if l.cache_hit)
-    total_cost = sum(l.cost_usd or 0 for l in logs)
-    latencies = [l.latency_ms for l in logs if l.latency_ms and l.success]
+    successes = sum(1 for entry in logs if entry.success)
+    cache_hits = sum(1 for entry in logs if entry.cache_hit)
+    total_cost = sum(entry.cost_usd or 0 for entry in logs)
+    latencies = [entry.latency_ms for entry in logs if entry.latency_ms and entry.success]
     avg_latency = int(sum(latencies) / len(latencies)) if latencies else 0
 
     by_model: dict[str, dict] = {}
     by_purpose: dict[str, dict] = {}
-    for l in logs:
-        m = l.model or "unknown"
+    for entry in logs:
+        m = entry.model or "unknown"
         by_model.setdefault(m, {"count": 0, "cost": 0.0, "tokens": 0})
         by_model[m]["count"] += 1
-        by_model[m]["cost"] += l.cost_usd or 0
-        by_model[m]["tokens"] += l.total_tokens or 0
+        by_model[m]["cost"] += entry.cost_usd or 0
+        by_model[m]["tokens"] += entry.total_tokens or 0
 
-        p = l.purpose or "other"
+        p = entry.purpose or "other"
         by_purpose.setdefault(p, {"count": 0, "cost": 0.0, "avg_latency": 0, "_latencies": []})
         by_purpose[p]["count"] += 1
-        by_purpose[p]["cost"] += l.cost_usd or 0
-        if l.latency_ms:
-            by_purpose[p]["_latencies"].append(l.latency_ms)
+        by_purpose[p]["cost"] += entry.cost_usd or 0
+        if entry.latency_ms:
+            by_purpose[p]["_latencies"].append(entry.latency_ms)
 
     for v in by_purpose.values():
         lats = v.pop("_latencies")
         v["avg_latency"] = int(sum(lats) / len(lats)) if lats else 0
 
-    return jsonify({
-        "period_days": days,
-        "total_requests": total,
-        "total_successes": successes,
-        "avg_latency_ms": avg_latency,
-        "total_cost_usd": round(total_cost, 6),
-        "cache_hit_rate_pct": round(cache_hits / total * 100, 1) if total else 0.0,
-        "success_rate_pct": round(successes / total * 100, 1) if total else 0.0,
-        "by_model": by_model,
-        "by_purpose": by_purpose,
-    })
+    return jsonify(
+        {
+            "period_days": days,
+            "total_requests": total,
+            "total_successes": successes,
+            "avg_latency_ms": avg_latency,
+            "total_cost_usd": round(total_cost, 6),
+            "cache_hit_rate_pct": round(cache_hits / total * 100, 1) if total else 0.0,
+            "success_rate_pct": round(successes / total * 100, 1) if total else 0.0,
+            "by_model": by_model,
+            "by_purpose": by_purpose,
+        }
+    )
 
 
 @ai_bp.route("/performance/by-assistant", methods=["GET"])
@@ -1426,7 +1389,8 @@ def performance_by_assistant():
     """Per-assistant-type aggregated performance metrics."""
     days = request.args.get("days", 7, type=int)
     from datetime import timedelta
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    cutoff = datetime.now(UTC) - timedelta(days=days)
 
     logs = AIUsageLog.query.filter(
         AIUsageLog.created_at >= cutoff,
@@ -1435,23 +1399,30 @@ def performance_by_assistant():
     ).all()
 
     assistants: dict[str, dict] = {}
-    for l in logs:
-        key = l.purpose
-        a = assistants.setdefault(key, {
-            "requests": 0, "successes": 0, "failures": 0,
-            "total_tokens": 0, "total_cost": 0.0,
-            "latencies": [], "cache_hits": 0,
-        })
+    for entry in logs:
+        key = entry.purpose
+        a = assistants.setdefault(
+            key,
+            {
+                "requests": 0,
+                "successes": 0,
+                "failures": 0,
+                "total_tokens": 0,
+                "total_cost": 0.0,
+                "latencies": [],
+                "cache_hits": 0,
+            },
+        )
         a["requests"] += 1
-        if l.success:
+        if entry.success:
             a["successes"] += 1
         else:
             a["failures"] += 1
-        a["total_tokens"] += l.total_tokens or 0
-        a["total_cost"] += l.cost_usd or 0
-        if l.latency_ms:
-            a["latencies"].append(l.latency_ms)
-        if l.cache_hit:
+        a["total_tokens"] += entry.total_tokens or 0
+        a["total_cost"] += entry.cost_usd or 0
+        if entry.latency_ms:
+            a["latencies"].append(entry.latency_ms)
+        if entry.cache_hit:
             a["cache_hits"] += 1
 
     result = {}
@@ -1469,6 +1440,7 @@ def performance_by_assistant():
 
 
 # ── S20: Cache Management ────────────────────────────────────────────────────
+
 
 @ai_bp.route("/cache/stats", methods=["GET"])
 def cache_stats():
@@ -1493,8 +1465,10 @@ def cache_clear():
 
 # ── S20: Token Budget Management ─────────────────────────────────────────────
 
+
 def _get_budget_service():
     from app.ai.budget import TokenBudgetService
+
     return TokenBudgetService()
 
 
@@ -1558,6 +1532,7 @@ def budget_status():
 # DATA MIGRATION (Sprint 21)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @ai_bp.route("/migration/analyze", methods=["POST"])
 @_ai_generate_limit
 def migration_analyze():
@@ -1614,6 +1589,7 @@ def migration_reconciliation():
 # INTEGRATION ANALYST (Sprint 21)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @ai_bp.route("/integration/dependencies", methods=["POST"])
 @_ai_generate_limit
 def integration_dependencies():
@@ -1651,6 +1627,7 @@ def integration_validate_switch():
 # ══════════════════════════════════════════════════════════════════════════════
 # FEEDBACK (Sprint 21)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @ai_bp.route("/feedback/stats", methods=["GET"])
 def feedback_stats():
@@ -1693,6 +1670,7 @@ def feedback_compute():
 # ══════════════════════════════════════════════════════════════════════════════
 # ASYNC TASKS (Sprint 21)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @ai_bp.route("/tasks", methods=["GET"])
 def list_tasks():
@@ -1748,14 +1726,17 @@ def cancel_task(task_id):
 # EXPORT (Sprint 21)
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 @ai_bp.route("/export/formats", methods=["GET"])
 def export_formats():
     """List supported export formats and document types."""
     exporter = _get_doc_exporter()
-    return jsonify({
-        "formats": ["markdown", "json"],
-        "document_types": exporter.list_exportable_types(),
-    })
+    return jsonify(
+        {
+            "formats": ["markdown", "json"],
+            "document_types": exporter.list_exportable_types(),
+        }
+    )
 
 
 @ai_bp.route("/export/<fmt>", methods=["POST"])
@@ -1785,6 +1766,7 @@ def export_document(fmt):
 # ══════════════════════════════════════════════════════════════════════════════
 # ORCHESTRATOR / WORKFLOWS (Sprint 21)
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 @ai_bp.route("/workflows", methods=["GET"])
 def list_workflows():
@@ -1825,4 +1807,128 @@ def workflow_task_status(task_id):
     result = runner.get_status(task_id)
     if not result:
         return jsonify({"error": "Workflow task not found"}), 404
+    return jsonify(result)
+
+
+# ── F4 — AI Pipeline Expansion: singleton helpers ────────────────────────────
+
+
+def _get_smart_search():
+    from flask import current_app
+
+    if not hasattr(current_app, "_ai_smart_search"):
+        current_app._ai_smart_search = SmartSearch(
+            gateway=_get_gateway(),
+            rag=_get_rag(),
+            prompt_registry=_get_prompt_registry(),
+        )
+    return current_app._ai_smart_search
+
+
+def _get_flaky_detector():
+    from flask import current_app
+
+    if not hasattr(current_app, "_ai_flaky_detector"):
+        current_app._ai_flaky_detector = FlakyTestDetector(
+            gateway=_get_gateway(),
+        )
+    return current_app._ai_flaky_detector
+
+
+def _get_predictive_coverage():
+    from flask import current_app
+
+    if not hasattr(current_app, "_ai_predictive_coverage"):
+        current_app._ai_predictive_coverage = PredictiveCoverage(
+            gateway=_get_gateway(),
+        )
+    return current_app._ai_predictive_coverage
+
+
+def _get_suite_optimizer():
+    from flask import current_app
+
+    if not hasattr(current_app, "_ai_suite_optimizer"):
+        current_app._ai_suite_optimizer = SuiteOptimizer(
+            gateway=_get_gateway(),
+        )
+    return current_app._ai_suite_optimizer
+
+
+def _get_tc_maintenance():
+    from flask import current_app
+
+    if not hasattr(current_app, "_ai_tc_maintenance"):
+        current_app._ai_tc_maintenance = TCMaintenance(
+            gateway=_get_gateway(),
+        )
+    return current_app._ai_tc_maintenance
+
+
+# ── F4 — AI Pipeline Expansion: routes ──────────────────────────────────────
+
+
+@ai_bp.route("/smart-search", methods=["POST"])
+@_ai_query_limit
+def smart_search():
+    """F4: Natural-language smart search across testing entities."""
+    data = request.get_json(silent=True) or {}
+    query = data.get("query", "").strip()
+    if not query:
+        return jsonify({"error": "query is required"}), 400
+    program_id = data.get("program_id")
+    if not program_id:
+        return jsonify({"error": "program_id is required"}), 400
+
+    searcher = _get_smart_search()
+    result = searcher.search(query, program_id)
+    return jsonify(result)
+
+
+@ai_bp.route("/programs/<int:program_id>/flaky-tests", methods=["GET"])
+@_ai_query_limit
+def flaky_tests(program_id):
+    """F4: Detect flaky tests in a program via execution oscillation analysis."""
+    window = request.args.get("window", 10, type=int)
+    threshold = request.args.get("threshold", 40, type=int)
+
+    detector = _get_flaky_detector()
+    result = detector.analyze(program_id, window=window, threshold=threshold)
+    return jsonify(result)
+
+
+@ai_bp.route("/programs/<int:program_id>/predictive-coverage", methods=["GET"])
+@_ai_query_limit
+def predictive_coverage(program_id):
+    """F4: Risk heat-map from defect density + change frequency + execution gaps."""
+    window_days = request.args.get("window_days", 30, type=int)
+
+    analyzer = _get_predictive_coverage()
+    result = analyzer.analyze(program_id, window_days=window_days)
+    return jsonify(result)
+
+
+@ai_bp.route("/testing/cycles/<int:cycle_id>/optimize-suite", methods=["POST"])
+@_ai_generate_limit
+def optimize_suite(cycle_id):
+    """F4: Risk-based test suite optimisation for a cycle."""
+    data = request.get_json(silent=True) or {}
+    confidence = data.get("confidence_target", 0.90)
+    max_tc = data.get("max_tc")
+
+    optimizer = _get_suite_optimizer()
+    result = optimizer.optimize(cycle_id, confidence_target=confidence, max_tc=max_tc)
+    if "error" in result and "not found" in result["error"]:
+        return jsonify(result), 404
+    return jsonify(result)
+
+
+@ai_bp.route("/programs/<int:program_id>/tc-maintenance", methods=["GET"])
+@_ai_query_limit
+def tc_maintenance(program_id):
+    """F4: Stale / deprecated test case detection and maintenance advice."""
+    stale_days = request.args.get("stale_days", 90, type=int)
+
+    advisor = _get_tc_maintenance()
+    result = advisor.analyze(program_id, stale_days=stale_days)
     return jsonify(result)

@@ -5,6 +5,7 @@ markers = [
     "integration: Cross-module integration tests",
     "performance: Performance / benchmark tests (slow, optional)",
     "ai_accuracy: AI assistant accuracy baseline tests (requires API key)",
+    "phase3: Phase 3 hardening and governance test scenarios",
     "slow: Tests that take > 5 seconds",
 ]
 # Default: run unit + integration only (skip performance/ai_accuracy)

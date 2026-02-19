@@ -27,14 +27,28 @@ const App = (() => {
         // Legacy SCOPE views removed — FE-Sprint 1
         backlog:      () => BacklogView.render(),
         'test-planning':      () => TestPlanningView.render(),
+        'test-case-detail':   (id) => TestCaseDetailView.render(id),
         'test-execution':     () => TestExecutionView.render(),
         'defect-management':  () => DefectManagementView.render(),
+        'approvals':          () => ApprovalsView.render(),
         integration:  () => IntegrationView.render(),
         'data-factory': () => DataFactoryView.render(),
         cutover:      () => CutoverView.render(),
         raid:         () => RaidView.render(),
         reports:      () => ReportsView.render(),
+        'dashboard-f5': () => DashboardView.render(),
+        'suite-folders': () => SuiteFoldersView.render(),
+        'env-matrix': () => EnvMatrixView.render(),
+        'bdd-editor': () => BddEditorView.render(),
+        'data-driven': () => DataDrivenView.render(),
+        'exploratory': () => ExploratoryView.render(),
+        'evidence': () => EvidenceCaptureView.render(),
+        'custom-fields': () => CustomFieldsView.render(),
+        'integrations': () => IntegrationsView.init(window.currentProgramId),
+        'observability': () => ObservabilityView.init(),
+        'gate-criteria': () => GateCriteriaView.render(document.getElementById('main-content')),
         'project-setup': () => ProjectSetupView.render(),
+        'ai-insights': () => AIInsightsView.render(),
         'ai-query':   () => AIQueryView.render(),
         'ai-admin':   () => AIAdminView.render(),
         // Explore Phase views
@@ -51,8 +65,9 @@ const App = (() => {
     // Views that require a program to be selected
     const programRequiredViews = new Set([
         'executive-cockpit',
-        'backlog', 'test-planning', 'test-execution', 'defect-management', 'integration', 'data-factory', 'cutover', 'raid',
-        'reports', 'project-setup', 'ai-query',
+        'backlog', 'test-planning', 'test-execution', 'defect-management', 'approvals', 'integration', 'data-factory', 'cutover', 'raid',
+        'test-case-detail',
+        'reports', 'dashboard-f5', 'suite-folders', 'env-matrix', 'bdd-editor', 'data-driven', 'exploratory', 'evidence', 'custom-fields', 'integrations', 'observability', 'gate-criteria', 'project-setup', 'ai-insights', 'ai-query',
         'explore-dashboard', 'explore-hierarchy', 'explore-workshops', 'explore-workshop-detail', 'explore-requirements',
     ]);
 
@@ -114,7 +129,7 @@ const App = (() => {
     }
 
     // ── Navigation ───────────────────────────────────────────────────────
-    function navigate(viewName) {
+    function navigate(viewName, ...args) {
         if (!views[viewName]) return;
 
         // Guard: program-required views need an active program
@@ -135,7 +150,7 @@ const App = (() => {
         });
 
         // Render the view
-        views[viewName]();
+        views[viewName](...args);
     }
 
     // ── Dashboard (Program-Specific) ─────────────────────────────────────

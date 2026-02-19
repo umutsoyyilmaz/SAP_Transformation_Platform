@@ -552,7 +552,7 @@ const TestPlanDetailView = (() => {
             <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid #f0f0f0">
                 <div>
                     <strong>${esc(s.name)}</strong>
-                    <span class="badge" style="background:#eee;color:#666;margin-left:6px">${esc(s.suite_type || 'general')}</span>
+                    <span class="badge" style="background:#eee;color:#666;margin-left:6px">${esc(s.purpose || s.suite_type || 'general')}</span>
                     ${s.module ? `<span style="color:#999;font-size:12px;margin-left:6px">${esc(s.module)}</span>` : ''}
                 </div>
                 <button class="btn btn-primary btn-sm" onclick="TestPlanDetailView.executeImportSuite(${s.id})">Import</button>

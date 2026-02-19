@@ -24,14 +24,17 @@ Covers:
 """
 
 import pytest
+import uuid
 
 from app import create_app
 from app.models import db as _db
 from app.models.program import Program
 from app.models.requirement import Requirement
+from app.models.explore.process import ProcessLevel
 from app.models.testing import (
     TestPlan, TestCycle, TestCase, TestExecution, Defect,
     TestSuite, TestStep, TestCaseDependency, TestCycleSuite,
+    TestCaseVersion,
     UATSignOff, PerfTestResult, TestDailySnapshot,
     VALID_TRANSITIONS, validate_defect_transition,
 )
@@ -116,7 +119,32 @@ def _create_cycle(client, plan_id, **overrides):
 
 
 def _create_case(client, pid, **overrides):
-    payload = {"title": "Verify FI posting", "test_layer": "sit", "module": "FI"}
+    l3 = ProcessLevel.query.filter_by(project_id=pid, level=3, code="OTC-010").first()
+    if not l3:
+        l1 = ProcessLevel(
+            project_id=pid, level=1, code="VC-01", name="Value Chain", sort_order=0,
+        )
+        _db.session.add(l1)
+        _db.session.flush()
+        l2 = ProcessLevel(
+            project_id=pid, level=2, code="PA-01", name="Process Area",
+            parent_id=l1.id, sort_order=0,
+        )
+        _db.session.add(l2)
+        _db.session.flush()
+        l3 = ProcessLevel(
+            project_id=pid, level=3, code="OTC-010", name="Order to Cash",
+            parent_id=l2.id, scope_item_code="J58", sort_order=0,
+        )
+        _db.session.add(l3)
+        _db.session.commit()
+
+    payload = {
+        "title": "Verify FI posting",
+        "test_layer": "sit",
+        "module": "FI",
+        "process_level_id": l3.id,
+    }
     payload.update(overrides)
     res = client.post(f"/api/v1/programs/{pid}/testing/catalog", json=payload)
     assert res.status_code == 201
@@ -282,6 +310,16 @@ class TestTestCases:
         res = client.post(f"/api/v1/programs/{p['id']}/testing/catalog", json={"module": "FI"})
         assert res.status_code == 400
 
+    def test_create_case_missing_l3_for_required_layer(self, client):
+        p = _create_program(client)
+        res = client.post(
+            f"/api/v1/programs/{p['id']}/testing/catalog",
+            json={"title": "No L3", "module": "FI", "test_layer": "sit"},
+        )
+        assert res.status_code == 400
+        data = res.get_json()
+        assert "process_level_id" in data["error"]
+
     def test_list_cases(self, client):
         p = _create_program(client)
         _create_case(client, p["id"], title="Case A")
@@ -357,6 +395,75 @@ class TestTestCases:
         tc2 = _create_case(client, p["id"], title="Second", module="SD")
         assert tc1["code"] == "TC-SD-0001"
         assert tc2["code"] == "TC-SD-0002"
+
+
+class TestTestCaseVersioning:
+    def test_create_case_auto_creates_initial_version(self, client):
+        p = _create_program(client)
+        tc = _create_case(client, p["id"], title="Versioned Case")
+
+        versions = client.get(f"/api/v1/testing/catalog/{tc['id']}/versions")
+        assert versions.status_code == 200
+        data = versions.get_json()
+        assert len(data) == 1
+        assert data[0]["version_no"] == 1
+        assert data[0]["is_current"] is True
+
+    def test_update_case_creates_new_version(self, client):
+        p = _create_program(client)
+        tc = _create_case(client, p["id"], title="Versioned Case")
+
+        res = client.put(
+            f"/api/v1/testing/catalog/{tc['id']}",
+            json={"title": "Versioned Case Updated", "change_summary": "title changed"},
+        )
+        assert res.status_code == 200
+
+        versions = client.get(f"/api/v1/testing/catalog/{tc['id']}/versions").get_json()
+        assert len(versions) == 2
+        assert versions[0]["version_no"] == 2
+        assert versions[0]["is_current"] is True
+        assert versions[1]["is_current"] is False
+
+    def test_manual_snapshot_endpoint(self, client):
+        p = _create_program(client)
+        tc = _create_case(client, p["id"], title="Manual Snapshot")
+
+        res = client.post(
+            f"/api/v1/testing/catalog/{tc['id']}/versions",
+            json={"change_summary": "baseline snapshot", "version_label": "1.1"},
+        )
+        assert res.status_code == 201
+        payload = res.get_json()
+        assert payload["version_no"] == 2
+        assert payload["version_label"] == "1.1"
+
+    def test_version_diff_endpoint(self, client):
+        p = _create_program(client)
+        tc = _create_case(client, p["id"], title="Diff Case")
+        client.put(f"/api/v1/testing/catalog/{tc['id']}", json={"title": "Diff Case v2", "priority": "high"})
+
+        res = client.get(f"/api/v1/testing/catalog/{tc['id']}/versions/diff?from=1&to=2")
+        assert res.status_code == 200
+        diff = res.get_json()["diff"]
+        assert diff["summary"]["field_change_count"] >= 1
+        changed_fields = {x["field"] for x in diff["field_changes"]}
+        assert "title" in changed_fields
+
+    def test_restore_version_endpoint(self, client):
+        p = _create_program(client)
+        tc = _create_case(client, p["id"], title="Restore Case", priority="medium")
+        client.put(f"/api/v1/testing/catalog/{tc['id']}", json={"title": "Restore Case v2", "priority": "critical"})
+
+        restore = client.post(f"/api/v1/testing/catalog/{tc['id']}/versions/1/restore", json={})
+        assert restore.status_code == 200
+
+        current = client.get(f"/api/v1/testing/catalog/{tc['id']}").get_json()
+        assert current["title"] == "Restore Case"
+        assert current["priority"] == "medium"
+
+        version_count = TestCaseVersion.query.filter_by(test_case_id=tc["id"]).count()
+        assert version_count == 3
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -836,6 +943,106 @@ class TestTestSuites:
         assert res.status_code == 404
 
 
+class TestSuiteNMEndpoints:
+    """ADR-008: Suite ↔ TestCase N:M endpoint coverage."""
+
+    def test_add_case_to_multiple_suites(self, client):
+        p = _create_program(client)
+        suite_a = _create_suite(client, p["id"], name="Suite A")
+        suite_b = _create_suite(client, p["id"], name="Suite B")
+        tc = _create_case(client, p["id"], title="Multi-suite case")
+
+        r1 = client.post(
+            f"/api/v1/testing/suites/{suite_a['id']}/cases",
+            json={"test_case_id": tc["id"]},
+        )
+        r2 = client.post(
+            f"/api/v1/testing/suites/{suite_b['id']}/cases",
+            json={"test_case_id": tc["id"]},
+        )
+        assert r1.status_code == 201
+        assert r2.status_code == 201
+
+        suites_res = client.get(f"/api/v1/testing/catalog/{tc['id']}/suites")
+        assert suites_res.status_code == 200
+        suite_ids = {x["suite_id"] for x in suites_res.get_json()}
+        assert suite_ids == {suite_a["id"], suite_b["id"]}
+
+    def test_add_case_to_suite_duplicate_returns_409(self, client):
+        p = _create_program(client)
+        suite = _create_suite(client, p["id"])
+        tc = _create_case(client, p["id"])
+
+        first = client.post(
+            f"/api/v1/testing/suites/{suite['id']}/cases",
+            json={"test_case_id": tc["id"]},
+        )
+        second = client.post(
+            f"/api/v1/testing/suites/{suite['id']}/cases",
+            json={"test_case_id": tc["id"]},
+        )
+        assert first.status_code == 201
+        assert second.status_code == 409
+
+    def test_remove_case_from_suite_keeps_other_links(self, client):
+        p = _create_program(client)
+        suite_a = _create_suite(client, p["id"], name="Suite A")
+        suite_b = _create_suite(client, p["id"], name="Suite B")
+        tc = _create_case(client, p["id"], title="Shared case")
+
+        client.post(
+            f"/api/v1/testing/suites/{suite_a['id']}/cases",
+            json={"test_case_id": tc["id"]},
+        )
+        client.post(
+            f"/api/v1/testing/suites/{suite_b['id']}/cases",
+            json={"test_case_id": tc["id"]},
+        )
+
+        rem = client.delete(f"/api/v1/testing/suites/{suite_a['id']}/cases/{tc['id']}")
+        assert rem.status_code == 204
+
+        suites_res = client.get(f"/api/v1/testing/catalog/{tc['id']}/suites")
+        assert suites_res.status_code == 200
+        suite_ids = {x["suite_id"] for x in suites_res.get_json()}
+        assert suite_ids == {suite_b["id"]}
+
+    def test_list_suite_cases(self, client):
+        p = _create_program(client)
+        suite = _create_suite(client, p["id"])
+        tc = _create_case(client, p["id"])
+
+        add = client.post(
+            f"/api/v1/testing/suites/{suite['id']}/cases",
+            json={"test_case_id": tc["id"], "added_method": "manual"},
+        )
+        assert add.status_code == 201
+
+        res = client.get(f"/api/v1/testing/suites/{suite['id']}/cases")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert len(data) == 1
+        assert data[0]["test_case_id"] == tc["id"]
+        assert data[0]["suite_id"] == suite["id"]
+
+    def test_add_case_to_suite_requires_test_case_id(self, client):
+        p = _create_program(client)
+        suite = _create_suite(client, p["id"])
+        res = client.post(f"/api/v1/testing/suites/{suite['id']}/cases", json={})
+        assert res.status_code == 400
+
+    def test_remove_case_from_suite_link_not_found(self, client):
+        p = _create_program(client)
+        suite = _create_suite(client, p["id"])
+        tc = _create_case(client, p["id"])
+        res = client.delete(f"/api/v1/testing/suites/{suite['id']}/cases/{tc['id']}")
+        assert res.status_code == 404
+
+    def test_list_tc_suites_not_found(self, client):
+        res = client.get("/api/v1/testing/catalog/99999/suites")
+        assert res.status_code == 404
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # TEST STEPS
 # ═════════════════════════════════════════════════════════════════════════════
@@ -960,6 +1167,34 @@ class TestTestCaseSuiteIntegration:
         data = res.get_json()
         assert "steps" in data
         assert len(data["steps"]) == 2
+
+    def test_create_case_with_suite_ids_without_legacy_suite_id(self, client):
+        p = _create_program(client)
+        suite_a = _create_suite(client, p["id"], name="Suite A")
+        suite_b = _create_suite(client, p["id"], name="Suite B")
+
+        tc = _create_case(
+            client,
+            p["id"],
+            title="Create with suite_ids only",
+            suite_ids=[suite_a["id"], suite_b["id"]],
+        )
+        assert set(tc["suite_ids"]) == {suite_a["id"], suite_b["id"]}
+
+    def test_update_case_with_suite_ids_without_legacy_suite_id(self, client):
+        p = _create_program(client)
+        suite_a = _create_suite(client, p["id"], name="Suite A")
+        suite_b = _create_suite(client, p["id"], name="Suite B")
+        tc = _create_case(client, p["id"])
+
+        res = client.put(
+            f"/api/v1/testing/catalog/{tc['id']}",
+            json={"suite_ids": [suite_a["id"], suite_b["id"]]},
+        )
+        assert res.status_code == 200
+        updated = res.get_json()
+        assert set(updated["suite_ids"]) == {suite_a["id"], suite_b["id"]}
+        assert updated.get("suite_id") is None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2060,6 +2295,11 @@ class TestGenerateFromWricef:
         data = res.get_json()
         assert data["count"] == 1
         assert len(data["test_case_ids"]) == 1
+        tc_id = data["test_case_ids"][0]
+        tc_res = client.get(f"/api/v1/testing/catalog/{tc_id}")
+        assert tc_res.status_code == 200
+        tc = tc_res.get_json()
+        assert suite["id"] in tc["suite_ids"]
 
     def test_generate_from_wricef_empty(self, client):
         p = _create_program(client)
@@ -2146,6 +2386,11 @@ class TestGenerateFromProcess:
         assert res.status_code == 201
         data = res.get_json()
         assert data["count"] == 1
+        tc_id = data["test_case_ids"][0]
+        tc_res = client.get(f"/api/v1/testing/catalog/{tc_id}")
+        assert tc_res.status_code == 200
+        tc = tc_res.get_json()
+        assert suite["id"] in tc["suite_ids"]
 
     def test_generate_from_process_missing_scope(self, client):
         p = _create_program(client)
@@ -2165,3 +2410,309 @@ class TestGenerateFromProcess:
         res = client.post("/api/v1/testing/suites/99999/generate-from-process",
                           json={"scope_item_ids": ["abc"]})
         assert res.status_code == 404
+
+
+class TestL3ScopeCoverage:
+    """ADR-008: L3 scope coverage endpoint."""
+
+    def _make_l3_tree(self, app, pid):
+        from app.models.explore import ProcessLevel
+
+        with app.app_context():
+            l3_id = str(uuid.uuid4())
+            l4_id = str(uuid.uuid4())
+            l3 = ProcessLevel(
+                id=l3_id, project_id=pid, level=3,
+                code="J58", name="Order to Cash", scope_item_code="J58",
+                process_area_code="SD",
+            )
+            _db.session.add(l3)
+            l4 = ProcessLevel(
+                id=l4_id, project_id=pid, parent_id=l3_id, level=4,
+                code="J58.01", name="Create Sales Order", process_area_code="SD",
+            )
+            _db.session.add(l4)
+            _db.session.commit()
+        return l3_id, l4_id
+
+    def test_l3_coverage_includes_process_steps(self, client, app):
+        from app.models.explore import ProcessStep, ExploreWorkshop
+
+        p = _create_program(client)
+        l3_id, l4_id = self._make_l3_tree(app, p["id"])
+
+        with app.app_context():
+            ws = ExploreWorkshop(
+                id=str(uuid.uuid4()), project_id=p["id"],
+                code="WS-SD-01", name="SD Workshop", process_area="SD",
+            )
+            _db.session.add(ws)
+            _db.session.flush()
+            ps = ProcessStep(workshop_id=ws.id, process_level_id=l4_id, sort_order=1, fit_decision="fit")
+            _db.session.add(ps)
+            _db.session.commit()
+
+        _create_case(client, p["id"], process_level_id=l3_id)
+
+        res = client.get(f"/api/v1/programs/{p['id']}/testing/scope-coverage/{l3_id}")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert len(data["process_steps"]) >= 1
+
+    def test_l3_coverage_includes_gap_requirements(self, client, app):
+        from app.models.explore.requirement import ExploreRequirement
+        from app.models.backlog import BacklogItem
+
+        p = _create_program(client)
+        l3_id, _l4_id = self._make_l3_tree(app, p["id"])
+
+        with app.app_context():
+            ereq = ExploreRequirement(
+                id=str(uuid.uuid4()), project_id=p["id"],
+                code="REQ-GAP", title="Gap Requirement", created_by_id="test-user-1",
+                scope_item_id=l3_id,
+            )
+            _db.session.add(ereq)
+            _db.session.flush()
+            bi = BacklogItem(
+                program_id=p["id"], code="ENH-SD-001", title="Gap Dev",
+                wricef_type="enhancement", module="SD", explore_requirement_id=ereq.id,
+            )
+            _db.session.add(bi)
+            _db.session.commit()
+            bi_id = bi.id
+
+        _create_case(client, p["id"], process_level_id=l3_id, backlog_item_id=bi_id, test_layer="unit")
+
+        res = client.get(f"/api/v1/programs/{p['id']}/testing/scope-coverage/{l3_id}")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert len(data["requirements"]) >= 1
+        assert len(data["requirements"][0]["backlog_items"]) >= 1
+
+    def test_l3_coverage_includes_interfaces(self, client, app):
+        from app.models.explore.requirement import ExploreRequirement
+        from app.models.backlog import BacklogItem
+        from app.models.integration import Interface
+
+        p = _create_program(client)
+        l3_id, _l4_id = self._make_l3_tree(app, p["id"])
+
+        with app.app_context():
+            ereq = ExploreRequirement(
+                id=str(uuid.uuid4()), project_id=p["id"],
+                code="REQ-IF", title="Interface Req", created_by_id="test-user-1",
+                scope_item_id=l3_id,
+            )
+            _db.session.add(ereq)
+            _db.session.flush()
+            bi = BacklogItem(
+                program_id=p["id"], code="IF-BI-001", title="Interface BI",
+                wricef_type="interface", module="SD", explore_requirement_id=ereq.id,
+            )
+            _db.session.add(bi)
+            _db.session.flush()
+            iface = Interface(
+                program_id=p["id"], backlog_item_id=bi.id,
+                code="IF-SD-001", name="Sales Interface", direction="outbound",
+            )
+            _db.session.add(iface)
+            _db.session.commit()
+
+        _create_case(client, p["id"], process_level_id=l3_id, title="Validate IF-SD-001 flow")
+
+        res = client.get(f"/api/v1/programs/{p['id']}/testing/scope-coverage/{l3_id}")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert len(data["interfaces"]) >= 1
+        assert data["interfaces"][0]["code"] == "IF-SD-001"
+
+    def test_l3_coverage_readiness_calculation(self, client, app):
+        p = _create_program(client)
+        l3_id, _l4_id = self._make_l3_tree(app, p["id"])
+
+        tc_pass = _create_case(client, p["id"], process_level_id=l3_id, title="Pass Case")
+        tc_fail = _create_case(client, p["id"], process_level_id=l3_id, title="Fail Case")
+
+        plan = _create_plan(client, p["id"])
+        cycle = _create_cycle(client, plan["id"])
+        _create_execution(client, cycle["id"], tc_pass["id"], result="pass")
+        _create_execution(client, cycle["id"], tc_fail["id"], result="fail")
+
+        res = client.get(f"/api/v1/programs/{p['id']}/testing/scope-coverage/{l3_id}")
+        assert res.status_code == 200
+        summary = res.get_json()["summary"]
+        assert summary["total_test_cases"] == 2
+        assert summary["failed"] >= 1
+        assert summary["readiness"] == "not_ready"
+
+    def test_l3_coverage_missing_tc_shown_as_gap(self, client, app):
+        from app.models.explore.requirement import ExploreRequirement
+
+        p = _create_program(client)
+        l3_id, _l4_id = self._make_l3_tree(app, p["id"])
+
+        with app.app_context():
+            ereq = ExploreRequirement(
+                id=str(uuid.uuid4()), project_id=p["id"],
+                code="REQ-GAP2", title="Uncovered Requirement", created_by_id="test-user-1",
+                scope_item_id=l3_id,
+            )
+            _db.session.add(ereq)
+            _db.session.commit()
+
+        res = client.get(f"/api/v1/programs/{p['id']}/testing/scope-coverage/{l3_id}")
+        assert res.status_code == 200
+        summary = res.get_json()["summary"]
+        assert summary["requirement_coverage"] == "0/1"
+
+    def test_l3_coverage_not_found(self, client):
+        p = _create_program(client)
+        res = client.get(f"/api/v1/programs/{p['id']}/testing/scope-coverage/nonexistent-l3")
+        assert res.status_code == 404
+
+
+@pytest.mark.phase3
+class TestTraceabilityOverridesPhase3:
+    """Phase-3 hardening: derived + override/exclude API contract checks."""
+
+    def _seed_traceability_graph(self, app, pid):
+        from app.models.explore.requirement import ExploreRequirement
+        from app.models.backlog import BacklogItem, ConfigItem
+
+        l3 = ProcessLevel.query.filter_by(project_id=pid, level=3, code="OTC-010").first()
+        if not l3:
+            l1 = ProcessLevel(
+                project_id=pid, level=1, code="VC-01", name="Value Chain", sort_order=0,
+            )
+            _db.session.add(l1)
+            _db.session.flush()
+            l2 = ProcessLevel(
+                project_id=pid, level=2, code="PA-01", name="Process Area",
+                parent_id=l1.id, sort_order=0,
+            )
+            _db.session.add(l2)
+            _db.session.flush()
+            l3 = ProcessLevel(
+                project_id=pid, level=3, code="OTC-010", name="Order to Cash",
+                parent_id=l2.id, scope_item_code="J58", sort_order=0,
+            )
+            _db.session.add(l3)
+            _db.session.flush()
+
+        ereq = ExploreRequirement(
+            id=str(uuid.uuid4()),
+            project_id=pid,
+            code="REQ-TC-OVR",
+            title="Traceability Requirement",
+            created_by_id="test-user-1",
+            scope_item_id=l3.id,
+        )
+        _db.session.add(ereq)
+        _db.session.flush()
+
+        backlog = BacklogItem(
+            program_id=pid,
+            code="ENH-TC-OVR",
+            title="Traceability WRICEF",
+            wricef_type="enhancement",
+            module="SD",
+            explore_requirement_id=ereq.id,
+        )
+        _db.session.add(backlog)
+        _db.session.flush()
+
+        cfg = ConfigItem(
+            program_id=pid,
+            code="CFG-TC-OVR",
+            title="Traceability Config",
+            module="SD",
+            explore_requirement_id=ereq.id,
+        )
+        _db.session.add(cfg)
+        _db.session.commit()
+
+        return {
+            "l3_id": l3.id,
+            "requirement_id": ereq.id,
+            "backlog_id": backlog.id,
+            "config_id": cfg.id,
+        }
+
+    def test_traceability_derived_endpoint_returns_expected_summary(self, client, app):
+        p = _create_program(client)
+        with app.app_context():
+            seeded = self._seed_traceability_graph(app, p["id"])
+
+        tc = _create_case(
+            client,
+            p["id"],
+            process_level_id=seeded["l3_id"],
+            traceability_links=[{
+                "l3_process_level_id": seeded["l3_id"],
+                "explore_requirement_ids": [seeded["requirement_id"]],
+                "backlog_item_ids": [seeded["backlog_id"]],
+                "config_item_ids": [seeded["config_id"]],
+            }],
+        )
+
+        res = client.get(f"/api/v1/testing/catalog/{tc['id']}/traceability-derived")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["test_case_id"] == tc["id"]
+        assert data["summary"]["group_count"] == 1
+        group = data["groups"][0]
+        assert group["summary"]["derived_requirements"] >= 1
+        assert group["summary"]["derived_wricef"] >= 1
+        assert group["summary"]["derived_config_items"] >= 1
+
+    def test_traceability_overrides_updates_manual_and_excluded(self, client, app):
+        p = _create_program(client)
+        with app.app_context():
+            seeded = self._seed_traceability_graph(app, p["id"])
+
+        tc = _create_case(
+            client,
+            p["id"],
+            process_level_id=seeded["l3_id"],
+            traceability_links=[{
+                "l3_process_level_id": seeded["l3_id"],
+            }],
+        )
+
+        put_res = client.put(
+            f"/api/v1/testing/catalog/{tc['id']}/traceability-overrides",
+            json={
+                "traceability_links": [{
+                    "l3_process_level_id": seeded["l3_id"],
+                    "manual_requirement_ids": [seeded["requirement_id"]],
+                    "manual_backlog_item_ids": [seeded["backlog_id"]],
+                    "manual_config_item_ids": [seeded["config_id"]],
+                    "excluded_requirement_ids": [seeded["requirement_id"]],
+                    "excluded_backlog_item_ids": [seeded["backlog_id"]],
+                    "excluded_config_item_ids": [seeded["config_id"]],
+                }],
+            },
+            headers={"X-User": "phase3-test"},
+        )
+        assert put_res.status_code == 200
+        put_data = put_res.get_json()
+        assert put_data["message"] == "Traceability overrides updated"
+        assert len(put_data["traceability_links"]) == 1
+
+        derived_res = client.get(f"/api/v1/testing/catalog/{tc['id']}/traceability-derived")
+        assert derived_res.status_code == 200
+        derived = derived_res.get_json()
+        group = derived["groups"][0]
+        assert group["summary"]["manual_additions"] == 3
+        assert group["summary"]["not_covered"] >= 3
+        assert derived["summary"]["not_covered_total"] >= 3
+
+    def test_traceability_overrides_requires_traceability_links(self, client):
+        p = _create_program(client)
+        tc = _create_case(client, p["id"])
+        res = client.put(
+            f"/api/v1/testing/catalog/{tc['id']}/traceability-overrides",
+            json={},
+        )
+        assert res.status_code == 400

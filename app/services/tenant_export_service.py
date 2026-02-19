@@ -85,6 +85,7 @@ def _export_programs(tenant_id):
             for p in programs
         ]
     except Exception:
+        logger.warning("Failed to export programs for tenant_id=%s", tenant_id, exc_info=True)
         return []
 
 

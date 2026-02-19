@@ -8,6 +8,7 @@ Usage:
     app = create_app("testing")  # explicit config
 """
 
+import logging
 import os
 
 from flask import Flask, send_from_directory
@@ -23,6 +24,8 @@ from app.tenant import init_tenant_support
 from app.middleware.logging_config import configure_logging
 from app.middleware.timing import init_request_timing
 from app.middleware.diagnostics import run_startup_diagnostics
+
+logger = logging.getLogger(__name__)
 from app.middleware.security_headers import init_security_headers
 from app.middleware.basic_auth import init_basic_auth
 from app.middleware.rate_limiter import init_rate_limits
@@ -234,6 +237,14 @@ def create_app(config_name=None):
     from app.models import base as _base_models               # noqa: F401
     from app.models import feature_flag as _feature_flag_models  # noqa: F401
     from app.models import soft_delete as _soft_delete_models    # noqa: F401
+    from app.models import reporting as _reporting_models        # noqa: F401
+    from app.models import folders_env as _folders_env_models    # noqa: F401
+    from app.models import bdd_parametric as _bdd_parametric_models  # noqa: F401
+    from app.models import exploratory_evidence as _exploratory_evidence_models  # noqa: F401
+    from app.models import custom_fields as _custom_fields_models  # noqa: F401
+    from app.models import integrations as _integrations_models  # noqa: F401
+    from app.models import observability as _observability_models  # noqa: F401
+    from app.models import gate_criteria as _gate_criteria_models  # noqa: F401
 
     # ── Auto-create tables (safe for production — CREATE IF NOT EXISTS) ──
     with app.app_context():
@@ -280,6 +291,14 @@ def create_app(config_name=None):
     from app.blueprints.dashboard_bp import dashboard_bp
     from app.blueprints.onboarding_bp import onboarding_bp
     from app.blueprints.tenant_export_bp import tenant_export_bp
+    from app.blueprints.approval_bp import approval_bp
+    from app.blueprints.folders_env_bp import folders_env_bp
+    from app.blueprints.bdd_parametric_bp import bdd_parametric_bp
+    from app.blueprints.exploratory_evidence_bp import exploratory_evidence_bp
+    from app.blueprints.custom_fields_bp import custom_fields_bp
+    from app.blueprints.integrations_bp import integrations_bp
+    from app.blueprints.observability_bp import observability_bp
+    from app.blueprints.gate_criteria_bp import gate_criteria_bp
 
     app.register_blueprint(program_bp)
     app.register_blueprint(backlog_bp)
@@ -312,6 +331,14 @@ def create_app(config_name=None):
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(onboarding_bp)
     app.register_blueprint(tenant_export_bp)
+    app.register_blueprint(approval_bp)
+    app.register_blueprint(folders_env_bp)
+    app.register_blueprint(bdd_parametric_bp)
+    app.register_blueprint(exploratory_evidence_bp)
+    app.register_blueprint(custom_fields_bp)
+    app.register_blueprint(integrations_bp)
+    app.register_blueprint(observability_bp)
+    app.register_blueprint(gate_criteria_bp)
 
     # ── Blueprint Permission Guards (Sprint 6) ──────────────────────────
     from app.middleware.blueprint_permissions import apply_all_blueprint_permissions
@@ -324,7 +351,7 @@ def create_app(config_name=None):
         from app.services.spec_template_service import seed_default_templates
         count = seed_default_templates()
         db.session.commit()
-        print(f"Seeded {count} new spec templates.")
+        logger.info("Seeded %s new spec templates.", count)
 
     # ── SPA catch-all ────────────────────────────────────────────────────
     @app.route("/")

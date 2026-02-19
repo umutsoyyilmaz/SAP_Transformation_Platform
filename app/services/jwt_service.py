@@ -138,3 +138,123 @@ def hash_token(token: str) -> str:
 def generate_invite_token() -> str:
     """Generate a secure random invite token."""
     return uuid.uuid4().hex + uuid.uuid4().hex  # 64 hex chars
+
+
+# ═══════════════════════════════════════════════════════════════
+# Session Management
+# All session persistence belongs in this service, not in blueprints.
+# ═══════════════════════════════════════════════════════════════
+
+def create_session(
+    user_id: int,
+    token_hash: str,
+    ip_address: str | None,
+    user_agent: str | None,
+    expires_at: datetime,
+) -> "Session":
+    """
+    Persist a new authenticated session to the database.
+
+    Keeps session creation out of blueprints so the transaction
+    boundary remains inside the service layer.
+    """
+    from app.models.auth import Session
+    from app.models import db
+
+    session = Session(
+        user_id=user_id,
+        token_hash=token_hash,
+        ip_address=ip_address,
+        user_agent=(user_agent or "")[:500],
+        expires_at=expires_at,
+    )
+    db.session.add(session)
+    db.session.commit()
+    return session
+
+
+def revoke_session(session: "Session") -> None:
+    """
+    Mark a session as inactive and commit.
+
+    Used when an expired or invalid session is detected during token refresh.
+    """
+    from app.models import db
+
+    session.is_active = False
+    db.session.commit()
+
+
+def revoke_session_by_token(token_hash: str) -> bool:
+    """
+    Find an active session by token hash and revoke it.
+
+    Returns True if a session was found and revoked, False otherwise.
+    """
+    from app.models.auth import Session
+    from app.models import db
+
+    session = Session.query.filter_by(token_hash=token_hash, is_active=True).first()
+    if session:
+        session.is_active = False
+        db.session.commit()
+        return True
+    return False
+
+
+def revoke_all_user_sessions(user_id: int) -> None:
+    """
+    Revoke all active sessions for a user (logout-everywhere flow).
+
+    Centralised here so blueprints never touch db.session.commit().
+    """
+    from app.models.auth import Session
+    from app.models import db
+
+    Session.query.filter_by(user_id=user_id, is_active=True).update({"is_active": False})
+    db.session.commit()
+
+
+def rotate_session(
+    old_session: "Session",
+    user_id: int,
+    new_token_hash: str,
+    new_expires_at: datetime,
+    ip_address: str | None,
+    user_agent: str | None,
+) -> "Session":
+    """
+    Invalidate the old session and atomically create a replacement.
+
+    Token rotation prevents refresh token reuse; both operations are
+    committed in a single transaction.
+    """
+    from app.models.auth import Session
+    from app.models import db
+
+    old_session.is_active = False
+    old_session.last_used_at = datetime.now(timezone.utc)
+
+    new_session = Session(
+        user_id=user_id,
+        token_hash=new_token_hash,
+        ip_address=ip_address,
+        user_agent=(user_agent or "")[:500],
+        expires_at=new_expires_at,
+    )
+    db.session.add(new_session)
+    db.session.commit()
+    return new_session
+
+
+def get_active_session_by_token(user_id: int, token_hash: str) -> "Session | None":
+    """
+    Retrieve a currently active session for the given user and token hash.
+
+    Centralised here so blueprint layer never needs to import Session directly.
+    """
+    from app.models.auth import Session
+
+    return Session.query.filter_by(
+        user_id=user_id, token_hash=token_hash, is_active=True
+    ).first()

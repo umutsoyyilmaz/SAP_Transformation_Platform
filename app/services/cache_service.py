@@ -171,7 +171,7 @@ def get_cached(key, ttl=DEFAULT_TTL, loader=None):
         try:
             return json.loads(raw)
         except (json.JSONDecodeError, TypeError):
-            pass
+            logger.debug("Cache deserialize failed — key evicted", exc_info=True)
     if loader is None:
         return None
     value = loader()

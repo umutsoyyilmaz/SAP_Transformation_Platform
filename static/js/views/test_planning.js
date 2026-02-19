@@ -15,12 +15,34 @@ const TestPlanningView = (() => {
     // ── Filter state (persisted across re-renders) ────────────────────
     let _catalogSearch = '';
     let _catalogFilters = {};
+    let _catalogTreeFilter = 'all';
+    let _planSearch = '';
+    let _planTreeFilter = 'all';
     let _suiteSearch = '';
     let _suiteFilters = {};
+    let _suiteTreeFilter = 'all';
 
     // ── Structured Step state ──────────────────────────────────────────
     let _currentSteps = [];
     let _currentCaseIdForSteps = null;
+    let _draftSteps = [];
+
+    // ── ADR-008 B: Hierarchical traceability state ─────────────────────
+    let _traceabilityState = { groups: [] };
+    let _traceabilityOptions = {
+        processLevels: [],
+        requirements: [],
+        backlogItems: [],
+        configItems: [],
+    };
+    let _caseWizardStep = 1;
+    let _activeTraceGroupIndex = null;
+    let _activeCaseId = null;
+    let _derivedTraceability = null;
+    let _l3CoverageState = {
+        selectedL3: null,
+        cache: {},
+    };
 
     // ── Main render ───────────────────────────────────────────────────
     async function render() {
@@ -34,23 +56,32 @@ const TestPlanningView = (() => {
 
         main.innerHTML = `
             <div class="page-header"><h1>📋 Test Planning</h1></div>
-            <div class="tabs" id="testPlanningTabs">
-                <div class="tab active" data-tab="catalog" onclick="TestPlanningView.switchTab('catalog')">📋 Test Cases</div>
-                <div class="tab" data-tab="suites" onclick="TestPlanningView.switchTab('suites')">📦 Test Suites</div>
-                <div class="tab" data-tab="plans" onclick="TestPlanningView.switchTab('plans')">📅 Test Plans</div>
-            </div>
+            <div id="testPlanningTabs"></div>
             <div class="card" id="testContent">
                 <div style="text-align:center;padding:40px"><div class="spinner"></div></div>
             </div>
         `;
+        _renderTopTabs();
         await loadTabData();
+    }
+
+    function _renderTopTabs() {
+        const container = document.getElementById('testPlanningTabs');
+        if (!container || !window.TMTabBar) return;
+        TMTabBar.render(container, {
+            active: currentTab,
+            tabs: [
+                { id: 'catalog', label: '📋 Test Cases' },
+                { id: 'suites', label: '📦 Test Suites' },
+                { id: 'plans', label: '📅 Test Plans' },
+            ],
+            onChange: switchTab,
+        });
     }
 
     function switchTab(tab) {
         currentTab = tab;
-        document.querySelectorAll('#testPlanningTabs .tab').forEach(t => {
-            t.classList.toggle('active', t.dataset.tab === tab);
-        });
+        _renderTopTabs();
         if (TestingShared.pid) loadTabData();
     }
 
@@ -77,9 +108,6 @@ const TestPlanningView = (() => {
         const plans = res.items || res || [];
         const container = document.getElementById('testContent');
 
-        const STATUS_CLR = { draft: '#888', active: '#0070f3', completed: '#107e3e', cancelled: '#c4314b' };
-        const TYPE_LBL = { sit: 'SIT', uat: 'UAT', regression: 'Regression', e2e: 'E2E', cutover_rehearsal: 'Cutover', performance: 'Performance' };
-
         if (plans.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
@@ -91,31 +119,137 @@ const TestPlanningView = (() => {
             return;
         }
 
-        let html = `
-            <div style="display:flex;justify-content:space-between;margin-bottom:16px">
-                <h3 style="margin:0">Test Plans (${plans.length})</h3>
-                <button class="btn btn-primary" onclick="TestPlanningView.showPlanModal()">+ New Test Plan</button>
+        container.innerHTML = `
+            <div class="tm-toolbar">
+                <div class="tm-toolbar__left">
+                    <input id="tmPlanSearch" class="tm-input" placeholder="Search test plans..." value="${esc(_planSearch)}" />
+                    <span id="planItemCount" class="tm-muted"></span>
+                </div>
+                <div class="tm-toolbar__right">
+                    <button class="btn btn-primary btn-sm" onclick="TestPlanningView.showPlanModal()">+ New Test Plan</button>
+                </div>
             </div>
-            <table class="data-table">
-                <thead><tr>
-                    <th>Plan Name</th><th>Type</th><th>Environment</th><th>Status</th><th>Start</th><th>End</th><th>Actions</th>
-                </tr></thead>
-                <tbody>
-                    ${plans.map(p => `<tr>
-                        <td><strong>${esc(p.name)}</strong>${p.description ? `<div style="color:#666;font-size:12px">${esc(p.description)}</div>` : ''}</td>
-                        <td><span class="badge" style="background:#0070f3;color:#fff">${TYPE_LBL[p.plan_type] || p.plan_type || '—'}</span></td>
-                        <td>${p.environment ? `<span class="badge" style="background:#6a4fa0;color:#fff">${esc(p.environment)}</span>` : '—'}</td>
-                        <td><span class="badge" style="background:${STATUS_CLR[p.status] || '#888'};color:#fff">${esc(p.status)}</span></td>
-                        <td>${p.start_date || '—'}</td>
-                        <td>${p.end_date || '—'}</td>
-                        <td style="display:flex;gap:4px">
-                            <button class="btn btn-sm" style="background:#C08B5C;color:#fff" onclick="TestPlanDetailView.open(${p.id}, {from:'planning'})" title="Plan detail: Scope, TCs, Data, Cycles">📊 Detail</button>
-                            <button class="btn btn-sm btn-danger" onclick="TestPlanningView.deletePlan(${p.id})">🗑</button>
-                        </td>
-                    </tr>`).join('')}
-                </tbody>
-            </table>`;
-        container.innerHTML = html;
+            <div id="planSplitRoot"></div>
+        `;
+
+        const searchEl = document.getElementById('tmPlanSearch');
+        if (searchEl) {
+            searchEl.addEventListener('input', (e) => {
+                _planSearch = e.target.value || '';
+                applyPlanFilter(plans);
+            });
+        }
+
+        applyPlanFilter(plans);
+    }
+
+    function applyPlanFilter(sourcePlans) {
+        let filtered = [...(sourcePlans || [])];
+
+        if (_planSearch) {
+            const q = _planSearch.toLowerCase();
+            filtered = filtered.filter(p =>
+                (p.name || '').toLowerCase().includes(q) ||
+                (p.description || '').toLowerCase().includes(q) ||
+                (p.environment || '').toLowerCase().includes(q)
+            );
+        }
+
+        if (_planTreeFilter && _planTreeFilter !== 'all') {
+            const [kind, value] = String(_planTreeFilter).split(':');
+            if (kind === 'type') filtered = filtered.filter(p => String(p.plan_type || '') === value);
+            if (kind === 'status') filtered = filtered.filter(p => String(p.status || '') === value);
+            if (kind === 'env') filtered = filtered.filter(p => String(p.environment || '') === value);
+        }
+
+        const countEl = document.getElementById('planItemCount');
+        if (countEl) countEl.textContent = `${filtered.length} of ${(sourcePlans || []).length}`;
+
+        _renderPlanSplit(sourcePlans || [], filtered);
+    }
+
+    function _buildPlanTreeNodes(plans) {
+        const nodes = [{ id: 'all', label: 'All Plans', count: plans.length }];
+        const types = new Map();
+        const statuses = new Map();
+        const envs = new Map();
+
+        plans.forEach(p => {
+            const t = p.plan_type || 'unknown';
+            const s = p.status || 'unknown';
+            const e = p.environment || 'unset';
+            types.set(t, (types.get(t) || 0) + 1);
+            statuses.set(s, (statuses.get(s) || 0) + 1);
+            envs.set(e, (envs.get(e) || 0) + 1);
+        });
+
+        [...types.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([val, count]) => {
+            nodes.push({ id: `type:${val}`, label: `Type: ${val.toUpperCase()}`, count });
+        });
+        [...statuses.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([val, count]) => {
+            nodes.push({ id: `status:${val}`, label: `Status: ${val}`, count });
+        });
+        [...envs.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([val, count]) => {
+            nodes.push({ id: `env:${val}`, label: `Env: ${val.toUpperCase()}`, count });
+        });
+
+        return nodes;
+    }
+
+    function _renderPlanSplit(allPlans, list) {
+        const root = document.getElementById('planSplitRoot');
+        if (!root) return;
+
+        if (!window.TMSplitPane || !window.TMTreePanel || !window.TMDataGrid) {
+            root.innerHTML = '<div class="empty-state" style="padding:30px">Component fallback unavailable.</div>';
+            return;
+        }
+
+        TMSplitPane.mount(root, {
+            leftHtml: '<div id="tmPlanTree"></div>',
+            rightHtml: '<div id="tmPlanGrid" style="padding:8px"></div>',
+            leftWidth: 260,
+            minLeft: 180,
+            maxLeft: 420,
+        });
+
+        const treeEl = document.getElementById('tmPlanTree');
+        const gridEl = document.getElementById('tmPlanGrid');
+        if (!treeEl || !gridEl) return;
+
+        TMTreePanel.render(treeEl, {
+            title: 'Plan Groups',
+            nodes: _buildPlanTreeNodes(allPlans),
+            selectedId: _planTreeFilter,
+            searchPlaceholder: 'Search group...',
+            onSelect: (nodeId) => {
+                _planTreeFilter = nodeId;
+                applyPlanFilter(allPlans);
+            },
+        });
+
+        const STATUS_CLR = { draft: '#888', active: '#0070f3', completed: '#107e3e', cancelled: '#c4314b' };
+        const TYPE_LBL = { sit: 'SIT', uat: 'UAT', regression: 'Regression', e2e: 'E2E', cutover_rehearsal: 'Cutover', performance: 'Performance' };
+
+        TMDataGrid.render(gridEl, {
+            rows: list,
+            rowKey: 'id',
+            emptyText: 'No plans match your filters.',
+            onRowClick: (rowId) => TestPlanDetailView.open(Number(rowId), { from: 'planning' }),
+            columns: [
+                { key: 'name', label: 'Plan Name', width: '260px', render: (p) => `<strong>${esc(p.name || '-')}</strong>${p.description ? `<div style="font-size:11px;color:#64748b">${esc(p.description)}</div>` : ''}` },
+                { key: 'plan_type', label: 'Type', width: '95px', render: (p) => `<span class="badge" style="background:#0070f3;color:#fff">${TYPE_LBL[p.plan_type] || (p.plan_type || '—').toUpperCase()}</span>` },
+                { key: 'environment', label: 'Env', width: '80px', render: (p) => p.environment ? `<span class="badge" style="background:#6a4fa0;color:#fff">${esc(p.environment)}</span>` : '-' },
+                { key: 'status', label: 'Status', width: '95px', render: (p) => `<span class="badge" style="background:${STATUS_CLR[p.status] || '#888'};color:#fff">${esc(p.status || '-')}</span>` },
+                { key: 'start_date', label: 'Start', width: '95px', render: (p) => esc(p.start_date || '-') },
+                { key: 'end_date', label: 'End', width: '95px', render: (p) => esc(p.end_date || '-') },
+                {
+                    key: 'actions', label: '', width: '92px', align: 'center', render: (p) =>
+                        `<button class="btn btn-sm" style="background:#C08B5C;color:#fff" onclick="event.stopPropagation();TestPlanDetailView.open(${p.id}, {from:'planning'})">📊</button>
+                         <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();TestPlanningView.deletePlan(${p.id})">🗑</button>`,
+                },
+            ],
+        });
     }
 
     function showPlanModal() {
@@ -218,20 +352,25 @@ const TestPlanningView = (() => {
             return;
         }
 
-        const layerBadge = (l) => {
-            const colors = { unit: '#0070f3', sit: '#e9730c', uat: '#107e3e', regression: '#a93e7e', e2e: '#6a4fa0', performance: '#6a4fa0', cutover_rehearsal: '#c4314b' };
-            return `<span class="badge" style="background:${colors[l] || '#888'};color:#fff">${(l || 'N/A').toUpperCase()}</span>`;
-        };
-        const statusBadge = (s) => {
-            const colors = { draft: '#888', ready: '#0070f3', approved: '#107e3e', in_review: '#e5a800', deprecated: '#c4314b' };
-            return `<span class="badge" style="background:${colors[s] || '#888'};color:#fff">${s}</span>`;
-        };
-
         container.innerHTML = `
-            <div id="catalogFilterBar" style="margin-bottom:8px"></div>
-            <div id="catalogTableArea"></div>
+            <div class="tm-toolbar">
+                <div class="tm-toolbar__left">
+                    <input id="tmCatalogSearch" class="tm-input" placeholder="Search test cases..." value="${esc(_catalogSearch)}" />
+                    <span id="catItemCount" class="tm-muted"></span>
+                </div>
+                <div class="tm-toolbar__right">
+                    <button class="btn btn-primary btn-sm" onclick="TestPlanningView.showCaseModal()">+ New Test Case</button>
+                </div>
+            </div>
+            <div id="catalogSplitRoot"></div>
         `;
-        renderCatalogFilterBar();
+        const searchEl = document.getElementById('tmCatalogSearch');
+        if (searchEl) {
+            searchEl.addEventListener('input', (e) => {
+                _catalogSearch = e.target.value || '';
+                applyCatalogFilter();
+            });
+        }
         applyCatalogFilter();
     }
 
@@ -313,16 +452,108 @@ const TestPlanningView = (() => {
             filtered = filtered.filter(tc => values.includes(String(tc[key])));
         });
 
+        if (_catalogTreeFilter && _catalogTreeFilter !== 'all') {
+            const [kind, value] = String(_catalogTreeFilter).split(':');
+            if (kind === 'module') {
+                filtered = filtered.filter(tc => String(tc.module || '') === value);
+            }
+            if (kind === 'layer') {
+                filtered = filtered.filter(tc => String(tc.test_layer || '') === value);
+            }
+        }
+
         const countEl = document.getElementById('catItemCount');
         if (countEl) countEl.textContent = `${filtered.length} of ${testCases.length}`;
 
-        const tableEl = document.getElementById('catalogTableArea');
-        if (!tableEl) return;
-        if (filtered.length === 0) {
-            tableEl.innerHTML = '<div class="empty-state" style="padding:40px"><p>No test cases match your filters.</p></div>';
+        _renderCatalogSplit(filtered);
+    }
+
+    function _buildCatalogTreeNodes() {
+        const nodes = [{ id: 'all', label: 'All Test Cases', count: testCases.length }];
+
+        const modules = new Map();
+        const layers = new Map();
+        testCases.forEach(tc => {
+            const module = (tc.module || '').trim();
+            const layer = (tc.test_layer || '').trim();
+            if (module) modules.set(module, (modules.get(module) || 0) + 1);
+            if (layer) layers.set(layer, (layers.get(layer) || 0) + 1);
+        });
+
+        [...modules.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([module, count]) => {
+            nodes.push({ id: `module:${module}`, label: `Module: ${module}`, count });
+        });
+
+        [...layers.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([layer, count]) => {
+            nodes.push({ id: `layer:${layer}`, label: `Layer: ${layer.toUpperCase()}`, count });
+        });
+
+        return nodes;
+    }
+
+    function _renderCatalogSplit(list) {
+        const root = document.getElementById('catalogSplitRoot');
+        if (!root) return;
+
+        if (!window.TMSplitPane || !window.TMTreePanel || !window.TMDataGrid) {
+            root.innerHTML = _renderCatalogTable(list);
             return;
         }
-        tableEl.innerHTML = _renderCatalogTable(filtered);
+
+        TMSplitPane.mount(root, {
+            leftHtml: '<div id="tmCatalogTree"></div>',
+            rightHtml: '<div id="tmCatalogGrid" style="padding:8px"></div>',
+            leftWidth: 260,
+            minLeft: 180,
+            maxLeft: 440,
+        });
+
+        const treeEl = document.getElementById('tmCatalogTree');
+        const gridEl = document.getElementById('tmCatalogGrid');
+        if (!treeEl || !gridEl) return;
+
+        TMTreePanel.render(treeEl, {
+            title: 'Catalog Groups',
+            nodes: _buildCatalogTreeNodes(),
+            selectedId: _catalogTreeFilter,
+            searchPlaceholder: 'Search group...',
+            onSelect: (nodeId) => {
+                _catalogTreeFilter = nodeId;
+                applyCatalogFilter();
+            },
+        });
+
+        const layerBadge = (layer) => {
+            const colors = {
+                unit: '#0070f3', sit: '#e9730c', uat: '#107e3e', regression: '#a93e7e',
+                e2e: '#6a4fa0', performance: '#6a4fa0', cutover_rehearsal: '#c4314b',
+            };
+            return `<span class="badge" style="background:${colors[layer] || '#888'};color:#fff">${(layer || 'N/A').toUpperCase()}</span>`;
+        };
+
+        const statusBadge = (status) => {
+            const colors = { draft: '#888', ready: '#0070f3', approved: '#107e3e', in_review: '#e5a800', deprecated: '#c4314b' };
+            return `<span class="badge" style="background:${colors[status] || '#888'};color:#fff">${status || '-'}</span>`;
+        };
+
+        TMDataGrid.render(gridEl, {
+            rows: list,
+            rowKey: 'id',
+            emptyText: 'No test cases match your filters.',
+            onRowClick: (rowId) => TestPlanningView.showCaseDetail(Number(rowId)),
+            columns: [
+                { key: 'code', label: 'Code', width: '140px', render: (tc) => `<span style="font-family:'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:500;color:#1e3a5f;letter-spacing:-0.2px">${esc(tc.code || '-')}</span>` },
+                { key: 'title', label: 'Title', width: 'auto' },
+                { key: 'test_layer', label: 'Layer', width: '95px', render: (tc) => layerBadge(tc.test_layer) },
+                { key: 'module', label: 'Module', width: '90px', render: (tc) => esc(tc.module || '-') },
+                { key: 'status', label: 'Status', width: '95px', render: (tc) => statusBadge(tc.status) },
+                { key: 'priority', label: 'Priority', width: '80px', render: (tc) => esc(tc.priority || '-') },
+                {
+                    key: 'actions', label: '', width: '50px', align: 'center',
+                    render: (tc) => `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();TestPlanningView.deleteCase(${tc.id})">🗑</button>`,
+                },
+            ],
+        });
     }
 
     // Legacy shim — old server-side filter, now handled client-side
@@ -349,7 +580,7 @@ const TestPlanningView = (() => {
                             ? `<span class="badge" style="background:${tc.blocked_by_count > 0 ? '#c4314b' : '#e9730c'};color:#fff" title="${tc.blocked_by_count || 0} blocked by, ${tc.blocks_count || 0} blocks">${depCount}</span>`
                             : '-';
                         return `<tr onclick="TestPlanningView.showCaseDetail(${tc.id})" style="cursor:pointer" class="clickable-row">
-                        <td><strong>${tc.code || '-'}</strong></td>
+                        <td><span style="font-family:'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:500;color:#1e3a5f;letter-spacing:-0.2px">${tc.code || '-'}</span></td>
                         <td>${tc.title}</td>
                         <td>${layerBadge(tc.test_layer)}</td>
                         <td>${tc.module || '-'}</td>
@@ -368,6 +599,8 @@ const TestPlanningView = (() => {
     async function showCaseModal(tc = null) {
         const pid = TestingShared.pid;
         const isEdit = !!tc;
+        _activeCaseId = isEdit ? tc.id : null;
+        _derivedTraceability = null;
         const title = isEdit ? 'Edit Test Case' : 'New Test Case';
         const members = await TeamMemberPicker.fetchMembers(pid);
         const assignedHtml = TeamMemberPicker.renderSelect('tcAssigned', members, isEdit ? (tc.assigned_to_id || tc.assigned_to || '') : '', { cssClass: 'form-control' });
@@ -385,87 +618,165 @@ const TestPlanningView = (() => {
                 </div>` : ''}
 
                 <div id="casePanelForm" class="case-tab-panel">
-                <div class="form-group"><label>Title *</label>
-                    <input id="tcTitle" class="form-control" value="${isEdit ? tc.title : ''}"></div>
-                <div class="form-row">
-                    <div class="form-group"><label>Test Layer</label>
-                        <select id="tcLayer" class="form-control">
-                            ${['unit','sit','uat','e2e','regression','performance','cutover_rehearsal'].map(l =>
-                                `<option value="${l}" ${(isEdit && tc.test_layer === l) ? 'selected' : ''}>${l.toUpperCase()}</option>`).join('')}
-                        </select></div>
-                    <div class="form-group"><label>Module</label>
-                        <input id="tcModule" class="form-control" value="${isEdit ? (tc.module || '') : ''}" placeholder="FI, MM, SD..."></div>
-                    <div class="form-group"><label>Priority</label>
-                        <select id="tcPriority" class="form-control">
-                            ${['low','medium','high','critical'].map(p =>
-                                `<option value="${p}" ${(isEdit && tc.priority === p) ? 'selected' : ''}>${p}</option>`).join('')}
-                        </select></div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group"><label>Suite</label>
-                        <select id="tcSuiteId" class="form-control">
-                            <option value="">— No Suite —</option>
-                        </select></div>
-                </div>
-
-                <!-- ── Traceability Links ─────────────────────────── -->
-                <div style="border:1px solid #e0ddd8;border-radius:8px;padding:14px 16px;margin:12px 0;background:#FDFCFA">
-                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
-                        <span style="font-size:15px">🔗</span>
-                        <strong style="font-size:13px;color:#0B1623">Traceability Links</strong>
-                        <span style="font-size:11px;color:#999;margin-left:auto">Link to process, requirement, WRICEF or config item</span>
+                    <div style="display:flex;gap:8px;margin-bottom:12px">
+                        <button type="button" class="btn btn-sm case-wizard-btn active" data-cwstep="1" onclick="TestPlanningView.switchCaseWizard(1)">1) Basics</button>
+                        <button type="button" class="btn btn-sm case-wizard-btn" data-cwstep="2" onclick="TestPlanningView.switchCaseWizard(2)">2) Scope</button>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group"><label>L3 Process</label>
-                            <select id="tcProcessLevelId" class="form-control">
-                                <option value="">— Select L3 Process —</option>
-                            </select></div>
-                        <div class="form-group"><label>Explore Requirement</label>
-                            <select id="tcExploreReqId" class="form-control">
-                                <option value="">— Select Requirement —</option>
-                            </select></div>
+
+                    <div id="caseWizardStep1">
+                        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:10px;background:#fff">
+                            <div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:8px">SECTION 1 — HEADER (Identity & Classification)</div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Test Case Code *</label>
+                                    <input id="tcCode" class="form-control" value="${isEdit ? (tc.code || '') : ''}" placeholder="e.g. TC-SD-0012"></div>
+                                <div class="form-group"><label>Title *</label>
+                                    <input id="tcTitle" class="form-control" value="${isEdit ? tc.title : ''}"></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Level *</label>
+                                    <select id="tcLayer" class="form-control">
+                                        ${['unit','sit','uat','e2e','regression','performance','cutover_rehearsal'].map(l =>
+                                            `<option value="${l}" ${(isEdit && tc.test_layer === l) ? 'selected' : ''}>${l.toUpperCase()}</option>`).join('')}
+                                    </select></div>
+                                <div class="form-group"><label>Type</label>
+                                    <select id="tcType" class="form-control">
+                                        ${['functional','integration','e2e','regression','performance','security','data'].map(t =>
+                                            `<option value="${t}" ${(isEdit && tc.test_type === t) ? 'selected' : ''}>${t}</option>`).join('')}
+                                    </select></div>
+                                <div class="form-group"><label>Module *</label>
+                                    <input id="tcModule" class="form-control" value="${isEdit ? (tc.module || '') : ''}" placeholder="FI, MM, SD..."></div>
+                                <div class="form-group"><label>Priority *</label>
+                                    <select id="tcPriority" class="form-control">
+                                        ${['low','medium','high','critical'].map(p =>
+                                            `<option value="${p}" ${(isEdit && tc.priority === p) ? 'selected' : ''}>${p}</option>`).join('')}
+                                    </select></div>
+                                <div class="form-group"><label>Risk *</label>
+                                    <select id="tcRisk" class="form-control">
+                                        ${['low','medium','high','critical'].map(r =>
+                                            `<option value="${r}" ${(isEdit && (tc.risk || 'medium') === r) ? 'selected' : ''}>${r}</option>`).join('')}
+                                    </select></div>
+                                <div class="form-group"><label>Status</label>
+                                    <select id="tcStatus" class="form-control">
+                                        ${['draft','ready','approved','in_review','deprecated'].map(s =>
+                                            `<option value="${s}" ${(isEdit && tc.status === s) ? 'selected' : ''}>${s}</option>`).join('')}
+                                    </select></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label>Owner</label>
+                                    ${assignedHtml}</div>
+                                <div class="form-group"><label>Reviewer</label>
+                                    <input id="tcReviewer" class="form-control" value="${isEdit ? (tc.reviewer || '') : ''}" placeholder="Reviewer name"></div>
+                                <div class="form-group"><label>Created Date</label>
+                                    <input class="form-control" value="${isEdit ? ((tc.created_at || '').slice(0, 10) || '') : (new Date().toISOString().slice(0,10))}" disabled></div>
+                                <div class="form-group"><label>Version</label>
+                                    <input id="tcVersion" class="form-control" value="${isEdit ? (tc.version || '1.0') : '1.0'}"></div>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group"><label>Suites</label>
+                                <select id="tcSuiteId" class="form-control" multiple size="4"></select>
+                                <div id="tcSuiteChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+                            </div>
+                        </div>
+
+                        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:10px;background:#fff">
+                            <div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:8px">SECTION 3 — TEST LOGIC</div>
+                        <div class="form-group"><label>Description</label>
+                            <textarea id="tcDesc" class="form-control" rows="2">${isEdit ? (tc.description || '') : ''}</textarea></div>
+                        <div class="form-group"><label>Preconditions *</label>
+                            <textarea id="tcPrecond" class="form-control" rows="2">${isEdit ? (tc.preconditions || '') : ''}</textarea></div>
+
+                        <div class="form-group">
+                            <label style="display:flex;justify-content:space-between;align-items:center">
+                                <span>Test Steps</span>
+                                ${isEdit ? `<button class="btn btn-sm btn-primary" type="button" onclick="TestPlanningView.addStepRow()">+ Add Step</button>` : ''}
+                            </label>
+                            ${isEdit ? `
+                            <div id="stepsContainer" style="margin-top:8px">
+                                <div style="text-align:center;padding:12px"><div class="spinner"></div> Loading steps...</div>
+                            </div>` : `
+                            <div id="draftStepsContainer" style="margin-top:8px"></div>
+                            <button type="button" class="btn btn-sm" onclick="TestPlanningView.addDraftStepRow()">+ Add Step</button>
+                            `}
+                        </div>
+
+                        <div class="form-group"><label>Expected Result</label>
+                            <textarea id="tcExpected" class="form-control" rows="2">${isEdit ? (tc.expected_result || '') : ''}</textarea></div>
+                        </div>
+
+                        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;background:#fff">
+                            <div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:8px">SECTION 4 — DATA & DEPENDENCIES</div>
+                        <div class="form-group"><label>Linked Data Set</label>
+                            <input id="tcData" class="form-control" value="${isEdit ? (tc.test_data_set || '') : ''}"></div>
+                        <div class="form-group"><label>Data Readiness Notes (required for SIT if no dataset)</label>
+                            <textarea id="tcDataReadiness" class="form-control" rows="2">${isEdit ? (tc.data_readiness || '') : ''}</textarea></div>
+                        <div class="form-row">
+                            <div class="form-group"><label>
+                                <input type="checkbox" id="tcRegression" ${isEdit && tc.is_regression ? 'checked' : ''}> Regression Set</label></div>
+                        </div>
+                        </div>
+
+                        <div style="display:flex;justify-content:flex-end">
+                            <button type="button" class="btn btn-primary btn-sm" onclick="TestPlanningView.switchCaseWizard(2)">Next: Scope</button>
+                        </div>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group"><label>WRICEF / Backlog Item</label>
-                            <select id="tcBacklogItemId" class="form-control">
-                                <option value="">— Select WRICEF —</option>
-                            </select></div>
-                        <div class="form-group"><label>Config Item</label>
-                            <select id="tcConfigItemId" class="form-control">
-                                <option value="">— Select Config Item —</option>
-                            </select></div>
+
+                    <div id="caseWizardStep2" style="display:none">
+                        <div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:8px">SECTION 2 — COVERAGE (MASTER BLOCK)</div>
+                        <div id="tcTraceRuleHint" style="font-size:12px;color:#c4314b;margin:0 0 10px 0">
+                            For UNIT/SIT/UAT, at least one L3 basket is required.
+                        </div>
+                        <div style="border:1px solid #e0ddd8;border-radius:8px;padding:14px 16px;background:#FDFCFA">
+                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+                                <span style="font-size:15px">🔗</span>
+                                <strong style="font-size:13px;color:#0B1623">Scope Selection</strong>
+                                <span style="font-size:11px;color:#999;margin-left:auto">Choose L3 first, then configure linked items</span>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label>L1 Value Chain</label>
+                                    <select id="traceL1" class="form-control"><option value="">— Select L1 —</option></select>
+                                </div>
+                                <div class="form-group"><label>L2 Process Area</label>
+                                    <select id="traceL2" class="form-control" disabled><option value="">— Select L2 —</option></select>
+                                </div>
+                                <div class="form-group"><label id="tcL3Label">L3 Process *</label>
+                                    <select id="traceL3" class="form-control" disabled><option value="">— Select L3 —</option></select>
+                                </div>
+                            </div>
+                            <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+                                <button type="button" class="btn btn-sm btn-primary" id="traceAddL3Btn">+ Add L3 Scope</button>
+                                <button type="button" class="btn btn-sm" id="traceClearAllBtn">Clear All</button>
+                            </div>
+
+                            <div id="traceBasket" style="display:flex;flex-direction:column;gap:8px"></div>
+                            <div id="traceGroupDetail" style="margin-top:10px"></div>
+
+                            <div id="derivedTraceabilityBox" style="margin-top:10px;border:1px solid #e5e7eb;border-radius:8px;padding:10px;background:#fff"></div>
+                        </div>
+
+                        <div style="margin-top:10px;border:1px solid #e5e7eb;border-radius:8px;padding:10px;background:#fff">
+                            <div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:8px">SECTION 5 — GOVERNANCE & IMPACT</div>
+                            <div id="governanceImpactBox" style="font-size:12px;color:#334155"></div>
+                        </div>
+
+                        <div style="margin-top:10px;border:1px solid #e5e7eb;border-radius:8px;padding:10px;background:#fff">
+                            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+                                <div style="font-size:12px;font-weight:700;color:#334155">SECTION 6 — L3 COVERAGE SNAPSHOT</div>
+                                <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                                    <select id="l3CoverageSelect" class="form-control" style="min-width:260px" onchange="TestPlanningView.onL3CoverageSelect(this.value)">
+                                        <option value="">— Select L3 from basket —</option>
+                                    </select>
+                                    <button type="button" class="btn btn-sm" onclick="TestPlanningView.refreshL3Coverage(true)">Refresh</button>
+                                </div>
+                            </div>
+                            <div id="l3CoverageBox" style="font-size:12px;color:#334155"></div>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;margin-top:10px">
+                            <button type="button" class="btn btn-sm" onclick="TestPlanningView.switchCaseWizard(1)">Back to Basics</button>
+                            <button type="button" class="btn btn-primary btn-sm" onclick="TestPlanningView.saveCase(${isEdit ? tc.id : 'null'})">${isEdit ? 'Update Test Case' : 'Create Test Case'}</button>
+                        </div>
                     </div>
-                </div>
-
-                <div class="form-group"><label>Description</label>
-                    <textarea id="tcDesc" class="form-control" rows="2">${isEdit ? (tc.description || '') : ''}</textarea></div>
-                <div class="form-group"><label>Preconditions</label>
-                    <textarea id="tcPrecond" class="form-control" rows="2">${isEdit ? (tc.preconditions || '') : ''}</textarea></div>
-
-                <!-- Structured Test Steps -->
-                <div class="form-group">
-                    <label style="display:flex;justify-content:space-between;align-items:center">
-                        <span>Test Steps</span>
-                        ${isEdit ? `<button class="btn btn-sm btn-primary" type="button" onclick="TestPlanningView.addStepRow()">+ Add Step</button>` : ''}
-                    </label>
-                    ${isEdit ? `
-                    <div id="stepsContainer" style="margin-top:8px">
-                        <div style="text-align:center;padding:12px"><div class="spinner"></div> Loading steps...</div>
-                    </div>` : `
-                    <textarea id="tcSteps" class="form-control" rows="3" placeholder="Steps will be editable after creation">${''}</textarea>
-                    `}
-                </div>
-
-                <div class="form-group"><label>Expected Result</label>
-                    <textarea id="tcExpected" class="form-control" rows="2">${isEdit ? (tc.expected_result || '') : ''}</textarea></div>
-                <div class="form-group"><label>Test Data Set</label>
-                    <input id="tcData" class="form-control" value="${isEdit ? (tc.test_data_set || '') : ''}"></div>
-                <div class="form-row">
-                    <div class="form-group"><label>Assigned To</label>
-                        ${assignedHtml}</div>
-                    <div class="form-group"><label>
-                        <input type="checkbox" id="tcRegression" ${isEdit && tc.is_regression ? 'checked' : ''}> Regression Set</label></div>
-                </div>
                 </div><!-- end casePanelForm -->
 
                 ${isEdit ? `
@@ -528,10 +839,29 @@ const TestPlanningView = (() => {
         overlay.classList.add('open');
 
         // Load suite options
-        _loadSuiteOptions(isEdit ? tc.suite_id : null);
+        const selectedSuiteIds = isEdit
+            ? ((tc.suite_ids && tc.suite_ids.length)
+                ? tc.suite_ids
+                : [])
+            : [];
+        _loadSuiteOptions(selectedSuiteIds);
 
-        // Load traceability picker options
-        _loadTraceabilityOptions(isEdit ? tc : null);
+        // Initialize hierarchical traceability picker/basket
+        await _initTraceabilityState(tc || null);
+        await _initTraceabilityUI();
+
+        // Layer-based requirement UX (ADR-008)
+        const layerEl = document.getElementById('tcLayer');
+        if (layerEl) {
+            layerEl.addEventListener('change', _updateTraceabilityRequirementUI);
+        }
+        _updateTraceabilityRequirementUI();
+        switchCaseWizard(1);
+
+        if (!isEdit) {
+            _draftSteps = [{ step_no: 1, action: '', expected_result: '' }];
+            _renderDraftSteps();
+        }
 
         // Load structured steps for existing cases
         if (isEdit) {
@@ -541,93 +871,869 @@ const TestPlanningView = (() => {
         }
     }
 
-    async function _loadSuiteOptions(selectedSuiteId) {
+    async function _loadSuiteOptions(selectedSuiteIds) {
         const pid = TestingShared.pid;
         try {
             const res = await API.get(`/programs/${pid}/testing/suites?per_page=200`);
             const suites = res.items || res || [];
             const sel = document.getElementById('tcSuiteId');
             if (!sel) return;
+            sel.innerHTML = '';
             suites.forEach(s => {
                 const opt = document.createElement('option');
                 opt.value = s.id;
-                opt.textContent = `${s.name} (${s.suite_type})`;
-                if (selectedSuiteId && s.id === selectedSuiteId) opt.selected = true;
+                opt.textContent = `${s.name} (${s.purpose || s.suite_type || 'Custom'})`;
+                if ((selectedSuiteIds || []).map(Number).includes(Number(s.id))) opt.selected = true;
                 sel.appendChild(opt);
             });
+            sel.onchange = _renderSuiteChips;
+            _renderSuiteChips();
         } catch (e) {
             console.warn('Could not load suites for selector:', e);
         }
     }
 
-    // ── Traceability Picker Loaders ────────────────────────────────────
-    async function _loadTraceabilityOptions(tc) {
-        const pid = TestingShared.pid;
-        // Load all 4 pickers in parallel
-        await Promise.allSettled([
-            _loadProcessLevels(pid, tc ? tc.process_level_id : null),
-            _loadExploreRequirements(pid, tc ? tc.explore_requirement_id : null),
-            _loadBacklogItems(pid, tc ? tc.backlog_item_id : null),
-            _loadConfigItems(pid, tc ? tc.config_item_id : null),
-        ]);
+    function _renderSuiteChips() {
+        const sel = document.getElementById('tcSuiteId');
+        const chips = document.getElementById('tcSuiteChips');
+        if (!sel || !chips) return;
+        const selected = Array.from(sel.selectedOptions || []);
+        if (!selected.length) {
+            chips.innerHTML = '<span style="font-size:12px;color:#777">No suite selected</span>';
+            return;
+        }
+        chips.innerHTML = selected.map(opt =>
+            `<span class="badge" style="background:#e8f1ff;color:#1f3d7a;border:1px solid #bfd6ff;padding:3px 8px">
+                ${esc(opt.textContent)}
+             </span>`
+        ).join('');
     }
 
-    function _fillSelect(elId, items, selectedVal) {
-        const sel = document.getElementById(elId);
-        if (!sel) return;
-        items.forEach(it => {
+    // ── ADR-008 B: Hierarchical Traceability Picker + Basket ───────────
+    function _toNum(val) {
+        const n = parseInt(val, 10);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    function _listUnique(values) {
+        return Array.from(new Set((values || []).filter(v => v !== null && v !== undefined && v !== '')));
+    }
+
+    function _traceRequirementL3(req) {
+        return String(req?.scope_item_id || req?.process_level_id || '').trim();
+    }
+
+    function _traceBacklogL3(item) {
+        const reqId = item?.explore_requirement_id;
+        const req = _traceabilityOptions.requirements.find(r => String(r.id) === String(reqId));
+        return _traceRequirementL3(req);
+    }
+
+    function _traceConfigL3(item) {
+        const reqId = item?.explore_requirement_id;
+        const req = _traceabilityOptions.requirements.find(r => String(r.id) === String(reqId));
+        return _traceRequirementL3(req);
+    }
+
+    function _findProcess(id) {
+        return _traceabilityOptions.processLevels.find(p => String(p.id) === String(id));
+    }
+
+    function _processLabel(id) {
+        const p = _findProcess(id);
+        if (!p) return String(id);
+        return `${p.code || ''} — ${p.name || ''}`.trim();
+    }
+
+    function _requirementLabel(id) {
+        const r = _traceabilityOptions.requirements.find(x => String(x.id) === String(id));
+        return r ? `${r.code || 'REQ'} — ${r.title || ''}` : String(id);
+    }
+
+    function _backlogLabel(id) {
+        const b = _traceabilityOptions.backlogItems.find(x => String(x.id) === String(id));
+        return b ? `${b.code || 'BL'} — ${b.title || ''}` : String(id);
+    }
+
+    function _configLabel(id) {
+        const c = _traceabilityOptions.configItems.find(x => String(x.id) === String(id));
+        return c ? `${c.code || 'CFG'} — ${c.title || ''}` : String(id);
+    }
+
+    function _normalizeTraceGroups(groups) {
+        const normalized = [];
+        (groups || []).forEach(g => {
+            const l3 = String(g.l3_process_level_id || g.l3_id || '').trim();
+            if (!l3) return;
+            normalized.push({
+                l3_process_level_id: l3,
+                l4_process_level_ids: _listUnique((g.l4_process_level_ids || []).map(String)),
+                explore_requirement_ids: _listUnique((g.explore_requirement_ids || []).map(String)),
+                backlog_item_ids: _listUnique((g.backlog_item_ids || []).map(_toNum).filter(Number.isFinite)),
+                config_item_ids: _listUnique((g.config_item_ids || []).map(_toNum).filter(Number.isFinite)),
+                manual_requirement_ids: _listUnique((g.manual_requirement_ids || []).map(String)),
+                manual_backlog_item_ids: _listUnique((g.manual_backlog_item_ids || []).map(_toNum).filter(Number.isFinite)),
+                manual_config_item_ids: _listUnique((g.manual_config_item_ids || []).map(_toNum).filter(Number.isFinite)),
+                excluded_requirement_ids: _listUnique((g.excluded_requirement_ids || []).map(String)),
+                excluded_backlog_item_ids: _listUnique((g.excluded_backlog_item_ids || []).map(_toNum).filter(Number.isFinite)),
+                excluded_config_item_ids: _listUnique((g.excluded_config_item_ids || []).map(_toNum).filter(Number.isFinite)),
+            });
+        });
+
+        const dedup = [];
+        const seen = new Set();
+        normalized.forEach(g => {
+            if (seen.has(g.l3_process_level_id)) return;
+            seen.add(g.l3_process_level_id);
+            dedup.push(g);
+        });
+        return dedup;
+    }
+
+    async function _initTraceabilityState(tc) {
+        const pid = TestingShared.pid;
+        const [levelsRes, reqRes, backlogRes, configRes] = await Promise.all([
+            API.get(`/explore/process-levels?project_id=${pid}&flat=true`).catch(() => []),
+            API.get(`/explore/requirements?project_id=${pid}&per_page=1000`).catch(() => ({ items: [] })),
+            API.get(`/programs/${pid}/backlog?per_page=1000`).catch(() => ({ items: [] })),
+            API.get(`/programs/${pid}/config-items`).catch(() => []),
+        ]);
+
+        _traceabilityOptions.processLevels = Array.isArray(levelsRes) ? levelsRes : (levelsRes.items || []);
+        _traceabilityOptions.requirements = reqRes.items || [];
+        _traceabilityOptions.backlogItems = backlogRes.items || [];
+        _traceabilityOptions.configItems = Array.isArray(configRes) ? configRes : (configRes.items || []);
+
+        let groups = [];
+        if (tc && Array.isArray(tc.traceability_links) && tc.traceability_links.length) {
+            groups = tc.traceability_links.map(t => ({
+                l3_process_level_id: t.l3_process_level_id,
+                l4_process_level_ids: t.l4_process_level_ids || [],
+                explore_requirement_ids: t.explore_requirement_ids || [],
+                backlog_item_ids: t.backlog_item_ids || [],
+                config_item_ids: t.config_item_ids || [],
+                manual_requirement_ids: t.manual_requirement_ids || [],
+                manual_backlog_item_ids: t.manual_backlog_item_ids || [],
+                manual_config_item_ids: t.manual_config_item_ids || [],
+                excluded_requirement_ids: t.excluded_requirement_ids || [],
+                excluded_backlog_item_ids: t.excluded_backlog_item_ids || [],
+                excluded_config_item_ids: t.excluded_config_item_ids || [],
+            }));
+        } else if (tc && (tc.process_level_id || tc.explore_requirement_id || tc.backlog_item_id || tc.config_item_id)) {
+            groups = [{
+                l3_process_level_id: tc.process_level_id || '',
+                l4_process_level_ids: [],
+                explore_requirement_ids: tc.explore_requirement_id ? [tc.explore_requirement_id] : [],
+                backlog_item_ids: tc.backlog_item_id ? [tc.backlog_item_id] : [],
+                config_item_ids: tc.config_item_id ? [tc.config_item_id] : [],
+                manual_requirement_ids: [],
+                manual_backlog_item_ids: [],
+                manual_config_item_ids: [],
+                excluded_requirement_ids: [],
+                excluded_backlog_item_ids: [],
+                excluded_config_item_ids: [],
+            }];
+        }
+        _traceabilityState = { groups: _normalizeTraceGroups(groups) };
+    }
+
+    function _fillSimpleSelect(el, options, placeholder) {
+        if (!el) return;
+        el.innerHTML = `<option value="">${placeholder}</option>`;
+        options.forEach(o => {
             const opt = document.createElement('option');
-            opt.value = it.value;
-            opt.textContent = it.label;
-            if (selectedVal && String(it.value) === String(selectedVal)) opt.selected = true;
-            sel.appendChild(opt);
+            opt.value = o.value;
+            opt.textContent = o.label;
+            el.appendChild(opt);
         });
     }
 
-    async function _loadProcessLevels(pid, selectedId) {
-        try {
-            const res = await API.get(`/explore/process-levels?project_id=${pid}&level=3&flat=true`);
-            const items = (res.items || []).map(p => ({
-                value: p.id,
-                label: `${p.code} — ${p.name}${p.process_area_code ? ' (' + p.process_area_code + ')' : ''}`
-            }));
-            _fillSelect('tcProcessLevelId', items, selectedId);
-        } catch (e) { console.warn('Could not load L3 processes:', e); }
+    function _processByLevel(level, parentId = null) {
+        return (_traceabilityOptions.processLevels || []).filter(p => {
+            if (Number(p.level) !== Number(level)) return false;
+            if (parentId === null) return true;
+            return String(p.parent_id || '') === String(parentId || '');
+        });
     }
 
-    async function _loadExploreRequirements(pid, selectedId) {
-        try {
-            const res = await API.get(`/explore/requirements?project_id=${pid}&per_page=500`);
-            const items = (res.items || []).map(r => ({
-                value: r.id,
-                label: `${r.code || 'REQ'} — ${r.title}${r.type ? ' [' + r.type + ']' : ''}`
-            }));
-            _fillSelect('tcExploreReqId', items, selectedId);
-        } catch (e) { console.warn('Could not load explore requirements:', e); }
+    async function _initTraceabilityUI() {
+        const l1 = document.getElementById('traceL1');
+        const l2 = document.getElementById('traceL2');
+        const l3 = document.getElementById('traceL3');
+        const addBtn = document.getElementById('traceAddL3Btn');
+        const clearBtn = document.getElementById('traceClearAllBtn');
+
+        const l1Items = _processByLevel(1).map(p => ({ value: p.id, label: `${p.code || ''} — ${p.name || ''}` }));
+        _fillSimpleSelect(l1, l1Items, '— Select L1 —');
+
+        const onL1Change = () => {
+            const l2Items = _processByLevel(2, l1.value).map(p => ({ value: p.id, label: `${p.code || ''} — ${p.name || ''}` }));
+            _fillSimpleSelect(l2, l2Items, '— Select L2 —');
+            l2.disabled = !l1.value;
+            _fillSimpleSelect(l3, [], '— Select L3 —');
+            l3.disabled = true;
+        };
+        const onL2Change = () => {
+            const l3Items = _processByLevel(3, l2.value).map(p => ({ value: p.id, label: `${p.code || ''} — ${p.name || ''}` }));
+            _fillSimpleSelect(l3, l3Items, '— Select L3 —');
+            l3.disabled = !l2.value;
+        };
+
+        l1?.addEventListener('change', onL1Change);
+        l2?.addEventListener('change', onL2Change);
+        addBtn?.addEventListener('click', () => {
+            const selectedL3 = l3?.value;
+            if (!selectedL3) return App.toast('Select L3 first', 'error');
+            if (_traceabilityState.groups.some(g => String(g.l3_process_level_id) === String(selectedL3))) {
+                return App.toast('This L3 basket already exists', 'error');
+            }
+            _traceabilityState.groups.push({
+                l3_process_level_id: selectedL3,
+                l4_process_level_ids: [],
+                explore_requirement_ids: [],
+                backlog_item_ids: [],
+                config_item_ids: [],
+                manual_requirement_ids: [],
+                manual_backlog_item_ids: [],
+                manual_config_item_ids: [],
+                excluded_requirement_ids: [],
+                excluded_backlog_item_ids: [],
+                excluded_config_item_ids: [],
+            });
+            _renderTraceabilityBasket();
+            _updateTraceabilityRequirementUI();
+        });
+        clearBtn?.addEventListener('click', clearTraceGroups);
+
+        onL1Change();
+        _renderTraceabilityBasket();
+        _updateTraceabilityRequirementUI();
     }
 
-    async function _loadBacklogItems(pid, selectedId) {
-        try {
-            const res = await API.get(`/programs/${pid}/backlog?per_page=500`);
-            const items = (res.items || []).map(b => ({
-                value: b.id,
-                label: `${b.code || 'BL'} — ${b.title}${b.wricef_type ? ' [' + b.wricef_type + ']' : ''}`
-            }));
-            _fillSelect('tcBacklogItemId', items, selectedId);
-        } catch (e) { console.warn('Could not load backlog items:', e); }
+    function _groupHasChildren(group) {
+        return (group.l4_process_level_ids || []).length
+            || (group.explore_requirement_ids || []).length
+            || (group.backlog_item_ids || []).length
+            || (group.config_item_ids || []).length;
     }
 
-    async function _loadConfigItems(pid, selectedId) {
+    function _renderTraceabilityBasket() {
+        const basket = document.getElementById('traceBasket');
+        const detail = document.getElementById('traceGroupDetail');
+        if (!basket) return;
+        const groups = _traceabilityState.groups || [];
+        if (!groups.length) {
+            basket.innerHTML = '<div style="font-size:12px;color:#777">No L3 scopes selected yet.</div>';
+            if (detail) detail.innerHTML = '';
+            _renderDerivedTraceability();
+            _renderGovernanceImpact();
+            _renderL3CoveragePanel();
+            _refreshDerivedTraceabilityFromApi();
+            return;
+        }
+
+        basket.innerHTML = groups.map((g, idx) => {
+            const l3Options = _processByLevel(3).map(p => `<option value="${p.id}" ${String(p.id) === String(g.l3_process_level_id) ? 'selected' : ''}>${esc(`${p.code || ''} — ${p.name || ''}`)}</option>`).join('');
+            return `
+                <div style="border:1px solid ${_activeTraceGroupIndex === idx ? '#9ec8ff' : '#e5e7eb'};border-radius:8px;padding:8px;background:#fff">
+                    <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+                        <div style="display:flex;gap:8px;align-items:center;min-width:260px;flex:1">
+                            <span class="badge" style="background:#0a6ed1;color:#fff">L3</span>
+                            <select class="form-control" style="max-width:340px" onchange="TestPlanningView.changeTraceGroupL3(${idx}, this.value)">
+                                ${l3Options}
+                            </select>
+                        </div>
+                        <div style="display:flex;gap:6px;align-items:center">
+                            <span style="font-size:12px;color:#555">L4:${(g.l4_process_level_ids || []).length} · Req:${(g.explore_requirement_ids || []).length} · WRICEF:${(g.backlog_item_ids || []).length} · Config:${(g.config_item_ids || []).length}</span>
+                            <button type="button" class="btn btn-sm" onclick="TestPlanningView.openTraceGroupDetail(${idx})">Configure Details</button>
+                            <button type="button" class="btn btn-sm btn-danger" onclick="TestPlanningView.removeTraceGroup(${idx})">Remove</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        if (detail) {
+            if (_activeTraceGroupIndex === null || !_traceabilityState.groups[_activeTraceGroupIndex]) {
+                detail.innerHTML = '';
+            } else {
+                detail.innerHTML = _renderTraceGroupDetailDrawer(_activeTraceGroupIndex);
+            }
+        }
+        _renderDerivedTraceability();
+        _renderGovernanceImpact();
+        _renderL3CoveragePanel();
+        _refreshDerivedTraceabilityFromApi();
+    }
+
+    function _renderL3CoveragePanel() {
+        const sel = document.getElementById('l3CoverageSelect');
+        const box = document.getElementById('l3CoverageBox');
+        if (!box) return;
+
+        const groups = _traceabilityState.groups || [];
+        const l3Ids = _listUnique(groups.map(g => String(g.l3_process_level_id || '')).filter(Boolean));
+
+        if (sel) {
+            const current = _l3CoverageState.selectedL3;
+            sel.innerHTML = `<option value="">— Select L3 from basket —</option>${l3Ids.map(l3Id =>
+                `<option value="${esc(l3Id)}" ${(String(current || '') === String(l3Id)) ? 'selected' : ''}>${esc(_processLabel(l3Id))}</option>`
+            ).join('')}`;
+        }
+
+        if (!l3Ids.length) {
+            _l3CoverageState.selectedL3 = null;
+            box.innerHTML = '<span style="color:#777">Add at least one L3 basket to see scope coverage.</span>';
+            return;
+        }
+
+        if (!_l3CoverageState.selectedL3 || !l3Ids.includes(String(_l3CoverageState.selectedL3))) {
+            _l3CoverageState.selectedL3 = l3Ids[0];
+            if (sel) sel.value = _l3CoverageState.selectedL3;
+        }
+
+        const cached = _l3CoverageState.cache[String(_l3CoverageState.selectedL3)];
+        if (cached) {
+            _renderL3CoverageData(cached);
+            return;
+        }
+
+        box.innerHTML = '<span style="color:#777">Select refresh to load L3 coverage snapshot.</span>';
+    }
+
+    function _renderL3CoverageData(data) {
+        const box = document.getElementById('l3CoverageBox');
+        if (!box) return;
+        const summary = data?.summary || {};
+        const l3 = data?.l3 || {};
+        const passRate = Number(summary.pass_rate || 0);
+        const ready = String(summary.readiness || 'not_ready') === 'ready';
+        const readinessColor = ready ? '#107e3e' : '#c4314b';
+
+        const processSteps = data?.process_steps || [];
+        const reqs = data?.requirements || [];
+        const ifaces = data?.interfaces || [];
+
+        box.innerHTML = `
+            <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+                <div><strong>${esc(l3.code || '')}</strong> ${esc(l3.name || '')}</div>
+                <span class="badge" style="background:${readinessColor};color:#fff">${ready ? 'Ready' : 'Not Ready'}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:8px;margin-bottom:8px">
+                <div><div style="color:#64748b">Total TCs</div><div><strong>${summary.total_test_cases || 0}</strong></div></div>
+                <div><div style="color:#64748b">Pass Rate</div><div><strong style="color:${readinessColor}">${passRate.toFixed(1)}%</strong></div></div>
+                <div><div style="color:#64748b">Step Coverage</div><div><strong>${esc(summary.process_step_coverage || '0/0')}</strong></div></div>
+                <div><div style="color:#64748b">Req Coverage</div><div><strong>${esc(summary.requirement_coverage || '0/0')}</strong></div></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+                <div style="padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:#fff">Process Steps: <strong>${processSteps.length}</strong></div>
+                <div style="padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:#fff">Requirements: <strong>${reqs.length}</strong></div>
+                <div style="padding:8px;border:1px solid #e2e8f0;border-radius:6px;background:#fff">Interfaces: <strong>${ifaces.length}</strong></div>
+            </div>
+        `;
+    }
+
+    async function refreshL3Coverage(force = false) {
+        const pid = TestingShared.pid;
+        const l3Id = _l3CoverageState.selectedL3 || document.getElementById('l3CoverageSelect')?.value;
+        const box = document.getElementById('l3CoverageBox');
+
+        if (!pid || !l3Id) {
+            if (box) box.innerHTML = '<span style="color:#777">Select an L3 scope to load coverage.</span>';
+            return;
+        }
+
+        if (!force && _l3CoverageState.cache[String(l3Id)]) {
+            _renderL3CoverageData(_l3CoverageState.cache[String(l3Id)]);
+            return;
+        }
+
+        if (box) box.innerHTML = '<span style="color:#777">Loading coverage…</span>';
         try {
-            const res = await API.get(`/programs/${pid}/config-items`);
-            // config-items returns bare array
-            const arr = Array.isArray(res) ? res : (res.items || []);
-            const items = arr.map(c => ({
-                value: c.id,
-                label: `${c.code || 'CFG'} — ${c.title}${c.module ? ' [' + c.module + ']' : ''}`
-            }));
-            _fillSelect('tcConfigItemId', items, selectedId);
-        } catch (e) { console.warn('Could not load config items:', e); }
+            const data = await API.get(`/programs/${pid}/testing/scope-coverage/${l3Id}`);
+            _l3CoverageState.cache[String(l3Id)] = data;
+            _l3CoverageState.selectedL3 = String(l3Id);
+            _renderL3CoverageData(data);
+        } catch (e) {
+            if (box) box.innerHTML = `<span style="color:#c4314b">Coverage load failed: ${esc(e.message || 'Unknown error')}</span>`;
+        }
+    }
+
+    function onL3CoverageSelect(l3Id) {
+        _l3CoverageState.selectedL3 = l3Id ? String(l3Id) : null;
+        refreshL3Coverage(false);
+    }
+
+    async function _refreshDerivedTraceabilityFromApi() {
+        if (!_activeCaseId) return;
+        try {
+            _derivedTraceability = await API.get(`/testing/catalog/${_activeCaseId}/traceability-derived`);
+            _renderDerivedTraceability();
+            _renderGovernanceImpact();
+        } catch (e) {
+            // Keep local fallback if API unavailable
+        }
+    }
+
+    function _renderDerivedTraceability() {
+        const box = document.getElementById('derivedTraceabilityBox');
+        if (!box) return;
+
+        if (_derivedTraceability && Array.isArray(_derivedTraceability.groups)) {
+            const summary = _derivedTraceability.summary || {};
+            const allGroups = _derivedTraceability.groups;
+            const reqCount = allGroups.reduce((n, g) => n + (g.summary?.derived_requirements || 0), 0);
+            const wricefCount = allGroups.reduce((n, g) => n + (g.summary?.derived_wricef || 0), 0);
+            const cfgCount = allGroups.reduce((n, g) => n + (g.summary?.derived_config_items || 0), 0);
+            const manualCount = allGroups.reduce((n, g) => n + (g.summary?.manual_additions || 0), 0);
+            const notCovered = summary.not_covered_total || 0;
+
+            box.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                    <div style="font-weight:600">Derived Traceability (Auto-generated)</div>
+                    <div style="display:flex;gap:6px;align-items:center;font-size:11px">
+                        <span class="badge" style="background:#0a6ed1;color:#fff">Derived (readonly)</span>
+                        <span class="badge" style="background:#e5a800;color:#111">Manually Added</span>
+                        <span class="badge" style="background:#c4314b;color:#fff">Not Covered in Test</span>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px">
+                    <div><strong>Requirements (${reqCount})</strong></div>
+                    <div><strong>WRICEF (${wricefCount})</strong></div>
+                    <div><strong>Config Items (${cfgCount})</strong></div>
+                </div>
+                <div style="margin-top:8px;font-size:12px;color:#334155">
+                    Manual additions: <strong>${manualCount}</strong> · Not covered: <strong style="color:${notCovered ? '#c4314b' : '#107e3e'}">${notCovered}</strong>
+                </div>
+            `;
+            return;
+        }
+
+        const groups = _traceabilityState.groups || [];
+        if (!groups.length) {
+            box.innerHTML = `
+                <div style="font-weight:600;margin-bottom:6px">Derived Traceability (Auto-generated)</div>
+                <div style="color:#777">No derived items yet. Add at least one L3 scope.</div>`;
+            return;
+        }
+
+        const selectedL3 = new Set(groups.map(g => String(g.l3_process_level_id)));
+        const reqs = (_traceabilityOptions.requirements || []).filter(r => {
+            const l3id = _traceRequirementL3(r);
+            return l3id && selectedL3.has(String(l3id));
+        });
+        const reqIds = new Set(reqs.map(r => String(r.id)));
+        const wricef = (_traceabilityOptions.backlogItems || []).filter(b => reqIds.has(String(b.explore_requirement_id || '')));
+        const cfg = (_traceabilityOptions.configItems || []).filter(c => reqIds.has(String(c.explore_requirement_id || '')));
+
+        const fit = reqs.filter(r => String(r.fit_status || '').toLowerCase() === 'fit').length;
+        const gap = reqs.filter(r => String(r.fit_status || '').toLowerCase() === 'gap').length;
+        const partial = reqs.filter(r => String(r.fit_status || '').toLowerCase().includes('partial')).length;
+
+        const iface = wricef.filter(w => String(w.wricef_type || '').toLowerCase() === 'interface').length;
+        const enh = wricef.filter(w => String(w.wricef_type || '').toLowerCase() === 'enhancement').length;
+        const rep = wricef.filter(w => String(w.wricef_type || '').toLowerCase() === 'report').length;
+
+        box.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                <div style="font-weight:600">Derived Traceability (Auto-generated)</div>
+                <div style="display:flex;gap:6px;align-items:center;font-size:11px">
+                    <span class="badge" style="background:#0a6ed1;color:#fff">Derived (readonly)</span>
+                    <span class="badge" style="background:#e5a800;color:#111">Manually Added</span>
+                    <span class="badge" style="background:#c4314b;color:#fff">Not Covered in Test</span>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px">
+                <div><strong>Requirements (${reqs.length})</strong><br><span style="color:#666">${gap} Gap | ${partial} Partial Fit | ${fit} Fit</span></div>
+                <div><strong>WRICEF (${wricef.length})</strong><br><span style="color:#666">${iface} Interface | ${enh} Enhancement | ${rep} Report</span></div>
+                <div><strong>Config Items (${cfg.length})</strong><br><span style="color:#666">${cfg.slice(0,2).map(c => esc(c.title || c.code || 'Item')).join(' · ') || '—'}</span></div>
+            </div>
+        `;
+    }
+
+    function _renderGovernanceImpact() {
+        const box = document.getElementById('governanceImpactBox');
+        if (!box) return;
+        const groups = _traceabilityState.groups || [];
+        const coverageBase = groups.length ? 100 : 0;
+        const readiness = groups.length ? 'in_progress' : 'not_started';
+        const notCovered = _derivedTraceability?.summary?.not_covered_total || 0;
+        box.innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <div><strong>Impacted L3 Readiness %</strong><br><span>${coverageBase}% (scope-linked)</span></div>
+                <div><strong>Historical Pass Rate</strong><br><span>Derived from executions after save</span></div>
+                <div><strong>Linked Defects</strong><br><span>Summary available after execution cycles</span></div>
+                <div><strong>Coverage Gaps Warning</strong><br><span style="color:${groups.length ? (notCovered ? '#c4314b' : '#107e3e') : '#c4314b'}">${groups.length ? (notCovered ? `${notCovered} item(s) not covered` : 'No uncovered derived item') : 'No L3 scope selected'}</span></div>
+            </div>
+            <div style="margin-top:8px;color:#475569">Status: ${readiness}</div>
+        `;
+    }
+
+    function _renderTraceGroupDetailDrawer(index) {
+        const g = _traceabilityState.groups[index];
+        if (!g) return '';
+        const derivedGroup = (_derivedTraceability?.groups || []).find(x => String(x.l3_process_level_id) === String(g.l3_process_level_id));
+
+        const l4Options = _processByLevel(4, g.l3_process_level_id)
+            .filter(p => !(g.l4_process_level_ids || []).map(String).includes(String(p.id)))
+            .map(p => `<option value="${p.id}">${esc(`${p.code || ''} — ${p.name || ''}`)}</option>`).join('');
+        const reqOptions = (_traceabilityOptions.requirements || [])
+            .filter(r => {
+                const l3id = _traceRequirementL3(r);
+                return !l3id || String(l3id) === String(g.l3_process_level_id);
+            })
+            .filter(r => !(g.explore_requirement_ids || []).map(String).includes(String(r.id)))
+            .map(r => `<option value="${r.id}">${esc(`${r.code || 'REQ'} — ${r.title || ''}`)}</option>`).join('');
+        const wricefOptions = (_traceabilityOptions.backlogItems || [])
+            .filter(b => {
+                const l3id = _traceBacklogL3(b);
+                return !l3id || String(l3id) === String(g.l3_process_level_id);
+            })
+            .filter(b => !(g.backlog_item_ids || []).map(Number).includes(Number(b.id)))
+            .map(b => `<option value="${b.id}">${esc(`${b.code || 'BL'} — ${b.title || ''}`)}</option>`).join('');
+        const cfgOptions = (_traceabilityOptions.configItems || [])
+            .filter(c => {
+                const l3id = _traceConfigL3(c);
+                return !l3id || String(l3id) === String(g.l3_process_level_id);
+            })
+            .filter(c => !(g.config_item_ids || []).map(Number).includes(Number(c.id)))
+            .map(c => `<option value="${c.id}">${esc(`${c.code || 'CFG'} — ${c.title || ''}`)}</option>`).join('');
+
+        const manualReqOptions = (_traceabilityOptions.requirements || [])
+            .filter(r => {
+                const l3id = _traceRequirementL3(r);
+                return !l3id || String(l3id) === String(g.l3_process_level_id);
+            })
+            .filter(r => !(g.manual_requirement_ids || []).map(String).includes(String(r.id)))
+            .map(r => `<option value="${r.id}">${esc(`${r.code || 'REQ'} — ${r.title || ''}`)}</option>`).join('');
+        const manualWricefOptions = (_traceabilityOptions.backlogItems || [])
+            .filter(b => {
+                const l3id = _traceBacklogL3(b);
+                return !l3id || String(l3id) === String(g.l3_process_level_id);
+            })
+            .filter(b => !(g.manual_backlog_item_ids || []).map(Number).includes(Number(b.id)))
+            .map(b => `<option value="${b.id}">${esc(`${b.code || 'BL'} — ${b.title || ''}`)}</option>`).join('');
+        const manualCfgOptions = (_traceabilityOptions.configItems || [])
+            .filter(c => {
+                const l3id = _traceConfigL3(c);
+                return !l3id || String(l3id) === String(g.l3_process_level_id);
+            })
+            .filter(c => !(g.manual_config_item_ids || []).map(Number).includes(Number(c.id)))
+            .map(c => `<option value="${c.id}">${esc(`${c.code || 'CFG'} — ${c.title || ''}`)}</option>`).join('');
+
+        const renderTags = (title, items, type, labelFn) => `
+            <div style="margin-top:8px">
+                <div style="font-size:12px;color:#555;margin-bottom:4px">${title}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px">
+                    ${(items || []).length
+                        ? (items || []).map(v => `<span class="badge" style="background:#e8f1ff;color:#1f3d7a;border:1px solid #bfd6ff;padding:3px 8px">${esc(labelFn(v))} <button type="button" style="margin-left:6px;border:none;background:transparent;color:#1f3d7a;cursor:pointer" onclick="TestPlanningView.removeTraceChild(${index}, '${type}', '${String(v)}')">×</button></span>`).join('')
+                        : '<span style="font-size:12px;color:#999">None</span>'}
+                </div>
+            </div>`;
+
+        const renderManualTags = (title, items, type, labelFn) => `
+            <div style="margin-top:8px">
+                <div style="font-size:12px;color:#555;margin-bottom:4px">${title}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px">
+                    ${(items || []).length
+                        ? (items || []).map(v => `<span class="badge" style="background:#fff7e6;color:#7a5100;border:1px solid #f5d48b;padding:3px 8px">${esc(labelFn(v))} <button type="button" style="margin-left:6px;border:none;background:transparent;color:#7a5100;cursor:pointer" onclick="TestPlanningView.removeTraceManual(${index}, '${type}', '${String(v)}')">×</button></span>`).join('')
+                        : '<span style="font-size:12px;color:#999">None</span>'}
+                </div>
+            </div>`;
+
+        const renderDerivedRows = (title, items, excludedIds, type, labelFn) => `
+            <div style="margin-top:8px">
+                <div style="font-size:12px;color:#555;margin-bottom:4px">${title}</div>
+                ${(items || []).length ? `
+                    <div style="display:flex;flex-direction:column;gap:4px;max-height:120px;overflow:auto;border:1px solid #e2e8f0;border-radius:6px;padding:6px;background:#fff">
+                        ${(items || []).map(item => {
+                            const itemId = String(item.id);
+                            const checked = (excludedIds || []).map(String).includes(itemId);
+                            return `<label style="font-size:12px;color:#334155;display:flex;align-items:center;gap:6px">
+                                <input type="checkbox" ${checked ? 'checked' : ''} onchange="TestPlanningView.toggleTraceExcluded(${index}, '${type}', '${itemId}', this.checked)">
+                                <span>${esc(labelFn(item.id))}</span>
+                                <span style="margin-left:auto;color:${item.coverage_status === 'not_covered' ? '#c4314b' : '#107e3e'}">${item.coverage_status === 'not_covered' ? 'Not Covered' : 'Covered'}</span>
+                            </label>`;
+                        }).join('')}
+                    </div>
+                ` : '<span style="font-size:12px;color:#999">No derived item</span>'}
+            </div>`;
+
+        return `
+            <div style="border:1px solid #d7e7ff;border-radius:8px;padding:10px;background:#f7fbff">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <strong style="font-size:12px">Configure L3 Details: ${esc(_processLabel(g.l3_process_level_id))}</strong>
+                    <button type="button" class="btn btn-sm" onclick="TestPlanningView.closeTraceGroupDetail()">Close</button>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                    <div style="display:flex;gap:6px"><select id="traceGroup_${index}_l4" class="form-control"><option value="">— Add L4 —</option>${l4Options}</select><button type="button" class="btn btn-sm" onclick="TestPlanningView.addTraceChild(${index}, 'l4')">Add</button></div>
+                    <div style="display:flex;gap:6px"><select id="traceGroup_${index}_req" class="form-control"><option value="">— Add Requirement —</option>${reqOptions}</select><button type="button" class="btn btn-sm" onclick="TestPlanningView.addTraceChild(${index}, 'req')">Add</button></div>
+                    <div style="display:flex;gap:6px"><select id="traceGroup_${index}_wricef" class="form-control"><option value="">— Add WRICEF —</option>${wricefOptions}</select><button type="button" class="btn btn-sm" onclick="TestPlanningView.addTraceChild(${index}, 'wricef')">Add</button></div>
+                    <div style="display:flex;gap:6px"><select id="traceGroup_${index}_config" class="form-control"><option value="">— Add Config —</option>${cfgOptions}</select><button type="button" class="btn btn-sm" onclick="TestPlanningView.addTraceChild(${index}, 'config')">Add</button></div>
+                </div>
+                ${renderTags('L4', g.l4_process_level_ids, 'l4', _processLabel)}
+                ${renderTags('Requirements', g.explore_requirement_ids, 'req', _requirementLabel)}
+                ${renderTags('WRICEF', g.backlog_item_ids, 'wricef', _backlogLabel)}
+                ${renderTags('Config', g.config_item_ids, 'config', _configLabel)}
+
+                ${_activeCaseId ? `
+                <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #bfd6ff">
+                    <div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:6px">Governance Overrides</div>
+                    <div style="font-size:11px;color:#64748b;margin-bottom:6px">Exclude derived items to mark not-covered, or add manual coverage items.</div>
+
+                    ${renderDerivedRows('Exclude Derived Requirements', derivedGroup?.derived?.requirements || [], g.excluded_requirement_ids || [], 'req', _requirementLabel)}
+                    ${renderDerivedRows('Exclude Derived WRICEF', derivedGroup?.derived?.wricef || [], g.excluded_backlog_item_ids || [], 'wricef', _backlogLabel)}
+                    ${renderDerivedRows('Exclude Derived Config', derivedGroup?.derived?.config_items || [], g.excluded_config_item_ids || [], 'config', _configLabel)}
+
+                    <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+                        <div style="display:flex;gap:6px"><select id="traceGroup_${index}_manual_req" class="form-control"><option value="">— Add Manual Requirement —</option>${manualReqOptions}</select><button type="button" class="btn btn-sm" onclick="TestPlanningView.addTraceManual(${index}, 'req')">Add</button></div>
+                        <div style="display:flex;gap:6px"><select id="traceGroup_${index}_manual_wricef" class="form-control"><option value="">— Add Manual WRICEF —</option>${manualWricefOptions}</select><button type="button" class="btn btn-sm" onclick="TestPlanningView.addTraceManual(${index}, 'wricef')">Add</button></div>
+                        <div style="display:flex;gap:6px"><select id="traceGroup_${index}_manual_config" class="form-control"><option value="">— Add Manual Config —</option>${manualCfgOptions}</select><button type="button" class="btn btn-sm" onclick="TestPlanningView.addTraceManual(${index}, 'config')">Add</button></div>
+                    </div>
+
+                    ${renderManualTags('Manual Requirements', g.manual_requirement_ids || [], 'req', _requirementLabel)}
+                    ${renderManualTags('Manual WRICEF', g.manual_backlog_item_ids || [], 'wricef', _backlogLabel)}
+                    ${renderManualTags('Manual Config', g.manual_config_item_ids || [], 'config', _configLabel)}
+
+                    <div style="display:flex;justify-content:flex-end;margin-top:10px">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="TestPlanningView.saveTraceOverrides()">Save Overrides</button>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    function clearTraceGroups() {
+        if (!(_traceabilityState.groups || []).length) return;
+        if (!confirm('Clear all selected L3 baskets and linked items?')) return;
+        _traceabilityState.groups = [];
+        _activeTraceGroupIndex = null;
+        _renderTraceabilityBasket();
+        _updateTraceabilityRequirementUI();
+    }
+
+    function removeTraceGroup(index) {
+        const group = _traceabilityState.groups[index];
+        if (!group) return;
+        if (_groupHasChildren(group) && !confirm('This L3 has linked items. Remove and clear all linked selections?')) {
+            return;
+        }
+        _traceabilityState.groups.splice(index, 1);
+        if (_activeTraceGroupIndex === index) _activeTraceGroupIndex = null;
+        if (_activeTraceGroupIndex !== null && _activeTraceGroupIndex > index) _activeTraceGroupIndex -= 1;
+        _renderTraceabilityBasket();
+        _updateTraceabilityRequirementUI();
+    }
+
+    function changeTraceGroupL3(index, newL3Id) {
+        const group = _traceabilityState.groups[index];
+        if (!group || !newL3Id || String(group.l3_process_level_id) === String(newL3Id)) return;
+        if (_traceabilityState.groups.some((g, i) => i !== index && String(g.l3_process_level_id) === String(newL3Id))) {
+            return App.toast('This L3 basket already exists', 'error');
+        }
+        if (_groupHasChildren(group) && !confirm('Changing L3 will clear linked L4/Requirement/WRICEF/Config items. Continue?')) {
+            _renderTraceabilityBasket();
+            return;
+        }
+        group.l3_process_level_id = newL3Id;
+        group.l4_process_level_ids = [];
+        group.explore_requirement_ids = [];
+        group.backlog_item_ids = [];
+        group.config_item_ids = [];
+        group.manual_requirement_ids = [];
+        group.manual_backlog_item_ids = [];
+        group.manual_config_item_ids = [];
+        group.excluded_requirement_ids = [];
+        group.excluded_backlog_item_ids = [];
+        group.excluded_config_item_ids = [];
+        _activeTraceGroupIndex = index;
+        _renderTraceabilityBasket();
+    }
+
+    function openTraceGroupDetail(index) {
+        if (!_traceabilityState.groups[index]) return;
+        _activeTraceGroupIndex = index;
+        _renderTraceabilityBasket();
+    }
+
+    function closeTraceGroupDetail() {
+        _activeTraceGroupIndex = null;
+        _renderTraceabilityBasket();
+    }
+
+    function addTraceChild(index, type) {
+        const group = _traceabilityState.groups[index];
+        if (!group) return;
+        const elId = `traceGroup_${index}_${type}`;
+        const value = document.getElementById(elId)?.value;
+        if (!value) return;
+
+        if (type === 'l4') group.l4_process_level_ids = _listUnique([...(group.l4_process_level_ids || []), String(value)]);
+        if (type === 'req') group.explore_requirement_ids = _listUnique([...(group.explore_requirement_ids || []), String(value)]);
+        if (type === 'wricef') group.backlog_item_ids = _listUnique([...(group.backlog_item_ids || []), _toNum(value)].filter(Number.isFinite));
+        if (type === 'config') group.config_item_ids = _listUnique([...(group.config_item_ids || []), _toNum(value)].filter(Number.isFinite));
+
+        _activeTraceGroupIndex = index;
+        _renderTraceabilityBasket();
+    }
+
+    function removeTraceChild(index, type, value) {
+        const group = _traceabilityState.groups[index];
+        if (!group) return;
+        if (type === 'l4') group.l4_process_level_ids = (group.l4_process_level_ids || []).filter(v => String(v) !== String(value));
+        if (type === 'req') group.explore_requirement_ids = (group.explore_requirement_ids || []).filter(v => String(v) !== String(value));
+        if (type === 'wricef') group.backlog_item_ids = (group.backlog_item_ids || []).filter(v => String(v) !== String(value));
+        if (type === 'config') group.config_item_ids = (group.config_item_ids || []).filter(v => String(v) !== String(value));
+        _activeTraceGroupIndex = index;
+        _renderTraceabilityBasket();
+    }
+
+    function toggleTraceExcluded(index, type, value, checked) {
+        const group = _traceabilityState.groups[index];
+        if (!group) return;
+        if (type === 'req') {
+            const base = (group.excluded_requirement_ids || []).map(String);
+            group.excluded_requirement_ids = checked
+                ? _listUnique([...base, String(value)])
+                : base.filter(v => String(v) !== String(value));
+        }
+        if (type === 'wricef') {
+            const base = (group.excluded_backlog_item_ids || []).map(_toNum).filter(Number.isFinite);
+            const num = _toNum(value);
+            group.excluded_backlog_item_ids = checked
+                ? _listUnique([...base, num].filter(Number.isFinite))
+                : base.filter(v => String(v) !== String(num));
+        }
+        if (type === 'config') {
+            const base = (group.excluded_config_item_ids || []).map(_toNum).filter(Number.isFinite);
+            const num = _toNum(value);
+            group.excluded_config_item_ids = checked
+                ? _listUnique([...base, num].filter(Number.isFinite))
+                : base.filter(v => String(v) !== String(num));
+        }
+        _activeTraceGroupIndex = index;
+        _renderTraceabilityBasket();
+    }
+
+    function addTraceManual(index, type) {
+        const group = _traceabilityState.groups[index];
+        if (!group) return;
+        if (type === 'req') {
+            const val = document.getElementById(`traceGroup_${index}_manual_req`)?.value;
+            if (!val) return;
+            group.manual_requirement_ids = _listUnique([...(group.manual_requirement_ids || []), String(val)]);
+        }
+        if (type === 'wricef') {
+            const val = _toNum(document.getElementById(`traceGroup_${index}_manual_wricef`)?.value);
+            if (!Number.isFinite(val)) return;
+            group.manual_backlog_item_ids = _listUnique([...(group.manual_backlog_item_ids || []), val]);
+        }
+        if (type === 'config') {
+            const val = _toNum(document.getElementById(`traceGroup_${index}_manual_config`)?.value);
+            if (!Number.isFinite(val)) return;
+            group.manual_config_item_ids = _listUnique([...(group.manual_config_item_ids || []), val]);
+        }
+        _activeTraceGroupIndex = index;
+        _renderTraceabilityBasket();
+    }
+
+    function removeTraceManual(index, type, value) {
+        const group = _traceabilityState.groups[index];
+        if (!group) return;
+        if (type === 'req') group.manual_requirement_ids = (group.manual_requirement_ids || []).filter(v => String(v) !== String(value));
+        if (type === 'wricef') group.manual_backlog_item_ids = (group.manual_backlog_item_ids || []).filter(v => String(v) !== String(value));
+        if (type === 'config') group.manual_config_item_ids = (group.manual_config_item_ids || []).filter(v => String(v) !== String(value));
+        _activeTraceGroupIndex = index;
+        _renderTraceabilityBasket();
+    }
+
+    async function saveTraceOverrides() {
+        if (!_activeCaseId) return App.toast('Save the test case first to manage overrides', 'error');
+        const traceGroups = _normalizeTraceGroups(_traceabilityState.groups || []);
+        if (!traceGroups.length) return App.toast('At least one L3 scope is required', 'error');
+        try {
+            await API.put(`/testing/catalog/${_activeCaseId}/traceability-overrides`, {
+                traceability_links: traceGroups,
+            });
+            await _refreshDerivedTraceabilityFromApi();
+            App.toast('Traceability overrides saved', 'success');
+        } catch (e) {
+            App.toast(e.message || 'Failed to save overrides', 'error');
+        }
+    }
+
+    function switchCaseWizard(step) {
+        _caseWizardStep = step === 2 ? 2 : 1;
+        const s1 = document.getElementById('caseWizardStep1');
+        const s2 = document.getElementById('caseWizardStep2');
+        if (s1) s1.style.display = _caseWizardStep === 1 ? '' : 'none';
+        if (s2) s2.style.display = _caseWizardStep === 2 ? '' : 'none';
+        document.querySelectorAll('.case-wizard-btn').forEach(btn => {
+            btn.classList.toggle('active', Number(btn.dataset.cwstep) === _caseWizardStep);
+        });
+        if (_caseWizardStep === 2) {
+            _renderL3CoveragePanel();
+            refreshL3Coverage(false);
+        }
+    }
+
+    function _isL3RequiredLayer(layer) {
+        return ['unit', 'sit', 'uat'].includes(String(layer || '').toLowerCase());
+    }
+
+    function _updateTraceabilityRequirementUI() {
+        const layer = document.getElementById('tcLayer')?.value || 'sit';
+        const required = _isL3RequiredLayer(layer);
+        const l3Label = document.getElementById('tcL3Label');
+        const hint = document.getElementById('tcTraceRuleHint');
+        if (l3Label) l3Label.textContent = required ? 'L3 Process *' : 'L3 Process';
+        if (hint) {
+            hint.style.color = required ? '#c4314b' : '#666';
+            hint.textContent = required
+                ? 'For UNIT/SIT/UAT, at least one L3 basket is required.'
+                : 'For this layer, L3 is optional but recommended for traceability.';
+        }
+    }
+
+    function _renderDraftSteps() {
+        const container = document.getElementById('draftStepsContainer');
+        if (!container) return;
+        if (!_draftSteps.length) {
+            container.innerHTML = '<p style="font-size:12px;color:#777">No steps yet.</p>';
+            return;
+        }
+        container.innerHTML = `
+            <table class="data-table" style="font-size:12px">
+                <thead><tr><th style="width:60px">Step</th><th>Action *</th><th>Expected Result *</th><th style="width:70px"></th></tr></thead>
+                <tbody>
+                    ${_draftSteps.map((s, idx) => `
+                        <tr>
+                            <td>${idx + 1}</td>
+                            <td><input class="form-control" value="${esc(s.action || '')}" oninput="TestPlanningView.updateDraftStep(${idx}, 'action', this.value)"></td>
+                            <td><input class="form-control" value="${esc(s.expected_result || '')}" oninput="TestPlanningView.updateDraftStep(${idx}, 'expected_result', this.value)"></td>
+                            <td><button type="button" class="btn btn-sm btn-danger" onclick="TestPlanningView.removeDraftStepRow(${idx})">🗑</button></td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+
+    function addDraftStepRow() {
+        const next = (_draftSteps.length || 0) + 1;
+        _draftSteps.push({ step_no: next, action: '', expected_result: '' });
+        _renderDraftSteps();
+    }
+
+    function updateDraftStep(index, field, value) {
+        if (!_draftSteps[index]) return;
+        _draftSteps[index][field] = value;
+    }
+
+    function removeDraftStepRow(index) {
+        _draftSteps.splice(index, 1);
+        _renderDraftSteps();
     }
 
     // ── Structured Step Management ─────────────────────────────────────
@@ -967,33 +2073,91 @@ const TestPlanningView = (() => {
 
     async function saveCase(id) {
         const pid = TestingShared.pid;
-        const _selVal = (elId) => { const el = document.getElementById(elId); return el ? el.value : ''; };
+        const _selectedSuiteIds = () => {
+            const el = document.getElementById('tcSuiteId');
+            if (!el) return [];
+            return Array.from(el.selectedOptions || [])
+                .map(o => parseInt(o.value, 10))
+                .filter(Number.isInteger);
+        };
+        const suiteIds = _selectedSuiteIds();
+        const selectedLayer = document.getElementById('tcLayer').value;
+        const traceGroups = _normalizeTraceGroups(_traceabilityState.groups || []);
+        const firstGroup = traceGroups[0] || null;
+        const selectedProcessLevelId = firstGroup ? firstGroup.l3_process_level_id : null;
+        const selectedExploreReqId = firstGroup ? ((firstGroup.explore_requirement_ids || [])[0] || null) : null;
+        const selectedBacklogItemId = firstGroup ? ((firstGroup.backlog_item_ids || [])[0] || null) : null;
+        const selectedConfigItemId = firstGroup ? ((firstGroup.config_item_ids || [])[0] || null) : null;
         const body = {
+            code: document.getElementById('tcCode')?.value?.trim(),
             title: document.getElementById('tcTitle').value,
-            test_layer: document.getElementById('tcLayer').value,
+            test_layer: selectedLayer,
+            test_type: document.getElementById('tcType')?.value || 'functional',
             module: document.getElementById('tcModule').value,
             priority: document.getElementById('tcPriority').value,
+            risk: document.getElementById('tcRisk')?.value || 'medium',
+            status: document.getElementById('tcStatus')?.value || 'draft',
             description: document.getElementById('tcDesc').value,
             preconditions: document.getElementById('tcPrecond').value,
             test_steps: document.getElementById('tcSteps') ? document.getElementById('tcSteps').value : '',
             expected_result: document.getElementById('tcExpected').value,
             test_data_set: document.getElementById('tcData').value,
+            data_readiness: document.getElementById('tcDataReadiness')?.value || '',
             assigned_to: document.getElementById('tcAssigned').value,
+            reviewer: document.getElementById('tcReviewer')?.value || '',
+            version: document.getElementById('tcVersion')?.value || '1.0',
             assigned_to_id: document.getElementById('tcAssigned').value || null,
             is_regression: document.getElementById('tcRegression').checked,
-            suite_id: parseInt(document.getElementById('tcSuiteId').value) || null,
-            process_level_id: _selVal('tcProcessLevelId') || null,
-            explore_requirement_id: _selVal('tcExploreReqId') || null,
-            backlog_item_id: parseInt(_selVal('tcBacklogItemId')) || null,
-            config_item_id: parseInt(_selVal('tcConfigItemId')) || null,
+            suite_ids: suiteIds,
+            process_level_id: selectedProcessLevelId,
+            explore_requirement_id: selectedExploreReqId,
+            backlog_item_id: selectedBacklogItemId,
+            config_item_id: selectedConfigItemId,
+            traceability_links: traceGroups,
         };
+        if (!body.code) return App.toast('Test Case Code is required', 'error');
         if (!body.title) return App.toast('Title is required', 'error');
+        if (!body.priority) return App.toast('Priority is required', 'error');
+        if (!body.preconditions || !body.preconditions.trim()) return App.toast('Preconditions are required', 'error');
+        if (_isL3RequiredLayer(selectedLayer)) {
+            if (!traceGroups.length) {
+                return App.toast('At least one L3 basket is required for UNIT/SIT/UAT.', 'error');
+            }
+        }
+        if (selectedLayer === 'sit') {
+            if (!body.module || !body.module.trim()) return App.toast('Module is required for SIT', 'error');
+            if (!body.risk) return App.toast('Risk is required for SIT', 'error');
+            const hasDataReadiness = (body.test_data_set && body.test_data_set.trim()) || (body.data_readiness && body.data_readiness.trim());
+            if (!hasDataReadiness) {
+                return App.toast('For SIT, provide linked data set or data readiness notes', 'error');
+            }
+        }
+
+        if (!id) {
+            const validDraftSteps = (_draftSteps || []).filter(s => (s.action || '').trim() || (s.expected_result || '').trim());
+            if (!validDraftSteps.length) return App.toast('At least one test step is required', 'error');
+            if (validDraftSteps.some(s => !(s.action || '').trim() || !(s.expected_result || '').trim())) {
+                return App.toast('Each step must include Action and Expected Result', 'error');
+            }
+            body.test_steps = validDraftSteps.map((s, i) => `${i + 1}. ${s.action}`).join('\n');
+            body.expected_result = validDraftSteps.map((s, i) => `${i + 1}. ${s.expected_result}`).join('\n');
+        }
 
         if (id) {
             await API.put(`/testing/catalog/${id}`, body);
             App.toast('Test case updated', 'success');
         } else {
-            await API.post(`/programs/${pid}/testing/catalog`, body);
+            const created = await API.post(`/programs/${pid}/testing/catalog`, body);
+            const createdId = created?.id;
+            const validDraftSteps = (_draftSteps || []).filter(s => (s.action || '').trim() && (s.expected_result || '').trim());
+            for (let i = 0; createdId && i < validDraftSteps.length; i += 1) {
+                const s = validDraftSteps[i];
+                await API.post(`/testing/catalog/${createdId}/steps`, {
+                    step_no: i + 1,
+                    action: s.action.trim(),
+                    expected_result: s.expected_result.trim(),
+                });
+            }
             App.toast('Test case created', 'success');
         }
         App.closeModal();
@@ -1001,8 +2165,7 @@ const TestPlanningView = (() => {
     }
 
     async function showCaseDetail(id) {
-        const tc = await API.get(`/testing/catalog/${id}`);
-        showCaseModal(tc);
+        App.navigate('test-case-detail', id);
     }
 
     async function deleteCase(id) {
@@ -1015,7 +2178,6 @@ const TestPlanningView = (() => {
     // ═══════════════════════════════════════════════════════════════════════
     // SUITES TAB
     // ═══════════════════════════════════════════════════════════════════════
-    const SUITE_TYPES = ['SIT', 'UAT', 'Regression', 'E2E', 'Performance', 'Custom'];
     const SUITE_STATUSES = ['draft', 'active', 'locked', 'archived'];
 
     async function renderSuites() {
@@ -1034,21 +2196,27 @@ const TestPlanningView = (() => {
                 </div>`;
             return;
         }
-
-        const typeBadge = (t) => {
-            const colors = { SIT: '#0070f3', UAT: '#107e3e', Regression: '#a93e7e', E2E: '#6a4fa0', Performance: '#e9730c', Custom: '#888' };
-            return `<span class="badge" style="background:${colors[t] || '#888'};color:#fff">${t}</span>`;
-        };
-        const statusBadge = (s) => {
-            const colors = { draft: '#888', active: '#0070f3', locked: '#e9730c', archived: '#555' };
-            return `<span class="badge" style="background:${colors[s] || '#888'};color:#fff">${s}</span>`;
-        };
-
         container.innerHTML = `
-            <div id="suiteFilterBar" style="margin-bottom:8px"></div>
-            <div id="suiteTableArea"></div>
+            <div class="tm-toolbar">
+                <div class="tm-toolbar__left">
+                    <input id="tmSuiteSearch" class="tm-input" placeholder="Search suites..." value="${esc(_suiteSearch)}" />
+                    <span id="suiteItemCount" class="tm-muted"></span>
+                </div>
+                <div class="tm-toolbar__right">
+                    <button class="btn btn-primary btn-sm" onclick="TestPlanningView.showSuiteModal()">+ New Suite</button>
+                </div>
+            </div>
+            <div id="suiteSplitRoot"></div>
         `;
-        renderSuiteFilterBar();
+
+        const searchEl = document.getElementById('tmSuiteSearch');
+        if (searchEl) {
+            searchEl.addEventListener('input', (e) => {
+                _suiteSearch = e.target.value || '';
+                applySuiteFilter();
+            });
+        }
+
         applySuiteFilter();
     }
 
@@ -1063,9 +2231,11 @@ const TestPlanningView = (() => {
             onChange: 'TestPlanningView.onSuiteFilterChange',
             filters: [
                 {
-                    id: 'suite_type', label: 'Type', type: 'multi', color: '#3b82f6',
-                    options: SUITE_TYPES.map(t => ({ value: t, label: t })),
-                    selected: _suiteFilters.suite_type || [],
+                    id: 'suite_purpose', label: 'Purpose', type: 'multi', color: '#3b82f6',
+                    options: [...new Set(testSuites.map(s => (s.purpose || s.suite_type || 'General').trim()).filter(Boolean))]
+                        .sort()
+                        .map(p => ({ value: p, label: p })),
+                    selected: _suiteFilters.suite_purpose || [],
                 },
                 {
                     id: 'status', label: 'Status', type: 'multi', color: '#10b981',
@@ -1122,25 +2292,126 @@ const TestPlanningView = (() => {
             if (!val) return;
             const values = Array.isArray(val) ? val : [val];
             if (values.length === 0) return;
-            filtered = filtered.filter(s => values.includes(String(s[key])));
+            if (key === 'suite_purpose') {
+                filtered = filtered.filter(s => values.includes(String((s.purpose || s.suite_type || 'General').trim())));
+            } else {
+                filtered = filtered.filter(s => values.includes(String(s[key])));
+            }
         });
+
+        if (_suiteTreeFilter && _suiteTreeFilter !== 'all') {
+            const [kind, value] = String(_suiteTreeFilter).split(':');
+            if (kind === 'purpose') {
+                filtered = filtered.filter(s => String((s.purpose || s.suite_type || 'General').trim()) === value);
+            }
+            if (kind === 'status') {
+                filtered = filtered.filter(s => String(s.status || '') === value);
+            }
+            if (kind === 'module') {
+                filtered = filtered.filter(s => String(s.module || '') === value);
+            }
+        }
 
         const countEl = document.getElementById('suiteItemCount');
         if (countEl) countEl.textContent = `${filtered.length} of ${testSuites.length}`;
 
-        const tableEl = document.getElementById('suiteTableArea');
-        if (!tableEl) return;
-        if (filtered.length === 0) {
-            tableEl.innerHTML = '<div class="empty-state" style="padding:40px"><p>No suites match your filters.</p></div>';
+        _renderSuiteSplit(filtered);
+    }
+
+    function _buildSuiteTreeNodes() {
+        const nodes = [{ id: 'all', label: 'All Suites', count: testSuites.length }];
+        const purposes = new Map();
+        const statuses = new Map();
+        const modules = new Map();
+
+        testSuites.forEach(s => {
+            const purpose = (s.purpose || s.suite_type || 'General').trim();
+            const status = s.status || 'draft';
+            const module = s.module || 'Unassigned';
+            purposes.set(purpose, (purposes.get(purpose) || 0) + 1);
+            statuses.set(status, (statuses.get(status) || 0) + 1);
+            modules.set(module, (modules.get(module) || 0) + 1);
+        });
+
+        [...purposes.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([value, count]) => {
+            nodes.push({ id: `purpose:${value}`, label: `Purpose: ${value}`, count });
+        });
+        [...statuses.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([value, count]) => {
+            nodes.push({ id: `status:${value}`, label: `Status: ${value}`, count });
+        });
+        [...modules.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([value, count]) => {
+            nodes.push({ id: `module:${value}`, label: `Module: ${value}`, count });
+        });
+
+        return nodes;
+    }
+
+    function _renderSuiteSplit(list) {
+        const root = document.getElementById('suiteSplitRoot');
+        if (!root) return;
+
+        if (!window.TMSplitPane || !window.TMTreePanel || !window.TMDataGrid) {
+            root.innerHTML = _renderSuiteTable(list);
             return;
         }
-        tableEl.innerHTML = _renderSuiteTable(filtered);
+
+        TMSplitPane.mount(root, {
+            leftHtml: '<div id="tmSuiteTree"></div>',
+            rightHtml: '<div id="tmSuiteGrid" style="padding:8px"></div>',
+            leftWidth: 260,
+            minLeft: 180,
+            maxLeft: 440,
+        });
+
+        const treeEl = document.getElementById('tmSuiteTree');
+        const gridEl = document.getElementById('tmSuiteGrid');
+        if (!treeEl || !gridEl) return;
+
+        TMTreePanel.render(treeEl, {
+            title: 'Suite Groups',
+            nodes: _buildSuiteTreeNodes(),
+            selectedId: _suiteTreeFilter,
+            searchPlaceholder: 'Search group...',
+            onSelect: (nodeId) => {
+                _suiteTreeFilter = nodeId;
+                applySuiteFilter();
+            },
+        });
+
+        const purposeBadge = (suite) => {
+            const txt = (suite.purpose || suite.suite_type || 'General').trim();
+            return `<span class="badge" style="background:#6a4fa0;color:#fff">${esc(txt)}</span>`;
+        };
+        const statusBadge = (status) => {
+            const colors = { draft: '#888', active: '#0070f3', locked: '#e9730c', archived: '#555' };
+            return `<span class="badge" style="background:${colors[status] || '#888'};color:#fff">${status || '-'}</span>`;
+        };
+
+        TMDataGrid.render(gridEl, {
+            rows: list,
+            rowKey: 'id',
+            emptyText: 'No suites match your filters.',
+            onRowClick: (rowId) => TestPlanningView.showSuiteDetail(Number(rowId)),
+            columns: [
+                { key: 'name', label: 'Name', width: '220px', render: (s) => `<strong>${esc(s.name || '-')}</strong>` },
+                { key: 'purpose', label: 'Purpose', width: '160px', render: (s) => purposeBadge(s) },
+                { key: 'status', label: 'Status', width: '100px', render: (s) => statusBadge(s.status) },
+                { key: 'module', label: 'Module', width: '95px', render: (s) => esc(s.module || '-') },
+                { key: 'owner', label: 'Owner', width: '120px', render: (s) => esc(s.owner || '-') },
+                { key: 'tags', label: 'Tags', width: 'auto', render: (s) => esc(s.tags || '-') },
+                {
+                    key: 'actions', label: '', width: '78px', align: 'center', render: (s) =>
+                        `<button class="btn btn-sm" onclick="event.stopPropagation();TestPlanningView.editSuite(${s.id})">✏️</button>
+                         <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();TestPlanningView.deleteSuite(${s.id})">🗑</button>`,
+                },
+            ],
+        });
     }
 
     function _renderSuiteTable(list) {
-        const typeBadge = (t) => {
-            const colors = { SIT: '#0070f3', UAT: '#107e3e', Regression: '#a93e7e', E2E: '#6a4fa0', Performance: '#e9730c', Custom: '#888' };
-            return `<span class="badge" style="background:${colors[t] || '#888'};color:#fff">${t}</span>`;
+        const purposeBadge = (suite) => {
+            const txt = (suite.purpose || suite.suite_type || 'General').trim();
+            return `<span class="badge" style="background:#6a4fa0;color:#fff">${esc(txt)}</span>`;
         };
         const statusBadge = (s) => {
             const colors = { draft: '#888', active: '#0070f3', locked: '#e9730c', archived: '#555' };
@@ -1148,12 +2419,12 @@ const TestPlanningView = (() => {
         };
         return `<table class="data-table">
                 <thead><tr>
-                    <th>Name</th><th>Type</th><th>Status</th><th>Module</th><th>Owner</th><th>Tags</th><th>Actions</th>
+                    <th>Name</th><th>Purpose</th><th>Status</th><th>Module</th><th>Owner</th><th>Tags</th><th>Actions</th>
                 </tr></thead>
                 <tbody>
                     ${list.map(s => `<tr onclick="TestPlanningView.showSuiteDetail(${s.id})" style="cursor:pointer" class="clickable-row">
                         <td><strong>${esc(s.name)}</strong></td>
-                        <td>${typeBadge(s.suite_type)}</td>
+                        <td>${purposeBadge(s)}</td>
                         <td>${statusBadge(s.status)}</td>
                         <td>${esc(s.module || '-')}</td>
                         <td>${esc(s.owner || '-')}</td>
@@ -1183,11 +2454,11 @@ const TestPlanningView = (() => {
                 <div class="form-group"><label>Name *</label>
                     <input id="suiteName" class="form-control" value="${isEdit ? esc(suite.name) : ''}"></div>
                 <div class="form-row">
-                    <div class="form-group"><label>Suite Type</label>
-                        <select id="suiteType" class="form-control">
-                            ${SUITE_TYPES.map(t =>
-                                `<option value="${t}" ${(isEdit && suite.suite_type === t) ? 'selected' : ''}>${t}</option>`).join('')}
-                        </select></div>
+                    <div class="form-group"><label>Legacy Suite Type (Read-only)</label>
+                        <input id="suiteTypeLegacy" class="form-control" value="${esc((isEdit ? (suite.suite_type || 'Custom') : 'Custom'))}" readonly>
+                    </div>
+                    <div class="form-group"><label>Purpose</label>
+                        <input id="suitePurpose" class="form-control" value="${isEdit ? esc(suite.purpose || '') : ''}" placeholder="e.g. E2E order flow, FI regression pack"></div>
                     <div class="form-group"><label>Status</label>
                         <select id="suiteStatus" class="form-control">
                             ${SUITE_STATUSES.map(s =>
@@ -1217,7 +2488,8 @@ const TestPlanningView = (() => {
         const pid = TestingShared.pid;
         const body = {
             name: document.getElementById('suiteName').value,
-            suite_type: document.getElementById('suiteType').value,
+            suite_type: document.getElementById('suiteTypeLegacy').value,
+            purpose: document.getElementById('suitePurpose').value,
             status: document.getElementById('suiteStatus').value,
             module: document.getElementById('suiteModule').value,
             owner: document.getElementById('suiteOwner').value,
@@ -1248,9 +2520,9 @@ const TestPlanningView = (() => {
         const cases = suite.test_cases || [];
         const modal = document.getElementById('modalContainer');
 
-        const typeBadge = (t) => {
-            const colors = { SIT: '#0070f3', UAT: '#107e3e', Regression: '#a93e7e', E2E: '#6a4fa0', Performance: '#e9730c', Custom: '#888' };
-            return `<span class="badge" style="background:${colors[t] || '#888'};color:#fff">${t}</span>`;
+        const purposeBadge = (suiteObj) => {
+            const txt = (suiteObj.purpose || suiteObj.suite_type || 'General').trim();
+            return `<span class="badge" style="background:#6a4fa0;color:#fff">${esc(txt)}</span>`;
         };
         const statusBadge = (s) => {
             const colors = { draft: '#888', active: '#0070f3', locked: '#e9730c', archived: '#555' };
@@ -1262,7 +2534,7 @@ const TestPlanningView = (() => {
                 <button class="modal-close" onclick="App.closeModal()">&times;</button></div>
             <div class="modal-body">
                 <div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap">
-                    <span>${typeBadge(suite.suite_type)}</span>
+                    <span>${purposeBadge(suite)}</span>
                     <span>${statusBadge(suite.status)}</span>
                     ${suite.module ? `<span><strong>Module:</strong> ${esc(suite.module)}</span>` : ''}
                     ${suite.owner ? `<span><strong>Owner:</strong> ${esc(suite.owner)}</span>` : ''}
@@ -1277,7 +2549,7 @@ const TestPlanningView = (() => {
                         <thead><tr><th>Code</th><th>Title</th><th>Layer</th><th>Status</th><th>Priority</th></tr></thead>
                         <tbody>
                             ${cases.map(tc => `<tr>
-                                <td><strong>${esc(tc.code || '-')}</strong></td>
+                                <td><span style="font-family:'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:500;color:#1e3a5f;letter-spacing:-0.2px">${esc(tc.code || '-')}</span></td>
                                 <td>${esc(tc.title)}</td>
                                 <td>${(tc.test_layer || '-').toUpperCase()}</td>
                                 <td>${esc(tc.status)}</td>
@@ -1330,7 +2602,7 @@ const TestPlanningView = (() => {
                     ${list.map(item => `
                         <label style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid #f0f0f0;cursor:pointer">
                             <input type="checkbox" class="wricef-cb" value="${item.id}">
-                            <span><strong>${esc(item.code || '')}</strong> ${esc(item.title)} <span class="badge" style="font-size:10px">${esc(item.type || '')}</span></span>
+                            <span><span style="font-family:'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:500;color:#1e3a5f">${esc(item.code || '')}</span> ${esc(item.title)} <span class="badge" style="font-size:10px">${esc(item.type || '')}</span></span>
                         </label>
                     `).join('')}
                 </div>`;
@@ -1442,9 +2714,15 @@ const TestPlanningView = (() => {
         setSuiteSearch, onSuiteFilterChange,
         // Steps
         addStepRow, saveNewStep, editStepRow, updateStep, deleteStep, _loadSteps,
+        addDraftStepRow, updateDraftStep, removeDraftStepRow,
         // Case tabs
         _switchCaseTab, addPerfResult, deletePerfResult,
         addCaseDependency, deleteCaseDependency,
+        // Traceability B
+        addTraceChild, removeTraceChild, removeTraceGroup, changeTraceGroupL3, clearTraceGroups,
+        openTraceGroupDetail, closeTraceGroupDetail, switchCaseWizard,
+        toggleTraceExcluded, addTraceManual, removeTraceManual, saveTraceOverrides,
+        refreshL3Coverage, onL3CoverageSelect,
         // Generate
         showGenerateWricefModal, executeGenerateWricef,
         showGenerateProcessModal, executeGenerateProcess,

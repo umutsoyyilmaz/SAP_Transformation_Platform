@@ -1,0 +1,80 @@
+/* F1 — Test Management Design Tokens (QMetry-style compact foundation) */
+:root {
+    /* ── Color: Neutral ────────────────────── */
+    --tm-bg: #f7f8fa;
+    --tm-surface: #ffffff;
+    --tm-surface-hover: #f0f2f5;
+    --tm-surface-active: #e8f0fe;
+    --tm-border: #e0e3e8;
+    --tm-border-strong: #c4c9d0;
+
+    /* ── Color: Text ───────────────────────── */
+    --tm-text-primary: #1a1d21;
+    --tm-text-secondary: #5f6368;
+    --tm-text-tertiary: #9aa0a6;
+    --tm-text-inverse: #ffffff;
+
+    /* ── Color: Accent ─────────────────────── */
+    --tm-accent: #1a73e8;
+    --tm-accent-hover: #1557b0;
+    --tm-accent-light: #e8f0fe;
+
+    /* ── Color: Semantic ───────────────────── */
+    --tm-pass: #34a853;
+    --tm-fail: #ea4335;
+    --tm-blocked: #f9ab00;
+    --tm-not-run: #9aa0a6;
+    --tm-deferred: #673ab7;
+    --tm-info: #1a73e8;
+    --tm-info-light: #e8f0fe;
+
+    /* ── Spacing (8-step scale) ─────────────── */
+    --sp-2xs: 2px;
+    --sp-xs: 4px;
+    --sp-sm: 8px;
+    --sp-md: 12px;
+    --sp-lg: 16px;
+    --sp-xl: 20px;
+    --sp-2xl: 24px;
+    --sp-3xl: 32px;
+
+    /* ── Border Radius ─────────────────────── */
+    --radius-sm: 3px;
+    --radius-md: 6px;
+    --radius-lg: 10px;
+
+    /* ── Shadow (4 levels) ─────────────────── */
+    --tm-shadow-none: none;
+    --tm-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --tm-shadow-md: 0 4px 14px rgba(15, 23, 42, 0.08);
+    --tm-shadow-lg: 0 10px 30px rgba(15, 23, 42, 0.12);
+
+    /* ── Typography (7-step scale) ─────────── */
+    --tm-font-2xs: 10px;
+    --tm-font-xs: 11px;
+    --tm-font-sm: 12px;
+    --tm-font-md: 14px;
+    --tm-font-lg: 16px;
+    --tm-font-xl: 20px;
+    --tm-font-2xl: 24px;
+    --tm-font-3xl: 28px;
+
+    /* ── Density ────────────────────────────── */
+    --tm-row-height: 32px;
+    --tm-row-padding: 4px 8px;
+    --tm-cell-font-size: 12px;
+    --tm-header-font-size: 11px;
+    --tm-density-line-height: 1.25;
+
+    /* ── Transitions ───────────────────────── */
+    --tm-transition-fast: 100ms ease;
+    --tm-transition-normal: 150ms ease;
+    --tm-transition-slow: 250ms ease;
+
+    /* ── Z-index layers ────────────────────── */
+    --tm-z-dropdown: 100;
+    --tm-z-modal-backdrop: 200;
+    --tm-z-modal: 210;
+    --tm-z-toast: 300;
+    --tm-z-context-menu: 150;
+}

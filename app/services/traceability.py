@@ -10,6 +10,8 @@ The engine builds a chain dict showing upstream (parents) and downstream
 (children) links for a given entity.
 """
 
+import logging
+
 from app.models import db
 from app.models.backlog import BacklogItem, ConfigItem, FunctionalSpec, TechnicalSpec
 from app.models.integration import Interface, Wave, ConnectivityTest, SwitchPlan
@@ -18,6 +20,7 @@ from app.models.scenario import Scenario, Workshop
 from app.models.scope import Process, Analysis
 from app.models.testing import TestCase, Defect
 
+logger = logging.getLogger(__name__)
 
 # Supported entity types for chain traversal
 ENTITY_TYPES = {
@@ -730,3 +733,154 @@ def trace_explore_batch(requirement_ids: list[str]) -> list[dict]:
         except ValueError:
             results.append({"requirement_id": rid, "error": "not_found"})
     return results
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Lateral link helpers (Open Items, Decisions, Interfaces)
+# Moved here from the blueprint layer to keep ORM access service-side.
+# ══════════════════════════════════════════════════════════════════════════════
+
+def build_explore_lateral(requirement_id: int) -> dict:
+    """Return Open Items and Decisions laterally linked to an ExploreRequirement.
+
+    Queries the RequirementOpenItemLink M:N table and the ExploreDecision table
+    via the requirement's ProcessStep, giving callers a flat lateral context
+    dict without needing direct ORM access in the blueprint.
+
+    Args:
+        requirement_id: PK of the ExploreRequirement.
+
+    Returns:
+        Dict with keys ``open_items`` and ``decisions``, each a list of dicts.
+    """
+    from app.models import db
+    from app.models.explore import (
+        ExploreDecision,
+        ExploreOpenItem,
+        ExploreRequirement,
+        ProcessStep,
+        RequirementOpenItemLink,
+    )
+
+    lateral: dict = {"open_items": [], "decisions": []}
+
+    # Open Items (M:N via RequirementOpenItemLink)
+    links = RequirementOpenItemLink.query.filter_by(
+        requirement_id=requirement_id,
+    ).all()
+    for lnk in links:
+        oi = db.session.get(ExploreOpenItem, lnk.open_item_id)
+        if oi:
+            lateral["open_items"].append({
+                "id": oi.id,
+                "code": oi.code,
+                "title": oi.title,
+                "status": oi.status,
+                "priority": oi.priority,
+                "link_type": lnk.link_type,
+            })
+
+    # Decisions (via ProcessStep)
+    req = db.session.get(ExploreRequirement, requirement_id)
+    if req and req.process_step_id:
+        ps = db.session.get(ProcessStep, req.process_step_id)
+        if ps:
+            decisions = ExploreDecision.query.filter_by(process_step_id=ps.id).all()
+            for d in decisions:
+                lateral["decisions"].append({
+                    "id": d.id,
+                    "code": d.code,
+                    "text": d.text,
+                    "decided_by": d.decided_by,
+                    "category": d.category,
+                    "status": d.status,
+                })
+
+    return lateral
+
+
+def build_lateral_links(entity_type: str, entity_id: int) -> dict:
+    """Return lateral link data for standard (non-explore) entities.
+
+    Handles three entity types:
+    - ``requirement``: linked Open Items via RequirementOpenItemLink
+    - ``backlog_item``: linked Interfaces
+    - ``interface``: linked ConnectivityTests and SwitchPlans
+
+    Keeping this in the service layer centralises ORM access and allows
+    blueprint helpers to stay query-free.
+
+    Args:
+        entity_type: One of ``requirement``, ``backlog_item``, ``interface``.
+        entity_id: PK of the entity instance.
+
+    Returns:
+        Dict whose keys depend on entity_type (e.g. ``open_items``, ``interfaces``).
+    """
+    from app.models import db
+
+    lateral: dict = {}
+
+    if entity_type == "requirement":
+        from app.models.requirement import Requirement
+
+        req = db.session.get(Requirement, entity_id)
+        if req:
+            try:
+                from app.models.explore import ExploreOpenItem, RequirementOpenItemLink
+
+                links = RequirementOpenItemLink.query.filter_by(
+                    requirement_id=str(entity_id),
+                ).all()
+                lateral["open_items"] = []
+                for lnk in links:
+                    oi = db.session.get(ExploreOpenItem, lnk.open_item_id)
+                    if oi:
+                        lateral["open_items"].append({
+                            "id": oi.id,
+                            "code": oi.code,
+                            "title": oi.title,
+                            "status": oi.status,
+                        })
+            except Exception:
+                logger.warning(
+                    "Could not load open-item links for requirement_id=%s", entity_id
+                )
+
+    elif entity_type == "backlog_item":
+        from app.models.integration import Interface
+
+        interfaces = Interface.query.filter_by(backlog_item_id=entity_id).all()
+        lateral["interfaces"] = [
+            {
+                "id": i.id,
+                "code": i.code,
+                "name": i.name,
+                "direction": i.direction,
+                "status": i.status,
+            }
+            for i in interfaces
+        ]
+
+    elif entity_type == "interface":
+        from app.models.integration import ConnectivityTest, SwitchPlan
+
+        lateral["connectivity_tests"] = [
+            {
+                "id": ct.id,
+                "environment": ct.environment,
+                "result": ct.result,
+            }
+            for ct in ConnectivityTest.query.filter_by(interface_id=entity_id).all()
+        ]
+        lateral["switch_plans"] = [
+            {
+                "id": sp.id,
+                "action": sp.action,
+                "status": sp.status,
+                "sequence": sp.sequence,
+            }
+            for sp in SwitchPlan.query.filter_by(interface_id=entity_id).all()
+        ]
+
+    return lateral

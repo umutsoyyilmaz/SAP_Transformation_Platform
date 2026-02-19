@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from app.models import db
 from app.models.testing import (
     TestPlan, TestCycle, TestCase, TestExecution, Defect,
-    TestSuite, PlanScope, PlanTestCase, PlanDataSet,
+    TestSuite, PlanScope, PlanTestCase, PlanDataSet, TestCaseSuiteLink,
 )
 from app.models.data_factory import TestDataSet
 
@@ -176,7 +176,7 @@ def _trace_from_l3_process(ref_id, label):
             for tc in TestCase.query.filter_by(requirement_id=req.id).all():
                 results.append(_tc_dict(tc, f"L3 {label} → Req → TC"))
     except (ValueError, TypeError):
-        pass
+        logger.debug("Non-integer ref_id for L3 process scope: %s", ref_id)
 
     # ── Path 2: Explore ProcessLevel (scope_item_id is String(36))
     try:
@@ -247,20 +247,14 @@ def _trace_from_scenario(ref_id, label):
                             _tc_dict(tc, f"Scenario {label} → WS → Req → TC")
                         )
     except (ValueError, TypeError):
-        pass
+        logger.debug("Non-integer ref_id for scenario scope: %s", ref_id)
 
     # ── Path 2: Explore ExploreRequirement linked via explore_requirement_id
-    try:
-        from app.models.explore import ExploreRequirement
-        from app.models.backlog import BacklogItem, ConfigItem
-
-        # ExploreRequirements don't directly have scenario_id, but they have
-        # workshop_id → ExploreWorkshop which could link to a scenario.
-        # For now, the explore path is via scope_item_id (L3) which is
-        # handled by the l3_process scope type.  Scenario scope uses the
-        # legacy path above.
-    except Exception:
-        pass
+    # ExploreRequirements don't directly have scenario_id, but they have
+    # workshop_id → ExploreWorkshop which could link to a scenario.
+    # For now, the explore path is via scope_item_id (L3) which is
+    # handled by the l3_process scope type.  Scenario scope uses the
+    # legacy path above.
 
     return results
 
@@ -295,8 +289,13 @@ def import_from_suite(plan_id, suite_id):
     if not suite:
         return {"error": "Suite not found"}, 404
 
-    # TestCase.suite_id → TestSuite
-    suite_tcs = TestCase.query.filter_by(suite_id=suite_id).all()
+    # ADR-008 source-of-truth path: TestCaseSuiteLink junction
+    linked_tc_ids = {
+        link.test_case_id
+        for link in TestCaseSuiteLink.query.filter_by(suite_id=suite_id).all()
+    }
+
+    suite_tcs = TestCase.query.filter(TestCase.id.in_(linked_tc_ids)).all() if linked_tc_ids else []
 
     existing_tc_ids = set(
         ptc.test_case_id

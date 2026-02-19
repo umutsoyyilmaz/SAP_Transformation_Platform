@@ -10,23 +10,29 @@ Sprint 2 endpoints:
   GET  /api/v1/auth/tenants     — List tenants (for login page tenant selector)
 """
 
-from datetime import datetime, timezone
-
 from flask import Blueprint, g, jsonify, request
 
-from app.models import db
-from app.models.auth import Role, Session, Tenant, User
 from app.services.jwt_service import (
-    decode_access_token,
+    create_session,
     decode_refresh_token,
     generate_token_pair,
+    get_active_session_by_token,
     hash_token,
+    revoke_all_user_sessions,
+    revoke_session,
+    revoke_session_by_token,
+    rotate_session,
 )
 from app.services.user_service import (
     UserServiceError,
     accept_invite,
     authenticate_user,
+    change_user_password,
+    get_platform_admin_by_email,
+    get_tenant_by_slug,
     get_user_by_id,
+    list_active_tenants,
+    update_last_login,
 )
 from app.utils.crypto import verify_password
 
@@ -54,7 +60,7 @@ def login():
     # ── Platform admin login (no tenant required) ──────────────
     if not tenant_slug:
         # Try tenant-free login: only platform_admin users with tenant_id=NULL
-        user = User.query.filter_by(email=email, tenant_id=None).first()
+        user = get_platform_admin_by_email(email)
         if not user:
             return jsonify({"error": "Tenant slug is required"}), 400
 
@@ -71,19 +77,13 @@ def login():
             return jsonify({"error": "Tenant slug is required"}), 400
 
         # Generate token pair WITHOUT tenant_id
-        user.last_login_at = datetime.now(timezone.utc)
-        db.session.commit()
+        update_last_login(user.id)
         tokens = generate_token_pair(user.id, None, list(roles))
-
-        session = Session(
-            user_id=user.id,
-            token_hash=tokens["token_hash"],
-            ip_address=request.remote_addr,
-            user_agent=request.headers.get("User-Agent", "")[:500],
-            expires_at=tokens["expires_at"],
+        create_session(
+            user.id, tokens["token_hash"],
+            request.remote_addr, request.headers.get("User-Agent", ""),
+            tokens["expires_at"],
         )
-        db.session.add(session)
-        db.session.commit()
 
         return jsonify({
             "access_token": tokens["access_token"],
@@ -95,7 +95,7 @@ def login():
 
     # ── Standard tenant login ─────────────────────────────────
     # Find tenant
-    tenant = Tenant.query.filter_by(slug=tenant_slug, is_active=True).first()
+    tenant = get_tenant_by_slug(tenant_slug)
     if not tenant:
         return jsonify({"error": "Tenant not found or inactive"}), 404
 
@@ -108,17 +108,11 @@ def login():
     # Generate token pair
     roles = user.role_names
     tokens = generate_token_pair(user.id, tenant.id, roles)
-
-    # Save session (refresh token tracking)
-    session = Session(
-        user_id=user.id,
-        token_hash=tokens["token_hash"],
-        ip_address=request.remote_addr,
-        user_agent=request.headers.get("User-Agent", "")[:500],
-        expires_at=tokens["expires_at"],
+    create_session(
+        user.id, tokens["token_hash"],
+        request.remote_addr, request.headers.get("User-Agent", ""),
+        tokens["expires_at"],
     )
-    db.session.add(session)
-    db.session.commit()
 
     return jsonify({
         "access_token": tokens["access_token"],
@@ -157,16 +151,11 @@ def register():
     # Auto-login after registration
     roles = user.role_names
     tokens = generate_token_pair(user.id, user.tenant_id, roles)
-
-    session = Session(
-        user_id=user.id,
-        token_hash=tokens["token_hash"],
-        ip_address=request.remote_addr,
-        user_agent=request.headers.get("User-Agent", "")[:500],
-        expires_at=tokens["expires_at"],
+    create_session(
+        user.id, tokens["token_hash"],
+        request.remote_addr, request.headers.get("User-Agent", ""),
+        tokens["expires_at"],
     )
-    db.session.add(session)
-    db.session.commit()
 
     return jsonify({
         "access_token": tokens["access_token"],
@@ -204,43 +193,31 @@ def refresh():
 
     # Verify session exists and is active
     token_h = hash_token(refresh_token)
-    session = Session.query.filter_by(
-        user_id=user_id, token_hash=token_h, is_active=True
-    ).first()
+    session = get_active_session_by_token(user_id, token_h)
     if not session:
         return jsonify({"error": "Session not found or revoked"}), 401
 
     if session.is_expired:
-        session.is_active = False
-        db.session.commit()
+        revoke_session(session)
         return jsonify({"error": "Session expired"}), 401
 
     # Get user
     user = get_user_by_id(user_id)
     if not user or user.status != "active":
-        session.is_active = False
-        db.session.commit()
+        revoke_session(session)
         return jsonify({"error": "User inactive or not found"}), 401
 
     # Token rotation: invalidate old, create new
-    session.is_active = False
-    db.session.flush()
-
     roles = user.role_names
     tokens = generate_token_pair(user.id, tenant_id, roles)
-
-    new_session = Session(
-        user_id=user.id,
-        token_hash=tokens["token_hash"],
-        ip_address=request.remote_addr,
-        user_agent=request.headers.get("User-Agent", "")[:500],
-        expires_at=tokens["expires_at"],
+    rotate_session(
+        session,
+        user.id,
+        tokens["token_hash"],
+        tokens["expires_at"],
+        request.remote_addr,
+        request.headers.get("User-Agent", ""),
     )
-    db.session.add(new_session)
-
-    # Update last_used
-    session.last_used_at = datetime.now(timezone.utc)
-    db.session.commit()
 
     return jsonify({
         "access_token": tokens["access_token"],
@@ -266,16 +243,10 @@ def logout():
     if refresh_token:
         # Revoke specific refresh token
         token_h = hash_token(refresh_token)
-        session = Session.query.filter_by(token_hash=token_h, is_active=True).first()
-        if session:
-            session.is_active = False
-            db.session.commit()
+        revoke_session_by_token(token_h)
     elif hasattr(g, "jwt_user_id"):
         # Revoke all sessions for this user (logout everywhere)
-        Session.query.filter_by(user_id=g.jwt_user_id, is_active=True).update(
-            {"is_active": False}
-        )
-        db.session.commit()
+        revoke_all_user_sessions(g.jwt_user_id)
 
     return jsonify({"message": "Logged out successfully"}), 200
 
@@ -307,7 +278,7 @@ def me():
 @auth_bp.route("/tenants", methods=["GET"])
 def list_tenants():
     """List active tenants (slug + name only — for login page selector)."""
-    tenants = Tenant.query.filter_by(is_active=True).order_by(Tenant.name).all()
+    tenants = list_active_tenants()
     return jsonify([
         {"slug": t.slug, "name": t.name} for t in tenants
     ]), 200
@@ -339,14 +310,10 @@ def change_password():
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    from app.utils.crypto import verify_password as vp
-    if not vp(current_pw, user.password_hash):
+    if not verify_password(current_pw, user.password_hash):
         return jsonify({"error": "Current password is incorrect"}), 403
 
-    from app.utils.crypto import hash_password as hp
-    user.password_hash = hp(new_pw)
-    db.session.commit()
-
+    change_user_password(g.jwt_user_id, new_pw)
     return jsonify({"message": "Password changed successfully"}), 200
 
 

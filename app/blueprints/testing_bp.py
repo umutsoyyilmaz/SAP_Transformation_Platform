@@ -65,6 +65,8 @@ TS-Sprint 2 new endpoints:
 """
 
 import logging
+import json
+import warnings
 
 from datetime import date, datetime, timedelta, timezone
 
@@ -74,9 +76,11 @@ from app.models import db
 from app.models.testing import (
     TestPlan, TestCycle, TestCase, TestExecution, Defect,
     TestSuite, TestStep, TestCaseDependency, TestCycleSuite,
+    TestCaseVersion,
     TestRun, TestStepResult, DefectComment, DefectHistory, DefectLink,
     UATSignOff, PerfTestResult, TestDailySnapshot,
     PlanScope, PlanTestCase, PlanDataSet, CycleDataSet,
+    TestCaseSuiteLink, TestCaseTraceLink,
     TEST_LAYERS, TEST_CASE_STATUSES, EXECUTION_RESULTS,
     DEFECT_SEVERITIES, DEFECT_PRIORITIES, DEFECT_STATUSES,
     CYCLE_STATUSES, PLAN_STATUSES,
@@ -91,13 +95,261 @@ from app.models.data_factory import TestDataSet
 from app.models.program import Program
 from app.models.requirement import Requirement
 from app.models.explore import ExploreRequirement
+from app.models.backlog import BacklogItem, ConfigItem
+from app.models.audit import write_audit
 from app.blueprints import paginate_query
 from app.utils.helpers import db_commit_or_error, get_or_404 as _get_or_404, parse_date as _parse_date
 from app.services import testing_service
+from app.services.scope_resolution import resolve_l3_for_tc, validate_l3_for_layer
 
 logger = logging.getLogger(__name__)
 
 testing_bp = Blueprint("testing", __name__, url_prefix="/api/v1")
+
+
+def _coerce_str_list(values):
+    out = []
+    for value in (values or []):
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            out.append(text)
+    # Preserve order while deduplicating
+    return list(dict.fromkeys(out))
+
+
+def _coerce_int_list(values):
+    out = []
+    for value in (values or []):
+        if value in (None, ""):
+            continue
+        try:
+            out.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return list(dict.fromkeys(out))
+
+
+def _normalize_traceability_links(raw_links):
+    """Normalize traceability payload into deterministic per-L3 groups."""
+    if not isinstance(raw_links, list):
+        return []
+
+    grouped = {}
+    order = []
+    for raw in raw_links:
+        if not isinstance(raw, dict):
+            continue
+        l3_id = str(
+            raw.get("l3_process_level_id")
+            or raw.get("l3_id")
+            or ""
+        ).strip()
+        if not l3_id:
+            continue
+        if l3_id not in grouped:
+            grouped[l3_id] = {
+                "l3_process_level_id": l3_id,
+                "l4_process_level_ids": [],
+                "explore_requirement_ids": [],
+                "backlog_item_ids": [],
+                "config_item_ids": [],
+                "manual_requirement_ids": [],
+                "manual_backlog_item_ids": [],
+                "manual_config_item_ids": [],
+                "excluded_requirement_ids": [],
+                "excluded_backlog_item_ids": [],
+                "excluded_config_item_ids": [],
+            }
+            order.append(l3_id)
+
+        grouped[l3_id]["l4_process_level_ids"].extend(_coerce_str_list(raw.get("l4_process_level_ids", [])))
+        grouped[l3_id]["explore_requirement_ids"].extend(_coerce_str_list(raw.get("explore_requirement_ids", [])))
+        grouped[l3_id]["backlog_item_ids"].extend(_coerce_int_list(raw.get("backlog_item_ids", [])))
+        grouped[l3_id]["config_item_ids"].extend(_coerce_int_list(raw.get("config_item_ids", [])))
+        grouped[l3_id]["manual_requirement_ids"].extend(_coerce_str_list(raw.get("manual_requirement_ids", [])))
+        grouped[l3_id]["manual_backlog_item_ids"].extend(_coerce_int_list(raw.get("manual_backlog_item_ids", [])))
+        grouped[l3_id]["manual_config_item_ids"].extend(_coerce_int_list(raw.get("manual_config_item_ids", [])))
+        grouped[l3_id]["excluded_requirement_ids"].extend(_coerce_str_list(raw.get("excluded_requirement_ids", [])))
+        grouped[l3_id]["excluded_backlog_item_ids"].extend(_coerce_int_list(raw.get("excluded_backlog_item_ids", [])))
+        grouped[l3_id]["excluded_config_item_ids"].extend(_coerce_int_list(raw.get("excluded_config_item_ids", [])))
+
+    normalized = []
+    for l3_id in order:
+        item = grouped[l3_id]
+        item["l4_process_level_ids"] = list(dict.fromkeys(item["l4_process_level_ids"]))
+        item["explore_requirement_ids"] = list(dict.fromkeys(item["explore_requirement_ids"]))
+        item["backlog_item_ids"] = list(dict.fromkeys(item["backlog_item_ids"]))
+        item["config_item_ids"] = list(dict.fromkeys(item["config_item_ids"]))
+        item["manual_requirement_ids"] = list(dict.fromkeys(item["manual_requirement_ids"]))
+        item["manual_backlog_item_ids"] = list(dict.fromkeys(item["manual_backlog_item_ids"]))
+        item["manual_config_item_ids"] = list(dict.fromkeys(item["manual_config_item_ids"]))
+        item["excluded_requirement_ids"] = list(dict.fromkeys(item["excluded_requirement_ids"]))
+        item["excluded_backlog_item_ids"] = list(dict.fromkeys(item["excluded_backlog_item_ids"]))
+        item["excluded_config_item_ids"] = list(dict.fromkeys(item["excluded_config_item_ids"]))
+        normalized.append(item)
+    return normalized
+
+
+def _extract_suite_assignment(data):
+    """Return normalized suite assignment from payload.
+
+    Returns:
+      - suite_ids: list[int] unique suite IDs
+      - legacy_suite_only: bool (suite_id provided without suite_ids)
+    """
+    raw_suite_ids = data.get("suite_ids")
+    suite_ids = []
+    if isinstance(raw_suite_ids, list):
+        for value in raw_suite_ids:
+            try:
+                suite_ids.append(int(value))
+            except (TypeError, ValueError):
+                continue
+
+    legacy_suite_only = data.get("suite_id") is not None and not suite_ids
+
+    if data.get("suite_id") is not None:
+        try:
+            sid = int(data.get("suite_id"))
+            if sid not in suite_ids:
+                suite_ids.append(sid)
+        except (TypeError, ValueError):
+            pass
+
+    # Preserve order while deduplicating
+    suite_ids = list(dict.fromkeys(suite_ids))
+    return suite_ids, legacy_suite_only
+
+
+def _sync_test_case_trace_links(test_case_id, normalized_links):
+    """Replace trace links for a test case with the normalized list."""
+    TestCaseTraceLink.query.filter_by(test_case_id=test_case_id).delete()
+    for link in normalized_links:
+        db.session.add(TestCaseTraceLink(
+            test_case_id=test_case_id,
+            l3_process_level_id=link["l3_process_level_id"],
+            l4_process_level_ids=json.dumps(link.get("l4_process_level_ids", [])),
+            explore_requirement_ids=json.dumps(link.get("explore_requirement_ids", [])),
+            backlog_item_ids=json.dumps(link.get("backlog_item_ids", [])),
+            config_item_ids=json.dumps(link.get("config_item_ids", [])),
+            manual_requirement_ids=json.dumps(link.get("manual_requirement_ids", [])),
+            manual_backlog_item_ids=json.dumps(link.get("manual_backlog_item_ids", [])),
+            manual_config_item_ids=json.dumps(link.get("manual_config_item_ids", [])),
+            excluded_requirement_ids=json.dumps(link.get("excluded_requirement_ids", [])),
+            excluded_backlog_item_ids=json.dumps(link.get("excluded_backlog_item_ids", [])),
+            excluded_config_item_ids=json.dumps(link.get("excluded_config_item_ids", [])),
+        ))
+
+
+def _derive_primary_traceability_fields(normalized_links):
+    """Derive backward-compatible single-value fields from grouped trace links."""
+    if not normalized_links:
+        return {
+            "process_level_id": None,
+            "explore_requirement_id": None,
+            "backlog_item_id": None,
+            "config_item_id": None,
+        }
+
+    first = normalized_links[0]
+    return {
+        "process_level_id": first.get("l3_process_level_id"),
+        "explore_requirement_id": (first.get("explore_requirement_ids") or [None])[0],
+        "backlog_item_id": (first.get("backlog_item_ids") or [None])[0],
+        "config_item_id": (first.get("config_item_ids") or [None])[0],
+    }
+
+
+def _actor_from_request(data):
+    return (
+        request.headers.get("X-User")
+        or data.get("changed_by")
+        or data.get("updated_by")
+        or "system"
+    )
+
+
+def _next_test_case_version_no(case_id):
+    latest = TestCaseVersion.query.filter_by(test_case_id=case_id).order_by(TestCaseVersion.version_no.desc()).first()
+    return (latest.version_no + 1) if latest else 1
+
+
+def _snapshot_test_case(tc):
+    return tc.to_dict(include_steps=True)
+
+
+def _create_test_case_version(tc, *, change_summary="", created_by="system", version_label=""):
+    TestCaseVersion.query.filter_by(test_case_id=tc.id, is_current=True).update({"is_current": False})
+    ver_no = _next_test_case_version_no(tc.id)
+    ver = TestCaseVersion(
+        test_case_id=tc.id,
+        version_no=ver_no,
+        version_label=version_label or str(ver_no),
+        snapshot=_snapshot_test_case(tc),
+        change_summary=change_summary or "snapshot",
+        created_by=created_by or "system",
+        is_current=True,
+    )
+    db.session.add(ver)
+    return ver
+
+
+def _compute_snapshot_diff(left_snapshot, right_snapshot):
+    left = left_snapshot or {}
+    right = right_snapshot or {}
+
+    ignore_fields = {"updated_at"}
+    fields = []
+
+    for key in sorted(set(left.keys()) | set(right.keys())):
+        if key in ignore_fields or key == "steps":
+            continue
+        if left.get(key) != right.get(key):
+            fields.append({
+                "field": key,
+                "from": left.get(key),
+                "to": right.get(key),
+            })
+
+    left_steps = {str(s.get("step_no")): s for s in (left.get("steps") or [])}
+    right_steps = {str(s.get("step_no")): s for s in (right.get("steps") or [])}
+    step_added = []
+    step_removed = []
+    step_changed = []
+
+    for step_no in sorted(set(left_steps.keys()) | set(right_steps.keys()), key=lambda x: int(x)):
+        ls = left_steps.get(step_no)
+        rs = right_steps.get(step_no)
+        if ls and not rs:
+            step_removed.append({"step_no": int(step_no), "from": ls})
+            continue
+        if rs and not ls:
+            step_added.append({"step_no": int(step_no), "to": rs})
+            continue
+
+        row_changes = {}
+        for col in ("action", "test_data", "expected_result", "notes"):
+            if (ls or {}).get(col) != (rs or {}).get(col):
+                row_changes[col] = {"from": (ls or {}).get(col), "to": (rs or {}).get(col)}
+        if row_changes:
+            step_changed.append({"step_no": int(step_no), "changes": row_changes})
+
+    return {
+        "field_changes": fields,
+        "steps": {
+            "added": step_added,
+            "removed": step_removed,
+            "changed": step_changed,
+        },
+        "summary": {
+            "field_change_count": len(fields),
+            "step_added_count": len(step_added),
+            "step_removed_count": len(step_removed),
+            "step_changed_count": len(step_changed),
+        },
+    }
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -357,7 +609,11 @@ def list_test_cases(pid):
 
 @testing_bp.route("/programs/<int:pid>/testing/catalog", methods=["POST"])
 def create_test_case(pid):
-    """Create a new test case with auto-generated code."""
+    """Create a new test case with auto-generated code and L3 scope resolution.
+
+    Preferred suite payload: ``suite_ids``.
+    Legacy ``suite_id`` is accepted for compatibility but deprecated.
+    """
     program, err = _get_or_404(Program, pid)
     if err:
         return err
@@ -365,6 +621,47 @@ def create_test_case(pid):
     data = request.get_json(silent=True) or {}
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
+
+    suite_ids, legacy_suite_only = _extract_suite_assignment(data)
+
+    if data.get("suite_id") is not None and not data.get("suite_ids"):
+        warnings.warn(
+            "suite_id is deprecated. Use suite_ids[] instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+    test_layer = data.get("test_layer", "sit")
+
+    normalized_trace_links = _normalize_traceability_links(data.get("traceability_links", []))
+    if normalized_trace_links:
+        for link in normalized_trace_links:
+            resolved = resolve_l3_for_tc({"process_level_id": link["l3_process_level_id"]})
+            if not resolved:
+                return jsonify({
+                    "error": f"Invalid L3 process level: {link['l3_process_level_id']}",
+                }), 400
+            link["l3_process_level_id"] = resolved
+
+        primary_fields = _derive_primary_traceability_fields(normalized_trace_links)
+        data["process_level_id"] = primary_fields["process_level_id"]
+        data["explore_requirement_id"] = primary_fields["explore_requirement_id"]
+        data["backlog_item_id"] = primary_fields["backlog_item_id"]
+        data["config_item_id"] = primary_fields["config_item_id"]
+
+    # ── ADR-008: L3 Scope Resolution ──
+    resolved_l3 = resolve_l3_for_tc(data)
+    if resolved_l3:
+        data["process_level_id"] = resolved_l3
+
+    # ── ADR-008: L3 Validation (CREATE only) ──
+    is_valid, error_msg = validate_l3_for_layer(test_layer, data.get("process_level_id"))
+    if not is_valid:
+        return jsonify({
+            "error": error_msg,
+            "resolution_attempted": True,
+            "hint": "Ensure the linked WRICEF/Config/Requirement has a scope_item_id (L3) assigned.",
+        }), 400
 
     # Auto-generate code if not provided
     module = data.get("module", "GEN")
@@ -375,7 +672,8 @@ def create_test_case(pid):
         code=code,
         title=data["title"],
         description=data.get("description", ""),
-        test_layer=data.get("test_layer", "sit"),
+        test_layer=test_layer,
+        test_type=data.get("test_type", "functional"),
         module=data.get("module", ""),
         preconditions=data.get("preconditions", ""),
         test_steps=data.get("test_steps", ""),
@@ -383,17 +681,40 @@ def create_test_case(pid):
         test_data_set=data.get("test_data_set", ""),
         status=data.get("status", "draft"),
         priority=data.get("priority", "medium"),
+        risk=data.get("risk", "medium"),
         is_regression=data.get("is_regression", False),
         assigned_to=data.get("assigned_to", ""),
+        reviewer=data.get("reviewer", ""),
+        version=data.get("version", "1.0"),
+        data_readiness=data.get("data_readiness", ""),
         assigned_to_id=data.get("assigned_to_id"),
         requirement_id=data.get("requirement_id"),
         explore_requirement_id=data.get("explore_requirement_id"),
         backlog_item_id=data.get("backlog_item_id"),
         config_item_id=data.get("config_item_id"),
         process_level_id=data.get("process_level_id"),
-        suite_id=data.get("suite_id"),
+        suite_id=data.get("suite_id") if legacy_suite_only else None,
     )
     db.session.add(tc)
+    db.session.flush()
+
+    # ── ADR-008: Suite assignment via junction ──
+    for sid in suite_ids:
+        link = TestCaseSuiteLink(
+            test_case_id=tc.id, suite_id=sid,
+            added_method="manual", tenant_id=tc.tenant_id,
+        )
+        db.session.add(link)
+
+    if normalized_trace_links:
+        _sync_test_case_trace_links(tc.id, normalized_trace_links)
+
+    _create_test_case_version(
+        tc,
+        change_summary=data.get("change_summary", "initial create"),
+        created_by=_actor_from_request(data),
+    )
+
     err = db_commit_or_error()
     if err:
         return err
@@ -410,22 +731,248 @@ def get_test_case(case_id):
     return jsonify(tc.to_dict(include_steps=include_steps))
 
 
-@testing_bp.route("/testing/catalog/<int:case_id>", methods=["PUT"])
-def update_test_case(case_id):
-    """Update a test case."""
+@testing_bp.route("/testing/catalog/<int:case_id>/versions", methods=["GET"])
+def list_test_case_versions(case_id):
+    """List all versions for a test case (latest first)."""
+    tc, err = _get_or_404(TestCase, case_id)
+    if err:
+        return err
+    versions = TestCaseVersion.query.filter_by(test_case_id=case_id).order_by(TestCaseVersion.version_no.desc()).all()
+    return jsonify([v.to_dict(include_snapshot=False) for v in versions])
+
+
+@testing_bp.route("/testing/catalog/<int:case_id>/versions", methods=["POST"])
+def create_test_case_version(case_id):
+    """Create an explicit version snapshot for a test case."""
     tc, err = _get_or_404(TestCase, case_id)
     if err:
         return err
 
     data = request.get_json(silent=True) or {}
-    for field in ("code", "title", "description", "test_layer", "module",
+    version = _create_test_case_version(
+        tc,
+        change_summary=data.get("change_summary", "manual snapshot"),
+        created_by=_actor_from_request(data),
+        version_label=data.get("version_label", ""),
+    )
+
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify(version.to_dict(include_snapshot=True)), 201
+
+
+@testing_bp.route("/testing/catalog/<int:case_id>/versions/diff", methods=["GET"])
+def diff_test_case_versions(case_id):
+    """Return field/step-level diff between two versions."""
+    tc, err = _get_or_404(TestCase, case_id)
+    if err:
+        return err
+
+    try:
+        from_no = int(request.args.get("from", ""))
+        to_no = int(request.args.get("to", ""))
+    except (TypeError, ValueError):
+        return jsonify({"error": "from and to query params are required integers"}), 400
+
+    left = TestCaseVersion.query.filter_by(test_case_id=case_id, version_no=from_no).first()
+    right = TestCaseVersion.query.filter_by(test_case_id=case_id, version_no=to_no).first()
+
+    if not left or not right:
+        return jsonify({"error": "version not found"}), 404
+
+    return jsonify({
+        "test_case_id": case_id,
+        "from": left.to_dict(include_snapshot=False),
+        "to": right.to_dict(include_snapshot=False),
+        "diff": _compute_snapshot_diff(left.snapshot, right.snapshot),
+    })
+
+
+@testing_bp.route("/testing/catalog/<int:case_id>/versions/<int:version_no>", methods=["GET"])
+def get_test_case_version(case_id, version_no):
+    """Get one version snapshot by version number."""
+    tc, err = _get_or_404(TestCase, case_id)
+    if err:
+        return err
+
+    version = TestCaseVersion.query.filter_by(test_case_id=case_id, version_no=version_no).first()
+    if not version:
+        return jsonify({"error": "version not found"}), 404
+    return jsonify(version.to_dict(include_snapshot=True))
+
+
+@testing_bp.route("/testing/catalog/<int:case_id>/versions/<int:version_no>/restore", methods=["POST"])
+def restore_test_case_version(case_id, version_no):
+    """Restore a test case to a previous version snapshot."""
+    tc, err = _get_or_404(TestCase, case_id)
+    if err:
+        return err
+
+    version = TestCaseVersion.query.filter_by(test_case_id=case_id, version_no=version_no).first()
+    if not version:
+        return jsonify({"error": "version not found"}), 404
+
+    snapshot = version.snapshot or {}
+
+    for field in (
+        "code", "title", "description", "test_layer", "test_type", "module",
+        "preconditions", "test_steps", "expected_result", "test_data_set",
+        "status", "priority", "risk", "is_regression", "assigned_to", "reviewer",
+        "version", "data_readiness", "assigned_to_id", "requirement_id",
+        "explore_requirement_id", "backlog_item_id", "config_item_id", "process_level_id",
+    ):
+        if field in snapshot:
+            setattr(tc, field, snapshot.get(field))
+
+    suite_ids = [int(sid) for sid in (snapshot.get("suite_ids") or []) if sid is not None]
+    legacy_suite_id = snapshot.get("suite_id")
+    if legacy_suite_id and int(legacy_suite_id) not in suite_ids:
+        suite_ids.append(int(legacy_suite_id))
+
+    existing_links = TestCaseSuiteLink.query.filter_by(test_case_id=tc.id).all()
+    existing_suite_ids = {link.suite_id for link in existing_links}
+    requested = set(suite_ids)
+
+    for link in existing_links:
+        if link.suite_id not in requested:
+            db.session.delete(link)
+
+    for sid in requested - existing_suite_ids:
+        db.session.add(TestCaseSuiteLink(
+            test_case_id=tc.id,
+            suite_id=sid,
+            added_method="restore",
+            tenant_id=tc.tenant_id,
+        ))
+
+    tc.suite_id = snapshot.get("suite_id") if snapshot.get("suite_id") else (next(iter(requested), None) if requested else None)
+
+    TestStep.query.filter_by(test_case_id=tc.id).delete()
+    for idx, step in enumerate((snapshot.get("steps") or []), start=1):
+        action = (step.get("action") or "").strip()
+        if not action:
+            continue
+        db.session.add(TestStep(
+            test_case_id=tc.id,
+            tenant_id=tc.tenant_id,
+            step_no=step.get("step_no") or idx,
+            action=action,
+            expected_result=step.get("expected_result") or "",
+            test_data=step.get("test_data") or "",
+            notes=step.get("notes") or "",
+        ))
+
+    if "traceability_links" in snapshot:
+        normalized_links = _normalize_traceability_links(snapshot.get("traceability_links") or [])
+        _sync_test_case_trace_links(tc.id, normalized_links)
+
+    data = request.get_json(silent=True) or {}
+    restored_version = _create_test_case_version(
+        tc,
+        change_summary=data.get("change_summary", f"restored from version {version_no}"),
+        created_by=_actor_from_request(data),
+    )
+
+    err = db_commit_or_error()
+    if err:
+        return err
+
+    return jsonify({
+        "message": "Version restored",
+        "restored_from": version_no,
+        "new_version": restored_version.to_dict(include_snapshot=False),
+        "test_case": tc.to_dict(include_steps=True),
+    })
+
+
+@testing_bp.route("/testing/catalog/<int:case_id>", methods=["PUT"])
+def update_test_case(case_id):
+    """Update a test case.
+
+    Preferred suite payload: ``suite_ids``.
+    Legacy ``suite_id`` is accepted for compatibility but deprecated.
+    """
+    tc, err = _get_or_404(TestCase, case_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+
+    normalized_trace_links = None
+    if "traceability_links" in data:
+        normalized_trace_links = _normalize_traceability_links(data.get("traceability_links", []))
+        for link in normalized_trace_links:
+            resolved = resolve_l3_for_tc({"process_level_id": link["l3_process_level_id"]})
+            if not resolved:
+                return jsonify({
+                    "error": f"Invalid L3 process level: {link['l3_process_level_id']}",
+                }), 400
+            link["l3_process_level_id"] = resolved
+
+        if normalized_trace_links:
+            primary_fields = _derive_primary_traceability_fields(normalized_trace_links)
+            data["process_level_id"] = primary_fields["process_level_id"]
+            data["explore_requirement_id"] = primary_fields["explore_requirement_id"]
+            data["backlog_item_id"] = primary_fields["backlog_item_id"]
+            data["config_item_id"] = primary_fields["config_item_id"]
+        else:
+            # Explicitly clear legacy single-value trace fields when no group remains
+            data["process_level_id"] = None
+            data["explore_requirement_id"] = None
+            data["backlog_item_id"] = None
+            data["config_item_id"] = None
+    for field in ("code", "title", "description", "test_layer", "test_type", "module",
                   "preconditions", "test_steps", "expected_result", "test_data_set",
-                  "status", "priority", "is_regression", "assigned_to",
+                  "status", "priority", "risk", "is_regression", "assigned_to", "reviewer",
+                  "version", "data_readiness",
                   "assigned_to_id",
                   "requirement_id", "explore_requirement_id", "backlog_item_id",
-                  "config_item_id", "process_level_id", "suite_id"):
+                  "config_item_id", "process_level_id"):
         if field in data:
             setattr(tc, field, data[field])
+
+    if "suite_id" in data and "suite_ids" not in data:
+        warnings.warn(
+            "suite_id is deprecated. Use suite_ids[] instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+    # ADR-008: suite link sync for N:M
+    if "suite_ids" in data or "suite_id" in data:
+        suite_ids, legacy_suite_only = _extract_suite_assignment(data)
+        requested = set(suite_ids)
+
+        existing_links = TestCaseSuiteLink.query.filter_by(test_case_id=tc.id).all()
+        existing_suite_ids = {link.suite_id for link in existing_links}
+
+        # Remove links not requested
+        for link in existing_links:
+            if link.suite_id not in requested:
+                db.session.delete(link)
+
+        # Add new links
+        for sid in requested - existing_suite_ids:
+            db.session.add(TestCaseSuiteLink(
+                test_case_id=tc.id,
+                suite_id=sid,
+                added_method="manual",
+                tenant_id=tc.tenant_id,
+            ))
+
+        # Backward-compat mirror field (legacy-only writes)
+        if legacy_suite_only:
+            tc.suite_id = next(iter(requested), None)
+
+    if normalized_trace_links is not None:
+        _sync_test_case_trace_links(tc.id, normalized_trace_links)
+
+    _create_test_case_version(
+        tc,
+        change_summary=data.get("change_summary", "manual update"),
+        created_by=_actor_from_request(data),
+    )
 
     err = db_commit_or_error()
     if err:
@@ -444,6 +991,160 @@ def delete_test_case(case_id):
     if err:
         return err
     return jsonify({"message": "Test case deleted"}), 200
+
+
+@testing_bp.route("/testing/catalog/<int:case_id>/traceability-derived", methods=["GET"])
+def get_test_case_traceability_derived(case_id):
+    """Return derived/manual/excluded coverage details for governance-safe UI rendering."""
+    tc, err = _get_or_404(TestCase, case_id)
+    if err:
+        return err
+
+    links = TestCaseTraceLink.query.filter_by(test_case_id=case_id).all()
+    groups = []
+    total_not_covered = 0
+
+    for link in links:
+        l3_id = str(link.l3_process_level_id)
+        reqs = ExploreRequirement.query.filter_by(scope_item_id=l3_id).all()
+        req_ids = {str(r.id) for r in reqs}
+
+        wricef_items = BacklogItem.query.filter(BacklogItem.explore_requirement_id.in_(req_ids)).all() if req_ids else []
+        cfg_items = ConfigItem.query.filter(ConfigItem.explore_requirement_id.in_(req_ids)).all() if req_ids else []
+
+        payload = link.to_dict()
+        excluded_req = {str(x) for x in payload.get("excluded_requirement_ids", [])}
+        excluded_wricef = {str(x) for x in payload.get("excluded_backlog_item_ids", [])}
+        excluded_cfg = {str(x) for x in payload.get("excluded_config_item_ids", [])}
+
+        derived_req = [{
+            "id": str(r.id),
+            "code": r.code,
+            "title": r.title,
+            "fit_status": r.fit_status,
+            "source": "derived",
+            "excluded": str(r.id) in excluded_req,
+            "coverage_status": "not_covered" if str(r.id) in excluded_req else "covered",
+        } for r in reqs]
+
+        derived_wricef = [{
+            "id": b.id,
+            "code": b.code,
+            "title": b.title,
+            "wricef_type": b.wricef_type,
+            "source": "derived",
+            "excluded": str(b.id) in excluded_wricef,
+            "coverage_status": "not_covered" if str(b.id) in excluded_wricef else "covered",
+        } for b in wricef_items]
+
+        derived_cfg = [{
+            "id": c.id,
+            "code": c.code,
+            "title": c.title,
+            "source": "derived",
+            "excluded": str(c.id) in excluded_cfg,
+            "coverage_status": "not_covered" if str(c.id) in excluded_cfg else "covered",
+        } for c in cfg_items]
+
+        manual_req = [{"id": rid, "source": "manual"} for rid in payload.get("manual_requirement_ids", [])]
+        manual_wricef = [{"id": bid, "source": "manual"} for bid in payload.get("manual_backlog_item_ids", [])]
+        manual_cfg = [{"id": cid, "source": "manual"} for cid in payload.get("manual_config_item_ids", [])]
+
+        not_covered = sum(1 for item in derived_req if item["coverage_status"] == "not_covered")
+        not_covered += sum(1 for item in derived_wricef if item["coverage_status"] == "not_covered")
+        not_covered += sum(1 for item in derived_cfg if item["coverage_status"] == "not_covered")
+        total_not_covered += not_covered
+
+        groups.append({
+            "l3_process_level_id": l3_id,
+            "derived": {
+                "requirements": derived_req,
+                "wricef": derived_wricef,
+                "config_items": derived_cfg,
+            },
+            "manual": {
+                "requirements": manual_req,
+                "wricef": manual_wricef,
+                "config_items": manual_cfg,
+            },
+            "excluded": {
+                "requirements": list(excluded_req),
+                "wricef": [int(x) for x in excluded_wricef if str(x).isdigit()],
+                "config_items": [int(x) for x in excluded_cfg if str(x).isdigit()],
+            },
+            "summary": {
+                "derived_requirements": len(derived_req),
+                "derived_wricef": len(derived_wricef),
+                "derived_config_items": len(derived_cfg),
+                "manual_additions": len(manual_req) + len(manual_wricef) + len(manual_cfg),
+                "not_covered": not_covered,
+            },
+        })
+
+    return jsonify({
+        "test_case_id": tc.id,
+        "groups": groups,
+        "summary": {
+            "group_count": len(groups),
+            "not_covered_total": total_not_covered,
+        },
+    })
+
+
+@testing_bp.route("/testing/catalog/<int:case_id>/traceability-overrides", methods=["PUT"])
+def update_test_case_traceability_overrides(case_id):
+    """Update manual/excluded traceability override lists with audit log."""
+    tc, err = _get_or_404(TestCase, case_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    normalized_links = _normalize_traceability_links(data.get("traceability_links", []))
+    if not normalized_links:
+        return jsonify({"error": "traceability_links is required"}), 400
+
+    existing_by_l3 = {
+        str(link.l3_process_level_id): link.to_dict()
+        for link in TestCaseTraceLink.query.filter_by(test_case_id=case_id).all()
+    }
+
+    # keep core references from existing rows when payload only updates manual/exclude
+    for link in normalized_links:
+        l3_id = str(link["l3_process_level_id"])
+        existing = existing_by_l3.get(l3_id, {})
+        for field in (
+            "l4_process_level_ids", "explore_requirement_ids", "backlog_item_ids", "config_item_ids",
+        ):
+            if not link.get(field):
+                link[field] = existing.get(field, [])
+
+    _sync_test_case_trace_links(case_id, normalized_links)
+
+    actor = request.headers.get("X-User", "system")
+    write_audit(
+        entity_type="test_case",
+        entity_id=str(case_id),
+        action="update",
+        actor=actor,
+        program_id=tc.program_id,
+        tenant_id=tc.tenant_id,
+        diff={
+            "traceability_overrides": {
+                "new": normalized_links,
+            }
+        },
+    )
+
+    err = db_commit_or_error()
+    if err:
+        return err
+
+    return jsonify({
+        "message": "Traceability overrides updated",
+        "traceability_links": [
+            link.to_dict() for link in TestCaseTraceLink.query.filter_by(test_case_id=case_id).all()
+        ],
+    })
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -761,11 +1462,22 @@ def create_test_suite(pid):
     if not data.get("name"):
         return jsonify({"error": "name is required"}), 400
 
+    if data.get("suite_type") is not None:
+        warnings.warn(
+            "suite_type is deprecated. Use purpose instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+    if data.get("suite_type") and not data.get("purpose"):
+        data["purpose"] = data.get("suite_type")
+
     suite = TestSuite(
         program_id=pid,
         name=data["name"],
         description=data.get("description", ""),
         suite_type=data.get("suite_type", "SIT"),
+        purpose=data.get("purpose", ""),
         status=data.get("status", "draft"),
         module=data.get("module", ""),
         owner=data.get("owner", ""),
@@ -789,6 +1501,81 @@ def get_test_suite(suite_id):
     return jsonify(suite.to_dict(include_cases=include_cases))
 
 
+@testing_bp.route("/testing/suites/<int:suite_id>/cases", methods=["GET"])
+def list_suite_cases(suite_id):
+    """List all test cases in a suite (via N:M junction)."""
+    suite, err = _get_or_404(TestSuite, suite_id)
+    if err:
+        return err
+    links = TestCaseSuiteLink.query.filter_by(suite_id=suite_id).all()
+    return jsonify([link.to_dict() for link in links])
+
+
+@testing_bp.route("/testing/suites/<int:suite_id>/cases", methods=["POST"])
+def add_case_to_suite(suite_id):
+    """Add a test case to a suite (N:M link)."""
+    suite, err = _get_or_404(TestSuite, suite_id)
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    tc_id = data.get("test_case_id")
+    if not tc_id:
+        return jsonify({"error": "test_case_id is required"}), 400
+
+    tc, err = _get_or_404(TestCase, tc_id)
+    if err:
+        return err
+
+    existing = TestCaseSuiteLink.query.filter_by(test_case_id=tc_id, suite_id=suite_id).first()
+    if existing:
+        return jsonify({"error": "Test case already in this suite"}), 409
+
+    link = TestCaseSuiteLink(
+        test_case_id=tc_id,
+        suite_id=suite_id,
+        added_method=data.get("added_method", "manual"),
+        notes=data.get("notes", ""),
+        tenant_id=suite.tenant_id,
+    )
+    db.session.add(link)
+    err = db_commit_or_error()
+    if err:
+        return err
+    return jsonify(link.to_dict()), 201
+
+
+@testing_bp.route("/testing/suites/<int:suite_id>/cases/<int:tc_id>", methods=["DELETE"])
+def remove_case_from_suite(suite_id, tc_id):
+    """Remove a test case from a suite."""
+    link = TestCaseSuiteLink.query.filter_by(test_case_id=tc_id, suite_id=suite_id).first()
+    if not link:
+        return jsonify({"error": "Link not found"}), 404
+    db.session.delete(link)
+    err = db_commit_or_error()
+    if err:
+        return err
+    return "", 204
+
+
+@testing_bp.route("/testing/catalog/<int:case_id>/suites", methods=["GET"])
+def list_tc_suites(case_id):
+    """List all suites a test case belongs to."""
+    tc, err = _get_or_404(TestCase, case_id)
+    if err:
+        return err
+    links = TestCaseSuiteLink.query.filter_by(test_case_id=case_id).all()
+    return jsonify([
+        {
+            "suite_id": l.suite_id,
+            "suite_name": l.suite.name if l.suite else None,
+            "added_method": l.added_method,
+            "created_at": l.created_at.isoformat() if l.created_at else None,
+        }
+        for l in links
+    ])
+
+
 @testing_bp.route("/testing/suites/<int:suite_id>", methods=["PUT"])
 def update_test_suite(suite_id):
     """Update a test suite."""
@@ -797,7 +1584,17 @@ def update_test_suite(suite_id):
         return err
 
     data = request.get_json(silent=True) or {}
-    for field in ("name", "description", "suite_type", "status", "module", "owner", "owner_id", "tags"):
+    if "suite_type" in data:
+        warnings.warn(
+            "suite_type is deprecated. Use purpose instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+    if data.get("suite_type") and not data.get("purpose"):
+        data["purpose"] = data.get("suite_type")
+
+    for field in ("name", "description", "suite_type", "purpose", "status", "module", "owner", "owner_id", "tags"):
         if field in data:
             setattr(suite, field, data[field])
 
@@ -815,6 +1612,7 @@ def delete_test_suite(suite_id):
         return err
     # Unlink test cases from this suite before deletion
     TestCase.query.filter_by(suite_id=suite_id).update({"suite_id": None})
+    TestCaseSuiteLink.query.filter_by(suite_id=suite_id).delete()
     db.session.delete(suite)
     err = db_commit_or_error()
     if err:
@@ -1681,6 +2479,210 @@ def generate_from_process(suite_id):
         "test_case_ids": [tc.id for tc in created],
         "suite_id": suite.id,
     }), 201
+
+
+@testing_bp.route("/programs/<int:pid>/testing/scope-coverage/<string:l3_id>", methods=["GET"])
+def l3_scope_coverage(pid, l3_id):
+    """Full test coverage view for a single L3 scope item."""
+    from app.models.explore.process import ProcessLevel, ProcessStep
+    from app.models.explore.requirement import ExploreRequirement
+    from app.models.backlog import BacklogItem, ConfigItem
+    from app.models.integration import Interface
+
+    program, err = _get_or_404(Program, pid)
+    if err:
+        return err
+
+    l3 = db.session.get(ProcessLevel, str(l3_id))
+    if not l3 or l3.level != 3:
+        return jsonify({"error": "L3 process level not found"}), 404
+
+    result = {
+        "l3": {
+            "id": l3.id,
+            "code": l3.code,
+            "name": l3.name,
+            "scope_item_code": l3.scope_item_code,
+        },
+        "process_steps": [],
+        "requirements": [],
+        "interfaces": [],
+        "summary": {},
+    }
+
+    # 1) Standard process steps (L4 -> ProcessStep -> TC)
+    l4_children = ProcessLevel.query.filter_by(parent_id=l3.id, level=4).all()
+    total_steps = 0
+    covered_steps = 0
+
+    for l4 in l4_children:
+        steps = ProcessStep.query.filter_by(process_level_id=l4.id).order_by(ProcessStep.sort_order).all()
+        for step in steps:
+            total_steps += 1
+            step_tcs = TestCase.query.filter_by(
+                program_id=pid,
+                process_level_id=l3.id,
+            ).filter(
+                TestCase.backlog_item_id.is_(None),
+                TestCase.config_item_id.is_(None),
+            ).all()
+
+            latest_result = _get_latest_execution_result(step_tcs)
+            if latest_result == "pass":
+                covered_steps += 1
+
+            result["process_steps"].append({
+                "l4_code": l4.code,
+                "l4_name": l4.name,
+                "step_name": f"Step {step.sort_order}",
+                "fit_decision": step.fit_decision,
+                "test_cases": [
+                    {
+                        "id": tc.id,
+                        "code": tc.code,
+                        "title": tc.title,
+                        "latest_result": _get_latest_execution_result([tc]),
+                    }
+                    for tc in step_tcs
+                ],
+            })
+
+    # 2) Requirements (gap/partial) -> WRICEF/Config -> TC
+    explore_reqs = ExploreRequirement.query.filter_by(project_id=pid, scope_item_id=l3.id).all()
+    total_reqs = len(explore_reqs)
+    covered_reqs = 0
+
+    for ereq in explore_reqs:
+        req_entry = {
+            "id": ereq.id,
+            "code": ereq.code,
+            "title": ereq.title,
+            "fit_status": ereq.fit_status,
+            "status": ereq.status,
+            "backlog_items": [],
+            "config_items": [],
+        }
+
+        req_covered = True
+
+        backlog_items = BacklogItem.query.filter_by(program_id=pid, explore_requirement_id=ereq.id).all()
+        for bi in backlog_items:
+            bi_tcs = TestCase.query.filter_by(program_id=pid, backlog_item_id=bi.id).all()
+            bi_result = _get_latest_execution_result(bi_tcs)
+            if bi_result != "pass":
+                req_covered = False
+            req_entry["backlog_items"].append({
+                "id": bi.id,
+                "code": bi.code,
+                "title": bi.title,
+                "wricef_type": bi.wricef_type,
+                "test_cases": [
+                    {
+                        "id": tc.id,
+                        "code": tc.code,
+                        "latest_result": _get_latest_execution_result([tc]),
+                    }
+                    for tc in bi_tcs
+                ],
+            })
+
+        config_items = ConfigItem.query.filter_by(program_id=pid, explore_requirement_id=ereq.id).all()
+        for ci in config_items:
+            ci_tcs = TestCase.query.filter_by(program_id=pid, config_item_id=ci.id).all()
+            ci_result = _get_latest_execution_result(ci_tcs)
+            if ci_result != "pass":
+                req_covered = False
+            req_entry["config_items"].append({
+                "id": ci.id,
+                "code": ci.code,
+                "title": ci.title,
+                "test_cases": [
+                    {
+                        "id": tc.id,
+                        "code": tc.code,
+                        "latest_result": _get_latest_execution_result([tc]),
+                    }
+                    for tc in ci_tcs
+                ],
+            })
+
+        if not req_entry["backlog_items"] and not req_entry["config_items"]:
+            req_covered = False
+
+        if req_covered:
+            covered_reqs += 1
+
+        result["requirements"].append(req_entry)
+
+    # 3) Interfaces under this L3 via linked backlog items
+    bi_ids = [
+        bi.id
+        for ereq in explore_reqs
+        for bi in BacklogItem.query.filter_by(program_id=pid, explore_requirement_id=ereq.id).all()
+    ]
+    if bi_ids:
+        interfaces = Interface.query.filter(
+            Interface.program_id == pid,
+            Interface.backlog_item_id.in_(bi_ids),
+        ).all()
+        for iface in interfaces:
+            iface_tcs = TestCase.query.filter(
+                TestCase.program_id == pid,
+                db.or_(
+                    TestCase.title.ilike(f"%{iface.code}%"),
+                    TestCase.description.ilike(f"%{iface.code}%"),
+                ),
+            ).all()
+            result["interfaces"].append({
+                "id": iface.id,
+                "code": iface.code,
+                "name": iface.name,
+                "direction": iface.direction,
+                "test_cases": [
+                    {
+                        "id": tc.id,
+                        "code": tc.code,
+                        "latest_result": _get_latest_execution_result([tc]),
+                    }
+                    for tc in iface_tcs
+                ],
+            })
+
+    # 4) Summary
+    all_tcs = TestCase.query.filter_by(program_id=pid, process_level_id=l3.id).all()
+    total_tcs = len(all_tcs)
+    passed_tcs = sum(1 for tc in all_tcs if _get_latest_execution_result([tc]) == "pass")
+    failed_tcs = sum(1 for tc in all_tcs if _get_latest_execution_result([tc]) == "fail")
+    not_run_tcs = sum(
+        1 for tc in all_tcs if _get_latest_execution_result([tc]) in ("not_run", None)
+    )
+
+    pass_rate = (passed_tcs / total_tcs * 100) if total_tcs > 0 else 0
+    readiness = "ready" if pass_rate >= 95 and failed_tcs == 0 else "not_ready"
+
+    result["summary"] = {
+        "total_test_cases": total_tcs,
+        "passed": passed_tcs,
+        "failed": failed_tcs,
+        "not_run": not_run_tcs,
+        "pass_rate": round(pass_rate, 1),
+        "readiness": readiness,
+        "process_step_coverage": f"{covered_steps}/{total_steps}",
+        "requirement_coverage": f"{covered_reqs}/{total_reqs}",
+    }
+
+    return jsonify(result)
+
+
+def _get_latest_execution_result(test_cases):
+    """Get the most recent execution result for a list of TCs."""
+    if not test_cases:
+        return None
+    tc_ids = [tc.id for tc in test_cases]
+    latest = TestExecution.query.filter(
+        TestExecution.test_case_id.in_(tc_ids)
+    ).order_by(TestExecution.executed_at.desc().nullslast()).first()
+    return latest.result if latest else "not_run"
 
 
 # ═════════════════════════════════════════════════════════════════════════════

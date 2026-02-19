@@ -34,6 +34,7 @@ Traceability: Requirement ↔ Test Case ↔ Defect (auto-built)
 """
 
 from datetime import datetime, timezone
+import json
 
 from app.models import db
 
@@ -405,7 +406,8 @@ class TestCase(db.Model):
     )
     suite_id = db.Column(
         db.Integer, db.ForeignKey("test_suites.id", ondelete="SET NULL"),
-        nullable=True, index=True, comment="Linked test suite",
+        nullable=True, index=True,
+        comment="DEPRECATED: Use test_case_suite_links. Kept for backward compat.",
     )
 
     # ── Identification
@@ -420,6 +422,10 @@ class TestCase(db.Model):
     test_layer = db.Column(
         db.String(30), default="sit",
         comment="unit | sit | uat | regression | performance | cutover_rehearsal",
+    )
+    test_type = db.Column(
+        db.String(30), default="functional",
+        comment="functional | integration | e2e | regression | performance | security | data",
     )
     module = db.Column(db.String(50), default="", comment="SAP module: FI, MM, SD, etc.")
     preconditions = db.Column(db.Text, default="", comment="Setup / preconditions")
@@ -444,11 +450,21 @@ class TestCase(db.Model):
         db.String(20), default="medium",
         comment="low | medium | high | critical",
     )
+    risk = db.Column(
+        db.String(20), default="medium",
+        comment="low | medium | high | critical",
+    )
     is_regression = db.Column(
         db.Boolean, default=False,
         comment="Flagged for regression set (re-run on upgrades/releases)",
     )
     assigned_to = db.Column(db.String(100), default="", comment="Tester name")
+    reviewer = db.Column(db.String(100), default="", comment="Reviewer name")
+    version = db.Column(db.String(30), default="1.0", comment="Version label")
+    data_readiness = db.Column(
+        db.Text, default="",
+        comment="Data readiness notes when no linked data set is selected",
+    )
     assigned_to_id = db.Column(
         db.Integer, db.ForeignKey("team_members.id", ondelete="SET NULL"),
         nullable=True, comment="FK → team_members",
@@ -501,6 +517,21 @@ class TestCase(db.Model):
         cascade="all, delete-orphan",
     )
     assigned_member = db.relationship("TeamMember", foreign_keys=[assigned_to_id])
+    trace_links = db.relationship(
+        "TestCaseTraceLink", backref="test_case", lazy="select",
+        cascade="all, delete-orphan", order_by="TestCaseTraceLink.id",
+    )
+
+    # ── ADR-008: N:M suite helpers ──
+    @property
+    def suites(self):
+        """All suites this TC belongs to (via N:M junction)."""
+        return [link.suite for link in self.suite_links]
+
+    @property
+    def suite_ids(self):
+        """List of suite IDs for serialization."""
+        return [link.suite_id for link in self.suite_links]
 
     def to_dict(self, include_steps=False):
         result = {
@@ -512,10 +543,19 @@ class TestCase(db.Model):
             "config_item_id": self.config_item_id,
             "process_level_id": self.process_level_id,
             "suite_id": self.suite_id,
+            "suite_ids": self.suite_ids,
+            "suites": [
+                {"id": link.suite_id, "name": link.suite.name if link.suite else None}
+                for link in self.suite_links
+            ],
+            "traceability_links": [
+                link.to_dict() for link in self.trace_links
+            ],
             "code": self.code,
             "title": self.title,
             "description": self.description,
             "test_layer": self.test_layer,
+            "test_type": self.test_type,
             "module": self.module,
             "preconditions": self.preconditions,
             "test_steps": self.test_steps,
@@ -525,8 +565,12 @@ class TestCase(db.Model):
             "data_set_id": self.data_set_id,
             "status": self.status,
             "priority": self.priority,
+            "risk": self.risk,
             "is_regression": self.is_regression,
             "assigned_to": self.assigned_to,
+            "reviewer": self.reviewer,
+            "version": self.version,
+            "data_readiness": self.data_readiness,
             "assigned_to_id": self.assigned_to_id,
             "assigned_to_member": self.assigned_member.to_dict() if self.assigned_to_id and self.assigned_member else None,
             "cloned_from_id": self.cloned_from_id,
@@ -539,6 +583,116 @@ class TestCase(db.Model):
 
     def __repr__(self):
         return f"<TestCase {self.id}: {self.code or self.title[:30]}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST CASE VERSION  (F2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestCaseVersion(db.Model):
+    """Point-in-time snapshot of a test case with step payload."""
+
+    __tablename__ = "test_case_versions"
+    __table_args__ = (
+        db.UniqueConstraint("test_case_id", "version_no", name="uq_tc_version_no"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    test_case_id = db.Column(
+        db.Integer, db.ForeignKey("test_cases.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    version_no = db.Column(db.Integer, nullable=False)
+    version_label = db.Column(db.String(30), default="")
+    snapshot = db.Column(db.JSON, nullable=False)
+    change_summary = db.Column(db.Text, default="")
+    created_by = db.Column(db.String(100), default="")
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+    is_current = db.Column(db.Boolean, default=True)
+
+    test_case = db.relationship(
+        "TestCase", backref=db.backref("versions", lazy="dynamic", cascade="all, delete-orphan"),
+    )
+
+    def to_dict(self, include_snapshot=False):
+        data = {
+            "id": self.id,
+            "test_case_id": self.test_case_id,
+            "version_no": self.version_no,
+            "version_label": self.version_label,
+            "change_summary": self.change_summary,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "is_current": self.is_current,
+        }
+        if include_snapshot:
+            data["snapshot"] = self.snapshot
+        return data
+
+    def __repr__(self):
+        return f"<TestCaseVersion {self.id}: tc#{self.test_case_id} v{self.version_no}>"
+
+
+class TestCaseTraceLink(db.Model):
+    """Traceability groups per test case (ADR-008 B design).
+
+    One row represents one selected L3 anchor and its optional linked items.
+    """
+
+    __tablename__ = "test_case_trace_links"
+    __table_args__ = (
+        db.UniqueConstraint("test_case_id", "l3_process_level_id", name="uq_tc_l3_trace"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    test_case_id = db.Column(
+        db.Integer, db.ForeignKey("test_cases.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    l3_process_level_id = db.Column(db.String(36), nullable=False, index=True)
+    l4_process_level_ids = db.Column(db.Text, default="[]")
+    explore_requirement_ids = db.Column(db.Text, default="[]")
+    backlog_item_ids = db.Column(db.Text, default="[]")
+    config_item_ids = db.Column(db.Text, default="[]")
+    manual_requirement_ids = db.Column(db.Text, default="[]")
+    manual_backlog_item_ids = db.Column(db.Text, default="[]")
+    manual_config_item_ids = db.Column(db.Text, default="[]")
+    excluded_requirement_ids = db.Column(db.Text, default="[]")
+    excluded_backlog_item_ids = db.Column(db.Text, default="[]")
+    excluded_config_item_ids = db.Column(db.Text, default="[]")
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+
+    @staticmethod
+    def _load_json_list(raw):
+        if not raw:
+            return []
+        try:
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "test_case_id": self.test_case_id,
+            "l3_process_level_id": self.l3_process_level_id,
+            "l4_process_level_ids": self._load_json_list(self.l4_process_level_ids),
+            "explore_requirement_ids": self._load_json_list(self.explore_requirement_ids),
+            "backlog_item_ids": self._load_json_list(self.backlog_item_ids),
+            "config_item_ids": self._load_json_list(self.config_item_ids),
+            "manual_requirement_ids": self._load_json_list(self.manual_requirement_ids),
+            "manual_backlog_item_ids": self._load_json_list(self.manual_backlog_item_ids),
+            "manual_config_item_ids": self._load_json_list(self.manual_config_item_ids),
+            "excluded_requirement_ids": self._load_json_list(self.excluded_requirement_ids),
+            "excluded_backlog_item_ids": self._load_json_list(self.excluded_backlog_item_ids),
+            "excluded_config_item_ids": self._load_json_list(self.excluded_config_item_ids),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -930,11 +1084,23 @@ class TestSuite(db.Model):
         nullable=False, index=True,
     )
 
+    # ── F6: Hierarchical Folders ──
+    parent_id = db.Column(
+        db.Integer, db.ForeignKey("test_suites.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+        comment="Self-referential FK for folder hierarchy",
+    )
+    sort_order = db.Column(db.Integer, default=0, comment="Display order within parent")
+    path = db.Column(
+        db.String(500), default="",
+        comment="Materialized path: /1/5/12/ for fast descendant queries",
+    )
+
     name = db.Column(db.String(200), nullable=False, comment="e.g. SIT Suite — Finance")
     description = db.Column(db.Text, default="")
     suite_type = db.Column(
         db.String(30), default="SIT",
-        comment="SIT | UAT | Regression | E2E | Performance | Custom",
+        comment="DEPRECATED: Use purpose. Kept for backward compatibility.",
     )
     status = db.Column(
         db.String(30), default="draft",
@@ -947,6 +1113,10 @@ class TestSuite(db.Model):
         nullable=True, comment="FK → team_members",
     )
     tags = db.Column(db.Text, default="", comment="Comma-separated tags for filtering")
+    purpose = db.Column(
+        db.String(200), default="",
+        comment="Free-text purpose: 'E2E order flow', 'Regression pack for pricing'",
+    )
 
     # ── Audit
     created_at = db.Column(
@@ -970,29 +1140,58 @@ class TestSuite(db.Model):
     )
     owner_member = db.relationship("TeamMember", foreign_keys=[owner_id])
 
-    def to_dict(self, include_cases=False):
+    # ── F6: Hierarchical children ──
+    children = db.relationship(
+        "TestSuite",
+        backref=db.backref("parent", remote_side=[id]),
+        lazy="dynamic",
+        cascade="all",
+        order_by="TestSuite.sort_order",
+    )
+
+    # ── ADR-008: N:M helpers ──
+    @property
+    def test_cases_via_links(self):
+        """All TCs in this suite via N:M junction."""
+        return [link.test_case for link in self.case_links]
+
+    @property
+    def case_count_via_links(self):
+        """Count of TCs via junction (replaces old suite_id-based count)."""
+        return self.case_links.count()
+
+    def to_dict(self, include_cases=False, include_children=False):
         result = {
             "id": self.id,
             "program_id": self.program_id,
+            "parent_id": self.parent_id,
+            "sort_order": self.sort_order,
+            "path": self.path,
             "name": self.name,
             "description": self.description,
             "suite_type": self.suite_type,
+            "purpose": self.purpose,
             "status": self.status,
             "module": self.module,
             "owner": self.owner,
             "owner_id": self.owner_id,
             "owner_member": self.owner_member.to_dict() if self.owner_id and self.owner_member else None,
             "tags": self.tags,
-            "case_count": self.test_cases.count(),
+            "case_count": self.case_count_via_links,
+            "case_count_via_links": self.case_count_via_links,
+            "child_count": self.children.count(),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
         if include_cases:
-            result["test_cases"] = [tc.to_dict() for tc in self.test_cases]
+            result["test_cases"] = [tc.to_dict() for tc in self.test_cases_via_links if tc]
+        if include_children:
+            result["children"] = [c.to_dict(include_children=True) for c in self.children.all()]
         return result
 
     def __repr__(self):
-        return f"<TestSuite {self.id}: [{self.suite_type}] {self.name}>"
+        label = self.purpose or self.suite_type
+        return f"<TestSuite {self.id}: [{label}] {self.name}>"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1173,6 +1372,69 @@ class TestCycleSuite(db.Model):
 
     def __repr__(self):
         return f"<TestCycleSuite {self.id}: cycle#{self.cycle_id} ↔ suite#{self.suite_id}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TEST CASE ↔ SUITE JUNCTION  (ADR-008)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestCaseSuiteLink(db.Model):
+    """N:M junction: a test case can belong to multiple suites.
+
+    Replaces the direct TestCase.suite_id FK (1:N) pattern.
+    Tracks how the TC was added to the suite for audit purposes.
+    """
+
+    __tablename__ = "test_case_suite_links"
+    __table_args__ = (
+        db.UniqueConstraint("test_case_id", "suite_id", name="uq_tc_suite"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer, db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    test_case_id = db.Column(
+        db.Integer, db.ForeignKey("test_cases.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    suite_id = db.Column(
+        db.Integer, db.ForeignKey("test_suites.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    added_method = db.Column(
+        db.String(30), default="manual",
+        comment="manual | auto_wricef | auto_process | import | clone",
+    )
+    notes = db.Column(db.Text, default="")
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+    )
+
+    # Relationships
+    test_case = db.relationship(
+        "TestCase", backref=db.backref("suite_links", lazy="dynamic"),
+    )
+    suite = db.relationship(
+        "TestSuite", backref=db.backref("case_links", lazy="dynamic"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "test_case_id": self.test_case_id,
+            "suite_id": self.suite_id,
+            "added_method": self.added_method,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "test_case_code": self.test_case.code if self.test_case else None,
+            "test_case_title": self.test_case.title if self.test_case else None,
+            "suite_name": self.suite.name if self.suite else None,
+        }
+
+    def __repr__(self):
+        return f"<TestCaseSuiteLink {self.id}: TC#{self.test_case_id} ↔ Suite#{self.suite_id}>"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2025,4 +2287,92 @@ class PlanTestCase(db.Model):
 
     def __repr__(self):
         return f"<PlanTestCase {self.id}: plan#{self.plan_id} ↔ tc#{self.test_case_id}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# FAZ 3 — Approval Workflow (e-Signature excluded)
+# ═════════════════════════════════════════════════════════════════════════════
+
+APPROVAL_ENTITY_TYPES = {"test_case", "test_plan", "test_cycle"}
+
+APPROVAL_STATUSES = {"pending", "approved", "rejected", "skipped"}
+
+
+class ApprovalWorkflow(db.Model):
+    """Configurable multi-stage approval pipeline per program/entity type."""
+    __tablename__ = "approval_workflows"
+
+    id          = db.Column(db.Integer, primary_key=True)
+    program_id  = db.Column(db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    entity_type = db.Column(db.String(30), nullable=False)   # test_case | test_plan | test_cycle
+    name        = db.Column(db.String(120), nullable=False)
+    stages      = db.Column(db.JSON, nullable=False, default=list)  # [{stage:1, role:"QA Lead", required:true}, ...]
+    is_active   = db.Column(db.Boolean, default=True)
+    created_by  = db.Column(db.String(100), default="")
+    created_at  = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at  = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    records = db.relationship("ApprovalRecord", backref="workflow", lazy="dynamic", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "program_id": self.program_id,
+            "entity_type": self.entity_type,
+            "name": self.name,
+            "stages": self.stages or [],
+            "is_active": self.is_active,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self):
+        return f"<ApprovalWorkflow {self.id} '{self.name}' ({self.entity_type})>"
+
+
+class ApprovalRecord(db.Model):
+    """Individual approval/rejection decision for an entity at a workflow stage."""
+    __tablename__ = "approval_records"
+
+    id            = db.Column(db.Integer, primary_key=True)
+    workflow_id   = db.Column(db.Integer, db.ForeignKey("approval_workflows.id", ondelete="CASCADE"), nullable=False, index=True)
+    entity_type   = db.Column(db.String(30), nullable=False)
+    entity_id     = db.Column(db.Integer, nullable=False)
+    stage         = db.Column(db.Integer, nullable=False)
+    status        = db.Column(db.String(20), nullable=False, default="pending")  # pending | approved | rejected | skipped
+    approver      = db.Column(db.String(100), default="")
+    comment       = db.Column(db.Text, default="")
+    decided_at    = db.Column(db.DateTime(timezone=True))
+    created_at    = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        db.Index("ix_approval_entity", "entity_type", "entity_id"),
+    )
+
+    def to_dict(self):
+        wf = self.workflow
+        stage_info = {}
+        if wf and wf.stages:
+            match = [s for s in wf.stages if s.get("stage") == self.stage]
+            if match:
+                stage_info = match[0]
+        return {
+            "id": self.id,
+            "workflow_id": self.workflow_id,
+            "workflow_name": wf.name if wf else None,
+            "entity_type": self.entity_type,
+            "entity_id": self.entity_id,
+            "stage": self.stage,
+            "stage_role": stage_info.get("role", ""),
+            "stage_required": stage_info.get("required", True),
+            "status": self.status,
+            "approver": self.approver,
+            "comment": self.comment,
+            "decided_at": self.decided_at.isoformat() if self.decided_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self):
+        return f"<ApprovalRecord {self.id} stage={self.stage} status={self.status}>"
 

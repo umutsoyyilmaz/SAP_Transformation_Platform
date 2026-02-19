@@ -23,9 +23,12 @@ Usage:
     )
 """
 
+import logging
 from datetime import datetime, timezone
 
 from app.models import db
+
+logger = logging.getLogger(__name__)
 from app.models.audit import write_audit
 from app.models.backlog import BacklogItem, ConfigItem
 from app.models.explore import (
@@ -220,7 +223,7 @@ def transition_requirement(
             diff=_diff,
         )
     except Exception:
-        pass  # audit must not break the main flow
+        logger.warning("Audit log failed for requirement transition — main flow unaffected", exc_info=True)
 
     return {
         "requirement_id": req.id,
@@ -590,7 +593,7 @@ def unconvert_requirement(
             },
         )
     except Exception:
-        pass  # audit must not break main flow
+        logger.warning("Audit log failed for requirement un-conversion — main flow unaffected", exc_info=True)
 
     return {
         "status": "unconverted",

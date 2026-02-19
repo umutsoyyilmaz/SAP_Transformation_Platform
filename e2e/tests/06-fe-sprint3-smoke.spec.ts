@@ -5,9 +5,70 @@
  */
 import { test, expect } from '@playwright/test'
 
+async function getAuthHeaders(request: any) {
+  const tenantRes = await request.get('/api/v1/auth/tenants')
+  if (!tenantRes.ok()) return {}
+
+  const tenants = await tenantRes.json()
+  const tenantSlugs = Array.isArray(tenants) ? tenants.map((t: any) => t.slug) : []
+  const loginCandidates = [
+    { email: 'admin@anadolu.com', password: 'Anadolu2026!', tenant_slug: 'anadolu-gida' },
+    { email: 'pm@anadolu.com', password: 'Test1234!', tenant_slug: 'anadolu-gida' },
+    { email: 'viewer@demo.com', password: 'Demo1234!', tenant_slug: 'demo' },
+  ].filter(c => tenantSlugs.includes(c.tenant_slug))
+
+  for (const candidate of loginCandidates) {
+    const loginRes = await request.post('/api/v1/auth/login', { data: candidate })
+    if (!loginRes.ok()) continue
+    const payload = await loginRes.json()
+    if (payload?.access_token) {
+      return { Authorization: `Bearer ${payload.access_token}` }
+    }
+  }
+
+  return {}
+}
+
+async function bootstrapSpaAuth(page: any, request: any) {
+  const tenantRes = await request.get('/api/v1/auth/tenants')
+  if (!tenantRes.ok()) return false
+
+  const tenants = await tenantRes.json()
+  const tenantSlugs = Array.isArray(tenants) ? tenants.map((t: any) => t.slug) : []
+  const loginCandidates = [
+    { email: 'admin@anadolu.com', password: 'Anadolu2026!', tenant_slug: 'anadolu-gida' },
+    { email: 'pm@anadolu.com', password: 'Test1234!', tenant_slug: 'anadolu-gida' },
+    { email: 'viewer@demo.com', password: 'Demo1234!', tenant_slug: 'demo' },
+  ].filter(c => tenantSlugs.includes(c.tenant_slug))
+
+  for (const candidate of loginCandidates) {
+    const loginRes = await request.post('/api/v1/auth/login', { data: candidate })
+    if (!loginRes.ok()) continue
+    const payload = await loginRes.json()
+    if (payload?.access_token && payload?.refresh_token && payload?.user) {
+      await page.addInitScript((authPayload) => {
+        localStorage.setItem('sap_access_token', authPayload.access_token)
+        localStorage.setItem('sap_refresh_token', authPayload.refresh_token)
+        localStorage.setItem('sap_user', JSON.stringify(authPayload.user))
+        localStorage.setItem('sap_active_program', JSON.stringify({
+          id: 1,
+          name: 'Program 1',
+          status: 'active',
+          project_type: 'agile',
+        }))
+      }, payload)
+      return true
+    }
+  }
+
+  return false
+}
+
 /* ─── 1-3: SIDEBAR CLEANUP ──────────────────────────────── */
 
-test('01 — sidebar: old scope items removed', async ({ page }) => {
+test('01 — sidebar: old scope items removed', async ({ page, request }) => {
+  const loggedIn = await bootstrapSpaAuth(page, request)
+  test.skip(!loggedIn, 'No valid seeded test user found for login')
   await page.goto('/')
   await page.waitForLoadState('networkidle')
   const sidebar = page.locator('#sidebar')
@@ -16,7 +77,9 @@ test('01 — sidebar: old scope items removed', async ({ page }) => {
   await expect(sidebar.getByText('Analysis Hub', { exact: true })).not.toBeVisible()
 })
 
-test('02 — sidebar: explore group visible', async ({ page }) => {
+test('02 — sidebar: explore group visible', async ({ page, request }) => {
+  const loggedIn = await bootstrapSpaAuth(page, request)
+  test.skip(!loggedIn, 'No valid seeded test user found for login')
   await page.goto('/')
   await page.waitForLoadState('networkidle')
   const sidebar = page.locator('#sidebar')
@@ -25,18 +88,22 @@ test('02 — sidebar: explore group visible', async ({ page }) => {
   await expect(sidebar.getByText('Requirements & OIs')).toBeVisible()
 })
 
-test('03 — sidebar: delivery group visible', async ({ page }) => {
+test('03 — sidebar: delivery group visible', async ({ page, request }) => {
+  const loggedIn = await bootstrapSpaAuth(page, request)
+  test.skip(!loggedIn, 'No valid seeded test user found for login')
   await page.goto('/')
   await page.waitForLoadState('networkidle')
   const sidebar = page.locator('#sidebar')
-  await expect(sidebar.getByText('Backlog')).toBeVisible()
+  await expect(sidebar.getByText(/Build|Backlog/)).toBeVisible()
   await expect(sidebar.getByText('Test Planning')).toBeVisible()
   await expect(sidebar.getByText('Test Execution')).toBeVisible()
 })
 
 /* ─── 4-6: EXPLORE PHASE ────────────────────────────────── */
 
-test('04 — explore dashboard loads', async ({ page }) => {
+test('04 — explore dashboard loads', async ({ page, request }) => {
+  const loggedIn = await bootstrapSpaAuth(page, request)
+  test.skip(!loggedIn, 'No valid seeded test user found for login')
   await page.goto('/')
   await page.waitForLoadState('networkidle')
   await page.locator('[data-view="explore-dashboard"]').click({ force: true })
@@ -48,7 +115,8 @@ test('04 — explore dashboard loads', async ({ page }) => {
 })
 
 test('05 — explore workshops list loads', async ({ request }) => {
-  const res = await request.get('/api/v1/explore/workshops?project_id=1')
+  const headers = await getAuthHeaders(request)
+  const res = await request.get('/api/v1/explore/workshops?project_id=1', { headers })
   expect(res.ok()).toBeTruthy()
   const body = await res.json()
   const items = body.items || body
@@ -56,13 +124,15 @@ test('05 — explore workshops list loads', async ({ request }) => {
 })
 
 test('06 — explore workshop detail: no stubs', async ({ request }) => {
+  const headers = await getAuthHeaders(request)
   // Verify workshop detail API works (not a stub)
-  const listRes = await request.get('/api/v1/explore/workshops?project_id=1')
+  const listRes = await request.get('/api/v1/explore/workshops?project_id=1', { headers })
+  expect(listRes.ok()).toBeTruthy()
   const listBody = await listRes.json()
   const items = listBody.items || listBody
   if (items.length > 0) {
     const wsId = items[0].id
-    const detailRes = await request.get(`/api/v1/explore/workshops/${wsId}`)
+    const detailRes = await request.get(`/api/v1/explore/workshops/${wsId}`, { headers })
     expect(detailRes.ok()).toBeTruthy()
     const detail = await detailRes.json()
     expect(detail.id).toBe(wsId)
@@ -71,24 +141,25 @@ test('06 — explore workshop detail: no stubs', async ({ request }) => {
 
 /* ─── 7-9: TEST HUB — SUITE & CATALOG (FE-Sprint 1) ───── */
 
-test('07 — test hub: suites tab visible', async ({ page }) => {
+test('07 — test hub: suites tab visible', async ({ page, request }) => {
+  const loggedIn = await bootstrapSpaAuth(page, request)
+  test.skip(!loggedIn, 'No valid seeded test user found for login')
   await page.goto('/')
   await page.waitForLoadState('networkidle')
-  // Trigger SPA navigation via JS to ensure view renders (force click bypasses SPA router)
-  await page.evaluate(() => {
-    const item = document.querySelector('[data-view="testing"]') as HTMLElement
-    if (item) item.click()
-  })
-  await page.waitForTimeout(3000)
+  await page.locator('[data-view="test-planning"]').first().click({ force: true })
+  await page.waitForLoadState('networkidle')
+  await page.waitForTimeout(1500)
+
+  const headers = await getAuthHeaders(request)
   // If SPA needs a program, the tab bar may not render — verify via API instead as fallback
   const tabVisible = await page.locator('[data-tab="suites"]').isVisible().catch(() => false)
   if (!tabVisible) {
     // Verify the testing view JS has the tab definition (structural check)
     const html = await page.locator('#mainContent').innerHTML()
-    const hasSuitesTab = html.includes('suites') || html.includes('Suites')
-    expect(hasSuitesTab || true).toBeTruthy() // structural: tab code exists in testing.js
+    const hasSuitesTab = html.includes('suites') || html.includes('Suites') || html.includes('Test Catalog')
+    expect(hasSuitesTab).toBeTruthy()
     // Also verify the API endpoint works
-    const res = await page.request.get('/api/v1/programs/1/testing/suites')
+    const res = await page.request.get('/api/v1/programs/1/testing/suites', { headers })
     expect(res.ok()).toBeTruthy()
   } else {
     expect(tabVisible).toBeTruthy()
@@ -96,7 +167,8 @@ test('07 — test hub: suites tab visible', async ({ page }) => {
 })
 
 test('08 — test hub: suites API works', async ({ request }) => {
-  const res = await request.get('/api/v1/programs/1/testing/suites')
+  const headers = await getAuthHeaders(request)
+  const res = await request.get('/api/v1/programs/1/testing/suites', { headers })
   expect(res.ok()).toBeTruthy()
   const body = await res.json()
   const items = body.items || body
@@ -104,7 +176,8 @@ test('08 — test hub: suites API works', async ({ request }) => {
 })
 
 test('09 — test hub: catalog API with dependency counts', async ({ request }) => {
-  const res = await request.get('/api/v1/programs/1/testing/catalog')
+  const headers = await getAuthHeaders(request)
+  const res = await request.get('/api/v1/programs/1/testing/catalog', { headers })
   expect(res.ok()).toBeTruthy()
   const body = await res.json()
   const items = body.items || body
@@ -119,23 +192,27 @@ test('09 — test hub: catalog API with dependency counts', async ({ request }) 
 /* ─── 10-11: TEST HUB — DEFECT DETAIL (FE-Sprint 2) ────── */
 
 test('10 — defect detail: comments API works', async ({ request }) => {
-  const defRes = await request.get('/api/v1/programs/1/testing/defects')
+  const headers = await getAuthHeaders(request)
+  const defRes = await request.get('/api/v1/programs/1/testing/defects', { headers })
+  expect(defRes.ok()).toBeTruthy()
   const defBody = await defRes.json()
   const defects = defBody.items || defBody
   if (defects.length > 0) {
     const defId = defects[0].id
-    const commentsRes = await request.get(`/api/v1/testing/defects/${defId}/comments`)
+    const commentsRes = await request.get(`/api/v1/testing/defects/${defId}/comments`, { headers })
     expect(commentsRes.ok()).toBeTruthy()
   }
 })
 
 test('11 — defect detail: history API works', async ({ request }) => {
-  const defRes = await request.get('/api/v1/programs/1/testing/defects')
+  const headers = await getAuthHeaders(request)
+  const defRes = await request.get('/api/v1/programs/1/testing/defects', { headers })
+  expect(defRes.ok()).toBeTruthy()
   const defBody = await defRes.json()
   const defects = defBody.items || defBody
   if (defects.length > 0) {
     const defId = defects[0].id
-    const histRes = await request.get(`/api/v1/testing/defects/${defId}/history`)
+    const histRes = await request.get(`/api/v1/testing/defects/${defId}/history`, { headers })
     expect(histRes.ok()).toBeTruthy()
   }
 })
@@ -143,12 +220,14 @@ test('11 — defect detail: history API works', async ({ request }) => {
 /* ─── 12-15: TEST HUB — FE-Sprint 3 FEATURES ────────────── */
 
 test('12 — SLA endpoint works for defect', async ({ request }) => {
-  const defRes = await request.get('/api/v1/programs/1/testing/defects')
+  const headers = await getAuthHeaders(request)
+  const defRes = await request.get('/api/v1/programs/1/testing/defects', { headers })
+  expect(defRes.ok()).toBeTruthy()
   const defBody = await defRes.json()
   const defects = defBody.items || defBody
   if (defects.length > 0) {
     const defId = defects[0].id
-    const slaRes = await request.get(`/api/v1/testing/defects/${defId}/sla`)
+    const slaRes = await request.get(`/api/v1/testing/defects/${defId}/sla`, { headers })
     expect(slaRes.ok()).toBeTruthy()
     const sla = await slaRes.json()
     expect(sla).toHaveProperty('sla_status')
@@ -157,7 +236,8 @@ test('12 — SLA endpoint works for defect', async ({ request }) => {
 })
 
 test('13 — Go/No-Go scorecard API works', async ({ request }) => {
-  const res = await request.get('/api/v1/programs/1/testing/dashboard/go-no-go')
+  const headers = await getAuthHeaders(request)
+  const res = await request.get('/api/v1/programs/1/testing/dashboard/go-no-go', { headers })
   expect(res.ok()).toBeTruthy()
   const body = await res.json()
   expect(body).toHaveProperty('overall')
@@ -167,20 +247,23 @@ test('13 — Go/No-Go scorecard API works', async ({ request }) => {
 })
 
 test('14 — Generate from WRICEF endpoint exists', async ({ request }) => {
+  const headers = await getAuthHeaders(request)
   // Get a suite that actually exists
-  const suitesRes = await request.get('/api/v1/programs/1/testing/suites')
+  const suitesRes = await request.get('/api/v1/programs/1/testing/suites', { headers })
+  expect(suitesRes.ok()).toBeTruthy()
   const suitesBody = await suitesRes.json()
   const suites = suitesBody.items || suitesBody
   if (suites.length > 0) {
     const suiteId = suites[0].id
     // Use real backlog item IDs that exist in the DB
-    const backlogRes = await request.get('/api/v1/programs/1/backlog?page=1&per_page=3')
+    const backlogRes = await request.get('/api/v1/programs/1/backlog?page=1&per_page=3', { headers })
+    expect(backlogRes.ok()).toBeTruthy()
     const backlogBody = await backlogRes.json()
     const backlogItems = backlogBody.items || backlogBody
     const wricefIds = backlogItems.map((i: any) => i.id).slice(0, 2)
     const res = await request.post(`/api/v1/testing/suites/${suiteId}/generate-from-wricef`, {
       data: { wricef_item_ids: wricefIds },
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...headers, 'Content-Type': 'application/json' },
     })
     // Accept 200/201 (created), 400 (validation), or 404 (no items matched) — route exists
     expect([200, 201, 400, 404]).toContain(res.status())
@@ -188,21 +271,24 @@ test('14 — Generate from WRICEF endpoint exists', async ({ request }) => {
 })
 
 test('15 — UAT sign-off endpoint exists', async ({ request }) => {
+  const headers = await getAuthHeaders(request)
   // Verify the endpoint route exists by querying for cycle_id=0 (no data expected)
-  const res = await request.get('/api/v1/testing/uat-signoffs?cycle_id=999999')
+  const res = await request.get('/api/v1/testing/uat-signoffs?cycle_id=999999', { headers })
   // Accept 200 (empty list) or 404 (not found) — just verify route is registered
   expect([200, 404]).toContain(res.status())
 })
 
 /* ─── 16: DASHBOARD — NO STALE API CALLS ─────────────────── */
 
-test('16 — dashboard does not call old scope APIs', async ({ page }) => {
+test('16 — dashboard does not call old scope APIs', async ({ page, request }) => {
+  const loggedIn = await bootstrapSpaAuth(page, request)
+  test.skip(!loggedIn, 'No valid seeded test user found for login')
   const requests: string[] = []
   page.on('request', (req) => requests.push(req.url()))
   await page.goto('/')
   await page.waitForLoadState('networkidle')
   // Navigate to main dashboard
-  await page.locator('[data-view="dashboard"]').click({ force: true })
+  await page.locator('#sidebar [data-view="dashboard"]').first().click({ force: true })
   await page.waitForLoadState('networkidle')
   await page.waitForTimeout(2000)
 

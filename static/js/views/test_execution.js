@@ -10,6 +10,10 @@ const TestExecutionView = (() => {
 
     // State
     let testPlans = [];
+    let _selectedPlanId = null;
+    let _planSearch = '';
+    let _planTreeFilter = 'all';
+    let _planCyclesById = {};
 
     // ── Main render ───────────────────────────────────────────────────
     async function render() {
@@ -74,49 +78,166 @@ const TestExecutionView = (() => {
                 </div>`;
             return;
         }
-
-        let html = `
-            <div style="display:flex;justify-content:space-between;margin-bottom:16px">
-                <h3 style="margin:0">Test Plans</h3>
-                <button class="btn btn-primary" onclick="TestExecutionView.showPlanModal()">+ New Test Plan</button>
-            </div>`;
-
-        for (const plan of testPlans) {
-            const detail = await API.get(`/testing/plans/${plan.id}`);
-            const statusColor = { draft: '#888', active: '#0070f3', completed: '#107e3e', cancelled: '#c4314b' };
-            html += `
-                <div class="card" style="margin-bottom:12px;padding:16px;border-left:4px solid ${statusColor[plan.status] || '#888'}">
-                    <div style="display:flex;justify-content:space-between;align-items:center">
-                        <div>
-                            <strong>${plan.name}</strong>
-                            <span class="badge" style="background:${statusColor[plan.status] || '#888'};color:#fff;margin-left:8px">${plan.status}</span>
-                        </div>
-                        <div style="display:flex;gap:6px">
-                            <button class="btn btn-sm" style="background:#C08B5C;color:#fff" onclick="TestPlanDetailView.open(${plan.id}, {from:'execution'})">📊 Detail</button>
-                            <button class="btn btn-sm" onclick="TestExecutionView.showCycleModal(${plan.id})">+ Cycle</button>
-                            <button class="btn btn-sm btn-danger" onclick="TestExecutionView.deletePlan(${plan.id})">🗑</button>
-                        </div>
-                    </div>
-                    ${plan.description ? `<p style="color:#666;margin:4px 0">${plan.description}</p>` : ''}
-                    ${detail.cycles && detail.cycles.length > 0 ? `
-                        <table class="data-table" style="margin-top:10px">
-                            <thead><tr><th>Cycle</th><th>Layer</th><th>Status</th><th>Start</th><th>End</th><th>Actions</th></tr></thead>
-                            <tbody>
-                                ${detail.cycles.map(c => `<tr onclick="TestExecutionView.viewCycleExecs(${c.id})" style="cursor:pointer" class="clickable-row">
-                                    <td><strong>${c.name}</strong></td>
-                                    <td>${(c.test_layer || '-').toUpperCase()}</td>
-                                    <td><span class="badge">${c.status}</span></td>
-                                    <td>${c.start_date || '-'}</td>
-                                    <td>${c.end_date || '-'}</td>
-                                    <td>
-                                        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();TestExecutionView.deleteCycle(${c.id})">🗑</button>
-                                    </td>
-                                </tr>`).join('')}
-                            </tbody>
-                        </table>` : '<p style="color:#999;margin-top:8px">No cycles yet.</p>'}
-                </div>`;
+        if (!_selectedPlanId || !testPlans.some(p => Number(p.id) === Number(_selectedPlanId))) {
+            _selectedPlanId = testPlans[0]?.id || null;
         }
-        container.innerHTML = html;
+
+        const detailPairs = await Promise.all(testPlans.map(async (plan) => {
+            const detail = await API.get(`/testing/plans/${plan.id}`).catch(() => ({ cycles: [] }));
+            return [plan.id, detail?.cycles || []];
+        }));
+        _planCyclesById = Object.fromEntries(detailPairs);
+
+        container.innerHTML = `
+            <div class="tm-toolbar">
+                <div class="tm-toolbar__left">
+                    <button class="btn btn-primary btn-sm" onclick="TestExecutionView.showPlanModal()">+ New Test Plan</button>
+                    ${_selectedPlanId ? `<button class="btn btn-sm" onclick="TestExecutionView.showCycleModal(${_selectedPlanId})">+ Cycle</button>` : ''}
+                    ${_selectedPlanId ? `<button class="btn btn-sm" style="background:#C08B5C;color:#fff" onclick="TestPlanDetailView.open(${_selectedPlanId}, {from:'execution'})">📊 Detail</button>` : ''}
+                </div>
+                <div class="tm-toolbar__right">
+                    <input class="tm-input" placeholder="Search plans…" value="${esc(_planSearch)}" oninput="TestExecutionView.setPlanSearch(this.value)">
+                </div>
+            </div>
+            <div id="execPlansSplit"></div>
+        `;
+
+        _renderPlanSplit();
+    }
+
+    function setPlanSearch(val) {
+        _planSearch = val || '';
+        _renderPlanSplit();
+    }
+
+    function setPlanTreeFilter(val) {
+        _planTreeFilter = val || 'all';
+        _renderPlanSplit();
+    }
+
+    function selectPlan(planId) {
+        _selectedPlanId = Number(planId);
+        _renderPlanSplit();
+    }
+
+    function _buildPlanTreeNodes(plans) {
+        const statusBucket = plans.reduce((acc, plan) => {
+            const key = plan.status || 'unknown';
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+        }, {});
+        return [{ id: 'all', label: 'All Plans', count: plans.length }]
+            .concat(Object.keys(statusBucket).sort().map(k => ({ id: k, label: k, count: statusBucket[k] })));
+    }
+
+    function _renderPlanSplit() {
+        const shell = document.getElementById('execPlansSplit');
+        if (!shell) return;
+
+        const query = (_planSearch || '').trim().toLowerCase();
+        const leftNodes = _buildPlanTreeNodes(testPlans);
+
+        const filteredPlans = testPlans.filter(plan => {
+            if (_planTreeFilter !== 'all' && (plan.status || 'unknown') !== _planTreeFilter) return false;
+            if (!query) return true;
+            return (plan.name || '').toLowerCase().includes(query)
+                || (plan.description || '').toLowerCase().includes(query)
+                || (plan.plan_type || '').toLowerCase().includes(query);
+        });
+
+        if (!_selectedPlanId || !filteredPlans.some(p => Number(p.id) === Number(_selectedPlanId))) {
+            _selectedPlanId = filteredPlans[0]?.id || null;
+        }
+
+        TMSplitPane.mount(shell, {
+            leftHtml: '<div id="execPlanTree"></div>',
+            rightHtml: '<div id="execPlanGrid"></div>',
+            leftWidth: 260,
+            minLeft: 200,
+            maxLeft: 420,
+        });
+
+        TMTreePanel.render(document.getElementById('execPlanTree'), {
+            title: 'Plan Status',
+            nodes: leftNodes,
+            selectedId: _planTreeFilter,
+            searchPlaceholder: 'Filter statuses…',
+            onSelect: (nodeId) => setPlanTreeFilter(nodeId),
+        });
+
+        const grid = document.getElementById('execPlanGrid');
+        if (!grid) return;
+
+        if (!_selectedPlanId) {
+            grid.innerHTML = '<div class="empty-state" style="padding:36px"><p>No plans match your filters.</p></div>';
+            return;
+        }
+
+        const selectedPlan = filteredPlans.find(p => Number(p.id) === Number(_selectedPlanId));
+        const cycles = _planCyclesById[_selectedPlanId] || [];
+
+        grid.innerHTML = `
+            <div style="padding:10px 12px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+                <div>
+                    <strong>${esc(selectedPlan?.name || '')}</strong>
+                    <span class="badge" style="margin-left:8px">${esc(selectedPlan?.status || '-')}</span>
+                    <span class="tm-muted" style="margin-left:8px">${cycles.length} cycle(s)</span>
+                </div>
+                <div style="display:flex;gap:6px">
+                    <button class="btn btn-sm" onclick="TestExecutionView.showCycleModal(${_selectedPlanId})">+ Cycle</button>
+                    <button class="btn btn-sm btn-danger" onclick="TestExecutionView.deletePlan(${_selectedPlanId})">🗑</button>
+                </div>
+            </div>
+            <div id="execCyclesGrid" style="padding:8px"></div>
+            <div id="execPlansListGrid" style="padding:8px;border-top:1px solid #eef2f7"></div>
+        `;
+
+        TMDataGrid.render(document.getElementById('execCyclesGrid'), {
+            columns: [
+                { key: 'name', label: 'Cycle', width: '28%' },
+                { key: 'test_layer', label: 'Layer', width: '14%', render: row => esc((row.test_layer || '-').toUpperCase()) },
+                { key: 'status', label: 'Status', width: '14%' },
+                { key: 'start_date', label: 'Start', width: '14%' },
+                { key: 'end_date', label: 'End', width: '14%' },
+                {
+                    key: 'actions',
+                    label: 'Actions',
+                    width: '16%',
+                    render: row => `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();TestExecutionView.deleteCycle(${row.id})">🗑</button>`,
+                },
+            ],
+            rows: cycles,
+            rowKey: 'id',
+            emptyText: 'No cycles yet.',
+            onRowClick: (rowId) => viewCycleExecs(Number(rowId)),
+        });
+
+        TMDataGrid.render(document.getElementById('execPlansListGrid'), {
+            columns: [
+                { key: 'name', label: 'Plan', width: '38%' },
+                { key: 'plan_type', label: 'Type', width: '14%', render: row => esc((row.plan_type || '-').toUpperCase()) },
+                { key: 'status', label: 'Status', width: '14%' },
+                { key: 'environment', label: 'Env', width: '14%' },
+                {
+                    key: 'cycle_count',
+                    label: 'Cycles',
+                    width: '10%',
+                    align: 'right',
+                    render: row => String((_planCyclesById[row.id] || []).length),
+                },
+                {
+                    key: 'detail',
+                    label: ' ',
+                    width: '10%',
+                    render: row => `<button class="btn btn-sm" style="background:#C08B5C;color:#fff" onclick="event.stopPropagation();TestPlanDetailView.open(${row.id}, {from:'execution'})">📊</button>`,
+                },
+            ],
+            rows: filteredPlans,
+            rowKey: 'id',
+            selectedRowId: _selectedPlanId,
+            emptyText: 'No plans match your filters.',
+            onRowClick: (rowId) => selectPlan(Number(rowId)),
+        });
     }
 
     function showPlanModal() {
@@ -1191,6 +1312,9 @@ const TestExecutionView = (() => {
     return {
         render,
         switchTab,
+        setPlanSearch,
+        setPlanTreeFilter,
+        selectPlan,
         // Plans & Cycles
         showPlanModal, savePlan, deletePlan,
         showCycleModal, saveCycle, deleteCycle,

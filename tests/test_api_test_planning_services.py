@@ -16,6 +16,7 @@ import pytest
 
 from app import create_app
 from app.models import db as _db
+from app.models.explore.process import ProcessLevel
 from app.models.requirement import Requirement
 
 
@@ -94,9 +95,15 @@ def cycle2(client, plan):
 
 @pytest.fixture()
 def test_case(client, program):
+    l3_id = _ensure_l3_process(program["id"])
     res = client.post(
         f"/api/v1/programs/{program['id']}/testing/catalog",
-        json={"title": "Test PO Creation", "test_layer": "sit", "module": "MM"},
+        json={
+            "title": "Test PO Creation",
+            "test_layer": "sit",
+            "module": "MM",
+            "process_level_id": l3_id,
+        },
     )
     assert res.status_code == 201
     return res.get_json()
@@ -104,9 +111,15 @@ def test_case(client, program):
 
 @pytest.fixture()
 def test_case2(client, program):
+    l3_id = _ensure_l3_process(program["id"])
     res = client.post(
         f"/api/v1/programs/{program['id']}/testing/catalog",
-        json={"title": "Test Invoice Post", "test_layer": "sit", "module": "FI"},
+        json={
+            "title": "Test Invoice Post",
+            "test_layer": "sit",
+            "module": "FI",
+            "process_level_id": l3_id,
+        },
     )
     assert res.status_code == 201
     return res.get_json()
@@ -122,16 +135,50 @@ def suite_with_cases(client, program):
     )
     assert res.status_code == 201
     suite = res.get_json()
+    l3_id = _ensure_l3_process(program["id"])
     # Create test cases linked to this suite
     tc_ids = []
     for title in ["TC FI-01: GL Posting", "TC FI-02: AP Invoice"]:
         res = client.post(
             f"/api/v1/programs/{program['id']}/testing/catalog",
-            json={"title": title, "test_layer": "sit", "suite_id": suite["id"]},
+            json={
+                "title": title,
+                "test_layer": "sit",
+                "suite_id": suite["id"],
+                "process_level_id": l3_id,
+            },
         )
         assert res.status_code == 201
         tc_ids.append(res.get_json()["id"])
     return {"suite": suite, "tc_ids": tc_ids}
+
+
+def _ensure_l3_process(program_id):
+    """Create/reuse a minimal L1→L2→L3 hierarchy and return L3 id."""
+    l3 = ProcessLevel.query.filter_by(project_id=program_id, level=3, code="OTC-010").first()
+    if l3:
+        return l3.id
+
+    l1 = ProcessLevel(
+        project_id=program_id, level=1, code="VC-01", name="Value Chain", sort_order=0,
+    )
+    _db.session.add(l1)
+    _db.session.flush()
+
+    l2 = ProcessLevel(
+        project_id=program_id, level=2, code="PA-01", name="Process Area",
+        parent_id=l1.id, sort_order=0,
+    )
+    _db.session.add(l2)
+    _db.session.flush()
+
+    l3 = ProcessLevel(
+        project_id=program_id, level=3, code="OTC-010", name="Order to Cash",
+        parent_id=l2.id, scope_item_code="J58", sort_order=0,
+    )
+    _db.session.add(l3)
+    _db.session.commit()
+    return l3.id
 
 
 @pytest.fixture()
@@ -161,6 +208,7 @@ class TestSuggestTestCases:
 
     def test_suggest_with_requirement_scope(self, client, plan, program):
         """Add a requirement scope → suggestion traces through."""
+        l3_id = _ensure_l3_process(program["id"])
         # Create a legacy requirement directly in DB
         req = Requirement(
             program_id=program["id"],
@@ -178,6 +226,7 @@ class TestSuggestTestCases:
                 "title": "PO Creation Test",
                 "test_layer": "sit",
                 "requirement_id": req.id,
+                "process_level_id": l3_id,
             },
         )
         assert res.status_code == 201
@@ -409,6 +458,7 @@ class TestCoverage:
 
     def test_coverage_with_scope_and_tc(self, client, plan, program):
         """Scope with requirement → coverage calculated."""
+        l3_id = _ensure_l3_process(program["id"])
         # Create requirement directly
         req = Requirement(
             program_id=program["id"],
@@ -420,8 +470,14 @@ class TestCoverage:
 
         tc_res = client.post(
             f"/api/v1/programs/{program['id']}/testing/catalog",
-            json={"title": "Cov TC", "test_layer": "sit", "requirement_id": req.id},
+            json={
+                "title": "Cov TC",
+                "test_layer": "sit",
+                "requirement_id": req.id,
+                "process_level_id": l3_id,
+            },
         )
+        assert tc_res.status_code == 201
         tc = tc_res.get_json()
 
         # Add scope

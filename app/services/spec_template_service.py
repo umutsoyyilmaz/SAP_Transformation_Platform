@@ -104,7 +104,7 @@ def build_template_context(item) -> dict:
                 ctx["requirement_title"] = req.title or ""
                 ctx["requirement_classification"] = getattr(req, "classification", "") or ""
         except Exception:
-            pass
+            logger.debug("Optional requirement context enrichment failed", exc_info=True)
 
     if getattr(item, "explore_requirement_id", None):
         try:
@@ -117,7 +117,7 @@ def build_template_context(item) -> dict:
                     getattr(ereq, "fit_gap_status", "") or ""
                 )
         except Exception:
-            pass
+            logger.debug("Optional explore requirement context enrichment failed", exc_info=True)
 
     # ── Linked Process Step (L3/L4 → L2 → L1 path)
     ctx["process_path"] = ""
@@ -140,7 +140,7 @@ def build_template_context(item) -> dict:
                 path_parts.reverse()
                 ctx["process_path"] = " → ".join(path_parts)
         except Exception:
-            pass
+            logger.debug("Optional process path context enrichment failed", exc_info=True)
 
     # ── Today's date for header
     ctx["date_generated"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")

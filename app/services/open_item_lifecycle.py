@@ -26,9 +26,12 @@ Usage:
     )
 """
 
+import logging
 from datetime import date, datetime, timezone
 
 from app.models import db
+
+logger = logging.getLogger(__name__)
 from app.models.audit import write_audit
 from app.models.explore import (
     ExploreOpenItem,
@@ -245,7 +248,7 @@ def transition_open_item(
             diff=_diff,
         )
     except Exception:
-        pass  # audit must not break the main flow
+        logger.warning("Audit log failed for open_item transition — main flow unaffected", exc_info=True)
 
     return {
         "open_item_id": oi.id,

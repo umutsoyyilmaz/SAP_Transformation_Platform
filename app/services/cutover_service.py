@@ -10,8 +10,10 @@ Business logic for:
     - Rehearsal metrics:     aggregated task stats + variance calc
     - Go/No-Go decision:    aggregate verdict from all checklist items
     - Hypercare metrics:     incident stats, SLA compliance
+    - CRUD operations:       create/read/update/delete for all cutover entities
 """
 
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import func
@@ -26,12 +28,16 @@ from app.models.cutover import (
     Rehearsal,
     RunbookTask,
     TaskDependency,
+    seed_default_go_no_go,
+    seed_default_sla_targets,
     validate_incident_transition,
     validate_no_cycle,
     validate_plan_transition,
     validate_rehearsal_transition,
     validate_task_transition,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ── Code Generation ──────────────────────────────────────────────────────────
@@ -116,6 +122,7 @@ def transition_plan(plan: CutoverPlan, new_status: str) -> tuple[bool, str]:
             from datetime import timedelta
             plan.hypercare_end = plan.hypercare_start + timedelta(weeks=plan.hypercare_duration_weeks)
 
+    db.session.commit()
     return True, f"Plan transitioned: {old} → {new_status}"
 
 
@@ -157,6 +164,7 @@ def transition_task(task: RunbookTask, new_status: str, executed_by: str = "") -
             delta = now - start
             task.actual_duration_min = int(delta.total_seconds() / 60)
 
+    db.session.commit()
     return True, f"Task transitioned: {old} → {new_status}"
 
 
@@ -183,6 +191,7 @@ def transition_rehearsal(rehearsal: Rehearsal, new_status: str) -> tuple[bool, s
             delta = now - start
             rehearsal.actual_duration_min = int(delta.total_seconds() / 60)
 
+    db.session.commit()
     return True, f"Rehearsal transitioned: {old} → {new_status}"
 
 
@@ -226,7 +235,7 @@ def add_dependency(predecessor_id: int, successor_id: int,
         lag_minutes=lag_minutes,
     )
     db.session.add(dep)
-    db.session.flush()
+    db.session.commit()
     return True, "Dependency added", dep
 
 
@@ -263,6 +272,7 @@ def compute_rehearsal_metrics(rehearsal: Rehearsal, plan: CutoverPlan) -> dict:
     rehearsal.skipped_tasks = skipped
     rehearsal.duration_variance_pct = variance
     rehearsal.runbook_revision_needed = (failed > 0 or (variance is not None and abs(variance) > 15))
+    db.session.commit()
 
     return {
         "total_tasks": total,
@@ -379,6 +389,7 @@ def transition_incident(incident: HypercareIncident, new_status: str,
         incident.resolved_by = ""
         incident.resolution_time_min = None
 
+    db.session.commit()
     return True, f"Incident transitioned: {old} → {new_status}"
 
 
@@ -430,3 +441,768 @@ def compute_hypercare_metrics(plan: CutoverPlan) -> dict:
         "hypercare_end": plan.hypercare_end.isoformat() if plan.hypercare_end else None,
         "hypercare_duration_weeks": plan.hypercare_duration_weeks,
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CRUD Service Functions — 3-layer architecture enforcement
+# Blueprint → Service (here) → Model/DB
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Datetime Parsing Helper ──────────────────────────────────────────────────
+
+_DT_FIELDS: set[str] = {
+    "planned_start", "planned_end", "rollback_deadline",
+    "hypercare_start", "hypercare_end",
+    "actual_start", "actual_end",
+    "reported_at", "resolved_at",
+    "scheduled_date", "start_time", "end_time",
+}
+
+
+def _parse_dt(val: str | datetime | None) -> datetime | None:
+    """Convert an ISO-format string to a Python datetime.
+
+    Centralizes datetime parsing so blueprints stay free of format
+    logic.  Supports the four most common ISO variants sent by the
+    frontend and falls back to ``fromisoformat`` for anything else.
+
+    Args:
+        val: An ISO-format string, an existing datetime, or None.
+
+    Returns:
+        Parsed datetime or None when the input is empty/None.
+    """
+    if val is None or isinstance(val, datetime):
+        return val
+    if isinstance(val, str):
+        val = val.strip()
+        if not val:
+            return None
+        for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(val, fmt)
+            except ValueError:
+                continue
+        return datetime.fromisoformat(val)
+    return val
+
+
+# ── CutoverPlan CRUD ─────────────────────────────────────────────────────────
+
+
+def list_plans(program_id: int | None = None, status: str | None = None) -> list[CutoverPlan]:
+    """Return cutover plans with optional program/status filters.
+
+    Provides the service-layer query so blueprints never touch ORM
+    directly.  Results are ordered by plan code for stable pagination.
+
+    Args:
+        program_id: Optional program filter.
+        status: Optional status filter (e.g. "draft", "ready").
+
+    Returns:
+        List of matching CutoverPlan model instances.
+    """
+    q = CutoverPlan.query
+    if program_id:
+        q = q.filter_by(program_id=program_id)
+    if status:
+        q = q.filter_by(status=status)
+    q = q.order_by(CutoverPlan.code)
+    return q.all()
+
+
+def create_plan(data: dict) -> CutoverPlan:
+    """Create a new CutoverPlan with an auto-generated code.
+
+    The plan code (CUT-001, CUT-002 …) is generated from the global
+    sequence so it stays unique across all programs.
+
+    Args:
+        data: Validated input dict from the blueprint containing at
+              least ``program_id`` and ``name``.
+
+    Returns:
+        The persisted CutoverPlan instance.
+    """
+    code = generate_plan_code(data["program_id"])
+    plan = CutoverPlan(
+        program_id=data["program_id"],
+        code=code,
+        name=data["name"],
+        description=data.get("description", ""),
+        cutover_manager=data.get("cutover_manager", ""),
+        cutover_manager_id=data.get("cutover_manager_id"),
+        environment=data.get("environment", "PRD"),
+        planned_start=_parse_dt(data.get("planned_start")),
+        planned_end=_parse_dt(data.get("planned_end")),
+        rollback_deadline=_parse_dt(data.get("rollback_deadline")),
+        rollback_decision_by=data.get("rollback_decision_by", ""),
+    )
+    db.session.add(plan)
+    db.session.commit()
+    logger.info("CutoverPlan created id=%s code=%s", plan.id, plan.code)
+    return plan
+
+
+def update_plan(plan: CutoverPlan, data: dict, dt_fields: set[str] | None = None) -> CutoverPlan:
+    """Update mutable fields on an existing CutoverPlan.
+
+    Only whitelisted fields are touched to prevent mass-assignment.
+    Datetime fields listed in *dt_fields* are parsed from ISO strings.
+
+    Args:
+        plan: The CutoverPlan instance to update.
+        data: Dict of field-name → new-value pairs.
+        dt_fields: Set of field names requiring datetime parsing.
+                   Defaults to the module-level ``_DT_FIELDS``.
+
+    Returns:
+        The updated CutoverPlan instance.
+    """
+    if dt_fields is None:
+        dt_fields = _DT_FIELDS
+    updatable = (
+        "name", "description", "cutover_manager", "cutover_manager_id", "environment",
+        "planned_start", "planned_end",
+        "rollback_deadline", "rollback_decision_by",
+        "hypercare_start", "hypercare_end",
+        "hypercare_duration_weeks", "hypercare_manager",
+    )
+    for f in updatable:
+        if f in data:
+            val = _parse_dt(data[f]) if f in dt_fields else data[f]
+            setattr(plan, f, val)
+    db.session.commit()
+    logger.info("CutoverPlan updated id=%s", plan.id)
+    return plan
+
+
+def delete_plan(plan: CutoverPlan) -> None:
+    """Delete a CutoverPlan and cascade to all children.
+
+    SQLAlchemy cascade rules propagate the delete to scope items,
+    tasks, rehearsals, go/no-go items, incidents, and SLA targets.
+
+    Args:
+        plan: The CutoverPlan instance to remove.
+    """
+    plan_id = plan.id
+    db.session.delete(plan)
+    db.session.commit()
+    logger.info("CutoverPlan deleted id=%s", plan_id)
+
+
+# ── CutoverScopeItem CRUD ────────────────────────────────────────────────────
+
+
+def list_scope_items(plan_id: int) -> list[CutoverScopeItem]:
+    """Return scope items for a cutover plan ordered by display order.
+
+    Args:
+        plan_id: Parent CutoverPlan primary key.
+
+    Returns:
+        Ordered list of CutoverScopeItem instances.
+    """
+    return (
+        CutoverScopeItem.query
+        .filter_by(cutover_plan_id=plan_id)
+        .order_by(CutoverScopeItem.order)
+        .all()
+    )
+
+
+def create_scope_item(plan_id: int, data: dict) -> CutoverScopeItem:
+    """Create a scope item within a cutover plan.
+
+    Scope items group related runbook tasks (e.g. "Basis", "FI/CO")
+    to give the cutover manager a structured view of the migration.
+
+    Args:
+        plan_id: Parent CutoverPlan primary key.
+        data: Validated input dict with at least ``name``.
+
+    Returns:
+        The persisted CutoverScopeItem instance.
+    """
+    si = CutoverScopeItem(
+        cutover_plan_id=plan_id,
+        name=data["name"],
+        category=data.get("category", "custom"),
+        description=data.get("description", ""),
+        owner=data.get("owner", ""),
+        owner_id=data.get("owner_id"),
+        order=data.get("order", 0),
+    )
+    db.session.add(si)
+    db.session.commit()
+    logger.info("CutoverScopeItem created id=%s plan_id=%s", si.id, plan_id)
+    return si
+
+
+def update_scope_item(si: CutoverScopeItem, data: dict) -> CutoverScopeItem:
+    """Update mutable fields on a scope item.
+
+    Args:
+        si: The CutoverScopeItem instance to update.
+        data: Dict of field-name → new-value pairs.
+
+    Returns:
+        The updated CutoverScopeItem instance.
+    """
+    for f in ("name", "category", "description", "owner", "owner_id", "order"):
+        if f in data:
+            setattr(si, f, data[f])
+    db.session.commit()
+    logger.info("CutoverScopeItem updated id=%s", si.id)
+    return si
+
+
+def delete_scope_item(si: CutoverScopeItem) -> None:
+    """Delete a scope item and cascade to its child tasks.
+
+    Args:
+        si: The CutoverScopeItem instance to remove.
+    """
+    si_id = si.id
+    db.session.delete(si)
+    db.session.commit()
+    logger.info("CutoverScopeItem deleted id=%s", si_id)
+
+
+# ── RunbookTask CRUD ─────────────────────────────────────────────────────────
+
+
+def list_tasks(si_id: int) -> list[RunbookTask]:
+    """Return runbook tasks for a scope item ordered by sequence.
+
+    Args:
+        si_id: Parent CutoverScopeItem primary key.
+
+    Returns:
+        Ordered list of RunbookTask instances.
+    """
+    return (
+        RunbookTask.query
+        .filter_by(scope_item_id=si_id)
+        .order_by(RunbookTask.sequence)
+        .all()
+    )
+
+
+def create_task(si_id: int, plan_id: int, data: dict) -> RunbookTask:
+    """Create a runbook task with an auto-generated code.
+
+    The task code is derived from the parent plan's code (e.g.
+    CUT-001-T001) so it remains human-readable and traceable.
+
+    Args:
+        si_id: Parent CutoverScopeItem primary key.
+        plan_id: Grandparent CutoverPlan primary key (for code gen).
+        data: Validated input dict with at least ``title``.
+
+    Returns:
+        The persisted RunbookTask instance.
+    """
+    code = generate_task_code(plan_id)
+    task = RunbookTask(
+        scope_item_id=si_id,
+        code=code,
+        sequence=data.get("sequence", 0),
+        title=data["title"],
+        description=data.get("description", ""),
+        planned_start=_parse_dt(data.get("planned_start")),
+        planned_end=_parse_dt(data.get("planned_end")),
+        planned_duration_min=data.get("planned_duration_min"),
+        responsible=data.get("responsible", ""),
+        responsible_id=data.get("responsible_id"),
+        accountable=data.get("accountable", ""),
+        environment=data.get("environment", "PRD"),
+        rollback_action=data.get("rollback_action", ""),
+        rollback_decision_point=data.get("rollback_decision_point", ""),
+        linked_entity_type=data.get("linked_entity_type"),
+        linked_entity_id=data.get("linked_entity_id"),
+        notes=data.get("notes", ""),
+    )
+    db.session.add(task)
+    db.session.commit()
+    logger.info("RunbookTask created id=%s code=%s si_id=%s", task.id, task.code, si_id)
+    return task
+
+
+def update_task(task: RunbookTask, data: dict, dt_fields: set[str] | None = None) -> RunbookTask:
+    """Update mutable fields on a runbook task.
+
+    Only whitelisted fields are touched.  Datetime fields listed in
+    *dt_fields* are parsed from ISO strings automatically.
+
+    Args:
+        task: The RunbookTask instance to update.
+        data: Dict of field-name → new-value pairs.
+        dt_fields: Set of field names requiring datetime parsing.
+                   Defaults to the module-level ``_DT_FIELDS``.
+
+    Returns:
+        The updated RunbookTask instance.
+    """
+    if dt_fields is None:
+        dt_fields = _DT_FIELDS
+    updatable = (
+        "sequence", "title", "description",
+        "planned_start", "planned_end", "planned_duration_min",
+        "responsible", "responsible_id", "accountable", "environment",
+        "rollback_action", "rollback_decision_point",
+        "linked_entity_type", "linked_entity_id", "notes",
+    )
+    for f in updatable:
+        if f in data:
+            val = _parse_dt(data[f]) if f in dt_fields else data[f]
+            setattr(task, f, val)
+    db.session.commit()
+    logger.info("RunbookTask updated id=%s", task.id)
+    return task
+
+
+def delete_task(task: RunbookTask) -> None:
+    """Delete a runbook task and its dependency edges.
+
+    Args:
+        task: The RunbookTask instance to remove.
+    """
+    task_id = task.id
+    db.session.delete(task)
+    db.session.commit()
+    logger.info("RunbookTask deleted id=%s", task_id)
+
+
+# ── TaskDependency ────────────────────────────────────────────────────────────
+
+
+def delete_dependency(dep: TaskDependency) -> None:
+    """Remove a task dependency edge.
+
+    Removing a dependency may unblock successor tasks that were
+    waiting on the predecessor to complete.
+
+    Args:
+        dep: The TaskDependency instance to remove.
+    """
+    dep_id = dep.id
+    db.session.delete(dep)
+    db.session.commit()
+    logger.info("TaskDependency deleted id=%s", dep_id)
+
+
+# ── Rehearsal CRUD ────────────────────────────────────────────────────────────
+
+
+def list_rehearsals(plan_id: int) -> list[Rehearsal]:
+    """Return rehearsals for a cutover plan ordered by number.
+
+    Args:
+        plan_id: Parent CutoverPlan primary key.
+
+    Returns:
+        Ordered list of Rehearsal instances.
+    """
+    return (
+        Rehearsal.query
+        .filter_by(cutover_plan_id=plan_id)
+        .order_by(Rehearsal.rehearsal_number)
+        .all()
+    )
+
+
+def create_rehearsal(plan_id: int, data: dict) -> Rehearsal:
+    """Create a rehearsal for a cutover plan with auto-numbering.
+
+    The rehearsal number is derived from the current maximum for
+    the plan so rehearsals are always sequentially numbered.
+
+    Args:
+        plan_id: Parent CutoverPlan primary key.
+        data: Validated input dict with at least ``name``.
+
+    Returns:
+        The persisted Rehearsal instance.
+    """
+    max_num = db.session.query(func.max(Rehearsal.rehearsal_number)).filter(
+        Rehearsal.cutover_plan_id == plan_id,
+    ).scalar() or 0
+
+    r = Rehearsal(
+        cutover_plan_id=plan_id,
+        rehearsal_number=max_num + 1,
+        name=data["name"],
+        description=data.get("description", ""),
+        environment=data.get("environment", "QAS"),
+        planned_start=_parse_dt(data.get("planned_start")),
+        planned_end=_parse_dt(data.get("planned_end")),
+        planned_duration_min=data.get("planned_duration_min"),
+    )
+    db.session.add(r)
+    db.session.commit()
+    logger.info("Rehearsal created id=%s plan_id=%s number=%s", r.id, plan_id, r.rehearsal_number)
+    return r
+
+
+def update_rehearsal(r: Rehearsal, data: dict, dt_fields: set[str] | None = None) -> Rehearsal:
+    """Update mutable fields on a rehearsal.
+
+    Args:
+        r: The Rehearsal instance to update.
+        data: Dict of field-name → new-value pairs.
+        dt_fields: Set of field names requiring datetime parsing.
+                   Defaults to the module-level ``_DT_FIELDS``.
+
+    Returns:
+        The updated Rehearsal instance.
+    """
+    if dt_fields is None:
+        dt_fields = _DT_FIELDS
+    updatable = (
+        "name", "description", "environment",
+        "planned_start", "planned_end", "planned_duration_min",
+        "findings_summary",
+    )
+    for f in updatable:
+        if f in data:
+            val = _parse_dt(data[f]) if f in dt_fields else data[f]
+            setattr(r, f, val)
+    db.session.commit()
+    logger.info("Rehearsal updated id=%s", r.id)
+    return r
+
+
+def delete_rehearsal(r: Rehearsal) -> None:
+    """Delete a rehearsal record.
+
+    Args:
+        r: The Rehearsal instance to remove.
+    """
+    r_id = r.id
+    db.session.delete(r)
+    db.session.commit()
+    logger.info("Rehearsal deleted id=%s", r_id)
+
+
+# ── GoNoGoItem CRUD + Seed ───────────────────────────────────────────────────
+
+
+def list_go_no_go(plan_id: int) -> list[GoNoGoItem]:
+    """Return Go/No-Go checklist items ordered by source domain.
+
+    Args:
+        plan_id: Parent CutoverPlan primary key.
+
+    Returns:
+        Ordered list of GoNoGoItem instances.
+    """
+    return (
+        GoNoGoItem.query
+        .filter_by(cutover_plan_id=plan_id)
+        .order_by(GoNoGoItem.source_domain)
+        .all()
+    )
+
+
+def create_go_no_go(plan_id: int, data: dict) -> GoNoGoItem:
+    """Create a Go/No-Go checklist item for a cutover plan.
+
+    Each item represents a gate criterion that must be evaluated
+    before the cutover can proceed to execution.
+
+    Args:
+        plan_id: Parent CutoverPlan primary key.
+        data: Validated input dict with at least ``criterion``.
+
+    Returns:
+        The persisted GoNoGoItem instance.
+    """
+    item = GoNoGoItem(
+        cutover_plan_id=plan_id,
+        source_domain=data.get("source_domain", "custom"),
+        criterion=data["criterion"],
+        description=data.get("description", ""),
+        verdict=data.get("verdict", "pending"),
+        evidence=data.get("evidence", ""),
+        evaluated_by=data.get("evaluated_by", ""),
+        notes=data.get("notes", ""),
+    )
+    db.session.add(item)
+    db.session.commit()
+    logger.info("GoNoGoItem created id=%s plan_id=%s", item.id, plan_id)
+    return item
+
+
+def update_go_no_go(item: GoNoGoItem, data: dict) -> GoNoGoItem:
+    """Update a Go/No-Go item including verdict and evidence.
+
+    When the verdict changes to a decisive value (go / no_go / waived),
+    ``evaluated_at`` is automatically stamped with the current UTC time.
+
+    Args:
+        item: The GoNoGoItem instance to update.
+        data: Dict of field-name → new-value pairs.
+
+    Returns:
+        The updated GoNoGoItem instance.
+    """
+    updatable = (
+        "source_domain", "criterion", "description",
+        "verdict", "evidence", "evaluated_by", "notes",
+    )
+    for f in updatable:
+        if f in data:
+            setattr(item, f, data[f])
+    if "verdict" in data and data["verdict"] in ("go", "no_go", "waived"):
+        item.evaluated_at = datetime.now(timezone.utc)
+    db.session.commit()
+    logger.info("GoNoGoItem updated id=%s verdict=%s", item.id, item.verdict)
+    return item
+
+
+def delete_go_no_go(item: GoNoGoItem) -> None:
+    """Delete a Go/No-Go checklist item.
+
+    Args:
+        item: The GoNoGoItem instance to remove.
+    """
+    item_id = item.id
+    db.session.delete(item)
+    db.session.commit()
+    logger.info("GoNoGoItem deleted id=%s", item_id)
+
+
+def seed_go_no_go_items(plan_id: int) -> list[GoNoGoItem]:
+    """Seed the standard seven Go/No-Go checklist items for a plan.
+
+    SAP Activate methodology defines a canonical set of gate criteria.
+    This function creates them in bulk so the cutover manager does not
+    have to enter each one manually.
+
+    Args:
+        plan_id: Parent CutoverPlan primary key.
+
+    Returns:
+        List of created GoNoGoItem instances.
+
+    Raises:
+        ValueError: If Go/No-Go items already exist for this plan.
+    """
+    existing = GoNoGoItem.query.filter_by(cutover_plan_id=plan_id).count()
+    if existing > 0:
+        raise ValueError("Go/No-Go items already exist for this plan")
+
+    items = seed_default_go_no_go(plan_id)
+    db.session.commit()
+    logger.info("Seeded %d Go/No-Go items for plan_id=%s", len(items), plan_id)
+    return items
+
+
+# ── HypercareIncident CRUD ───────────────────────────────────────────────────
+
+
+def list_incidents(
+    plan_id: int,
+    severity: str | None = None,
+    status: str | None = None,
+) -> list[HypercareIncident]:
+    """Return hypercare incidents with optional severity/status filters.
+
+    Results are ordered by ``reported_at`` descending so the most
+    recent incidents appear first in the dashboard.
+
+    Args:
+        plan_id: Parent CutoverPlan primary key.
+        severity: Optional severity filter (e.g. "P1", "P2").
+        status: Optional status filter (e.g. "open", "resolved").
+
+    Returns:
+        List of matching HypercareIncident instances.
+    """
+    q = HypercareIncident.query.filter_by(cutover_plan_id=plan_id)
+    if severity:
+        q = q.filter_by(severity=severity)
+    if status:
+        q = q.filter_by(status=status)
+    q = q.order_by(HypercareIncident.reported_at.desc())
+    return q.all()
+
+
+def create_incident(plan_id: int, data: dict) -> HypercareIncident:
+    """Create a hypercare incident with an auto-generated code.
+
+    Incident codes (INC-001, INC-002 …) are scoped to the cutover
+    plan so each plan has its own sequence.
+
+    Args:
+        plan_id: Parent CutoverPlan primary key.
+        data: Validated input dict with at least ``title``.
+
+    Returns:
+        The persisted HypercareIncident instance.
+    """
+    code = generate_incident_code(plan_id)
+    inc = HypercareIncident(
+        cutover_plan_id=plan_id,
+        code=code,
+        title=data["title"],
+        description=data.get("description", ""),
+        severity=data.get("severity", "P3"),
+        category=data.get("category", "other"),
+        reported_by=data.get("reported_by", ""),
+        assigned_to=data.get("assigned_to", ""),
+        linked_entity_type=data.get("linked_entity_type"),
+        linked_entity_id=data.get("linked_entity_id"),
+        notes=data.get("notes", ""),
+    )
+    db.session.add(inc)
+    db.session.commit()
+    logger.info("HypercareIncident created id=%s code=%s plan_id=%s", inc.id, inc.code, plan_id)
+    return inc
+
+
+def update_incident(inc: HypercareIncident, data: dict) -> HypercareIncident:
+    """Update mutable fields on a hypercare incident.
+
+    Args:
+        inc: The HypercareIncident instance to update.
+        data: Dict of field-name → new-value pairs.
+
+    Returns:
+        The updated HypercareIncident instance.
+    """
+    updatable = (
+        "title", "description", "severity", "category",
+        "reported_by", "assigned_to", "resolution",
+        "response_time_min", "linked_entity_type",
+        "linked_entity_id", "notes",
+    )
+    for f in updatable:
+        if f in data:
+            setattr(inc, f, data[f])
+    db.session.commit()
+    logger.info("HypercareIncident updated id=%s", inc.id)
+    return inc
+
+
+def delete_incident(inc: HypercareIncident) -> None:
+    """Delete a hypercare incident record.
+
+    Args:
+        inc: The HypercareIncident instance to remove.
+    """
+    inc_id = inc.id
+    db.session.delete(inc)
+    db.session.commit()
+    logger.info("HypercareIncident deleted id=%s", inc_id)
+
+
+# ── HypercareSLA CRUD + Seed ─────────────────────────────────────────────────
+
+
+def list_sla_targets(plan_id: int) -> list[HypercareSLA]:
+    """Return SLA targets for a cutover plan ordered by severity.
+
+    Args:
+        plan_id: Parent CutoverPlan primary key.
+
+    Returns:
+        Ordered list of HypercareSLA instances.
+    """
+    return (
+        HypercareSLA.query
+        .filter_by(cutover_plan_id=plan_id)
+        .order_by(HypercareSLA.severity)
+        .all()
+    )
+
+
+def create_sla_target(plan_id: int, data: dict) -> HypercareSLA:
+    """Create a custom SLA target for a cutover plan.
+
+    SLA targets define the maximum allowed response and resolution
+    times per severity level during the hypercare period.
+
+    Args:
+        plan_id: Parent CutoverPlan primary key.
+        data: Validated input dict with ``severity``,
+              ``response_target_min``, and ``resolution_target_min``.
+
+    Returns:
+        The persisted HypercareSLA instance.
+    """
+    sla = HypercareSLA(
+        cutover_plan_id=plan_id,
+        severity=data["severity"],
+        response_target_min=data["response_target_min"],
+        resolution_target_min=data["resolution_target_min"],
+        escalation_after_min=data.get("escalation_after_min"),
+        escalation_to=data.get("escalation_to", ""),
+        notes=data.get("notes", ""),
+    )
+    db.session.add(sla)
+    db.session.commit()
+    logger.info("HypercareSLA created id=%s plan_id=%s severity=%s", sla.id, plan_id, sla.severity)
+    return sla
+
+
+def update_sla_target(sla: HypercareSLA, data: dict) -> HypercareSLA:
+    """Update mutable fields on an SLA target.
+
+    Args:
+        sla: The HypercareSLA instance to update.
+        data: Dict of field-name → new-value pairs.
+
+    Returns:
+        The updated HypercareSLA instance.
+    """
+    updatable = (
+        "response_target_min", "resolution_target_min",
+        "escalation_after_min", "escalation_to", "notes",
+    )
+    for f in updatable:
+        if f in data:
+            setattr(sla, f, data[f])
+    db.session.commit()
+    logger.info("HypercareSLA updated id=%s", sla.id)
+    return sla
+
+
+def delete_sla_target(sla: HypercareSLA) -> None:
+    """Delete an SLA target record.
+
+    Args:
+        sla: The HypercareSLA instance to remove.
+    """
+    sla_id = sla.id
+    db.session.delete(sla)
+    db.session.commit()
+    logger.info("HypercareSLA deleted id=%s", sla_id)
+
+
+def seed_sla_targets_for_plan(plan_id: int) -> list[HypercareSLA]:
+    """Seed SAP-standard SLA targets (P1–P4) for a cutover plan.
+
+    Populates the four standard severity-level SLA definitions so
+    the hypercare manager has sensible defaults from day one.
+
+    Args:
+        plan_id: Parent CutoverPlan primary key.
+
+    Returns:
+        List of created HypercareSLA instances.
+
+    Raises:
+        ValueError: If SLA targets already exist for this plan.
+    """
+    existing = HypercareSLA.query.filter_by(cutover_plan_id=plan_id).count()
+    if existing > 0:
+        raise ValueError("SLA targets already exist for this plan")
+
+    items = seed_default_sla_targets(plan_id)
+    db.session.commit()
+    logger.info("Seeded %d SLA targets for plan_id=%s", len(items), plan_id)
+    return items

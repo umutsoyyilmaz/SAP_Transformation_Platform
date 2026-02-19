@@ -11,6 +11,8 @@ const DefectManagementView = (() => {
     let defects = [];
     let _defectSearch = '';
     let _defectFilters = {};
+    let _defectTreeFilter = 'all';
+    let _selectedDefectId = null;
 
     // ── Main render ───────────────────────────────────────────────────
     async function render() {
@@ -51,9 +53,21 @@ const DefectManagementView = (() => {
             return;
         }
 
+        if (!_selectedDefectId || !defects.some(d => Number(d.id) === Number(_selectedDefectId))) {
+            _selectedDefectId = defects[0]?.id || null;
+        }
+
         container.innerHTML = `
+            <div class="tm-toolbar">
+                <div class="tm-toolbar__left">
+                    <button class="btn btn-primary btn-sm" onclick="DefectManagementView.showDefectModal()">+ Report Defect</button>
+                </div>
+                <div class="tm-toolbar__right">
+                    <input class="tm-input" placeholder="Search defects…" value="${esc(_defectSearch)}" oninput="DefectManagementView.setDefectSearch(this.value)">
+                </div>
+            </div>
             <div id="defectFilterBar" style="margin-bottom:8px"></div>
-            <div id="defectTableArea"></div>
+            <div id="defectSplitShell"></div>
         `;
         renderDefectFilterBar();
         applyDefectFilter();
@@ -95,6 +109,16 @@ const DefectManagementView = (() => {
         applyDefectFilter();
     }
 
+    function setDefectTreeFilter(val) {
+        _defectTreeFilter = val || 'all';
+        applyDefectFilter();
+    }
+
+    function selectDefect(id) {
+        _selectedDefectId = Number(id);
+        applyDefectFilter();
+    }
+
     function onDefectFilterChange(update) {
         if (update._clearAll) {
             _defectFilters = {};
@@ -132,33 +156,104 @@ const DefectManagementView = (() => {
             filtered = filtered.filter(d => values.includes(String(d[key])));
         });
 
+        if (_defectTreeFilter !== 'all') {
+            filtered = filtered.filter(d => String(d.status || 'unknown') === _defectTreeFilter);
+        }
+
         const countEl = document.getElementById('defItemCount');
         if (countEl) countEl.textContent = `${filtered.length} of ${defects.length}`;
 
-        const tableEl = document.getElementById('defectTableArea');
-        if (!tableEl) return;
+        if (!_selectedDefectId || !filtered.some(d => Number(d.id) === Number(_selectedDefectId))) {
+            _selectedDefectId = filtered[0]?.id || null;
+        }
+
+        _renderDefectSplit(filtered);
+    }
+
+    function _buildDefectTreeNodes() {
+        const bucket = defects.reduce((acc, defect) => {
+            const key = defect.status || 'unknown';
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+        }, {});
+
+        return [{ id: 'all', label: 'All Defects', count: defects.length }]
+            .concat(Object.keys(bucket).sort().map(k => ({ id: k, label: k, count: bucket[k] })));
+    }
+
+    function _renderDefectSplit(filtered) {
+        const shell = document.getElementById('defectSplitShell');
+        if (!shell) return;
+
+        TMSplitPane.mount(shell, {
+            leftHtml: '<div id="defectTreePanel"></div>',
+            rightHtml: '<div id="defectGridPanel"></div>',
+            leftWidth: 250,
+            minLeft: 190,
+            maxLeft: 420,
+        });
+
+        TMTreePanel.render(document.getElementById('defectTreePanel'), {
+            title: 'Defect Status',
+            nodes: _buildDefectTreeNodes(),
+            selectedId: _defectTreeFilter,
+            searchPlaceholder: 'Filter status…',
+            onSelect: (nodeId) => setDefectTreeFilter(nodeId),
+        });
+
+        const grid = document.getElementById('defectGridPanel');
+        if (!grid) return;
+
         if (filtered.length === 0) {
-            tableEl.innerHTML = '<div class="empty-state" style="padding:40px"><p>No defects match your filters.</p></div>';
+            grid.innerHTML = '<div class="empty-state" style="padding:40px"><p>No defects match your filters.</p></div>';
             return;
         }
-        tableEl.innerHTML = _renderDefectTable(filtered);
+
+        TMDataGrid.render(grid, {
+            columns: [
+                { key: 'code', label: 'Code', width: '10%', render: row => `<strong>${esc(row.code || '-')}</strong>` },
+                { key: 'title', label: 'Title', width: '30%' },
+                { key: 'severity', label: 'Severity', width: '10%', render: row => _severityBadge(row.severity) },
+                { key: 'status', label: 'Status', width: '12%', render: row => _statusBadge(row.status) },
+                { key: 'sla_status', label: 'SLA', width: '12%', render: row => _slaBadge(row.sla_status) },
+                { key: 'module', label: 'Module', width: '10%' },
+                { key: 'aging_days', label: 'Aging', width: '8%', align: 'right', render: row => `${row.aging_days || 0}d` },
+                {
+                    key: 'actions',
+                    label: ' ',
+                    width: '8%',
+                    render: row => `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();DefectManagementView.deleteDefect(${row.id})">🗑</button>`,
+                },
+            ],
+            rows: filtered,
+            rowKey: 'id',
+            selectedRowId: _selectedDefectId,
+            onRowClick: (rowId) => showDefectDetail(Number(rowId)),
+            emptyText: 'No defects match your filters.',
+        });
+    }
+
+    function _severityBadge(s) {
+        const c = { P1: '#c4314b', P2: '#e9730c', P3: '#e5a800', P4: '#888' };
+        return `<span class="badge" style="background:${c[s] || '#888'};color:#fff">${s || '-'}</span>`;
+    }
+
+    function _statusBadge(s) {
+        const c = { new: '#0070f3', open: '#e9730c', in_progress: '#6a4fa0', fixed: '#107e3e', retest: '#e5a800', closed: '#888', rejected: '#555', reopened: '#c4314b' };
+        return `<span class="badge" style="background:${c[s] || '#888'};color:#fff">${s || '-'}</span>`;
+    }
+
+    function _slaBadge(s) {
+        if (!s || s === 'n/a') return '<span class="badge" style="background:#ccc;color:#666">N/A</span>';
+        const c = { on_track: '#107e3e', warning: '#e5a800', breached: '#c4314b' };
+        const label = { on_track: '✓ On Track', warning: '⚠ Warning', breached: '🔴 Breached' };
+        return `<span class="badge" style="background:${c[s] || '#888'};color:#fff">${label[s] || s}</span>`;
     }
 
     function _renderDefectTable(list) {
-        const sevBadge = (s) => {
-            const c = { P1: '#c4314b', P2: '#e9730c', P3: '#e5a800', P4: '#888' };
-            return `<span class="badge" style="background:${c[s] || '#888'};color:#fff">${s}</span>`;
-        };
-        const statusBadge = (s) => {
-            const c = { new: '#0070f3', open: '#e9730c', in_progress: '#6a4fa0', fixed: '#107e3e', retest: '#e5a800', closed: '#888', rejected: '#555', reopened: '#c4314b' };
-            return `<span class="badge" style="background:${c[s] || '#888'};color:#fff">${s}</span>`;
-        };
-        const slaBadge = (s) => {
-            if (!s || s === 'n/a') return '<span class="badge" style="background:#ccc;color:#666">N/A</span>';
-            const c = { on_track: '#107e3e', warning: '#e5a800', breached: '#c4314b' };
-            const label = { on_track: '✓ On Track', warning: '⚠ Warning', breached: '🔴 Breached' };
-            return `<span class="badge" style="background:${c[s] || '#888'};color:#fff">${label[s] || s}</span>`;
-        };
+        const sevBadge = _severityBadge;
+        const statusBadge = _statusBadge;
+        const slaBadge = _slaBadge;
         return `<table class="data-table">
                 <thead><tr>
                     <th>Code</th><th>Title</th><th>Severity</th><th>Status</th>
@@ -631,7 +726,7 @@ const DefectManagementView = (() => {
     return {
         render,
         showDefectModal, saveDefect, showDefectDetail, deleteDefect, filterDefects,
-        setDefectSearch, onDefectFilterChange,
+        setDefectSearch, setDefectTreeFilter, selectDefect, onDefectFilterChange,
         runAITriage, applyTriageSuggestion,
         _switchDefectTab, addDefectComment, deleteDefectComment,
         addDefectLink, deleteDefectLink,

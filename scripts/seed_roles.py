@@ -10,8 +10,8 @@ Also creates a default tenant and platform admin user if none exist.
 """
 
 import argparse
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -27,9 +27,8 @@ from app.models.auth import (
 )
 from app.utils.crypto import hash_password
 
-
 # ═══════════════════════════════════════════════════════════════
-# PERMISSIONS — 42 permissions across 11 categories
+# PERMISSIONS — 43 permissions across 11 categories
 # ═══════════════════════════════════════════════════════════════
 PERMISSIONS = [
     # Requirements (5)
@@ -61,10 +60,11 @@ PERMISSIONS = [
     # Reports (2)
     ("reports.view", "reports", "View Reports", "View reports and dashboards"),
     ("reports.export", "reports", "Export Reports", "Export reports to file"),
-    # Admin (3)
+    # Admin (4)
     ("admin.settings", "admin", "Manage Settings", "Manage company settings"),
     ("admin.roles", "admin", "Manage Roles", "View and manage role assignments"),
     ("admin.audit", "admin", "View Audit Log", "View audit trail"),
+    ("ai.admin", "admin", "AI Admin", "AI admin dashboard access and SQL execution"),
     # Backlog (3)
     ("backlog.view", "backlog", "View Backlog", "View backlog items"),
     ("backlog.create", "backlog", "Create Backlog", "Create backlog items"),
@@ -111,10 +111,18 @@ ROLES = {
         "description": "Oversees all projects within a program",
         "level": 80,
         "permissions": [
-            "requirements.*", "workshops.*", "tests.*",
-            "projects.view", "projects.create", "projects.edit",
-            "reports.*", "backlog.*", "raid.*", "integration.*",
-            "cutover.*", "data.*",
+            "requirements.*",
+            "workshops.*",
+            "tests.*",
+            "projects.view",
+            "projects.create",
+            "projects.edit",
+            "reports.*",
+            "backlog.*",
+            "raid.*",
+            "integration.*",
+            "cutover.*",
+            "data.*",
         ],
     },
     "project_manager": {
@@ -122,11 +130,21 @@ ROLES = {
         "description": "Manages specific project(s)",
         "level": 70,
         "permissions": [
-            "requirements.*", "workshops.*",
-            "tests.view", "tests.create", "tests.execute", "tests.approve",
-            "projects.view", "projects.create", "projects.edit",
-            "reports.*", "backlog.*", "raid.*", "integration.*",
-            "cutover.*", "data.*",
+            "requirements.*",
+            "workshops.*",
+            "tests.view",
+            "tests.create",
+            "tests.execute",
+            "tests.approve",
+            "projects.view",
+            "projects.create",
+            "projects.edit",
+            "reports.*",
+            "backlog.*",
+            "raid.*",
+            "integration.*",
+            "cutover.*",
+            "data.*",
         ],
     },
     "functional_consultant": {
@@ -134,16 +152,31 @@ ROLES = {
         "description": "Business process configuration and workshops",
         "level": 50,
         "permissions": [
-            "requirements.view", "requirements.create", "requirements.edit",
-            "workshops.view", "workshops.create", "workshops.facilitate",
-            "tests.view", "tests.create",
+            "requirements.view",
+            "requirements.create",
+            "requirements.edit",
+            "workshops.view",
+            "workshops.create",
+            "workshops.facilitate",
+            "tests.view",
+            "tests.create",
             "projects.view",
-            "reports.view", "reports.export",
-            "backlog.view", "backlog.create", "backlog.edit",
-            "raid.view", "raid.create", "raid.edit",
-            "integration.view", "integration.create", "integration.edit",
-            "cutover.view", "cutover.create", "cutover.edit",
-            "data.view", "data.create",
+            "reports.view",
+            "reports.export",
+            "backlog.view",
+            "backlog.create",
+            "backlog.edit",
+            "raid.view",
+            "raid.create",
+            "raid.edit",
+            "integration.view",
+            "integration.create",
+            "integration.edit",
+            "cutover.view",
+            "cutover.create",
+            "cutover.edit",
+            "data.view",
+            "data.create",
         ],
     },
     "technical_consultant": {
@@ -154,11 +187,20 @@ ROLES = {
             "requirements.view",
             "tests.view",
             "projects.view",
-            "reports.view", "reports.export",
-            "backlog.view", "backlog.create", "backlog.edit",
-            "integration.view", "integration.create", "integration.edit",
-            "cutover.view", "cutover.create", "cutover.edit",
-            "data.view", "data.create", "data.migrate",
+            "reports.view",
+            "reports.export",
+            "backlog.view",
+            "backlog.create",
+            "backlog.edit",
+            "integration.view",
+            "integration.create",
+            "integration.edit",
+            "cutover.view",
+            "cutover.create",
+            "cutover.edit",
+            "data.view",
+            "data.create",
+            "data.migrate",
         ],
     },
     "tester": {
@@ -167,7 +209,9 @@ ROLES = {
         "level": 30,
         "permissions": [
             "requirements.view",
-            "tests.view", "tests.create", "tests.execute",
+            "tests.view",
+            "tests.create",
+            "tests.execute",
             "projects.view",
             "reports.view",
         ],
@@ -177,10 +221,16 @@ ROLES = {
         "description": "Read-only access to all visible resources",
         "level": 10,
         "permissions": [
-            "requirements.view", "workshops.view", "tests.view",
-            "projects.view", "reports.view",
-            "backlog.view", "raid.view", "integration.view",
-            "cutover.view", "data.view",
+            "requirements.view",
+            "workshops.view",
+            "tests.view",
+            "projects.view",
+            "reports.view",
+            "backlog.view",
+            "raid.view",
+            "integration.view",
+            "cutover.view",
+            "data.view",
         ],
     },
 }
@@ -253,9 +303,7 @@ def seed_roles():
 
         # Assign permissions
         target_perms = _expand_permissions(cfg["permissions"], all_codenames)
-        existing_perms = {
-            rp.permission.codename for rp in role.role_permissions.all()
-        }
+        existing_perms = {rp.permission.codename for rp in role.role_permissions.all()}
 
         for codename in target_perms - existing_perms:
             perm = Permission.query.filter_by(codename=codename).first()
