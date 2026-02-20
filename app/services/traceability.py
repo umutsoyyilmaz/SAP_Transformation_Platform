@@ -399,8 +399,21 @@ def _trace_scenario_downstream(scenario, chain):
 # ── Sprint 5 — Test Case & Defect tracing ────────────────────────────────────
 
 def _trace_test_case_upstream(tc, chain):
-    """TestCase → Requirement → Scenario."""
-    if tc.requirement_id:
+    """TestCase → ExploreRequirement (or standard Requirement) → upstream hierarchy."""
+    if tc.explore_requirement_id:
+        from app.models.explore import ExploreRequirement
+        req = db.session.get(ExploreRequirement, tc.explore_requirement_id)
+        if req:
+            chain.append({
+                "type": "explore_requirement",
+                "id": str(req.id),
+                "title": req.title,
+                "code": req.code,
+                "fit_status": req.fit_status,
+            })
+            # Walk the explore upstream hierarchy (workshop → process steps → levels)
+            _build_explore_upstream_inline(req, chain)
+    elif tc.requirement_id:
         req = db.session.get(Requirement, tc.requirement_id)
         if req:
             chain.append({"type": "requirement", "id": req.id, "title": req.title})
@@ -414,6 +427,46 @@ def _trace_test_case_upstream(tc, chain):
         ci = db.session.get(ConfigItem, tc.config_item_id)
         if ci:
             chain.append({"type": "config_item", "id": ci.id, "title": ci.title})
+
+
+def _build_explore_upstream_inline(req, chain):
+    """Walk ExploreRequirement's workshop + process level hierarchy into chain.
+
+    Inlines the process-level walk to avoid a circular import with the
+    traceability blueprint's private _walk_process_level_hierarchy helper.
+    """
+    from app.models.explore import ExploreWorkshop, ProcessStep, ProcessLevel
+
+    if req.workshop_id:
+        ws = db.session.get(ExploreWorkshop, req.workshop_id)
+        if ws:
+            chain.append({"type": "workshop", "id": ws.id, "title": ws.name, "code": ws.code})
+
+    # Determine starting process_level_id
+    start_level_id = None
+    if req.process_step_id:
+        ps = db.session.get(ProcessStep, req.process_step_id)
+        if ps:
+            chain.append({"type": "process_step", "id": str(ps.id), "title": f"Step {str(ps.id)[:8]}"})
+            start_level_id = ps.process_level_id
+    elif req.process_level_id:
+        start_level_id = req.process_level_id
+
+    # Walk up through ProcessLevel ancestors
+    visited: set = set()
+    current_id = start_level_id
+    while current_id and current_id not in visited:
+        visited.add(current_id)
+        pl = db.session.get(ProcessLevel, current_id)
+        if not pl:
+            break
+        chain.append({
+            "type": f"process_l{pl.level}" if pl.level else "process_level",
+            "id": str(pl.id),
+            "title": pl.name,
+            "code": pl.code,
+        })
+        current_id = pl.parent_id
 
 
 def _trace_test_case_downstream(tc, chain):

@@ -1081,12 +1081,34 @@ def get_test_case_traceability_derived(case_id):
             },
         })
 
+    # Enrich summary with TestCase-level metadata for UI traceability panel
+    explore_requirement_code = None
+    process_level_name = None
+    source_type = "unlinked"
+
+    if tc.explore_requirement_id:
+        er = db.session.get(ExploreRequirement, tc.explore_requirement_id)
+        if er:
+            explore_requirement_code = er.code
+        source_type = "explore"
+    elif tc.requirement_id:
+        source_type = "standard"
+
+    if tc.process_level_id:
+        from app.models.explore import ProcessLevel
+        pl = db.session.get(ProcessLevel, tc.process_level_id)
+        if pl:
+            process_level_name = pl.name
+
     return jsonify({
         "test_case_id": tc.id,
         "groups": groups,
         "summary": {
             "group_count": len(groups),
             "not_covered_total": total_not_covered,
+            "explore_requirement_code": explore_requirement_code,
+            "process_level_name": process_level_name,
+            "source_type": source_type,
         },
     })
 

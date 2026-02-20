@@ -311,3 +311,110 @@ class TestUnifiedTraceLateral:
         oi_list = data.get("lateral", {}).get("open_items", [])
         assert len(oi_list) >= 1
         assert oi_list[0]["code"] == "OI-T01"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Explore ↔ Test cross-domain traceability tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _seed_explore_with_test_case():
+    """Seed a full explore tree plus a TestCase linked via explore_requirement_id.
+
+    Returns (req_id, test_case_id) so tests can assert in both directions.
+    """
+    from app.models.program import Program
+    from app.models.testing import TestCase
+
+    req_id = _seed_explore_tree()
+    req = db.session.get(ExploreRequirement, req_id)
+
+    tc = TestCase(
+        title="TC-Explore-Trace",
+        code="TC-EX-001",
+        test_type="functional",
+        test_layer="performance",  # avoids ADR-008 L3 requirement
+        status="draft",
+        priority="medium",
+        program_id=req.project_id,
+        explore_requirement_id=req_id,
+    )
+    db.session.add(tc)
+    db.session.commit()
+    return req_id, tc.id
+
+
+class TestExploreTestTraceability:
+    """Cross-domain traceability: ExploreRequirement ↔ TestCase."""
+
+    def test_explore_requirement_shows_test_case_downstream(self, client):
+        """trace_explore_requirement should include test_cases when a TestCase is linked."""
+        req_id, tc_id = _seed_explore_with_test_case()
+        r = client.get(f"/api/v1/traceability/explore_requirement/{req_id}")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert "test_cases" in data
+        assert any(tc["id"] == tc_id for tc in data["test_cases"]), (
+            f"TestCase {tc_id} not found in downstream test_cases: {data['test_cases']}"
+        )
+
+    def test_explore_coverage_test_count_increases(self, client):
+        """coverage.test should be >= 1 after linking a TestCase."""
+        req_id, _tc_id = _seed_explore_with_test_case()
+        r = client.get(f"/api/v1/traceability/explore_requirement/{req_id}")
+        data = r.get_json()
+        assert data["coverage"]["test"] >= 1
+
+    def test_test_case_upstream_contains_explore_requirement(self, client):
+        """GET /traceability/test_case/<id> upstream must include explore_requirement node."""
+        _req_id, tc_id = _seed_explore_with_test_case()
+        r = client.get(f"/api/v1/traceability/test_case/{tc_id}")
+        assert r.status_code == 200
+        data = r.get_json()
+        upstream_types = [n["type"] for n in data.get("upstream", [])]
+        assert "explore_requirement" in upstream_types, (
+            f"explore_requirement not in upstream: {upstream_types}"
+        )
+
+    def test_test_case_upstream_contains_workshop(self, client):
+        """With full explore tree, upstream should include workshop node."""
+        _req_id, tc_id = _seed_explore_with_test_case()
+        r = client.get(f"/api/v1/traceability/test_case/{tc_id}")
+        data = r.get_json()
+        upstream_types = [n["type"] for n in data.get("upstream", [])]
+        assert "workshop" in upstream_types, (
+            f"workshop not in upstream: {upstream_types}"
+        )
+
+    def test_traceability_derived_summary_has_explore_fields(self, client):
+        """traceability-derived summary must include explore_requirement_code and source_type."""
+        req_id, tc_id = _seed_explore_with_test_case()
+        # Manually create a TestCaseTraceLink so the endpoint has groups to process
+        from app.models.testing import TestCaseTraceLink
+        from app.models.explore import ProcessLevel, ProcessStep, ExploreRequirement
+
+        req = db.session.get(ExploreRequirement, req_id)
+        # Get any process level from the seeded tree
+        ps = db.session.get(ProcessStep, req.process_step_id) if req.process_step_id else None
+        l3_id = str(ps.process_level_id) if ps and ps.process_level_id else None
+
+        if l3_id:
+            import json
+            link = TestCaseTraceLink(
+                test_case_id=tc_id,
+                l3_process_level_id=l3_id,
+                explore_requirement_ids=json.dumps([req_id]),
+            )
+            db.session.add(link)
+            db.session.commit()
+
+        r = client.get(f"/api/v1/testing/catalog/{tc_id}/traceability-derived")
+        assert r.status_code == 200
+        data = r.get_json()
+        summary = data.get("summary", {})
+        assert "explore_requirement_code" in summary
+        assert "source_type" in summary
+        assert "process_level_name" in summary
+        # TestCase is linked to an ExploreRequirement, so source_type must be "explore"
+        assert summary["source_type"] == "explore"
+        assert summary["explore_requirement_code"] == "REQ-T01"
