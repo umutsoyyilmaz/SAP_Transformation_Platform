@@ -49,22 +49,44 @@
     --tm-shadow-md: 0 4px 14px rgba(15, 23, 42, 0.08);
     --tm-shadow-lg: 0 10px 30px rgba(15, 23, 42, 0.12);
 
-    /* ── Typography (7-step scale) ─────────── */
-    --tm-font-2xs: 10px;
-    --tm-font-xs: 11px;
-    --tm-font-sm: 12px;
-    --tm-font-md: 14px;
-    --tm-font-lg: 16px;
-    --tm-font-xl: 20px;
-    --tm-font-2xl: 24px;
-    --tm-font-3xl: 28px;
+    /* ── Typography — aliases to global type scale (main.css --fs-*) ── */
+    --tm-font-family:  var(--font-family);
+    --tm-font-mono:    var(--font-mono);
+
+    /* Size aliases — always in sync with the global scale */
+    --tm-font-2xs: var(--fs-2xs);  /* 10px */
+    --tm-font-xs:  var(--fs-xs);   /* 11px */
+    --tm-font-sm:  var(--fs-sm);   /* 12px */
+    --tm-font-base:var(--fs-base); /* 13px */
+    --tm-font-md:  var(--fs-md);   /* 14px */
+    --tm-font-lg:  var(--fs-lg);   /* 16px */
+    --tm-font-xl:  var(--fs-xl);   /* 18px */
+    --tm-font-2xl: var(--fs-2xl);  /* 22px */
+    --tm-font-3xl: var(--fs-3xl);  /* 28px */
+
+    /* Weight aliases */
+    --tm-fw-light:    var(--fw-light);    /* 300 */
+    --tm-fw-normal:   var(--fw-normal);   /* 400 */
+    --tm-fw-medium:   var(--fw-medium);   /* 500 */
+    --tm-fw-semibold: var(--fw-semibold); /* 600 */
+    --tm-fw-bold:     var(--fw-bold);     /* 700 */
+
+    /* Line-height aliases */
+    --tm-lh-tight:    var(--lh-tight);    /* 1.2 */
+    --tm-lh-normal:   var(--lh-normal);   /* 1.4 */
+    --tm-lh-relaxed:  var(--lh-relaxed);  /* 1.5 */
+
+    /* Letter-spacing aliases */
+    --tm-ls-normal:   var(--ls-normal);
+    --tm-ls-wide:     var(--ls-wide);
+    --tm-ls-widest:   var(--ls-widest);   /* 0.05em */
 
     /* ── Density ────────────────────────────── */
     --tm-row-height: 32px;
     --tm-row-padding: 4px 8px;
-    --tm-cell-font-size: 12px;
-    --tm-header-font-size: 11px;
-    --tm-density-line-height: 1.25;
+    --tm-cell-font-size:   var(--fs-sm);  /* 12px */
+    --tm-header-font-size: var(--fs-xs);  /* 11px */
+    --tm-density-line-height: var(--lh-tight); /* 1.2 */
 
     /* ── Transitions ───────────────────────── */
     --tm-transition-fast: 100ms ease;

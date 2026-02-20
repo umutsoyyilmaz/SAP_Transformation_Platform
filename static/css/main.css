@@ -62,6 +62,7 @@
     --fs-3xl:   28px;
     --fs-4xl:   48px;
 
+    --fw-light:     300;
     --fw-normal:    400;
     --fw-medium:    500;
     --fw-semibold:  600;
@@ -96,6 +97,119 @@ html, body {
 
 a { color: var(--sap-text-link); text-decoration: none; }
 a:hover { text-decoration: underline; }
+
+/* ── Form Element Font Reset ──────────────────────────────────────────── */
+/* Browsers don't inherit font on form elements by default; fix globally   */
+input, textarea, select, button, optgroup, option {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+}
+
+/* ── Heading Defaults ─────────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-family);
+    font-weight: var(--fw-semibold);
+    line-height: var(--lh-tight);
+    color: var(--sap-text-primary);
+    margin: 0;
+}
+h1 { font-size: var(--fs-3xl); font-weight: var(--fw-bold); }
+h2 { font-size: var(--fs-2xl); }
+h3 { font-size: var(--fs-xl);  }
+h4 { font-size: var(--fs-lg);  }
+h5 { font-size: var(--fs-md);  }
+h6 { font-size: var(--fs-sm);  font-weight: var(--fw-bold); letter-spacing: var(--ls-wide); text-transform: uppercase; }
+
+/* ── Mono / Code Elements ─────────────────────────────────────────────── */
+code, kbd, samp {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: var(--sap-bg);
+    border: 1px solid var(--sap-border);
+    border-radius: 3px;
+    padding: 1px 5px;
+}
+pre {
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    line-height: var(--lh-relaxed);
+    background: var(--sap-bg);
+    border: 1px solid var(--sap-border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    overflow-x: auto;
+}
+pre code { background: none; border: none; padding: 0; font-size: inherit; }
+
+/* ── Typography Utilities ─────────────────────────────────────────────── */
+/* Size */
+.text-2xs    { font-size: var(--fs-2xs)  !important; }
+.text-xs     { font-size: var(--fs-xs)   !important; }
+.text-sm     { font-size: var(--fs-sm)   !important; }
+.text-base   { font-size: var(--fs-base) !important; }
+.text-md     { font-size: var(--fs-md)   !important; }
+.text-lg     { font-size: var(--fs-lg)   !important; }
+.text-xl     { font-size: var(--fs-xl)   !important; }
+.text-2xl    { font-size: var(--fs-2xl)  !important; }
+.text-3xl    { font-size: var(--fs-3xl)  !important; }
+
+/* Weight */
+.font-light    { font-weight: var(--fw-light)    !important; }
+.font-normal   { font-weight: var(--fw-normal)   !important; }
+.font-medium   { font-weight: var(--fw-medium)   !important; }
+.font-semibold { font-weight: var(--fw-semibold) !important; }
+.font-bold     { font-weight: var(--fw-bold)     !important; }
+
+/* Color */
+.text-primary   { color: var(--sap-text-primary)   !important; }
+.text-secondary { color: var(--sap-text-secondary) !important; }
+.text-muted     { color: var(--sap-text-secondary) !important; opacity: 0.7; }
+.text-link      { color: var(--sap-text-link)      !important; }
+.text-positive  { color: var(--sap-positive)       !important; }
+.text-negative  { color: var(--sap-negative)       !important; }
+.text-warning   { color: var(--sap-warning)        !important; }
+
+/* Line-height */
+.leading-tight   { line-height: var(--lh-tight)   !important; }
+.leading-normal  { line-height: var(--lh-normal)  !important; }
+.leading-relaxed { line-height: var(--lh-relaxed) !important; }
+
+/* Letter-spacing */
+.tracking-normal  { letter-spacing: var(--ls-normal)  !important; }
+.tracking-wide    { letter-spacing: var(--ls-wide)    !important; }
+.tracking-widest  { letter-spacing: var(--ls-widest)  !important; }
+
+/* Special patterns */
+.text-uppercase { text-transform: uppercase !important; }
+.text-truncate  { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.text-mono      { font-family: var(--font-mono) !important; }
+
+/* Semantic label pattern — ALL CAPS micro-text (e.g. section headers) */
+.type-label {
+    font-size: var(--fs-xs);
+    font-weight: var(--fw-semibold);
+    letter-spacing: var(--ls-widest);
+    text-transform: uppercase;
+    color: var(--sap-text-secondary);
+    line-height: var(--lh-normal);
+}
+/* Caption — small explanatory text below a field or element */
+.type-caption {
+    font-size: var(--fs-xs);
+    color: var(--sap-text-secondary);
+    line-height: var(--lh-normal);
+}
+/* Code identifier style — monospaced inline values */
+.type-code {
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    background: var(--sap-bg);
+    border: 1px solid var(--sap-border);
+    border-radius: 3px;
+    padding: 1px 5px;
+}
 
 /* ── Shell Header ──────────────────────────────────────────────────────── */
 .shell-header {
