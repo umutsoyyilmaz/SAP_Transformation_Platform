@@ -23,8 +23,8 @@ const ApprovalsView = (function () {
     async function _loadPending() {
         const pid = App.activeProgramId;
         const url = pid
-            ? `/api/v1/approvals/pending?program_id=${pid}`
-            : '/api/v1/approvals/pending';
+            ? `/approvals/pending?program_id=${pid}`
+            : '/approvals/pending';
         _pendingRecords = await API.get(url).catch(() => []);
     }
 
@@ -105,7 +105,7 @@ const ApprovalsView = (function () {
     async function _renderHistory(el) {
         // Load all records (not just pending) for the current program
         const pid = App.activeProgramId;
-        let url = '/api/v1/approvals/pending'; // fallback
+        let url = '/approvals/pending'; // fallback
         // We'll fetch history via entity status endpoint—since there's no "all records" endpoint,
         // we show a summary based on pending count
         el.innerHTML = `
@@ -126,7 +126,7 @@ const ApprovalsView = (function () {
         }
 
         try {
-            await API.post(`/api/v1/approvals/${recordId}/decide`, {
+            await API.post(`/approvals/${recordId}/decide`, {
                 decision,
                 comment,
             });
@@ -149,7 +149,7 @@ const ApprovalsView = (function () {
         if (!containerEl) return;
 
         try {
-            const data = await API.get(`/api/v1/${entityType}/${entityId}/approval-status`);
+            const data = await API.get(`/${entityType}/${entityId}/approval-status`);
             if (data.status === 'not_submitted') {
                 containerEl.innerHTML = `
                     <div class="tm-approval-banner tm-approval-banner--draft">
@@ -201,7 +201,7 @@ const ApprovalsView = (function () {
 
     async function submitEntity(entityType, entityId) {
         try {
-            await API.post('/api/v1/approvals/submit', {
+            await API.post('/approvals/submit', {
                 entity_type: entityType,
                 entity_id: entityId,
             });

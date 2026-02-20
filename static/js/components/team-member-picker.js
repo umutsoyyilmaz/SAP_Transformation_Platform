@@ -19,7 +19,7 @@ const TeamMemberPicker = (() => {
         if (!programId) return [];
         if (_cache[programId]) return _cache[programId];
         try {
-            const resp = await fetch(`/api/programs/${programId}/team-members`);
+            const resp = await fetch(`/api/v1/programs/${programId}/team`);
             if (!resp.ok) return [];
             const data = await resp.json();
             const list = Array.isArray(data) ? data : (data.items || data.team_members || []);

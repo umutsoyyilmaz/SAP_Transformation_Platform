@@ -87,7 +87,7 @@ def test_case(client, program):
     """Create a test case."""
     res = client.post(
         f"/api/v1/programs/{program['id']}/testing/catalog",
-        json={"title": "Test PO Creation", "test_layer": "sit", "module": "MM"},
+        json={"title": "Test PO Creation", "test_layer": "performance", "module": "MM"},
     )
     assert res.status_code == 201
     return res.get_json()
@@ -312,7 +312,7 @@ class TestPlanTestCase:
         tc_ids = []
         for i in range(3):
             r = client.post(f"/api/v1/programs/{program['id']}/testing/catalog",
-                             json={"title": f"Bulk TC {i}", "test_layer": "sit"})
+                             json={"title": f"Bulk TC {i}", "test_layer": "performance"})
             tc_ids.append(r.get_json()["id"])
 
         res = client.post(
@@ -331,7 +331,7 @@ class TestPlanTestCase:
 
         # Bulk add including the already-added one
         r2 = client.post(f"/api/v1/programs/{program['id']}/testing/catalog",
-                          json={"title": "New TC", "test_layer": "sit"})
+                          json={"title": "New TC", "test_layer": "performance"})
         new_id = r2.get_json()["id"]
 
         res = client.post(
@@ -346,7 +346,7 @@ class TestPlanTestCase:
     def test_filter_plan_tcs_by_priority(self, client, plan, program):
         for i, prio in enumerate(["high", "low", "high"]):
             r = client.post(f"/api/v1/programs/{program['id']}/testing/catalog",
-                             json={"title": f"Prio TC {i}", "test_layer": "sit"})
+                             json={"title": f"Prio TC {i}", "test_layer": "performance"})
             client.post(f"/api/v1/testing/plans/{plan['id']}/test-cases",
                          json={"test_case_id": r.get_json()["id"], "priority": prio})
 
