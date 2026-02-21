@@ -10,12 +10,16 @@ Generates structured meeting minutes from workshop data:
 import json
 from datetime import datetime, timezone
 
+from sqlalchemy import select
+
+from app.core.exceptions import NotFoundError
 from app.models import db
 from app.models.explore import (
     ExploreWorkshop, WorkshopAttendee, WorkshopAgendaItem,
     ProcessStep, ProcessLevel, ExploreDecision, ExploreOpenItem,
     ExploreRequirement, ExploreWorkshopDocument,
 )
+from app.services.helpers.scoped_queries import get_scoped
 
 
 class MinutesGeneratorService:
@@ -24,46 +28,57 @@ class MinutesGeneratorService:
     # ── Public API ────────────────────────────────────────────────────
 
     @staticmethod
-    def generate(workshop_id: str, *, format: str = "markdown",
+    def generate(workshop_id: str, *, project_id: int, format: str = "markdown",
                  created_by: str | None = None, session_number: int | None = None) -> dict:
         """
         Generate meeting minutes for the given workshop.
 
         Args:
             workshop_id: Workshop UUID
+            project_id: Required — owner project scope. Raises ValueError if
+                workshop_id does not belong to this project (isolation enforcement).
             format: 'markdown' (default) — future: 'docx', 'pdf'
             created_by: User ID who triggered the generation
             session_number: If multi-session, which session to limit to
 
         Returns:
             dict with keys: id, content, title, format
+
+        Raises:
+            ValueError: If workshop_id is not found within project_id scope.
         """
-        ws = db.session.get(ExploreWorkshop, workshop_id)
-        if not ws:
+        try:
+            ws = get_scoped(ExploreWorkshop, workshop_id, project_id=project_id)
+        except NotFoundError:
             raise ValueError(f"Workshop {workshop_id} not found")
 
-        # Gather data
-        attendees = WorkshopAttendee.query.filter_by(workshop_id=workshop_id).all()
-        agenda = (WorkshopAgendaItem.query
-                  .filter_by(workshop_id=workshop_id)
-                  .order_by(WorkshopAgendaItem.sort_order)
-                  .all())
-        steps_q = ProcessStep.query.filter_by(workshop_id=workshop_id)
-        # session_number lives on ExploreWorkshop, not ProcessStep
-        steps = steps_q.order_by(ProcessStep.sort_order).all()
+        # Gather data — child queries are FK-safe after parent ws is scope-validated
+        attendees = db.session.execute(
+            select(WorkshopAttendee).where(WorkshopAttendee.workshop_id == ws.id)
+        ).scalars().all()
+        agenda = db.session.execute(
+            select(WorkshopAgendaItem)
+            .where(WorkshopAgendaItem.workshop_id == ws.id)
+            .order_by(WorkshopAgendaItem.sort_order)
+        ).scalars().all()
+        steps = db.session.execute(
+            select(ProcessStep)
+            .where(ProcessStep.workshop_id == ws.id)
+            .order_by(ProcessStep.sort_order)
+        ).scalars().all()
         step_ids = [s.id for s in steps]
 
-        decisions = ExploreDecision.query.filter(
-            ExploreDecision.process_step_id.in_(step_ids)
-        ).all() if step_ids else []
+        decisions = db.session.execute(
+            select(ExploreDecision).where(ExploreDecision.process_step_id.in_(step_ids))
+        ).scalars().all() if step_ids else []
 
-        open_items = ExploreOpenItem.query.filter_by(
-            workshop_id=workshop_id
-        ).all()
+        open_items = db.session.execute(
+            select(ExploreOpenItem).where(ExploreOpenItem.workshop_id == ws.id)
+        ).scalars().all()
 
-        requirements = ExploreRequirement.query.filter_by(
-            workshop_id=workshop_id
-        ).all()
+        requirements = db.session.execute(
+            select(ExploreRequirement).where(ExploreRequirement.workshop_id == ws.id)
+        ).scalars().all()
 
         # Build minutes
         content = MinutesGeneratorService._build_markdown(
@@ -187,19 +202,36 @@ class MinutesGeneratorService:
     # ── AI Summary (placeholder for Gemini integration) ──────────────
 
     @staticmethod
-    def generate_ai_summary(workshop_id: str, *, created_by: str | None = None) -> dict:
+    def generate_ai_summary(workshop_id: str, *, project_id: int, created_by: str | None = None) -> dict:
         """
         Generate an AI-powered summary of a workshop (A-030).
-        Currently outputs a structured summary from raw data;
-        future: calls Gemini/GPT for natural language synthesis.
+
+        Args:
+            workshop_id: Workshop UUID
+            project_id: Required — owner project scope. Raises ValueError if
+                workshop_id does not belong to this project (isolation enforcement).
+            created_by: User ID who triggered the generation
+
+        Returns:
+            dict representation of the persisted ExploreWorkshopDocument
+
+        Raises:
+            ValueError: If workshop_id is not found within project_id scope.
         """
-        ws = db.session.get(ExploreWorkshop, workshop_id)
-        if not ws:
+        try:
+            ws = get_scoped(ExploreWorkshop, workshop_id, project_id=project_id)
+        except NotFoundError:
             raise ValueError(f"Workshop {workshop_id} not found")
 
-        steps = ProcessStep.query.filter_by(workshop_id=workshop_id).all()
-        open_items = ExploreOpenItem.query.filter_by(workshop_id=workshop_id).all()
-        requirements = ExploreRequirement.query.filter_by(workshop_id=workshop_id).all()
+        steps = db.session.execute(
+            select(ProcessStep).where(ProcessStep.workshop_id == ws.id)
+        ).scalars().all()
+        open_items = db.session.execute(
+            select(ExploreOpenItem).where(ExploreOpenItem.workshop_id == ws.id)
+        ).scalars().all()
+        requirements = db.session.execute(
+            select(ExploreRequirement).where(ExploreRequirement.workshop_id == ws.id)
+        ).scalars().all()
 
         fit_count = sum(1 for s in steps if s.fit_decision == "fit")
         gap_count = sum(1 for s in steps if s.fit_decision == "gap")

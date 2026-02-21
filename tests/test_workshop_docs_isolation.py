@@ -131,7 +131,7 @@ class TestWorkshopDocumentServiceGenerate:
     def test_generate_meeting_minutes_returns_document_dict(self, two_projects):
         """Generating meeting_minutes for own workshop succeeds."""
         result = WorkshopDocumentService.generate(
-            two_projects["ws_a_id"], "meeting_minutes"
+            two_projects["ws_a_id"], "meeting_minutes", project_id=two_projects["prog_a_id"]
         )
 
         assert result["type"] == "meeting_minutes"
@@ -141,7 +141,7 @@ class TestWorkshopDocumentServiceGenerate:
     def test_generate_workshop_summary_returns_document_dict(self, two_projects):
         """Generating workshop_summary for own workshop succeeds."""
         result = WorkshopDocumentService.generate(
-            two_projects["ws_a_id"], "workshop_summary"
+            two_projects["ws_a_id"], "workshop_summary", project_id=two_projects["prog_a_id"]
         )
 
         assert result["type"] == "workshop_summary"
@@ -150,7 +150,7 @@ class TestWorkshopDocumentServiceGenerate:
     def test_generate_traceability_report_returns_document_dict(self, two_projects):
         """Generating traceability_report for own workshop succeeds."""
         result = WorkshopDocumentService.generate(
-            two_projects["ws_a_id"], "traceability_report"
+            two_projects["ws_a_id"], "traceability_report", project_id=two_projects["prog_a_id"]
         )
 
         assert result["type"] == "traceability_report"
@@ -165,7 +165,7 @@ class TestWorkshopDocumentServiceGenerate:
         the owning workshop's project_id, not be hardcoded or left NULL.
         """
         result = WorkshopDocumentService.generate(
-            two_projects["ws_a_id"], "meeting_minutes"
+            two_projects["ws_a_id"], "meeting_minutes", project_id=two_projects["prog_a_id"]
         )
 
         assert result["project_id"] == str(two_projects["prog_a_id"])
@@ -173,7 +173,7 @@ class TestWorkshopDocumentServiceGenerate:
     def test_generated_document_is_persisted_to_db(self, two_projects):
         """Document persisted by generate() must be retrievable from DB."""
         result = WorkshopDocumentService.generate(
-            two_projects["ws_a_id"], "meeting_minutes"
+            two_projects["ws_a_id"], "meeting_minutes", project_id=two_projects["prog_a_id"]
         )
         doc_id = result["id"]
 
@@ -184,7 +184,7 @@ class TestWorkshopDocumentServiceGenerate:
     def test_generated_document_has_non_empty_content(self, two_projects):
         """Generated documents must have actual content (not empty strings)."""
         result = WorkshopDocumentService.generate(
-            two_projects["ws_a_id"], "meeting_minutes"
+            two_projects["ws_a_id"], "meeting_minutes", project_id=two_projects["prog_a_id"]
         )
         assert result["content"] is not None
         assert len(result["content"]) > 0
@@ -194,48 +194,37 @@ class TestWorkshopDocumentServiceGenerate:
     def test_generate_invalid_doc_type_raises_value_error(self, two_projects):
         """Unknown doc_type must raise ValueError with helpful message."""
         with pytest.raises(ValueError, match="Unknown document type"):
-            WorkshopDocumentService.generate(two_projects["ws_a_id"], "unknown_type")
+            WorkshopDocumentService.generate(
+                two_projects["ws_a_id"], "unknown_type", project_id=two_projects["prog_a_id"]
+            )
 
     def test_generate_nonexistent_workshop_raises_value_error(self):
         """Non-existent workshop_id must raise ValueError, never return None."""
         with pytest.raises(ValueError, match="Workshop not found"):
             WorkshopDocumentService.generate(
-                "00000000-0000-0000-0000-000000000000", "meeting_minutes"
+                "00000000-0000-0000-0000-000000000000", "meeting_minutes", project_id=999
             )
 
-    # ── Isolation (xfail — documents desired post-fix behavior) ───────────
+    # ── Isolation ───────────────────────────────────────────────────────────────────
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason=(
-            "P0 isolation gap: WorkshopDocumentService.generate has no project_id "
-            "parameter. A caller that knows ws_b_id can generate and persist a "
-            "document tagged to project_b without any authorization check. "
-            "Fix: add project_id param + reject when ws.project_id != project_id."
-        ),
-    )
     def test_cross_project_generate_is_blocked(self, two_projects):
         """Project A MUST NOT generate documents for project B's workshop.
 
-        VULNERABILITY TODAY: generate(ws_b_id) succeeds, writes a document
-        with project_id=prog_b_id — a cross-tenant write with no auth check.
-        EXPECTED AFTER FIX: raise ValueError/PermissionError.
+        Verification that P0 isolation gap is closed: project_a's project_id
+        is passed but ws_b belongs to project_b — must raise ValueError.
         """
-        with pytest.raises((ValueError, PermissionError)):
+        with pytest.raises(ValueError):
             WorkshopDocumentService.generate(
-                two_projects["ws_b_id"], "meeting_minutes"
+                two_projects["ws_b_id"], "meeting_minutes", project_id=two_projects["prog_a_id"]
             )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="P0 isolation gap: see test_cross_project_generate_is_blocked.",
-    )
     def test_cross_project_traceability_report_is_blocked(self, two_projects):
         """Traceability report for project_b's workshop must be rejected by project_a caller."""
-        with pytest.raises((ValueError, PermissionError)):
+        with pytest.raises(ValueError):
             WorkshopDocumentService.generate(
-                two_projects["ws_b_id"], "traceability_report"
+                two_projects["ws_b_id"], "traceability_report", project_id=two_projects["prog_a_id"]
             )
+
 
 
 # ── TestMinutesGeneratorServiceGenerate ──────────────────────────────────────
@@ -248,7 +237,7 @@ class TestMinutesGeneratorServiceGenerate:
 
     def test_generate_returns_document_dict(self, two_projects):
         """Generating minutes for own workshop returns a document dict."""
-        result = MinutesGeneratorService.generate(two_projects["ws_a_id"])
+        result = MinutesGeneratorService.generate(two_projects["ws_a_id"], project_id=two_projects["prog_a_id"])
 
         assert isinstance(result, dict)
         assert result["type"] == "meeting_minutes"
@@ -257,21 +246,21 @@ class TestMinutesGeneratorServiceGenerate:
 
     def test_generate_content_is_non_empty_markdown(self, two_projects):
         """Generated content must be a non-empty string."""
-        result = MinutesGeneratorService.generate(two_projects["ws_a_id"])
+        result = MinutesGeneratorService.generate(two_projects["ws_a_id"], project_id=two_projects["prog_a_id"])
 
         assert result["content"] is not None
         assert len(result["content"]) > 0
 
     def test_generate_title_includes_workshop_code(self, two_projects):
         """Document title must reference the workshop code for traceability."""
-        result = MinutesGeneratorService.generate(two_projects["ws_a_id"])
+        result = MinutesGeneratorService.generate(two_projects["ws_a_id"], project_id=two_projects["prog_a_id"])
 
         assert "WS-DOC-A01" in result["title"]
 
     def test_generate_with_session_number_adds_session_to_title(self, two_projects):
         """session_number=1 causes 'Session 1' to appear in the title."""
         result = MinutesGeneratorService.generate(
-            two_projects["ws_a_id"], session_number=1
+            two_projects["ws_a_id"], project_id=two_projects["prog_a_id"], session_number=1
         )
 
         assert "Session 1" in result["title"]
@@ -280,13 +269,13 @@ class TestMinutesGeneratorServiceGenerate:
 
     def test_generated_document_project_id_matches_workshop(self, two_projects):
         """Document project_id must be inherited from parent workshop, not caller."""
-        result = MinutesGeneratorService.generate(two_projects["ws_a_id"])
+        result = MinutesGeneratorService.generate(two_projects["ws_a_id"], project_id=two_projects["prog_a_id"])
 
         assert result["project_id"] == str(two_projects["prog_a_id"])
 
     def test_generated_document_persisted_with_correct_workshop_id(self, two_projects):
         """Document in DB must reference the correct workshop."""
-        result = MinutesGeneratorService.generate(two_projects["ws_a_id"])
+        result = MinutesGeneratorService.generate(two_projects["ws_a_id"], project_id=two_projects["prog_a_id"])
 
         doc = db.session.get(ExploreWorkshopDocument, result["id"])
         assert doc is not None
@@ -299,28 +288,19 @@ class TestMinutesGeneratorServiceGenerate:
         """Non-existent workshop UUID raises ValueError."""
         with pytest.raises(ValueError, match="not found"):
             MinutesGeneratorService.generate(
-                "deadbeef-dead-beef-dead-beefdeadbeef"
+                "deadbeef-dead-beef-dead-beefdeadbeef", project_id=999
             )
 
     # ── Isolation (xfail) ────────────────────────────────────────────────
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason=(
-            "P0 isolation gap: MinutesGeneratorService.generate has no project_id "
-            "parameter. Any caller that knows ws_b_id can trigger minutes "
-            "generation for project_b's workshop and read the output. "
-            "Fix: add project_id parameter + ownership verification."
-        ),
-    )
     def test_cross_project_minutes_generation_is_blocked(self, two_projects):
         """Project A caller MUST NOT generate minutes for project B's workshop.
 
-        VULNERABILITY TODAY: call succeeds, returns project_b data.
-        EXPECTED AFTER FIX: raise ValueError/PermissionError.
+        Verification that P0 isolation gap is closed: project_a's project_id is
+        passed but ws_b belongs to project_b — must raise ValueError.
         """
-        with pytest.raises((ValueError, PermissionError)):
-            MinutesGeneratorService.generate(two_projects["ws_b_id"])
+        with pytest.raises(ValueError):
+            MinutesGeneratorService.generate(two_projects["ws_b_id"], project_id=two_projects["prog_a_id"])
 
 
 # ── TestMinutesGeneratorServiceGenerateAiSummary ─────────────────────────────
@@ -335,7 +315,7 @@ class TestMinutesGeneratorServiceGenerateAiSummary:
 
     def test_generate_ai_summary_own_workshop_returns_dict(self, two_projects):
         """AI summary for own workshop returns a document dict."""
-        result = MinutesGeneratorService.generate_ai_summary(two_projects["ws_a_id"])
+        result = MinutesGeneratorService.generate_ai_summary(two_projects["ws_a_id"], project_id=two_projects["prog_a_id"])
 
         assert isinstance(result, dict)
         assert result["type"] == "ai_summary"
@@ -343,7 +323,7 @@ class TestMinutesGeneratorServiceGenerateAiSummary:
 
     def test_ai_summary_project_id_matches_workshop(self, two_projects):
         """project_id on AI summary document must match workshop's project."""
-        result = MinutesGeneratorService.generate_ai_summary(two_projects["ws_a_id"])
+        result = MinutesGeneratorService.generate_ai_summary(two_projects["ws_a_id"], project_id=two_projects["prog_a_id"])
 
         assert result["project_id"] == str(two_projects["prog_a_id"])
 
@@ -351,20 +331,17 @@ class TestMinutesGeneratorServiceGenerateAiSummary:
         """Non-existent workshop_id raises ValueError."""
         with pytest.raises(ValueError, match="not found"):
             MinutesGeneratorService.generate_ai_summary(
-                "00000000-0000-0000-0000-000000000000"
+                "00000000-0000-0000-0000-000000000000", project_id=999
             )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason=(
-            "P0 isolation gap: generate_ai_summary has no project_id parameter. "
-            "Any caller can retrieve AI-aggregated data for another project's workshop."
-        ),
-    )
     def test_cross_project_ai_summary_is_blocked(self, two_projects):
-        """Project A must not receive AI summary data for project B's workshop."""
-        with pytest.raises((ValueError, PermissionError)):
-            MinutesGeneratorService.generate_ai_summary(two_projects["ws_b_id"])
+        """Project A must not receive AI summary data for project B's workshop.
+
+        Verification that P0 isolation gap is closed: project_a's project_id is
+        passed but ws_b belongs to project_b — must raise ValueError.
+        """
+        with pytest.raises(ValueError):
+            MinutesGeneratorService.generate_ai_summary(two_projects["ws_b_id"], project_id=two_projects["prog_a_id"])
 
 
 # ── TestDocumentProjectIsolationAtModel ──────────────────────────────────────

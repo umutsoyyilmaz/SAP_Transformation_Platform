@@ -128,7 +128,7 @@ class TestGetSessionSummary:
 
     def test_own_workshop_returns_valid_summary_dict(self, two_projects):
         """Happy path: own workshop ID returns aggregated summary."""
-        result = get_session_summary(two_projects["ws_a_id"])
+        result = get_session_summary(two_projects["ws_a_id"], project_id=two_projects["prog_a_id"])
 
         assert isinstance(result, dict)
         assert "total_sessions" in result
@@ -138,38 +138,27 @@ class TestGetSessionSummary:
 
     def test_summary_total_sessions_at_least_one(self, two_projects):
         """A single non-chained workshop counts as 1 session."""
-        result = get_session_summary(two_projects["ws_a_id"])
+        result = get_session_summary(two_projects["ws_a_id"], project_id=two_projects["prog_a_id"])
         assert result["total_sessions"] >= 1
 
     def test_summary_initial_completion_is_zero(self, two_projects):
         """Fresh workshop with no assessed steps has 0% completion."""
-        result = get_session_summary(two_projects["ws_a_id"])
+        result = get_session_summary(two_projects["ws_a_id"], project_id=two_projects["prog_a_id"])
         assert result["completion_pct"] == 0.0
 
     def test_nonexistent_workshop_raises_value_error(self):
         """Non-existent UUID must raise ValueError, not return None."""
         with pytest.raises(ValueError, match="Workshop not found"):
-            get_session_summary("00000000-0000-0000-0000-000000000000")
+            get_session_summary("00000000-0000-0000-0000-000000000000", project_id=999)
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason=(
-            "P0 isolation gap: get_session_summary(workshop_id) has no project_id "
-            "parameter. Any caller that knows ws_b_id can read project_b's session "
-            "data without authorization. Fix: add project_id parameter and reject "
-            "mismatched workshop ownership."
-        ),
-    )
     def test_cross_project_access_raises_not_found(self, two_projects):
         """Caller from project_a MUST NOT read project_b's session summary.
 
-        VULNERABILITY: Currently this call SUCCEEDS and returns project_b data.
-        EXPECTED AFTER FIX: raise ValueError/NotFoundError/PermissionError.
+        Verification that P0 isolation gap is closed: project_a's project_id
+        is passed but ws_b belongs to project_b — must raise ValueError.
         """
-        with pytest.raises((ValueError, PermissionError)):
-            # Once fixed the API will be: get_session_summary(ws_id, project_id=...)
-            # and this mis-match must be rejected:
-            get_session_summary(two_projects["ws_b_id"])
+        with pytest.raises(ValueError):
+            get_session_summary(two_projects["ws_b_id"], project_id=two_projects["prog_a_id"])
 
 
 # ── TestValidateSessionStart ──────────────────────────────────────────────────
@@ -180,7 +169,7 @@ class TestValidateSessionStart:
 
     def test_own_workshop_returns_result_dict(self, two_projects):
         """Happy path: returns can_start, errors, warnings keys."""
-        result = validate_session_start(two_projects["ws_a_id"])
+        result = validate_session_start(two_projects["ws_a_id"], project_id=two_projects["prog_a_id"])
 
         assert isinstance(result, dict)
         assert "can_start" in result
@@ -189,14 +178,14 @@ class TestValidateSessionStart:
 
     def test_no_scope_items_blocks_start(self, two_projects):
         """Workshop without scope items cannot start (errors list populated)."""
-        result = validate_session_start(two_projects["ws_a_id"])
+        result = validate_session_start(two_projects["ws_a_id"], project_id=two_projects["prog_a_id"])
 
         assert result["can_start"] is False
         assert any("scope" in e.lower() for e in result["errors"])
 
     def test_nonexistent_workshop_returns_cannot_start(self):
         """Completely unknown workshop_id returns can_start=False (graceful)."""
-        result = validate_session_start("00000000-dead-beef-0000-000000000000")
+        result = validate_session_start("00000000-dead-beef-0000-000000000000", project_id=999)
 
         assert result["can_start"] is False
         assert len(result["errors"]) > 0
@@ -208,27 +197,22 @@ class TestValidateSessionStart:
             code="WS-DONE",
             status="completed",
         )
-        result = validate_session_start(ws.id)
+        result = validate_session_start(ws.id, project_id=two_projects["prog_a_id"])
 
         assert result["can_start"] is False
         assert any("status" in e.lower() for e in result["errors"])
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason=(
-            "P0 isolation gap: validate_session_start has no project_id "
-            "parameter. Project A can send project B's workshop ID and receive "
-            "its validation data. Fix: add project_id param + ownership check."
-        ),
-    )
     def test_cross_project_access_is_blocked(self, two_projects):
         """Project A must not be able to validate project B's workshop.
 
-        VULNERABILITY: Currently returns project_b workshop validation.
-        EXPECTED AFTER FIX: raise ValueError/PermissionError.
+        Verification that P0 isolation gap is closed: project_a's project_id
+        is passed but ws_b belongs to project_b — must return can_start=False.
         """
-        with pytest.raises((ValueError, PermissionError)):
-            validate_session_start(two_projects["ws_b_id"])
+        result = validate_session_start(
+            two_projects["ws_b_id"], project_id=two_projects["prog_a_id"]
+        )
+        assert result["can_start"] is False
+        assert len(result["errors"]) > 0
 
 
 # ── TestCarryForwardSteps ─────────────────────────────────────────────────────
@@ -242,6 +226,7 @@ class TestCarryForwardSteps:
         result = carry_forward_steps(
             previous_workshop_id=chained_workshops["ws1_id"],
             new_workshop_id=chained_workshops["ws2_id"],
+            project_id=chained_workshops["prog_id"],
         )
         assert result == []
 
@@ -250,6 +235,7 @@ class TestCarryForwardSteps:
         result = carry_forward_steps(
             previous_workshop_id=chained_workshops["ws1_id"],
             new_workshop_id=chained_workshops["ws2_id"],
+            project_id=chained_workshops["prog_id"],
             carry_all=True,
         )
         assert result == []
@@ -260,6 +246,7 @@ class TestCarryForwardSteps:
             carry_forward_steps(
                 previous_workshop_id="00000000-0000-0000-0000-000000000000",
                 new_workshop_id="11111111-1111-1111-1111-111111111111",
+                project_id=999,
             )
 
     def test_nonexistent_target_workshop_raises_value_error(self, two_projects):
@@ -268,28 +255,20 @@ class TestCarryForwardSteps:
             carry_forward_steps(
                 previous_workshop_id=two_projects["ws_a_id"],
                 new_workshop_id="11111111-1111-1111-1111-111111111111",
+                project_id=two_projects["prog_a_id"],
             )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason=(
-            "P0 isolation gap (CROSS-PROJECT WRITE): carry_forward_steps allows "
-            "steps from project_a's workshop to be written into project_b's workshop. "
-            "This is a cross-tenant WRITE — the most critical isolation failure. "
-            "Fix: verify both workshop IDs belong to the same project_id."
-        ),
-    )
     def test_cross_project_carry_forward_is_blocked(self, two_projects):
         """Carrying steps from project_a into project_b's workshop MUST be rejected.
 
-        VULNERABILITY: Currently succeeds — even with steps present this would
-        write project_a data into project_b's workshop with no authorization.
-        EXPECTED AFTER FIX: raise ValueError/PermissionError.
+        Verification that P0 isolation gap is closed: project_a's project_id is
+        passed but ws_b belongs to project_b — must raise ValueError.
         """
-        with pytest.raises((ValueError, PermissionError)):
+        with pytest.raises(ValueError):
             carry_forward_steps(
                 previous_workshop_id=two_projects["ws_a_id"],
                 new_workshop_id=two_projects["ws_b_id"],
+                project_id=two_projects["prog_a_id"],
             )
 
 
@@ -304,6 +283,7 @@ class TestLinkSessionSteps:
         result = link_session_steps(
             previous_workshop_id=chained_workshops["ws1_id"],
             new_workshop_id=chained_workshops["ws2_id"],
+            project_id=chained_workshops["prog_id"],
         )
         assert result == 0
 
@@ -312,32 +292,27 @@ class TestLinkSessionSteps:
         link_session_steps(
             previous_workshop_id=chained_workshops["ws1_id"],
             new_workshop_id=chained_workshops["ws2_id"],
+            project_id=chained_workshops["prog_id"],
         )
         # Second call must be idempotent
         result = link_session_steps(
             previous_workshop_id=chained_workshops["ws1_id"],
             new_workshop_id=chained_workshops["ws2_id"],
+            project_id=chained_workshops["prog_id"],
         )
         assert result == 0
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason=(
-            "P0 isolation gap: link_session_steps has no project_id parameter. "
-            "A caller can establish step links between workshops from different "
-            "projects, corrupting cross-tenant process step audit trails."
-        ),
-    )
     def test_cross_project_linking_is_blocked(self, two_projects):
         """Linking steps across projects must be rejected.
 
-        VULNERABILITY: Currently succeeds (returns 0 with no error).
-        EXPECTED AFTER FIX: raise ValueError/PermissionError.
+        Verification that P0 isolation gap is closed: project_a's project_id is
+        passed but ws_b belongs to project_b — must raise ValueError.
         """
-        with pytest.raises((ValueError, PermissionError)):
+        with pytest.raises(ValueError):
             link_session_steps(
                 previous_workshop_id=two_projects["ws_a_id"],
                 new_workshop_id=two_projects["ws_b_id"],
+                project_id=two_projects["prog_a_id"],
             )
 
 

@@ -205,9 +205,19 @@ def generate_minutes(workshop_id):
     from app.services.minutes_generator import MinutesGeneratorService
 
     data = request.get_json(silent=True) or {}
+    project_id = data.get("project_id", type(None)) or request.args.get("project_id", type=int)
+    if not project_id:
+        project_id = data.get("project_id")
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    try:
+        project_id = int(project_id)
+    except (TypeError, ValueError):
+        return api_error(E.VALIDATION, "project_id must be an integer")
     try:
         doc = MinutesGeneratorService.generate(
             workshop_id,
+            project_id=project_id,
             format=data.get("format", "markdown"),
             created_by=data.get("created_by"),
             session_number=data.get("session_number"),
@@ -226,9 +236,19 @@ def generate_ai_summary(workshop_id):
     from app.services.minutes_generator import MinutesGeneratorService
 
     data = request.get_json(silent=True) or {}
+    project_id = data.get("project_id")
+    if not project_id:
+        project_id = request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    try:
+        project_id = int(project_id)
+    except (TypeError, ValueError):
+        return api_error(E.VALIDATION, "project_id must be an integer")
     try:
         doc = MinutesGeneratorService.generate_ai_summary(
             workshop_id,
+            project_id=project_id,
             created_by=data.get("created_by"),
         )
         return jsonify(doc), 201

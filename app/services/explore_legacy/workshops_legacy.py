@@ -461,7 +461,9 @@ def start_workshop(ws_id):
     carried = 0
     if ws.session_number > 1:
         from app.services.workshop_session import carry_forward_steps
-        carried = carry_forward_steps(ws.original_workshop_id or ws.id, ws.id)
+        carried = carry_forward_steps(
+            ws.original_workshop_id or ws.id, ws.id, project_id=ws.project_id
+        )
 
     # F2-1: Revision log entry for start
     log = WorkshopRevisionLog(

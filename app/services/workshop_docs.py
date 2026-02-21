@@ -9,6 +9,7 @@ Supports three document types:
 
 from datetime import datetime, timezone
 
+from app.core.exceptions import NotFoundError
 from app.models import db
 from app.models.explore import (
     ExploreWorkshop,
@@ -23,6 +24,7 @@ from app.models.explore import (
 )
 from app.models.backlog import BacklogItem, ConfigItem
 from app.models.testing import TestCase
+from app.services.helpers.scoped_queries import get_scoped
 
 
 def _uuid():
@@ -52,20 +54,22 @@ class WorkshopDocumentService:
     }
 
     @classmethod
-    def generate(cls, workshop_id: str, doc_type: str, created_by: str = None) -> dict:
+    def generate(cls, workshop_id: str, doc_type: str, *, project_id: int, created_by: str = None) -> dict:
         """
         Generate a document for the given workshop.
 
         Args:
             workshop_id: Workshop UUID
             doc_type: One of meeting_minutes, workshop_summary, traceability_report
+            project_id: Required — owner project scope. Raises ValueError if
+                workshop_id does not belong to this project (isolation enforcement).
             created_by: User ID (optional)
 
         Returns:
             ExploreWorkshopDocument.to_dict()
 
         Raises:
-            ValueError if invalid doc_type or workshop not found
+            ValueError: If invalid doc_type or workshop not found in project_id scope.
         """
         if doc_type not in cls.GENERATORS:
             raise ValueError(
@@ -73,8 +77,9 @@ class WorkshopDocumentService:
                 f"Valid: {list(cls.GENERATORS.keys())}"
             )
 
-        ws = db.session.get(ExploreWorkshop, workshop_id)
-        if not ws:
+        try:
+            ws = get_scoped(ExploreWorkshop, workshop_id, project_id=project_id)
+        except NotFoundError:
             raise ValueError(f"Workshop not found: {workshop_id}")
 
         gen_method = getattr(cls, cls.GENERATORS[doc_type])
@@ -208,7 +213,7 @@ class WorkshopDocumentService:
 
 **Date:** {ws_date or 'N/A'}
 **Status:** {ws.status}
-**Facilitator:** {ws.facilitator or 'N/A'}
+**Facilitator:** {ws.facilitator_id or 'N/A'}
 **Process Area:** {ws.process_area or 'N/A'}
 **Wave:** {ws.wave or 'N/A'}
 
