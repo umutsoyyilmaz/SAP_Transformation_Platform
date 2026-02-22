@@ -345,3 +345,236 @@ class StabilizationMetric(db.Model):
             f"<StabilizationMetric {self.id}: {self.metric_name} "
             f"[{self.current_value}/{self.target_value} {self.unit}]>"
         )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 4. LessonLearned  (S6-01 / FDD-I04)
+# ═════════════════════════════════════════════════════════════════════════════
+
+LESSON_CATEGORIES = [
+    "what_went_well",
+    "what_went_wrong",
+    "improve_next_time",
+    "risk_realized",
+    "best_practice",
+]
+LESSON_IMPACTS = ["high", "medium", "low"]
+LESSON_PHASES = ["discover", "prepare", "explore", "realize", "deploy", "run"]
+
+#: Public fields exposed to all tenants via to_dict_public()
+#: Sensitive fields (project_id, tenant_id) are masked with None.
+_LL_SENSITIVE_FIELDS = frozenset({"project_id", "tenant_id"})
+
+
+class LessonLearned(db.Model):
+    """Captures a lesson from a project for cross-project institutional memory.
+
+    Lessons may be kept private (default) or published as public (is_public=True),
+    which makes them searchable by all tenants.  When public, to_dict_public()
+    is used to mask project_id and tenant_id, preventing customer-identity leaks
+    while still sharing the technical/functional knowledge.
+
+    Lifecycle:
+        Created during or after any SAP Activate phase.
+        Linked optionally to an HypercareIncident or Risk for traceability.
+        Upvoted via LessonUpvote (unique per user — prevents gaming).
+        tenant_id nullable=True + ondelete=SET NULL preserves lessons if tenant is deleted.
+    """
+
+    __tablename__ = "lessons_learned"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Owner tenant. nullable=True: lessons survive tenant deletion (institutional memory).",
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Source project. nullable=True: lessons survive project deletion.",
+    )
+    author_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    title = db.Column(db.String(255), nullable=False)
+    category = db.Column(
+        db.String(30),
+        nullable=False,
+        default="what_went_well",
+        comment="what_went_well | what_went_wrong | improve_next_time | risk_realized | best_practice",
+    )
+    description = db.Column(db.Text, nullable=True)
+    recommendation = db.Column(db.Text, nullable=True, comment="Actionable advice for the next project.")
+    impact = db.Column(
+        db.String(10),
+        nullable=True,
+        comment="high | medium | low — significance of this lesson",
+    )
+
+    # SAP-specific tags for search and filtering
+    sap_module = db.Column(db.String(10), nullable=True, comment="FI | MM | SD | PP | PM | ...")
+    sap_activate_phase = db.Column(
+        db.String(20),
+        nullable=True,
+        comment="discover | prepare | explore | realize | deploy | run",
+    )
+    tags = db.Column(
+        db.String(500),
+        nullable=True,
+        comment="Comma-separated free-text tags: data-migration,interface,authorization",
+    )
+
+    # Source traceability (optional back-links)
+    linked_incident_id = db.Column(
+        db.Integer,
+        db.ForeignKey("hypercare_incidents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    linked_risk_id = db.Column(
+        db.Integer,
+        db.ForeignKey("risks.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Sharing
+    is_public = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+        comment="True → visible to all tenants via search; masking applied via to_dict_public().",
+    )
+
+    # Denormalized upvote counter (authoritative source = LessonUpvote table)
+    upvote_count = db.Column(db.Integer, nullable=False, default=0)
+
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # Relationships
+    upvotes = db.relationship("LessonUpvote", back_populates="lesson", lazy="select", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "category IN ('what_went_well','what_went_wrong','improve_next_time','risk_realized','best_practice')",
+            name="ck_lesson_category",
+        ),
+        db.CheckConstraint(
+            "impact IN ('high','medium','low') OR impact IS NULL",
+            name="ck_lesson_impact",
+        ),
+        db.CheckConstraint(
+            "sap_activate_phase IN ('discover','prepare','explore','realize','deploy','run') OR sap_activate_phase IS NULL",
+            name="ck_lesson_phase",
+        ),
+        db.Index("ix_ll_tenant_phase", "tenant_id", "sap_activate_phase"),
+        db.Index("ix_ll_tenant_module", "tenant_id", "sap_module"),
+        db.Index("ix_ll_public", "is_public"),
+    )
+
+    def to_dict(self) -> dict:
+        """Full serialization for the owning tenant."""
+        return {
+            "id": self.id,
+            "tenant_id": self.tenant_id,
+            "project_id": self.project_id,
+            "author_id": self.author_id,
+            "title": self.title,
+            "category": self.category,
+            "description": self.description,
+            "recommendation": self.recommendation,
+            "impact": self.impact,
+            "sap_module": self.sap_module,
+            "sap_activate_phase": self.sap_activate_phase,
+            "tags": self.tags,
+            "linked_incident_id": self.linked_incident_id,
+            "linked_risk_id": self.linked_risk_id,
+            "is_public": self.is_public,
+            "upvote_count": self.upvote_count,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def to_dict_public(self) -> dict:
+        """Serialization safe for cross-tenant share.
+
+        Security rationale: project_id and tenant_id identify the customer.
+        Exposing them to other tenants would be a data leak.  author_id is also
+        masked because it's a user PK from another tenant's user table.
+        """
+        d = self.to_dict()
+        d["project_id"] = None
+        d["tenant_id"] = None
+        d["author_id"] = None
+        d["linked_incident_id"] = None   # incident IDs are tenant-private
+        d["linked_risk_id"] = None       # risk IDs are tenant-private
+        return d
+
+    def __repr__(self) -> str:
+        return f"<LessonLearned id={self.id} category={self.category!r} public={self.is_public}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 5. LessonUpvote  (S6-01 / FDD-I04 Audit A2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class LessonUpvote(db.Model):
+    """One upvote per user per lesson — enforced by a unique DB constraint.
+
+    Why a separate table instead of just incrementing a counter?
+    A bare counter can be gamed by calling the endpoint multiple times.
+    This join table prevents duplicate votes at the DB level and enables
+    future analytics (e.g. who voted for what, vote timeline).
+
+    The lesson.upvote_count column is maintained as a denormalized cache
+    for fast ordering and is synced by the service on every upvote/removal.
+    """
+
+    __tablename__ = "lesson_upvotes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    lesson_id = db.Column(
+        db.Integer,
+        db.ForeignKey("lessons_learned.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    # Relationship back to lesson
+    lesson = db.relationship("LessonLearned", back_populates="upvotes")
+
+    __table_args__ = (
+        # DB-level enforcement: one vote per user per lesson
+        db.UniqueConstraint("lesson_id", "user_id", name="uq_lesson_upvote_user"),
+    )

@@ -518,15 +518,15 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | — |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] `to_dict_public()` metodu ekle — `project_id`, `tenant_id` maskele
-- [ ] Upvote unique constraint (user + lesson) DB level ekle
-- [ ] B-02 Discover entegrasyonu (scope assessment → KB öneri) → AI feature olarak Sprint 7+ backlog'a not
+- [x] `to_dict_public()` metodu ekle — `project_id`, `tenant_id` maskele
+- [x] Upvote unique constraint (user + lesson) DB level ekle
+- [x] B-02 Discover entegrasyonu (scope assessment → KB öneri) → AI feature olarak Sprint 7+ backlog'a not
 
 **Kabul Kriterleri:**
-- [ ] Lesson oluşturulabiliyor ve KB'de listeleniyor
-- [ ] `is_public=True` lesson'lar diğer tenant'lara görünüyor ama hassas alanlar maskelendi
-- [ ] Incident ve cutover close flow'larında "Add to KB" butonu görünüyor
-- [ ] Tenant isolation: kendi private lesson'ları başka tenant'a görünmüyor
+- [x] Lesson oluşturulabiliyor ve KB'de listeleniyor
+- [x] `is_public=True` lesson'lar diğer tenant'lara görünüyor ama hassas alanlar maskelendi
+- [x] Incident ve cutover close flow'larında "Add to KB" butonu görünüyor
+- [x] Tenant isolation: kendi private lesson'ları başka tenant'a görünmüyor
 
 ---
 
@@ -609,7 +609,7 @@ S5-01 (ADR-002 auth)
 | S5-03 | I-03 Cutover clock | P3 | 5 | L | ✅ I-04 | S1-01, S4-01 |
 | S5-04 | I-01 Transport | P3 | 5 | L | ✅ FDD-I01 | S1-05, S1-01 |
 | S5-05 | I-08 Stakeholder | P3 | 5 | M | ✅ FDD-I08 | S3-01 |
-| S6-01 | I-04 KB | P3 | 6 | M | — | S4-01, S5-03 |
+| S6-01 | I-04 KB | P3 | 6 | M | ✅ FDD-I04 | S4-01, S5-03 |
 | S7-01 | I-07 1YG Catalog | Backlog | 7 | M+L | — | S3-01, Legal onay |
 | S7-02 | I-02 Auth Concept | Backlog | 7 | XL | — | S5-01, S1-05 |
 | S8-01 | I-05 Faz B | Backlog | 8 | XL | — | S5-02, S4-02 |

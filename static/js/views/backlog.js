@@ -802,8 +802,6 @@ const BacklogView = (() => {
     }
 
     function renderDetail() {
-
-    function renderDetail() {
         const i = currentItem;
         const w = WRICEF[i.wricef_type] || WRICEF.enhancement;
         const sprint = sprints.find(s => s.id === i.sprint_id);

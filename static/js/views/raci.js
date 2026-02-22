@@ -290,7 +290,8 @@ const RaciView = (() => {
     function render(container) {
         if (!container) return;
 
-        const programId = typeof App !== "undefined" && App.getActiveProgram && App.getActiveProgram();
+        const _prog = typeof App !== "undefined" && App.getActiveProgram && App.getActiveProgram();
+        const programId = _prog && (_prog.id || _prog);
         if (!programId) {
             container.innerHTML = `<div class="raci-no-program">
                 <p>Lütfen önce bir program seçin.</p>
@@ -298,7 +299,7 @@ const RaciView = (() => {
             return;
         }
 
-        _state.programId = programId;
+        _state.programId = typeof programId === "object" ? programId.id : programId;
         _state.loading = true;
 
         container.innerHTML = `

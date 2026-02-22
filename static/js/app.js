@@ -61,6 +61,7 @@ const App = (() => {
         'explore-workshops':       () => ExploreWorkshopHubView.render(),
         'explore-workshop-detail': () => ExploreWorkshopDetailView.render(),
         'explore-requirements':    () => ExploreRequirementHubView.render(),
+        'knowledge-base':           () => KnowledgeBaseView.init(window.currentTenantId),
     };
 
     let currentView = 'dashboard';
@@ -180,9 +181,9 @@ const App = (() => {
 
         try {
             const [summary, actions, recent] = await Promise.all([
-                API.get('/api/v1/dashboard/summary'),
-                API.get('/api/v1/dashboard/actions'),
-                API.get('/api/v1/dashboard/recent-activity'),
+                API.get('/dashboard/summary'),
+                API.get('/dashboard/actions'),
+                API.get('/dashboard/recent-activity'),
             ]);
             _renderDashboardContent(summary, actions, recent);
         } catch (err) {
