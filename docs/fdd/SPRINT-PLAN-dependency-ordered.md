@@ -383,17 +383,17 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | S5-02 (ADR-003 gateway pattern referans) |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] `app/integrations/alm_gateway.py` oluştur — doğrudan `requests` çağrısı yasak
-- [ ] `app/utils/crypto.py` Fernet şifreleme — `CloudALMConfig.encrypted_secret` için
-- [ ] Circuit breaker: 5 hata / 1 dakika → 30 saniye bekle
-- [ ] OAuth2 token cache + refresh gateway içinde (her çağrıda yeni token alma)
-- [ ] Her push/pull `CloudALMSyncLog`'a: `tenant_id`, `user_id`, `payload_hash`, `response_code`, `latency_ms`
+- [x] `app/integrations/alm_gateway.py` oluştur — doğrudan `requests` çağrısı yasak
+- [x] `app/utils/crypto.py` Fernet şifreleme — `CloudALMConfig.encrypted_secret` için
+- [x] Circuit breaker: 5 hata / 1 dakika → 30 saniye bekle
+- [x] OAuth2 token cache + refresh gateway içinde (her çağrıda yeni token alma)
+- [x] Her push/pull `CloudALMSyncLog`'a: `tenant_id`, `user_id`, `payload_hash`, `response_code`, `latency_ms`
 
 **Kabul Kriterleri:**
-- [ ] Test connection endpoint OAuth2 token alıyor ve OK döndürüyor
-- [ ] Push requirements sonrası `external_id` alanları doluyor
-- [ ] `encrypted_secret` hiçbir API response'da görünmüyor
-- [ ] Her sync işlemi `CloudALMSyncLog`'a yazılıyor
+- [x] Test connection endpoint OAuth2 token alıyor ve OK döndürüyor
+- [x] Push requirements sonrası `external_id` alanları doluyor
+- [x] `encrypted_secret` hiçbir API response'da görünmüyor
+- [x] Her sync işlemi `CloudALMSyncLog`'a yazılıyor
 
 ---
 

@@ -207,3 +207,75 @@ class WebhookDelivery(db.Model):
             if self.delivered_at
             else None,
         }
+
+
+# ── S4-02: CloudALMConfig — SAP Cloud ALM connection config (FDD-F07 Faz B) ──
+
+class CloudALMConfig(db.Model):
+    """SAP Cloud ALM OAuth2 connection configuration, one row per tenant.
+
+    Security contract:
+      - `client_secret` is NEVER stored plaintext.  It is encrypted at the
+        service layer via `app.utils.crypto.encrypt_secret()` and stored in
+        `encrypted_secret`.
+      - `to_dict()` explicitly excludes `encrypted_secret` via SENSITIVE_FIELDS.
+      - Any change to this model must preserve that exclusion.
+
+    Lifecycle:
+      draft (not yet tested) → active (test_connection ok) → error (test failed)
+    """
+
+    __tablename__ = "cloud_alm_configs"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(
+        Integer,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+        comment="One config per tenant — enforced by unique constraint",
+    )
+    alm_url = Column(
+        String(500),
+        nullable=False,
+        comment="SAP Cloud ALM base URL: https://<tenant>.alm.cloud.sap",
+    )
+    client_id = Column(String(200), nullable=False, comment="OAuth2 client_id")
+    encrypted_secret = Column(
+        Text,
+        nullable=False,
+        comment="Fernet-encrypted OAuth2 client_secret — never plaintext",
+    )
+    token_url = Column(
+        String(500),
+        nullable=False,
+        comment="OAuth2 token endpoint: https://<auth-server>/oauth/token",
+    )
+    sync_requirements = Column(Boolean, nullable=False, default=True)
+    sync_test_results = Column(Boolean, nullable=False, default=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    last_test_at = Column(DateTime(timezone=True), nullable=True)
+    last_test_status = Column(
+        String(20),
+        nullable=True,
+        comment="ok | error | timeout",
+    )
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    SENSITIVE_FIELDS: frozenset[str] = frozenset({"encrypted_secret"})
+
+    def to_dict(self) -> dict:
+        """Serialise config excluding the encrypted secret.
+
+        Security: encrypted_secret is in SENSITIVE_FIELDS and must NEVER
+        appear in any API response — even to admins.  The secret is write-only
+        from the API perspective.
+        """
+        return {
+            c.name: getattr(self, c.name)
+            for c in self.__table__.columns
+            if c.name not in self.SENSITIVE_FIELDS
+        }
+

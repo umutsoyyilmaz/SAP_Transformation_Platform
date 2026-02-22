@@ -45,7 +45,8 @@ class CloudALMSyncLog(db.Model):
     )
     requirement_id = db.Column(
         db.String(36), db.ForeignKey("explore_requirements.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        nullable=True, index=True,
+        comment="Specific requirement for per-req logs; NULL for batch/test ops",
     )
     sync_direction = db.Column(
         db.String(5), nullable=False,
@@ -60,15 +61,42 @@ class CloudALMSyncLog(db.Model):
     payload = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
 
+    # ── S4-02 Faz B additions: richer audit trail ─────────────────────────
+    http_status_code = db.Column(db.Integer, nullable=True, comment="HTTP status from ALM API")
+    records_pushed = db.Column(db.Integer, nullable=True, comment="Count of records sent to ALM")
+    records_pulled = db.Column(db.Integer, nullable=True, comment="Count of records received from ALM")
+    duration_ms = db.Column(db.Integer, nullable=True, comment="Round-trip latency in milliseconds")
+    triggered_by = db.Column(
+        db.String(20), nullable=True,
+        comment="manual | scheduled | webhook",
+    )
+    user_id = db.Column(db.Integer, nullable=True, comment="User who triggered the sync (FK → users.id)")
+    payload_hash = db.Column(
+        db.String(64), nullable=True,
+        comment="SHA-256 hex digest of the serialised payload for integrity audit",
+    )
+    project_id = db.Column(
+        db.Integer, nullable=True, index=True,
+        comment="Program/project scope — enables sync-log listing by project",
+    )
+
     def to_dict(self):
         return {
             "id": self.id,
+            "tenant_id": self.tenant_id,
             "requirement_id": self.requirement_id,
+            "project_id": self.project_id,
             "sync_direction": self.sync_direction,
             "sync_status": self.sync_status,
             "alm_item_id": self.alm_item_id,
             "error_message": self.error_message,
-            "payload": self.payload,
+            "http_status_code": self.http_status_code,
+            "records_pushed": self.records_pushed,
+            "records_pulled": self.records_pulled,
+            "duration_ms": self.duration_ms,
+            "triggered_by": self.triggered_by,
+            "user_id": self.user_id,
+            "payload_hash": self.payload_hash,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

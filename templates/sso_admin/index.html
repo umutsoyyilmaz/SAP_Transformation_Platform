@@ -366,7 +366,7 @@ function renderConfigs(configs) {
                     <button class="btn btn-sm btn-danger" onclick="deleteConfig(${c.id})">Sil</button>
                 </div>
             </div>
-            <div style="font-size:0.85rem; color:#666;">
+            <div style="font-size:0.85rem; color:var(--pg-color-text-secondary);">
                 ${c.provider_type === 'oidc'
                     ? `Discovery: ${c.discovery_url || '—'} | Client ID: ${c.client_id ? c.client_id.substring(0,8) + '...' : '—'}`
                     : `IdP SSO: ${c.idp_sso_url || '—'}`}
@@ -391,7 +391,7 @@ function renderDomains(domains) {
             <td>${d.is_verified
                 ? '<span class="verified-badge">✅ Doğrulanmış</span>'
                 : '<span class="unverified-badge">⏳ Doğrulama Bekliyor</span>'}</td>
-            <td style="font-size:0.85rem; color:#888;">${d.created_at ? new Date(d.created_at).toLocaleDateString('tr') : '—'}</td>
+            <td style="font-size:0.85rem; color:var(--pg-color-text-tertiary);">${d.created_at ? new Date(d.created_at).toLocaleDateString('tr') : '—'}</td>
             <td>
                 ${!d.is_verified ? `<button class="btn btn-sm btn-success" onclick="verifyDomain(${d.id})">Doğrula</button>` : ''}
                 <button class="btn btn-sm btn-danger" onclick="deleteDomain(${d.id})">Sil</button>
