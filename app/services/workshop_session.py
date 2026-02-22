@@ -190,8 +190,9 @@ def get_session_summary(workshop_id: str, *, project_id: int) -> dict:
             .distinct()
         ).all()
         for (ws_id,) in shared_ws:
-            candidate = db.session.get(ExploreWorkshop, ws_id)
-            if candidate and candidate.project_id == ws.project_id and candidate.process_area == ws.process_area:
+            # Scope by project_id — prevents cross-project workshop leakage
+            candidate = get_scoped_or_none(ExploreWorkshop, ws_id, project_id=project_id)
+            if candidate and candidate.process_area == ws.process_area:
                 related_ids.add(ws_id)
 
     sessions = []
@@ -202,7 +203,8 @@ def get_session_summary(workshop_id: str, *, project_id: int) -> dict:
     overall_partial = 0
 
     for rid in sorted(related_ids):
-        rws = db.session.get(ExploreWorkshop, rid)
+        # Scope enforced — all rids were added only after project_id verification above
+        rws = get_scoped_or_none(ExploreWorkshop, rid, project_id=project_id)
         if not rws:
             continue
         steps = db.session.execute(

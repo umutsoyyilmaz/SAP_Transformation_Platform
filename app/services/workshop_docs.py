@@ -24,7 +24,7 @@ from app.models.explore import (
 )
 from app.models.backlog import BacklogItem, ConfigItem
 from app.models.testing import TestCase
-from app.services.helpers.scoped_queries import get_scoped
+from app.services.helpers.scoped_queries import get_scoped, get_scoped_or_none
 
 
 def _uuid():
@@ -36,9 +36,13 @@ def _utcnow():
     return datetime.now(timezone.utc)
 
 
-def _step_label(step):
-    """Get a human-readable label for a process step via its linked ProcessLevel."""
-    pl = db.session.get(ProcessLevel, step.process_level_id) if step.process_level_id else None
+def _step_label(step, project_id: int):
+    """Get a human-readable label for a process step via its linked ProcessLevel.
+
+    Scoped by project_id to prevent cross-project ProcessLevel data disclosure.
+    ProcessLevel has a project_id column — unscoped lookups are forbidden.
+    """
+    pl = get_scoped_or_none(ProcessLevel, step.process_level_id, project_id=project_id) if step.process_level_id else None
     if pl:
         return f"{pl.code} — {pl.name}"
     return f"Step {step.id[:8]}"
@@ -151,7 +155,7 @@ class WorkshopDocumentService:
         # Step detail section
         step_sections = []
         for s in steps:
-            label = _step_label(s)
+            label = _step_label(s, pid)
             status_emoji = {
                 "fit": "✅", "gap": "❌", "partial_fit": "⚠️"
             }.get(s.fit_decision, "⬜")

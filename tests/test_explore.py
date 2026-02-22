@@ -1061,14 +1061,14 @@ class TestProcessStepAPI:
         _db.session.commit()
         resp = client.put(
             f"/api/v1/explore/process-steps/{step.id}",
-            json={"fit_decision": "gap", "notes": "Gap identified"},
+            json={"fit_decision": "gap", "notes": "Gap identified", "project_id": project_id},
         )
         assert resp.status_code == 200
 
-    def test_update_step_not_found(self, client):
+    def test_update_step_not_found(self, client, project_id):
         resp = client.put(
             "/api/v1/explore/process-steps/nonexistent-uuid",
-            json={"fit_decision": "fit"},
+            json={"fit_decision": "fit", "project_id": project_id},
         )
         assert resp.status_code == 404
 
@@ -1083,6 +1083,7 @@ class TestProcessStepAPI:
                 "text": "Use standard config",
                 "decided_by": "consultant",
                 "category": "process",
+                "project_id": project_id,
             },
         )
         assert resp.status_code in (200, 201)
@@ -1108,6 +1109,7 @@ class TestProcessStepAPI:
             json={
                 "title": "Config missing", "description": "Need config",
                 "priority": "P2", "category": "configuration",
+                "project_id": project_id,
             },
         )
         assert resp.status_code in (200, 201)
@@ -1122,6 +1124,7 @@ class TestProcessStepAPI:
             json={
                 "title": "Custom report", "description": "Need custom report",
                 "priority": "P2", "type": "functional", "fit_status": "gap",
+                "project_id": project_id,
             },
         )
         assert resp.status_code in (200, 201)
@@ -1298,14 +1301,14 @@ class TestOpenItemAPI:
         _db.session.commit()
         resp = client.put(
             f"/api/v1/explore/open-items/{oi.id}",
-            json={"title": "Updated OI", "priority": "P1"},
+            json={"title": "Updated OI", "priority": "P1", "project_id": project_id},
         )
         assert resp.status_code == 200
 
-    def test_update_open_item_not_found(self, client):
+    def test_update_open_item_not_found(self, client, project_id):
         resp = client.put(
             "/api/v1/explore/open-items/nonexistent-uuid",
-            json={"title": "Nope"},
+            json={"title": "Nope", "project_id": project_id},
         )
         assert resp.status_code == 404
 
@@ -1333,14 +1336,14 @@ class TestOpenItemAPI:
         _db.session.commit()
         resp = client.post(
             f"/api/v1/explore/open-items/{oi.id}/reassign",
-            json={"assignee_id": "user-2", "assignee_name": "Jane Doe", "user_id": "system"},
+            json={"assignee_id": "user-2", "assignee_name": "Jane Doe", "user_id": "system", "project_id": project_id},
         )
         assert resp.status_code == 200
 
-    def test_reassign_not_found(self, client):
+    def test_reassign_not_found(self, client, project_id):
         resp = client.post(
             "/api/v1/explore/open-items/nonexistent-uuid/reassign",
-            json={"assignee_id": "user-2", "assignee_name": "Jane"},
+            json={"assignee_id": "user-2", "assignee_name": "Jane", "project_id": project_id},
         )
         assert resp.status_code == 404
 
@@ -1350,7 +1353,7 @@ class TestOpenItemAPI:
         # Comments endpoint is POST-only; create a comment and verify response
         resp = client.post(
             f"/api/v1/explore/open-items/{oi.id}/comments",
-            json={"user_id": "user-1", "content": "Test", "type": "comment"},
+            json={"user_id": "user-1", "content": "Test", "type": "comment", "project_id": project_id},
         )
         assert resp.status_code in (200, 201)
 
@@ -1360,7 +1363,7 @@ class TestOpenItemAPI:
         # POST a comment to verify the endpoint works, then check response
         resp = client.post(
             f"/api/v1/explore/open-items/{oi.id}/comments",
-            json={"user_id": "user-1", "content": "Check", "type": "comment"},
+            json={"user_id": "user-1", "content": "Check", "type": "comment", "project_id": project_id},
         )
         assert resp.status_code in (200, 201)
 
@@ -2011,14 +2014,14 @@ class TestOpenItemLifecycleIntegration:
 
         resp = client.post(
             f"/api/v1/explore/open-items/{oi.id}/reassign",
-            json={"assignee_id": "user-2", "assignee_name": "Bob", "user_id": "system"},
+            json={"assignee_id": "user-2", "assignee_name": "Bob", "user_id": "system", "project_id": project_id},
         )
         assert resp.status_code == 200
 
         # Verify comment was created (comments endpoint is POST-only)
         resp = client.post(
             f"/api/v1/explore/open-items/{oi.id}/comments",
-            json={"user_id": "user-1", "content": "Verify", "type": "comment"},
+            json={"user_id": "user-1", "content": "Verify", "type": "comment", "project_id": project_id},
         )
         assert resp.status_code in (200, 201)
 

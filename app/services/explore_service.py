@@ -201,7 +201,9 @@ def update_process_step_service(step_id: str, data: dict, *, project_id: int):
                     changed_by=user_id,
                 )
             )
-        ws = db.session.get(ExploreWorkshop, step.workshop_id)
+        # Scope by project_id — step.workshop_id is a trusted FK but ExploreWorkshop
+        # has project_id so we enforce it explicitly for defence in depth.
+        ws = get_scoped_or_none(ExploreWorkshop, step.workshop_id, project_id=project_id)
         is_final = ws.session_number >= ws.total_sessions if ws else True
         propagation = propagate_fit_from_step(step, is_final_session=is_final)
     db.session.commit()
@@ -229,7 +231,7 @@ def create_decision_service(step_id: str, data: dict, *, project_id: int):
     step = db.session.execute(stmt).scalar_one_or_none()
     if not step:
         return api_error(E.NOT_FOUND, "Process step not found")
-    ws = db.session.get(ExploreWorkshop, step.workshop_id)
+    ws = get_scoped_or_none(ExploreWorkshop, step.workshop_id, project_id=project_id)
     code = generate_decision_code(ws.project_id)
     active_decisions = ExploreDecision.query.filter_by(process_step_id=step.id, status="active").all()
     for old_dec in active_decisions:
@@ -268,8 +270,8 @@ def create_step_open_item_service(step_id: str, data: dict, *, project_id: int):
     step = db.session.execute(stmt).scalar_one_or_none()
     if not step:
         return api_error(E.NOT_FOUND, "Process step not found")
-    ws = db.session.get(ExploreWorkshop, step.workshop_id)
-    l4 = db.session.get(ProcessLevel, step.process_level_id)
+    ws = get_scoped_or_none(ExploreWorkshop, step.workshop_id, project_id=project_id)
+    l4 = get_scoped_or_none(ProcessLevel, step.process_level_id, project_id=project_id) if step.process_level_id else None
     code = generate_open_item_code(ws.project_id)
     oi = ExploreOpenItem(
         project_id=ws.project_id,
@@ -312,8 +314,8 @@ def create_step_requirement_service(step_id: str, data: dict, *, project_id: int
     step = db.session.execute(stmt).scalar_one_or_none()
     if not step:
         return api_error(E.NOT_FOUND, "Process step not found")
-    ws = db.session.get(ExploreWorkshop, step.workshop_id)
-    l4 = db.session.get(ProcessLevel, step.process_level_id)
+    ws = get_scoped_or_none(ExploreWorkshop, step.workshop_id, project_id=project_id)
+    l4 = get_scoped_or_none(ProcessLevel, step.process_level_id, project_id=project_id) if step.process_level_id else None
     code = generate_requirement_code(ws.project_id)
     req = ExploreRequirement(
         project_id=ws.project_id,
@@ -364,7 +366,7 @@ def list_fit_decisions_service(ws_id: str, *, project_id: int):
     for s in steps:
         d = s.to_dict()
         if s.process_level_id:
-            pl = db.session.get(ProcessLevel, s.process_level_id)
+            pl = get_scoped_or_none(ProcessLevel, s.process_level_id, project_id=project_id)
             if pl:
                 d["process_level_name"] = pl.name
                 d["process_level_code"] = getattr(pl, "code", None)
@@ -386,8 +388,18 @@ def set_fit_decision_bulk_service(ws_id: str, data: dict, *, project_id: int):
     _ws = get_scoped_or_none(ExploreWorkshop, ws_id, project_id=project_id)
     if not _ws:
         return api_error(E.NOT_FOUND, "Workshop not found")
-    step = db.session.get(ProcessStep, data.get("step_id"))
-    if not step or step.workshop_id != ws_id:
+    # Scoped join: verifies step belongs to ws_id AND ws_id belongs to project_id in one query.
+    # Replaces the two-step (unscoped get + post-hoc workshop_id check) pattern.
+    step = db.session.execute(
+        select(ProcessStep)
+        .join(ExploreWorkshop, ExploreWorkshop.id == ProcessStep.workshop_id)
+        .where(
+            ProcessStep.id == data.get("step_id"),
+            ExploreWorkshop.id == ws_id,
+            ExploreWorkshop.project_id == project_id,
+        )
+    ).scalar_one_or_none()
+    if not step:
         return api_error(E.NOT_FOUND, "Step not found in this workshop")
     step.fit_decision = data.get("fit_decision")
     if "notes" in data:
@@ -860,7 +872,8 @@ def create_scope_change_request_service(data: dict):
     current_value = data.get("current_value")
     pl_id = data.get("process_level_id")
     if pl_id and not current_value:
-        pl = db.session.get(ProcessLevel, pl_id)
+        # pl_id is user-supplied — scope by project_id to prevent cross-project data read
+        pl = get_scoped_or_none(ProcessLevel, pl_id, project_id=project_id)
         if pl:
             current_value = {
                 "scope_status": pl.scope_status,
@@ -999,7 +1012,8 @@ def implement_scope_change_request_service(scr_id: str, data: dict, *, project_i
     now = _utcnow()
     changed_by = data.get("changed_by", "system")
     change_logs = []
-    pl = db.session.get(ProcessLevel, scr.process_level_id) if scr.process_level_id else None
+    # scr is already project-scoped; FK navigation scoped explicitly for defence in depth
+    pl = get_scoped_or_none(ProcessLevel, scr.process_level_id, project_id=project_id) if scr.process_level_id else None
     if pl and scr.proposed_value:
         proposed = scr.proposed_value if isinstance(scr.proposed_value, dict) else {}
         for field_name, new_val in proposed.items():
