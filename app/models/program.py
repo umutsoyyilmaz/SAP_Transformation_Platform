@@ -482,3 +482,266 @@ class Committee(db.Model):
 
     def __repr__(self):
         return f"<Committee {self.id}: {self.name}>"
+
+
+# ── Discover Fazı Modelleri (S3-01 / FDD-B02) ────────────────────────────────
+
+
+class ProjectCharter(db.Model):
+    """SAP Activate Discover fazı çıktısı: proje gerekçesi ve temel kararlar.
+
+    Her Program için en fazla bir charter oluşturulur. Discover Gate'i
+    geçebilmek için charter'ın status='approved' olması zorunludur.
+
+    Lifecycle: draft → in_review → approved | rejected
+    """
+
+    __tablename__ = "project_charters"
+
+    id = db.Column(db.Integer, primary_key=True)
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        comment="Her program için en fazla bir charter — unique constraint",
+    )
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    # Proje gerekçesi
+    project_objective = db.Column(db.Text, nullable=True, comment="Projenin iş hedefi")
+    business_drivers = db.Column(db.Text, nullable=True, comment="Neden şimdi? Tetikleyici faktörler")
+    expected_benefits = db.Column(db.Text, nullable=True, comment="Beklenen iş faydaları")
+    key_risks = db.Column(db.Text, nullable=True, comment="Bilinen başlangıç riskleri")
+
+    # Kapsam özeti
+    in_scope_summary = db.Column(db.Text, nullable=True, comment="Kapsama dahil alanlar")
+    out_of_scope_summary = db.Column(db.Text, nullable=True, comment="Kapsam dışı alanlar")
+    affected_countries = db.Column(db.String(500), nullable=True, comment="CSV ülke kodları: TR,DE,NL")
+    affected_sap_modules = db.Column(db.String(500), nullable=True, comment="CSV modül kodları: FI,MM,SD")
+
+    # Proje tipi ve takvim
+    project_type = db.Column(
+        db.String(30),
+        nullable=False,
+        default="greenfield",
+        comment="greenfield | brownfield | selective_migration | cloud_move",
+    )
+    target_go_live_date = db.Column(db.Date, nullable=True)
+    estimated_duration_months = db.Column(db.Integer, nullable=True)
+
+    # Onay durumu
+    status = db.Column(
+        db.String(20),
+        nullable=False,
+        default="draft",
+        comment="draft | in_review | approved | rejected",
+    )
+    approved_by_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    approved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    approval_notes = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    def to_dict(self) -> dict:
+        """Serialize charter excluding no sensitive fields; dates as ISO strings."""
+        return {
+            "id": self.id,
+            "program_id": self.program_id,
+            "tenant_id": self.tenant_id,
+            "project_objective": self.project_objective,
+            "business_drivers": self.business_drivers,
+            "expected_benefits": self.expected_benefits,
+            "key_risks": self.key_risks,
+            "in_scope_summary": self.in_scope_summary,
+            "out_of_scope_summary": self.out_of_scope_summary,
+            "affected_countries": self.affected_countries,
+            "affected_sap_modules": self.affected_sap_modules,
+            "project_type": self.project_type,
+            "target_go_live_date": self.target_go_live_date.isoformat() if self.target_go_live_date else None,
+            "estimated_duration_months": self.estimated_duration_months,
+            "status": self.status,
+            "approved_by_id": self.approved_by_id,
+            "approved_at": self.approved_at.isoformat() if self.approved_at else None,
+            "approval_notes": self.approval_notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self) -> str:
+        return f"<ProjectCharter program={self.program_id} status={self.status}>"
+
+
+class SystemLandscape(db.Model):
+    """AS-IS sistem peyzajı kaydı.
+
+    Her program için birden fazla sistem kaydedilebilir. Hangi SAP/non-SAP
+    sistemler mevcut, go-live sonrası hangisi emekli olacak veya entegre kalacak?
+
+    tenant_id ile scoped — tüm sorgularda WHERE tenant_id = :tid zorunludur.
+    """
+
+    __tablename__ = "system_landscapes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    system_name = db.Column(db.String(100), nullable=False)
+    system_type = db.Column(
+        db.String(30),
+        nullable=False,
+        default="non_sap",
+        comment="sap_erp | s4hana | non_sap | middleware | cloud | legacy",
+    )
+    role = db.Column(
+        db.String(20),
+        nullable=False,
+        default="source",
+        comment="source | target | interface | decommission | keep",
+    )
+    vendor = db.Column(db.String(100), nullable=True)
+    version = db.Column(db.String(50), nullable=True)
+    environment = db.Column(
+        db.String(20),
+        nullable=False,
+        default="prod",
+        comment="dev | test | q | prod",
+    )
+    description = db.Column(db.Text, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    # Composite index — most queries will filter by tenant + program
+    __table_args__ = (
+        db.Index("ix_system_landscape_tenant_program", "tenant_id", "program_id"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "program_id": self.program_id,
+            "tenant_id": self.tenant_id,
+            "system_name": self.system_name,
+            "system_type": self.system_type,
+            "role": self.role,
+            "vendor": self.vendor,
+            "version": self.version,
+            "environment": self.environment,
+            "description": self.description,
+            "notes": self.notes,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self) -> str:
+        return f"<SystemLandscape {self.system_name} role={self.role}>"
+
+
+class ScopeAssessment(db.Model):
+    """SAP modül bazında ilk scope değerlendirmesi (Discover fazı).
+
+    Hangi modüller kapsama dahil, kompleksite ve tahmini iş büyüklüğü nedir?
+    Bir program + modül kombinasyonu için en fazla bir kayıt — upsert mantığı
+    discover_service.save_scope_assessment() içinde uygulanır.
+
+    tenant_id ile scoped — tüm sorgularda WHERE tenant_id = :tid zorunludur.
+    """
+
+    __tablename__ = "scope_assessments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    sap_module = db.Column(db.String(10), nullable=False, comment="FI, MM, SD, PP, CO, HR, etc.")
+    is_in_scope = db.Column(db.Boolean, nullable=False, default=True)
+    complexity = db.Column(
+        db.String(10),
+        nullable=True,
+        comment="low | medium | high | very_high",
+    )
+    estimated_requirements = db.Column(db.Integer, nullable=True, comment="Tahmini requirement sayısı")
+    estimated_gaps = db.Column(db.Integer, nullable=True, comment="Tahmini gap sayısı (WRICEF)")
+    notes = db.Column(db.Text, nullable=True)
+    assessment_basis = db.Column(
+        db.String(30),
+        nullable=True,
+        comment="workshop | document_review | interview | expert_estimate",
+    )
+    assessed_by_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    assessed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    # Composite unique: one assessment per module per program per tenant
+    __table_args__ = (
+        db.UniqueConstraint("program_id", "tenant_id", "sap_module", name="uq_scope_program_tenant_module"),
+        db.Index("ix_scope_assessment_tenant_program", "tenant_id", "program_id"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "program_id": self.program_id,
+            "tenant_id": self.tenant_id,
+            "sap_module": self.sap_module,
+            "is_in_scope": self.is_in_scope,
+            "complexity": self.complexity,
+            "estimated_requirements": self.estimated_requirements,
+            "estimated_gaps": self.estimated_gaps,
+            "notes": self.notes,
+            "assessment_basis": self.assessment_basis,
+            "assessed_by_id": self.assessed_by_id,
+            "assessed_at": self.assessed_at.isoformat() if self.assessed_at else None,
+        }
+
+    def __repr__(self) -> str:
+        return f"<ScopeAssessment program={self.program_id} module={self.sap_module}>"

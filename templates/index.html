@@ -3,12 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SAP Transformation Platform</title>
+    <title>Perga</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- pg-tokens MUST load first — source of truth for --pg-* variables -->
+    <link rel="stylesheet" href="/static/css/pg-tokens.css">
     <link rel="stylesheet" href="/static/css/design-tokens.css">
     <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/pg-button.css">
+    <link rel="stylesheet" href="/static/css/pg-layout.css">
+    <link rel="stylesheet" href="/static/css/pg-form.css">
+    <link rel="stylesheet" href="/static/css/pg-empty-state.css">
+    <link rel="stylesheet" href="/static/css/pg-skeleton.css">
+    <link rel="stylesheet" href="/static/css/pg-breadcrumb.css">
     <link rel="stylesheet" href="/static/css/test-management-f1.css">
     <link rel="stylesheet" href="/static/css/explore-tokens.css">
     <link rel="stylesheet" href="/static/css/mobile.css">
@@ -23,23 +31,44 @@
 <body>
 
     <!-- ── Shell Header ────────────────────────────────────────────────── -->
-    <header class="shell-header">
-        <div class="shell-header__logo">
-            SAP <span>Transformation Platform</span>
+    <header class="pg-header" id="shell-header">
+        <div class="pg-header__left">
+            <!-- Brand -->
+            <div class="pg-header__brand" title="Perga">
+                <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="6" fill="#0070f2"/>
+                    <path d="M8 8h10a6 6 0 0 1 0 12H8V8z" fill="white"/>
+                    <path d="M8 20h12a4 4 0 0 1 0 8H8v-8z" fill="rgba(255,255,255,0.6)"/>
+                </svg>
+                <span class="pg-header__brand-name">Perga</span>
+            </div>
+            <!-- Active program badge -->
+            <div id="activeProgramBadge" class="shell-header__program-badge" onclick="App.navigate('programs')" title="Click to switch program">
+                <span class="shell-header__program-icon">📋</span>
+                <span id="activeProgramName">No program selected</span>
+                <span class="shell-header__program-switch">⟳</span>
+            </div>
         </div>
-        <div class="shell-header__spacer"></div>
-        <div id="activeProgramBadge" class="shell-header__program-badge" onclick="App.navigate('programs')" title="Click to switch program">
-            <span class="shell-header__program-icon">📋</span>
-            <span id="activeProgramName">No program selected</span>
-            <span class="shell-header__program-switch">⟳</span>
+        <div class="pg-header__center">
+            <!-- Global search trigger -->
+            <button class="pg-header__search-btn" id="searchTrigger" title="Search (⌘K)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>Search or jump to...</span>
+                <kbd>⌘K</kbd>
+            </button>
         </div>
-        <div class="shell-header__actions">
-            <button class="shell-header__icon-btn" title="Notifications">🔔</button>
+        <div class="pg-header__right">
+            <!-- Notifications -->
+            <button class="pg-header__icon-btn" id="notifBtn" title="Notifications">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                <span class="pg-header__notif-dot" id="notifDot" style="display:none"></span>
+            </button>
+            <!-- Profile dropdown (all IDs preserved for app.js compatibility) -->
             <div class="profile-dropdown" id="profileDropdown">
-                <button class="profile-dropdown__btn" id="profileBtn" title="User profile">
+                <button class="profile-dropdown__btn pg-header__avatar" id="profileBtn" title="User profile">
                     <span class="profile-dropdown__avatar" id="profileAvatar">?</span>
-                    <span class="profile-dropdown__name" id="profileName">User</span>
-                    <span class="profile-dropdown__chevron">▾</span>
+                    <span class="profile-dropdown__name" id="profileName" style="display:none">User</span>
+                    <span class="profile-dropdown__chevron" style="display:none">▾</span>
                 </button>
                 <div class="profile-dropdown__menu" id="profileMenu">
                     <div class="profile-dropdown__user-info" id="profileUserInfo">
@@ -63,102 +92,113 @@
 
     <!-- ── Sidebar Navigation ──────────────────────────────────────────── -->
     <nav class="sidebar" id="sidebar">
+        <!-- Collapse toggle -->
+        <button class="sidebar__collapse-btn" id="sidebarCollapseBtn" title="Toggle sidebar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+
         <div class="sidebar__section-title">Program Management</div>
         <div class="sidebar__item active" data-view="dashboard">
-            <span class="sidebar__item-icon">📊</span>
-            <span>Dashboard</span>
+            <span class="sidebar__item-icon" data-pg-icon="dashboard"></span>
+            <span class="sidebar__label">Dashboard</span>
         </div>
         <div class="sidebar__item" data-view="executive-cockpit">
-            <span class="sidebar__item-icon">🎯</span>
-            <span>Executive Cockpit</span>
+            <span class="sidebar__item-icon" data-pg-icon="cockpit"></span>
+            <span class="sidebar__label">Executive Cockpit</span>
         </div>
         <div class="sidebar__item" data-view="programs">
-            <span class="sidebar__item-icon">📋</span>
-            <span>Programs</span>
+            <span class="sidebar__item-icon" data-pg-icon="programs"></span>
+            <span class="sidebar__label">Programs</span>
         </div>
         <div class="sidebar__item" data-view="project-setup">
-            <span class="sidebar__item-icon">⚙️</span>
-            <span>Project Setup</span>
+            <span class="sidebar__item-icon" data-pg-icon="setup"></span>
+            <span class="sidebar__label">Project Setup</span>
         </div>
         <div class="sidebar__item" data-view="raid">
-            <span class="sidebar__item-icon">⚠️</span>
-            <span>RAID</span>
+            <span class="sidebar__item-icon" data-pg-icon="raid"></span>
+            <span class="sidebar__label">RAID</span>
         </div>
         <div class="sidebar__item" data-view="reports">
-            <span class="sidebar__item-icon">📈</span>
-            <span>Reports</span>
+            <span class="sidebar__item-icon" data-pg-icon="reports"></span>
+            <span class="sidebar__label">Reports</span>
         </div>
         <div class="sidebar__item" data-view="dashboard-f5">
-            <span class="sidebar__item-icon">📊</span>
-            <span>Dashboard</span>
+            <span class="sidebar__item-icon" data-pg-icon="dashboard"></span>
+            <span class="sidebar__label">Dashboard</span>
+        </div>
+
+        <div class="sidebar__section-title">Discover Phase</div>
+        <div class="sidebar__item" data-view="discover">
+            <span class="sidebar__item-icon" data-pg-icon="setup"></span>
+            <span>Discover</span>
         </div>
 
         <div class="sidebar__section-title">Explore Phase</div>
         <div class="sidebar__item" data-view="explore-dashboard">
-            <span class="sidebar__item-icon">📊</span>
-            <span>Explore Dashboard</span>
+            <span class="sidebar__item-icon" data-pg-icon="explore"></span>
+            <span class="sidebar__label">Explore Dashboard</span>
         </div>
         <div class="sidebar__item" data-view="explore-hierarchy">
-            <span class="sidebar__item-icon">🏗️</span>
-            <span>Process Hierarchy</span>
+            <span class="sidebar__item-icon" data-pg-icon="hierarchy"></span>
+            <span class="sidebar__label">Process Hierarchy</span>
         </div>
         <div class="sidebar__item" data-view="explore-workshops">
-            <span class="sidebar__item-icon">📋</span>
-            <span>Workshops</span>
+            <span class="sidebar__item-icon" data-pg-icon="workshops"></span>
+            <span class="sidebar__label">Workshops</span>
         </div>
         <div class="sidebar__item" data-view="explore-requirements">
-            <span class="sidebar__item-icon">📝</span>
-            <span>Requirements & OIs</span>
+            <span class="sidebar__item-icon" data-pg-icon="requirements"></span>
+            <span class="sidebar__label">Requirements &amp; OIs</span>
         </div>
 
         <div class="sidebar__section-title">Delivery</div>
         <div class="sidebar__item" data-view="backlog">
-            <span class="sidebar__item-icon">⚙️</span>
-            <span>Build</span>
+            <span class="sidebar__item-icon" data-pg-icon="backlog"></span>
+            <span class="sidebar__label">Build</span>
         </div>
         <div class="sidebar__item" data-view="test-planning">
-            <span class="sidebar__item-icon">📋</span>
-            <span>Test Planning</span>
+            <span class="sidebar__item-icon" data-pg-icon="test"></span>
+            <span class="sidebar__label">Test Planning</span>
         </div>
         <div class="sidebar__item" data-view="test-execution">
-            <span class="sidebar__item-icon">▶️</span>
-            <span>Test Execution</span>
+            <span class="sidebar__item-icon" data-pg-icon="test_execute"></span>
+            <span class="sidebar__label">Test Execution</span>
         </div>
         <div class="sidebar__item" data-view="defect-management">
-            <span class="sidebar__item-icon">🐛</span>
-            <span>Defect Management</span>
+            <span class="sidebar__item-icon" data-pg-icon="defect"></span>
+            <span class="sidebar__label">Defect Management</span>
         </div>
         <div class="sidebar__item" data-view="approvals">
-            <span class="sidebar__item-icon">✅</span>
-            <span>Approvals</span>
+            <span class="sidebar__item-icon" data-pg-icon="approvals"></span>
+            <span class="sidebar__label">Approvals</span>
         </div>
         <div class="sidebar__item" data-view="integration">
-            <span class="sidebar__item-icon">🔌</span>
-            <span>Integration Factory</span>
+            <span class="sidebar__item-icon" data-pg-icon="integration"></span>
+            <span class="sidebar__label">Integration Factory</span>
         </div>
         <div class="sidebar__item" data-view="data-factory">
-            <span class="sidebar__item-icon">🗄️</span>
-            <span>Data Factory</span>
+            <span class="sidebar__item-icon" data-pg-icon="data"></span>
+            <span class="sidebar__label">Data Factory</span>
         </div>
 
-        <div class="sidebar__section-title">Go-Live & Run</div>
+        <div class="sidebar__section-title">Go-Live &amp; Run</div>
         <div class="sidebar__item" data-view="cutover">
-            <span class="sidebar__item-icon">🚀</span>
-            <span>Cutover Hub</span>
+            <span class="sidebar__item-icon" data-pg-icon="cutover"></span>
+            <span class="sidebar__label">Cutover Hub</span>
         </div>
 
         <div class="sidebar__section-title">AI Assistant</div>
         <div class="sidebar__item" data-view="ai-insights">
-            <span class="sidebar__item-icon">🧠</span>
-            <span>AI Insights</span>
+            <span class="sidebar__item-icon" data-pg-icon="ai"></span>
+            <span class="sidebar__label">AI Insights</span>
         </div>
         <div class="sidebar__item" data-view="ai-query">
-            <span class="sidebar__item-icon">🤖</span>
-            <span>AI Query</span>
+            <span class="sidebar__item-icon" data-pg-icon="ai"></span>
+            <span class="sidebar__label">AI Query</span>
         </div>
         <div class="sidebar__item" data-view="ai-admin">
-            <span class="sidebar__item-icon">⚙️</span>
-            <span>AI Admin</span>
+            <span class="sidebar__item-icon" data-pg-icon="setup"></span>
+            <span class="sidebar__label">AI Admin</span>
         </div>
     </nav>
 
@@ -182,6 +222,14 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/api.js"></script>
+    <!-- pg-* components load before views so all views can use them -->
+    <script src="/static/js/components/pg_status_registry.js"></script>
+    <script src="/static/js/components/pg_button.js"></script>
+    <script src="/static/js/components/pg_icon.js"></script>
+    <script src="/static/js/components/pg_form.js"></script>
+    <script src="/static/js/components/pg_empty_state.js"></script>
+    <script src="/static/js/components/pg_skeleton.js"></script>
+    <script src="/static/js/components/pg_breadcrumb.js"></script>
     <script src="/static/js/views/program.js"></script>
     <script src="/static/js/views/backlog.js"></script>
     <script src="/static/js/views/testing_shared.js"></script>
@@ -240,10 +288,20 @@
     <script src="/static/js/views/integrations.js"></script>
     <script src="/static/js/views/observability.js"></script>
     <script src="/static/js/views/gate_criteria.js"></script>
+    <script src="/static/js/views/discover.js"></script>
     <script src="/static/js/views/project_setup.js"></script>
     <script src="/static/js/app.js"></script>
     <script src="/static/js/pwa.js"></script>
     <script src="/static/js/mobile.js"></script>
+
+    <!-- UI-S01: Initialize PGIcon for sidebar + header icon slots -->
+    <script>
+        (function () {
+            document.querySelectorAll('[data-pg-icon]').forEach(function (el) {
+                el.innerHTML = PGIcon.html(el.dataset.pgIcon, 16);
+            });
+        }());
+    </script>
 
 </body>
 </html>

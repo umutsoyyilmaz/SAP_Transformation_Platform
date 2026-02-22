@@ -268,16 +268,16 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | S5-05 (I-08 — Stakeholder, Prepare fazı çıktısı) |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] Charter approval → Discover Gate bağlantısı `gate_service.py`'e ekle
-- [ ] `SystemLandscape` → `TenantModel`'den türet (şu an belirsiz)
-- [ ] SAP modül double-entry riski için consistency check notu backlog'a
-- [ ] I-07 (1YG seed) entegrasyon noktasını FDD'ye not et
+- [x] Charter approval → Discover Gate bağlantısı `gate_service.py`'e ekle
+- [x] `SystemLandscape` → `TenantModel`'den türet (şu an belirsiz)
+- [x] SAP modül double-entry riski için consistency check notu backlog'a
+- [x] I-07 (1YG seed) entegrasyon noktasını FDD'ye not et
 
 **Kabul Kriterleri:**
-- [ ] `ProjectCharter` oluşturulup onaylanabiliyor
-- [ ] Charter onaylanmadan Discover Gate geçilemiyor
-- [ ] `SystemLandscape` kayıtları tenant-scoped
-- [ ] Navigation'da Discover faz linki görünüyor
+- [x] `ProjectCharter` oluşturulup onaylanabiliyor
+- [x] Charter onaylanmadan Discover Gate geçilemiyor
+- [x] `SystemLandscape` kayıtları tenant-scoped
+- [x] Navigation'da Discover faz linki görünüyor
 
 ---
 

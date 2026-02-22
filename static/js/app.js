@@ -47,6 +47,7 @@ const App = (() => {
         'integrations': () => IntegrationsView.init(window.currentProgramId),
         'observability': () => ObservabilityView.init(),
         'gate-criteria': () => GateCriteriaView.render(document.getElementById('main-content')),
+        'discover':     () => DiscoverView.render(document.getElementById('mainContent')),
         'project-setup': () => ProjectSetupView.render(),
         'ai-insights': () => AIInsightsView.render(),
         'ai-query':   () => AIQueryView.render(),
@@ -67,7 +68,7 @@ const App = (() => {
         'executive-cockpit',
         'backlog', 'test-planning', 'test-execution', 'defect-management', 'approvals', 'integration', 'data-factory', 'cutover', 'raid',
         'test-case-detail',
-        'reports', 'dashboard-f5', 'suite-folders', 'env-matrix', 'bdd-editor', 'data-driven', 'exploratory', 'evidence', 'custom-fields', 'integrations', 'observability', 'gate-criteria', 'project-setup', 'ai-insights', 'ai-query',
+        'reports', 'dashboard-f5', 'suite-folders', 'env-matrix', 'bdd-editor', 'data-driven', 'exploratory', 'evidence', 'custom-fields', 'integrations', 'observability', 'gate-criteria', 'project-setup', 'ai-insights', 'ai-query', 'discover',
         'explore-dashboard', 'explore-hierarchy', 'explore-workshops', 'explore-workshop-detail', 'explore-requirements',
     ]);
 
@@ -355,8 +356,27 @@ const App = (() => {
         updateProgramBadge();
         updateSidebarState();
 
+        // Initialize sidebar collapse (UI-S03-T03)
+        initSidebarCollapse();
+
         // Render default view
         navigate('dashboard');
+    }
+
+    // ── Sidebar Collapse (UI-S03-T03) ─────────────────────────────
+
+    function initSidebarCollapse() {
+        const sidebar = document.getElementById('sidebar');
+        const collapseBtn = document.getElementById('sidebarCollapseBtn');
+        if (!sidebar || !collapseBtn) return;
+
+        const stored = localStorage.getItem('pg_sidebar_collapsed') === 'true';
+        if (stored) sidebar.classList.add('sidebar--collapsed');
+
+        collapseBtn.addEventListener('click', () => {
+            const isCollapsed = sidebar.classList.toggle('sidebar--collapsed');
+            localStorage.setItem('pg_sidebar_collapsed', isCollapsed);
+        });
     }
 
     // ── Profile Dropdown ──────────────────────────────────────────
