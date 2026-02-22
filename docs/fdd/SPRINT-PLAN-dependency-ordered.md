@@ -314,14 +314,14 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | — |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] `RaciEntry.tenant_id → nullable=False` (kritik açık)
-- [ ] Accountable uniqueness DB constraint — PostgreSQL partial index araştır, test ortamı farkı belgele
-- [ ] SAP aktivite template içeriği özgün yazılmalı (SAP IP kopyalanamaz)
+- [x] `RaciEntry.tenant_id → nullable=False` (kritik açık)
+- [x] Accountable uniqueness DB constraint — PostgreSQL partial index araştır, test ortamı farkı belgele
+- [x] SAP aktivite template içeriği özgün yazılmalı (SAP IP kopyalanamaz)
 
 **Kabul Kriterleri:**
-- [ ] Hücre click → R/A/C/I toggle çalışıyor
-- [ ] Aynı aktiviteye 2 kişi "A" atanamıyor (400 dönüyor)
-- [ ] Tenant isolation korunuyor
+- [x] Hücre click → R/A/C/I toggle çalışıyor
+- [x] Aynı aktiviteye 2 kişi "A" atanamıyor (400 dönüyor)
+- [x] Tenant isolation korunuyor
 
 ---
 

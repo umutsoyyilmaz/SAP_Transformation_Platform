@@ -49,6 +49,7 @@ const App = (() => {
         'gate-criteria': () => GateCriteriaView.render(document.getElementById('main-content')),
         'discover':     () => DiscoverView.render(document.getElementById('mainContent')),
         'timeline':     () => TimelineView.render(document.getElementById('mainContent')),
+        'raci':         () => RaciView.render(document.getElementById('mainContent')),
         'project-setup': () => ProjectSetupView.render(),
         'ai-insights': () => AIInsightsView.render(),
         'ai-query':   () => AIQueryView.render(),
@@ -69,7 +70,7 @@ const App = (() => {
         'executive-cockpit',
         'backlog', 'test-planning', 'test-execution', 'defect-management', 'approvals', 'integration', 'data-factory', 'cutover', 'raid',
         'test-case-detail',
-        'reports', 'dashboard-f5', 'suite-folders', 'env-matrix', 'bdd-editor', 'data-driven', 'exploratory', 'evidence', 'custom-fields', 'integrations', 'observability', 'gate-criteria', 'project-setup', 'ai-insights', 'ai-query', 'discover', 'timeline',
+        'reports', 'dashboard-f5', 'suite-folders', 'env-matrix', 'bdd-editor', 'data-driven', 'exploratory', 'evidence', 'custom-fields', 'integrations', 'observability', 'gate-criteria', 'project-setup', 'ai-insights', 'ai-query', 'discover', 'timeline', 'raci',
         'explore-dashboard', 'explore-hierarchy', 'explore-workshops', 'explore-workshop-detail', 'explore-requirements',
     ]);
 

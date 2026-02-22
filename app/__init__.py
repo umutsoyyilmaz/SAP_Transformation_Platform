@@ -303,6 +303,7 @@ def create_app(config_name=None):
     from app.blueprints.signoff_bp import signoff_bp
     from app.blueprints.export_bp import export_bp
     from app.blueprints.discover_bp import discover_bp
+    from app.blueprints.raci_bp import raci_bp
 
     app.register_blueprint(program_bp)
     app.register_blueprint(backlog_bp)
@@ -347,6 +348,7 @@ def create_app(config_name=None):
     app.register_blueprint(signoff_bp)
     app.register_blueprint(export_bp)
     app.register_blueprint(discover_bp)
+    app.register_blueprint(raci_bp)
 
     # ── Blueprint Permission Guards (Sprint 6) ──────────────────────────
     from app.middleware.blueprint_permissions import apply_all_blueprint_permissions

@@ -22,6 +22,8 @@
     <link rel="stylesheet" href="/static/css/pg-dashboard.css">
     <link rel="stylesheet" href="/static/css/pg-filter.css">
     <link rel="stylesheet" href="/static/css/pg-panel.css">
+    <link rel="stylesheet" href="/static/css/pg-progress.css">
+    <link rel="stylesheet" href="/static/css/pg-command-palette.css">
     <link rel="stylesheet" href="/static/css/mobile.css">
 
     <!-- PWA -->
@@ -56,7 +58,7 @@
         </div>
         <div class="pg-header__center">
             <!-- Global search trigger -->
-            <button class="pg-header__search-btn" id="searchTrigger" title="Search (⌘K)">
+            <button class="pg-header__search-btn" id="searchTrigger" title="Search (⌘K)" onclick="PGCommandPalette.toggle()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <span>Search or jump to...</span>
                 <kbd>⌘K</kbd>
@@ -140,6 +142,10 @@
         <div class="sidebar__item" data-view="timeline">
             <span class="sidebar__item-icon" data-pg-icon="dashboard"></span>
             <span>Timeline</span>
+        </div>
+        <div class="sidebar__item" data-view="raci">
+            <span class="sidebar__item-icon" data-pg-icon="teams"></span>
+            <span>RACI Matris</span>
         </div>
 
         <div class="sidebar__section-title">Explore Phase</div>
@@ -242,6 +248,9 @@
     <script src="/static/js/components/pg_skeleton.js"></script>
     <script src="/static/js/components/pg_breadcrumb.js"></script>
     <script src="/static/js/components/pg_panel.js"></script>
+    <script src="/static/js/components/pg_command_palette.js"></script>
+    <script src="/static/js/components/pg_shortcuts.js"></script>
+    <script src="/static/js/components/pg_shortcut_help.js"></script>
     <script src="/static/js/views/program.js"></script>
     <script src="/static/js/views/backlog.js"></script>
     <script src="/static/js/views/testing_shared.js"></script>
@@ -302,6 +311,7 @@
     <script src="/static/js/views/gate_criteria.js"></script>
     <script src="/static/js/views/discover.js"></script>
     <script src="/static/js/views/timeline.js"></script>
+    <script src="/static/js/views/raci.js"></script>
     <script src="/static/js/views/project_setup.js"></script>
     <script src="/static/js/app.js"></script>
     <script src="/static/js/pwa.js"></script>
