@@ -80,7 +80,7 @@ S5-01 (ADR-002 auth)
 - [x] `run_sustain_service.py` örüntüleri düzelt (önce)
 - [x] `cutover_service.py` örüntüleri düzelt (önce)
 - [x] `explore_service.py` örüntüleri düzelt (önce)
-- [~] Kalan tüm servisler düzelt (data_factory_service, scope_resolution, spec_template, traceability)
+- [x] Kalan tüm servisler düzelt (data_factory_service, scope_resolution, spec_template, traceability)
 - [x] Integration test suite geçiyor
 
 ---
