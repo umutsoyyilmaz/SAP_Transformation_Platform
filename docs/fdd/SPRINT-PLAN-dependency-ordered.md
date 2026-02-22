@@ -336,10 +336,10 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | S4-02 (F-07 Faz B) |
 
 **Yapılacaklar:**
-- [ ] `integrations.js`'e "SAP Cloud ALM" kartı ekle — "Coming Q2 2026"
-- [ ] `integrations.js`'e "Process Mining" kartı ekle — aynı card şablonuyla
-- [ ] `GET /integrations/cloud-alm/sync-log` aktif, `connection_active: false` döndürüyor
-- [ ] Card şablonu standardize edildi (iki kart aynı component)
+- [x] `integrations.js`'e "SAP Cloud ALM" kartı ekle — "Coming Q2 2026"
+- [x] `integrations.js`'e "Process Mining" kartı ekle — aynı card şablonuyla
+- [x] `GET /integrations/cloud-alm/sync-log` aktif, `connection_active: false` döndürüyor
+- [x] Card şablonu standardize edildi (iki kart aynı component)
 
 ---
 

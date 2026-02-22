@@ -9,6 +9,7 @@ const IntegrationsView = (function () {
   let webhooks = [];
   let automationJobs = [];
   let jiraIntegration = null;
+  let cloudAlmSyncLog = null;
   let activeTab = 'jira';
 
   /* ── public ──────────────────────────────────────────── */
@@ -41,6 +42,12 @@ const IntegrationsView = (function () {
           </button>
           <button class="tab-btn" data-tab="webhooks" onclick="IntegrationsView.switchTab('webhooks')">
             <i class="fas fa-satellite-dish"></i> Webhooks
+          </button>
+          <button class="tab-btn" data-tab="cloud-alm" onclick="IntegrationsView.switchTab('cloud-alm')">
+            <i class="fas fa-cloud"></i> SAP Cloud ALM
+          </button>
+          <button class="tab-btn" data-tab="process-mining" onclick="IntegrationsView.switchTab('process-mining')">
+            <i class="fas fa-project-diagram"></i> Process Mining
           </button>
         </div>
 
@@ -167,8 +174,15 @@ const IntegrationsView = (function () {
 
   /* ── data loading ────────────────────────────────────── */
   async function loadAll() {
-    await Promise.all([loadJira(), loadAutomationJobs(), loadWebhooks()]);
+    await Promise.all([loadJira(), loadAutomationJobs(), loadWebhooks(), loadCloudAlmSyncLog()]);
     renderTab();
+  }
+
+  async function loadCloudAlmSyncLog() {
+    try {
+      const r = await fetch(`/api/v1/programs/${currentProgramId}/integrations/cloud-alm/sync-log`);
+      cloudAlmSyncLog = r.ok ? await r.json() : null;
+    } catch { cloudAlmSyncLog = null; }
   }
 
   async function loadJira() {
@@ -208,6 +222,8 @@ const IntegrationsView = (function () {
     if (!c) return;
     if (activeTab === 'jira') renderJiraTab(c);
     else if (activeTab === 'automation') renderAutomationTab(c);
+    else if (activeTab === 'cloud-alm') renderCloudAlmTab(c);
+    else if (activeTab === 'process-mining') renderProcessMiningTab(c);
     else renderWebhooksTab(c);
   }
 
@@ -322,6 +338,107 @@ const IntegrationsView = (function () {
           </button>
         </div>
         <div class="webhooks-grid">${cards}</div>
+      </div>`;
+  }
+
+  /* ── SAP Cloud ALM placeholder tab (FDD-F07 Faz A) ──────────────────── */
+  function renderCloudAlmTab(c) {
+    const isActive = cloudAlmSyncLog && cloudAlmSyncLog.connection_active;
+    const logRows = (cloudAlmSyncLog && cloudAlmSyncLog.logs.length)
+      ? cloudAlmSyncLog.logs.map(l => `
+          <tr>
+            <td><code>${l.id ? l.id.slice(0, 8) : '—'}</code></td>
+            <td><span class="badge badge-secondary">${l.sync_direction || '—'}</span></td>
+            <td><span class="badge badge-${l.sync_status === 'success' ? 'success' : 'danger'}">${l.sync_status || '—'}</span></td>
+            <td>${l.created_at ? new Date(l.created_at).toLocaleString() : '—'}</td>
+          </tr>`).join('')
+      : '<tr><td colspan="4" class="text-center text-muted">Henüz sync kaydı yok.</td></tr>';
+
+    c.innerHTML = `
+      <div style="padding:1.5rem">
+        ${_renderComingSoonCard({
+          icon: 'fas fa-cloud',
+          title: 'SAP Cloud ALM',
+          subtitle: 'Requirement ve test senkronizasyonu',
+          eta: 'Q2 2026',
+          description: 'SAP Cloud ALM ile çift yönlü requirement ve test result senkronizasyonu. '
+            + 'Mevcut CloudALMSyncLog altyapısı hazır; OAuth2 bağlantısı S4-02\'de devreye alınacak.',
+          badges: ['Requirement Sync', 'Test Result Push', 'OAuth2 Client Credentials'],
+        })}
+        <div style="margin-top:1.5rem">
+          <h4 style="margin-bottom:.75rem;font-size:.9rem;color:var(--text-secondary)">Sync Log (son 50 kayıt)</h4>
+          <div style="margin-bottom:.75rem;padding:.5rem .75rem;border-radius:6px;background:${isActive ? '#d1fae5' : '#fef3c7'};color:${isActive ? '#065f46' : '#92400e'};font-size:.85rem">
+            <i class="fas fa-${isActive ? 'check-circle' : 'exclamation-triangle'}"></i>
+            ${isActive ? 'Bağlantı aktif' : 'Bağlantı aktif değil — yapılandırma gerekiyor'}
+          </div>
+          <table class="data-table" style="font-size:.85rem">
+            <thead><tr><th>ID</th><th>Yön</th><th>Durum</th><th>Tarih</th></tr></thead>
+            <tbody>${logRows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  /* ── Process Mining placeholder tab (FDD-I05 Faz A) ─────────────────── */
+  function renderProcessMiningTab(c) {
+    c.innerHTML = `
+      <div style="padding:1.5rem">
+        ${_renderComingSoonCard({
+          icon: 'fas fa-project-diagram',
+          title: 'Process Mining',
+          subtitle: 'AS-IS süreç keşfi ve varyant analizi',
+          eta: 'Q3 2026',
+          description: 'Celonis, SAP Signavio Process Intelligence ve UiPath Process Mining entegrasyonu. '
+            + 'ERP log verisinden gerçek süreç akışlarını çıkararak L4 adayları oluşturur '
+            + 've Fit/Gap kararlarını destekler.',
+          badges: ['Celonis', 'SAP Signavio', 'UiPath Process Mining', 'SAP LAMA'],
+        })}
+      </div>`;
+  }
+
+  /**
+   * Render a standardised 'Coming Soon' integration card.
+   *
+   * Why a shared helper: FDD-F07 Faz A + FDD-I05 Faz A both need the same
+   * visual template. Centralising here ensures UX consistency and makes future
+   * placeholder integrations trivial to add (S4-02 onwards just call this).
+   *
+   * @param {object}   opts
+   * @param {string}   opts.icon        Font Awesome class e.g. 'fas fa-cloud'
+   * @param {string}   opts.title       Card heading
+   * @param {string}   opts.subtitle    One-line capability description
+   * @param {string}   opts.eta         ETA label e.g. 'Q2 2026'
+   * @param {string}   opts.description Body text explaining the feature
+   * @param {string[]} opts.badges      Capability / provider pills
+   * @returns {string} HTML string
+   */
+  function _renderComingSoonCard({ icon, title, subtitle, eta, description, badges = [] }) {
+    const pillsHtml = badges.map(b =>
+      `<span style="display:inline-block;margin:.2rem .3rem .2rem 0;padding:.2rem .6rem;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:.75rem;font-weight:600">${b}</span>`
+    ).join('');
+    return `
+      <div style="border:1.5px solid #e2e8f0;border-radius:10px;padding:1.5rem;max-width:600px;background:#fafafa">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem">
+          <div style="width:40px;height:40px;border-radius:8px;background:#e0e7ff;display:flex;align-items:center;justify-content:center;color:#4338ca;font-size:1.1rem">
+            <i class="${icon}"></i>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:1rem">${title}</div>
+            <div style="font-size:.8rem;color:var(--text-secondary)">${subtitle}</div>
+          </div>
+          <span style="margin-left:auto;padding:.25rem .75rem;border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:.8rem;font-weight:600">
+            🔵 Coming ${eta}
+          </span>
+        </div>
+        <p style="font-size:.875rem;color:var(--text-secondary);margin:.5rem 0 1rem">${description}</p>
+        <div>${pillsHtml}</div>
+        <button
+          class="btn btn-outline btn-sm"
+          style="margin-top:1rem"
+          onclick="alert('Bu özellik ${title} için ${eta} itibarıyla kullanıma alınacaktır. Bildirim almak için lütfen hesap yöneticinizle iletişime geçin.')"
+        >
+          <i class="fas fa-bell"></i> Beni bilgilendir
+        </button>
       </div>`;
   }
 

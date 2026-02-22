@@ -262,6 +262,42 @@ def openapi_spec():
             "/webhooks/{wid}/test": {
                 "post": {"summary": "Test webhook", "tags": ["Webhooks"]},
             },
+            "/programs/{pid}/integrations/cloud-alm/sync-log": {
+                "get": {"summary": "Get Cloud ALM sync log (Phase A placeholder)", "tags": ["CloudALM"]},
+            },
         },
     }
     return jsonify(spec)
+
+
+# ══════════════════════════════════════════════════════════════════
+# 5.  SAP Cloud ALM — Phase A Placeholder (FDD-F07 Faz A, S3-04)
+# ══════════════════════════════════════════════════════════════════
+
+@integrations_bp.route(
+    "/programs/<int:pid>/integrations/cloud-alm/sync-log", methods=["GET"]
+)
+def cloud_alm_sync_log(pid):
+    """Return Cloud ALM sync log for a program (Phase A placeholder).
+
+    Phase A: no live SAP Cloud ALM connection exists yet (scheduled Q2 2026).
+    Returns connection_active=False and an empty logs list so the UI can render
+    the 'Coming Soon' card without masking the absence of real integration.
+
+    Phase B (FDD-F07 Faz B, S4-02) will replace this with a real OAuth2 sync
+    that populates CloudALMSyncLog records keyed to this program.
+
+    Args:
+        pid: Program primary key — scoped from URL; tenant isolation guaranteed
+             by the parent Program FK chain (program → tenant).
+
+    Returns:
+        200: {connection_active: false, program_id, message, logs: [], total: 0}
+    """
+    return jsonify({
+        "connection_active": False,
+        "program_id": pid,
+        "message": "SAP Cloud ALM entegrasyonu henüz yapılandırılmadı. Tahmini: Q2 2026.",
+        "logs": [],
+        "total": 0,
+    })
