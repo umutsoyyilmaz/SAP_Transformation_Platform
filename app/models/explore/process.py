@@ -14,6 +14,9 @@ from app.models import db
 __all__ = [
     "ProcessLevel",
     "ProcessStep",
+    "L1SeedCatalog",
+    "L2SeedCatalog",
+    "L3SeedCatalog",
     "L4SeedCatalog",
     "BPMNDiagram",
 ]
@@ -307,6 +310,156 @@ class ProcessStep(db.Model):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# 15. L1SeedCatalog — SAP Process Hierarchy Level 1 (Business Area)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class L1SeedCatalog(db.Model):
+    """SAP S/4HANA Process Catalog — Level 1 (Business Area / Süreç Alanı).
+
+    Global data shared across all tenants — no tenant_id.
+    Examples: Financial Management, Procurement, Sales Management.
+
+    Source: SAP Activate Best Practices conceptual structure (re-written for licensing).
+    """
+
+    __tablename__ = "l1_seed_catalog"
+
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(
+        db.String(10), nullable=False, unique=True,
+        comment="Örn: L1-FI, L1-MM, L1-SD",
+    )
+    name = db.Column(db.String(200), nullable=False)
+    sap_module_group = db.Column(
+        db.String(50), nullable=False,
+        comment="FI_CO | MM_WM | SD_CS | HR | BASIS | PP_QM | PM",
+    )
+    description = db.Column(db.Text, nullable=True)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+
+    children = db.relationship(
+        "L2SeedCatalog",
+        back_populates="parent_l1",
+        lazy="select",
+        order_by="L2SeedCatalog.sort_order",
+        cascade="all, delete-orphan",
+    )
+
+    def to_dict(self) -> dict:
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+    def __repr__(self) -> str:
+        return f"<L1SeedCatalog {self.code}: {self.name}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 16. L2SeedCatalog — SAP Process Hierarchy Level 2 (Process Group)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class L2SeedCatalog(db.Model):
+    """SAP S/4HANA Process Catalog — Level 2 (Process Group / Süreç Grubu).
+
+    Global data shared across all tenants — no tenant_id.
+    Examples: Accounts Payable, Accounts Receivable, Purchasing.
+    """
+
+    __tablename__ = "l2_seed_catalog"
+
+    id = db.Column(db.Integer, primary_key=True)
+    parent_l1_id = db.Column(
+        db.Integer,
+        db.ForeignKey("l1_seed_catalog.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    code = db.Column(
+        db.String(15), nullable=False, unique=True,
+        comment="Örn: L2-FI-AP, L2-MM-PUR",
+    )
+    name = db.Column(db.String(200), nullable=False)
+    sap_module = db.Column(
+        db.String(10), nullable=False,
+        comment="FI, MM, SD, CO, PP, PM, ...",
+    )
+    description = db.Column(db.Text, nullable=True)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    is_s4_mandatory = db.Column(
+        db.Boolean, nullable=False, default=False,
+        comment="True = required for every S/4HANA migration (e.g. GL, New AP)",
+    )
+
+    parent_l1 = db.relationship("L1SeedCatalog", back_populates="children")
+    children = db.relationship(
+        "L3SeedCatalog",
+        back_populates="parent_l2",
+        lazy="select",
+        order_by="L3SeedCatalog.sort_order",
+        cascade="all, delete-orphan",
+    )
+
+    def to_dict(self) -> dict:
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+    def __repr__(self) -> str:
+        return f"<L2SeedCatalog {self.code}: {self.name}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 17. L3SeedCatalog — SAP Process Hierarchy Level 3 (End-to-End Process)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class L3SeedCatalog(db.Model):
+    """SAP S/4HANA Process Catalog — Level 3 (E2E Process / Uçtan Uca Süreç).
+
+    Global data shared across all tenants — no tenant_id.
+    Examples: Vendor Invoice Processing, Payment Run, Period-End Closing.
+
+    Bridges L2 → L4 and optionally maps to a SAP Activate Scope Item code.
+    """
+
+    __tablename__ = "l3_seed_catalog"
+
+    id = db.Column(db.Integer, primary_key=True)
+    parent_l2_id = db.Column(
+        db.Integer,
+        db.ForeignKey("l2_seed_catalog.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    code = db.Column(
+        db.String(20), nullable=False, unique=True,
+        comment="Örn: L3-FI-AP-01, L3-MM-PUR-02",
+    )
+    name = db.Column(db.String(200), nullable=False)
+    sap_scope_item_id = db.Column(
+        db.String(20), nullable=True,
+        comment="SAP Activate Scope Item reference: J45, BKC, BD9, ...",
+    )
+    description = db.Column(db.Text, nullable=True)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    typical_complexity = db.Column(
+        db.String(10), nullable=True,
+        comment="low | medium | high",
+    )
+
+    parent_l2 = db.relationship("L2SeedCatalog", back_populates="children")
+    l4_steps = db.relationship(
+        "L4SeedCatalog",
+        back_populates="parent_l3",
+        lazy="select",
+        order_by="L4SeedCatalog.standard_sequence",
+        cascade="all, delete-orphan",
+        foreign_keys="L4SeedCatalog.parent_l3_id",
+    )
+
+    def to_dict(self) -> dict:
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+    def __repr__(self) -> str:
+        return f"<L3SeedCatalog {self.code}: {self.name}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # 14. L4SeedCatalog — SAP Best Practice reference catalog (T-014, GAP-01)
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -344,6 +497,30 @@ class L4SeedCatalog(db.Model):
         comment='SAP release version, e.g. "2402", "2311"',
     )
 
+    # S7-01 FDD-I07 additions — link to L3 seed catalog hierarchy
+    parent_l3_id = db.Column(
+        db.Integer,
+        db.ForeignKey("l3_seed_catalog.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="FK to L3SeedCatalog. nullable: existing records without hierarchy still valid.",
+    )
+    is_customer_facing = db.Column(
+        db.Boolean, nullable=False, default=False,
+        comment="True = end-user facing L4 step (relevant for UAT scope).",
+    )
+    typical_fit_decision = db.Column(
+        db.String(20), nullable=True,
+        comment="fit | partial_fit | gap — SAP best practice baseline estimate.",
+    )
+
+    # Relationship back to L3
+    parent_l3 = db.relationship(
+        "L3SeedCatalog",
+        back_populates="l4_steps",
+        foreign_keys=[parent_l3_id],
+    )
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -354,6 +531,9 @@ class L4SeedCatalog(db.Model):
             "standard_sequence": self.standard_sequence,
             "bpmn_activity_id": self.bpmn_activity_id,
             "sap_release": self.sap_release,
+            "parent_l3_id": self.parent_l3_id,
+            "is_customer_facing": self.is_customer_facing,
+            "typical_fit_decision": self.typical_fit_decision,
         }
 
     def __repr__(self):

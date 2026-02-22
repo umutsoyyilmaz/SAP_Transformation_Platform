@@ -1,0 +1,129 @@
+{
+  "l1": {
+    "code": "L1-MM",
+    "name": "Materials Management",
+    "sap_module_group": "MM_WM",
+    "description": "Procurement, inventory management and material valuation processes.",
+    "sort_order": 20
+  },
+  "l2": {
+    "code": "L2-MM-PUR",
+    "name": "Purchasing",
+    "sap_module": "MM",
+    "description": "Source-to-pay process: requisitions, purchase orders, and vendor evaluation.",
+    "sort_order": 10,
+    "is_s4_mandatory": true
+  },
+  "l3_list": [
+    {
+      "code": "L3-MM-PUR-01",
+      "name": "Purchase Requisition Processing",
+      "sap_scope_item_id": null,
+      "description": "Internal demand creation and approval before purchasing.",
+      "typical_complexity": "low",
+      "sort_order": 10,
+      "l4_list": [
+        {
+          "sub_process_code": "MM-PUR-01-01",
+          "sub_process_name": "Create purchase requisition (ME51N)",
+          "description": "Raise an internal purchasing request for materials or services.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 10
+        },
+        {
+          "sub_process_code": "MM-PUR-01-02",
+          "sub_process_name": "Approve purchase requisition workflow",
+          "description": "Multi-level approval routing based on value and cost centre.",
+          "typical_fit_decision": "partial_fit",
+          "is_customer_facing": false,
+          "standard_sequence": 20
+        },
+        {
+          "sub_process_code": "MM-PUR-01-03",
+          "sub_process_name": "Convert purchase requisition to PO (ME57 / ME58)",
+          "description": "Automatic or manual conversion from approved PR to purchase order.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 30
+        }
+      ]
+    },
+    {
+      "code": "L3-MM-PUR-02",
+      "name": "Purchase Order Management",
+      "sap_scope_item_id": null,
+      "description": "Create, change, and monitor purchase orders for materials and services.",
+      "typical_complexity": "medium",
+      "sort_order": 20,
+      "l4_list": [
+        {
+          "sub_process_code": "MM-PUR-02-01",
+          "sub_process_name": "Create standard purchase order (ME21N)",
+          "description": "Issue purchase order to external vendor for goods or services.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 10
+        },
+        {
+          "sub_process_code": "MM-PUR-02-02",
+          "sub_process_name": "Create blanket purchase order (ME21N — value limit)",
+          "description": "Framework order with overall value limit for recurring procurement.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 20
+        },
+        {
+          "sub_process_code": "MM-PUR-02-03",
+          "sub_process_name": "Print / transmit purchase order to vendor",
+          "description": "Output purchase order via EDI, email, or print medium.",
+          "typical_fit_decision": "partial_fit",
+          "is_customer_facing": false,
+          "standard_sequence": 30
+        },
+        {
+          "sub_process_code": "MM-PUR-02-04",
+          "sub_process_name": "Monitor PO delivery schedule and reminders",
+          "description": "Track overdue PO items and send expediting messages to vendors.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 40
+        }
+      ]
+    },
+    {
+      "code": "L3-MM-PUR-03",
+      "name": "Source List and Contracts",
+      "sap_scope_item_id": null,
+      "description": "Manage preferred sources, outline agreements, and scheduling agreements.",
+      "typical_complexity": "medium",
+      "sort_order": 30,
+      "l4_list": [
+        {
+          "sub_process_code": "MM-PUR-03-01",
+          "sub_process_name": "Create and maintain source list (ME01)",
+          "description": "Define approved vendors per material and plant combination.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 10
+        },
+        {
+          "sub_process_code": "MM-PUR-03-02",
+          "sub_process_name": "Create scheduling agreement (ME31L)",
+          "description": "Long-term agreement with delivery schedule lines released against it.",
+          "typical_fit_decision": "partial_fit",
+          "is_customer_facing": false,
+          "standard_sequence": 20
+        },
+        {
+          "sub_process_code": "MM-PUR-03-03",
+          "sub_process_name": "Create purchasing contract (ME31K)",
+          "description": "Quantity or value contract committing spend with a vendor.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 30
+        }
+      ]
+    }
+  ]
+}

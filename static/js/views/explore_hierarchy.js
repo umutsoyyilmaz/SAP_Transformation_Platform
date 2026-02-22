@@ -728,6 +728,80 @@ const ExploreHierarchyView = (() => {
         </div>`;
     }
 
+    // ── Quick Start — Catalog Seed Wizard (F-011, FDD-I07) ──────────────
+    async function openCatalogSeedWizard() {
+        let modules = [];
+        ExpUI.modal({
+            title: '🌱 SAP Katalogdan Hızlı Başlat',
+            contentHtml: `<div style="text-align:center;padding:24px"><div style="font-size:20px">⏳</div><p>Modüller yükleniyor…</p></div>`,
+            footerHtml: '',
+            id: 'catalogWizardModal',
+        });
+        try {
+            modules = await ExploreAPI.catalog.modules();
+        } catch (err) {
+            document.querySelector('#catalogWizardModal .modal-body').innerHTML =
+                `<div class="exp-empty"><div class="exp-empty__icon">❌</div><div class="exp-empty__title">Katalog yüklenemedi</div><p>${esc(err.message)}</p></div>`;
+            return;
+        }
+        if (!modules.length) {
+            document.querySelector('#catalogWizardModal .modal-body').innerHTML =
+                `<div class="exp-empty"><div class="exp-empty__icon">⚠️</div><div class="exp-empty__title">Katalog boş</div><p>Önce katalog verisi yüklenmelidir.</p></div>`;
+            return;
+        }
+        let checkboxHtml = '';
+        for (const l1 of modules) {
+            checkboxHtml += `<div style="margin-bottom:12px"><div style="font-weight:600;color:var(--sap-text);margin-bottom:4px">${esc(l1.name)} <span style="font-size:11px;color:var(--sap-text-secondary)">(${esc(l1.sap_module_group)})</span></div>`;
+            for (const l2 of (l1.modules || [])) {
+                checkboxHtml += `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer">
+                    <input type="checkbox" name="catalogModule" value="${esc(l2.sap_module)}" style="width:15px;height:15px">
+                    <span>${esc(l2.name)}</span>
+                    <span style="margin-left:auto;font-size:11px;color:var(--sap-text-secondary);background:var(--sap-surface-2);padding:2px 6px;border-radius:10px">${l2.step_count} adım</span>
+                </label>`;
+            }
+            checkboxHtml += `</div>`;
+        }
+        document.querySelector('#catalogWizardModal .modal-body').innerHTML = `
+            <p style="color:var(--sap-text-secondary);margin-bottom:16px">İçe aktarmak istediğiniz SAP modüllerini seçin. Seçilen modüllerin tüm L1→L4 süreç hiyerarşisi projeye eklenecektir.</p>
+            <div id="catalogModuleList" style="max-height:360px;overflow-y:auto;border:1px solid var(--sap-border);border-radius:var(--exp-radius-md);padding:12px">
+                ${checkboxHtml}
+            </div>
+        `;
+        document.querySelector('#catalogWizardModal .modal-footer').innerHTML = `
+            <button class="btn btn-secondary" onclick="ExpUI.closeModal('catalogWizardModal')">İptal</button>
+            <button class="btn btn-primary" onclick="ExploreHierarchyView._submitCatalogSeed()">Seçilenleri İçe Aktar</button>
+        `;
+    }
+
+    async function _submitCatalogSeed() {
+        const checked = [...document.querySelectorAll('input[name="catalogModule"]:checked')].map(el => el.value);
+        if (!checked.length) {
+            ExpUI.toast({ message: 'En az bir modül seçin.', type: 'warning' });
+            return;
+        }
+        const btn = document.querySelector('#catalogWizardModal .modal-footer .btn-primary');
+        if (btn) { btn.disabled = true; btn.textContent = 'İçe aktarılıyor…'; }
+        try {
+            const tenantId = App.getActiveTenant ? App.getActiveTenant().id : (window._tenantId || 1);
+            const result = await ExploreAPI.catalog.seedProject(_pid, {
+                tenant_id: tenantId,
+                modules: checked,
+            });
+            ExpUI.closeModal('catalogWizardModal');
+            const c = result.created || {};
+            ExpUI.toast({
+                message: `✅ İçe aktarma tamamlandı — L1:${c.l1} L2:${c.l2} L3:${c.l3} L4:${c.l4} oluşturuldu (${result.elapsed_ms}ms)`,
+                type: 'success', duration: 6000,
+            });
+            await fetchAll();
+            _l1List.forEach(l1 => _expandedNodes.add(l1.id));
+            renderPage();
+        } catch (err) {
+            ExpUI.toast({ message: `Hata: ${err.message}`, type: 'error' });
+            if (btn) { btn.disabled = false; btn.textContent = 'Seçilenleri İçe Aktar'; }
+        }
+    }
+
     // ── Filter Bar ───────────────────────────────────────────────────
     function renderFilterBar() {
         const areas = [...new Set(_l3List.map(l => l.area || l.area_code).filter(Boolean))].sort();
@@ -767,6 +841,7 @@ const ExploreHierarchyView = (() => {
             actionsHtml: `
                 <div style="display:flex;gap:8px;align-items:center">
                     ${renderViewToggle()}
+                    ${_l1List.length === 0 ? ExpUI.actionButton({ label: '🌱 SAP Katalogdan Başlat', variant: 'success', size: 'sm', icon: '', onclick: 'ExploreHierarchyView.openCatalogSeedWizard()' }) : ''}
                     ${ExpUI.actionButton({ label: '+ Import L4', variant: 'primary', size: 'sm', icon: '📥', onclick: 'ExploreHierarchyView.openSeedingDialog()' })}
                 </div>
             `,
@@ -894,5 +969,6 @@ const ExploreHierarchyView = (() => {
         openSeedingDialog, submitSeedImport,
         requestScopeChange, submitScopeChange,
         _setSeedMode, _filterCatalog,
+        openCatalogSeedWizard, _submitCatalogSeed,
     };
 })();

@@ -1,0 +1,145 @@
+{
+  "l1": {
+    "code": "L1-FI",
+    "name": "Financial Management",
+    "sap_module_group": "FI_CO",
+    "description": "Core financial accounting and reporting processes for S/4HANA.",
+    "sort_order": 10
+  },
+  "l2": {
+    "code": "L2-FI-AP",
+    "name": "Accounts Payable",
+    "sap_module": "FI",
+    "description": "Manage vendor invoices, payments, and cash disbursements.",
+    "sort_order": 20,
+    "is_s4_mandatory": true
+  },
+  "l3_list": [
+    {
+      "code": "L3-FI-AP-01",
+      "name": "Vendor Invoice Processing",
+      "sap_scope_item_id": null,
+      "description": "Receive, verify and post vendor invoices (both PO-based and standalone).",
+      "typical_complexity": "medium",
+      "sort_order": 10,
+      "l4_list": [
+        {
+          "sub_process_code": "FI-AP-01-01",
+          "sub_process_name": "Post standalone vendor invoice (FB60)",
+          "description": "Manual posting of a vendor invoice without a purchase order reference.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 10
+        },
+        {
+          "sub_process_code": "FI-AP-01-02",
+          "sub_process_name": "Post PO-based vendor invoice (MIRO)",
+          "description": "Three-way match: vendor invoice against PO and goods receipt.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 20
+        },
+        {
+          "sub_process_code": "FI-AP-01-03",
+          "sub_process_name": "Post credit memo from vendor (FB65)",
+          "description": "Record vendor credit memo reducing outstanding payables.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 30
+        },
+        {
+          "sub_process_code": "FI-AP-01-04",
+          "sub_process_name": "Park and release vendor invoice",
+          "description": "Parking workflow for multi-level invoice approval before final posting.",
+          "typical_fit_decision": "partial_fit",
+          "is_customer_facing": false,
+          "standard_sequence": 40
+        },
+        {
+          "sub_process_code": "FI-AP-01-05",
+          "sub_process_name": "Recurring invoice posting",
+          "description": "Automatic periodic posting for fixed expense invoices (rent, leases).",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 50
+        }
+      ]
+    },
+    {
+      "code": "L3-FI-AP-02",
+      "name": "Payment Processing",
+      "sap_scope_item_id": null,
+      "description": "Automatic and manual payment runs to settle vendor liabilities.",
+      "typical_complexity": "medium",
+      "sort_order": 20,
+      "l4_list": [
+        {
+          "sub_process_code": "FI-AP-02-01",
+          "sub_process_name": "Execute automatic payment run (F110)",
+          "description": "Mass payment run selecting open items by due date and bank key.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 10
+        },
+        {
+          "sub_process_code": "FI-AP-02-02",
+          "sub_process_name": "Manual outgoing payment (F-53)",
+          "description": "Single manual payment clearing specific open line items.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 20
+        },
+        {
+          "sub_process_code": "FI-AP-02-03",
+          "sub_process_name": "Payment medium creation (DMEE / SEPA)",
+          "description": "Generate payment file in SEPA or local bank format.",
+          "typical_fit_decision": "partial_fit",
+          "is_customer_facing": false,
+          "standard_sequence": 30
+        },
+        {
+          "sub_process_code": "FI-AP-02-04",
+          "sub_process_name": "Bank statement processing (FF67)",
+          "description": "Import and post electronic bank statements to clear outgoing payments.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 40
+        }
+      ]
+    },
+    {
+      "code": "L3-FI-AP-03",
+      "name": "Vendor Account Management",
+      "sap_scope_item_id": null,
+      "description": "Master data lifecycle and account reconciliation for vendor accounts.",
+      "typical_complexity": "low",
+      "sort_order": 30,
+      "l4_list": [
+        {
+          "sub_process_code": "FI-AP-03-01",
+          "sub_process_name": "Create / change vendor master (BP)",
+          "description": "Business Partner master data management for vendors in S/4HANA.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 10
+        },
+        {
+          "sub_process_code": "FI-AP-03-02",
+          "sub_process_name": "Vendor account clearing (F-44)",
+          "description": "Clear open debit and credit items on vendor accounts manually.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 20
+        },
+        {
+          "sub_process_code": "FI-AP-03-03",
+          "sub_process_name": "Vendor age analysis and dunning response",
+          "description": "Review overdue payables and respond to vendor dunning notices.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 30
+        }
+      ]
+    }
+  ]
+}

@@ -201,6 +201,13 @@ const ExploreAPI = (() => {
         create: (pid, levelId, data) => API.post(`${B}/process-levels/${levelId}/bpmn`, data),
     };
 
+    // ── SAP Process Catalog (S7-01 FDD-I07) ─────────────────────────
+    const catalog = {
+        modules:     ()         => API.get(`${B}/catalog/modules`),
+        tree:        (module)  => API.get(`${B}/catalog/tree${module ? '?module=' + encodeURIComponent(module) : ''}`),
+        seedProject: (pid, data) => API.post(`${B}/projects/${pid}/seed-from-catalog`, data),
+    };
+
     // ── Cross-Module Flags ────────────────────────────────────────
     const crossModuleFlags = {
         list:   (params)           => API.get(`${B}/cross-module-flags${params ? '?' + new URLSearchParams(params) : ''}`),
@@ -222,6 +229,6 @@ const ExploreAPI = (() => {
         requirements, openItems, signoff, fitPropagation,
         agenda, attendees, dependencies, scopeChangeRequests, attachments,
         snapshots, reports, documents, bpmn,
-        crossModuleFlags, processSteps,
+        crossModuleFlags, processSteps, catalog,
     };
 })();

@@ -115,7 +115,8 @@ const TimelineView = (() => {
     function render(container) {
         if (!container) return;
 
-        const programId = typeof App !== 'undefined' && App.getActiveProgram && App.getActiveProgram();
+        const _prog = typeof App !== 'undefined' && App.getActiveProgram && App.getActiveProgram();
+        const programId = _prog && (_prog.id || _prog);
         if (!programId) {
             renderNoProgram(container);
             return;

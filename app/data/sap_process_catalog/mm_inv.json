@@ -1,0 +1,129 @@
+{
+  "l1": {
+    "code": "L1-MM",
+    "name": "Materials Management",
+    "sap_module_group": "MM_WM",
+    "description": "Procurement, inventory management and material valuation processes.",
+    "sort_order": 20
+  },
+  "l2": {
+    "code": "L2-MM-INV",
+    "name": "Inventory Management",
+    "sap_module": "MM",
+    "description": "Goods movements, stock monitoring, and physical inventory processes.",
+    "sort_order": 20,
+    "is_s4_mandatory": true
+  },
+  "l3_list": [
+    {
+      "code": "L3-MM-INV-01",
+      "name": "Goods Receipt Processing",
+      "sap_scope_item_id": null,
+      "description": "Post incoming goods against purchase orders, production orders, or free delivery.",
+      "typical_complexity": "low",
+      "sort_order": 10,
+      "l4_list": [
+        {
+          "sub_process_code": "MM-INV-01-01",
+          "sub_process_name": "Post goods receipt against PO (MIGO — 101)",
+          "description": "Record arrival of goods, update stock quantities and trigger financial posting.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 10
+        },
+        {
+          "sub_process_code": "MM-INV-01-02",
+          "sub_process_name": "Post goods receipt — free delivery (MIGO — 501)",
+          "description": "Receive goods not linked to a purchase order, e.g. samples or returns.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 20
+        },
+        {
+          "sub_process_code": "MM-INV-01-03",
+          "sub_process_name": "Cancel / reverse goods receipt (MIGO — 102)",
+          "description": "Reverse an incorrect goods receipt to correct inventory and accounting.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 30
+        }
+      ]
+    },
+    {
+      "code": "L3-MM-INV-02",
+      "name": "Goods Issue Processing",
+      "sap_scope_item_id": null,
+      "description": "Manage outbound stock movements to cost centres, production, or scrapping.",
+      "typical_complexity": "low",
+      "sort_order": 20,
+      "l4_list": [
+        {
+          "sub_process_code": "MM-INV-02-01",
+          "sub_process_name": "Post goods issue to cost centre (MIGO — 201)",
+          "description": "Issue materials directly to an overhead cost centre for consumption.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 10
+        },
+        {
+          "sub_process_code": "MM-INV-02-02",
+          "sub_process_name": "Post goods issue for production order (MIGO — 261)",
+          "description": "Withdraw component materials from stock to supply a production order.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 20
+        },
+        {
+          "sub_process_code": "MM-INV-02-03",
+          "sub_process_name": "Post scrapping / goods issue for destruction (MIGO — 551)",
+          "description": "Write off obsolete or damaged stock and record consumption.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 30
+        },
+        {
+          "sub_process_code": "MM-INV-02-04",
+          "sub_process_name": "Transfer stock between storage locations (MIGO — 311 / 312)",
+          "description": "Move material within the same plant from one storage location to another.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 40
+        }
+      ]
+    },
+    {
+      "code": "L3-MM-INV-03",
+      "name": "Physical Inventory and Stock Count",
+      "sap_scope_item_id": null,
+      "description": "Plan, execute, and reconcile cycle count and annual physical inventory.",
+      "typical_complexity": "medium",
+      "sort_order": 30,
+      "l4_list": [
+        {
+          "sub_process_code": "MM-INV-03-01",
+          "sub_process_name": "Create physical inventory document (MI01)",
+          "description": "Generate the document that freezes book inventory at the count date.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 10
+        },
+        {
+          "sub_process_code": "MM-INV-03-02",
+          "sub_process_name": "Enter physical inventory count results (MI04)",
+          "description": "Record the actual counted quantities against the frozen book stock.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 20
+        },
+        {
+          "sub_process_code": "MM-INV-03-03",
+          "sub_process_name": "Post inventory differences (MI07)",
+          "description": "Adjust book inventory to match counted quantities and update financials.",
+          "typical_fit_decision": "fit",
+          "is_customer_facing": false,
+          "standard_sequence": 30
+        }
+      ]
+    }
+  ]
+}

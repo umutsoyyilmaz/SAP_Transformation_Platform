@@ -16,3 +16,4 @@ from app.blueprints.explore import process_steps    # noqa: E402, F401
 from app.blueprints.explore import requirements     # noqa: E402, F401
 from app.blueprints.explore import open_items       # noqa: E402, F401
 from app.blueprints.explore import supporting       # noqa: E402, F401
+from app.blueprints.explore import catalog          # noqa: E402, F401

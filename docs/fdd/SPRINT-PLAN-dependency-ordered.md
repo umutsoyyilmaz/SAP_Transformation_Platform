@@ -530,11 +530,11 @@ S5-01 (ADR-002 auth)
 
 ---
 
-## ⬜ SPRINT 7+ — Backlog
+## ✅ SPRINT 7 — Tamamlandı (S7-01) / Backlog (S7-02+)
 
 ---
 
-### S7-01 · `FDD-I07` · Backlog · Effort: M+L
+### S7-01 · `FDD-I07` · ✅ Tamamlandı · Effort: M+L
 
 **SAP 1YG Process Catalog — Seed Data Yönetimi**
 
@@ -545,9 +545,17 @@ S5-01 (ADR-002 auth)
 | **BLOKER** | SAP Best Practices içerik lisansı → **Legal onay Sprint 7 başında alınmalı** |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] `L1SeedCatalog`, `L2SeedCatalog`, `L3SeedCatalog` şema detayları — L4 ile tutarlı
-- [ ] Import akışı idempotent: aynı `process_code` varsa skip
-- [ ] Seed catalog global (tüm tenant'lara ortak) olarak tanımlanmalı
+- [x] `L1SeedCatalog`, `L2SeedCatalog`, `L3SeedCatalog` şema detayları — L4 ile tutarlı
+- [x] Import akışı idempotent: aynı `process_code` varsa skip
+- [x] Seed catalog global (tüm tenant'lara ortak) olarak tanımlanmalı
+
+**Uygulanan ek geliştirmeler:**
+- [x] JSON seed data: `fi_ap.json`, `fi_gl.json`, `fi_ar.json`, `fi_aa.json`, `mm_pur.json`, `mm_inv.json` (6 dosya, 56 L4 adımı)
+- [x] `process_catalog_service.py` — `load_catalog_from_json`, `get_catalog_tree`, `seed_project_from_catalog`
+- [x] Blueprint: `GET /catalog/modules`, `GET /catalog/tree`, `POST /projects/<pid>/seed-from-catalog`
+- [x] Frontend: `ExploreAPI.catalog`, Quick Start wizard (boş hierarchy'de gösterilir)
+- [x] Migration: `a57ae6490f32` — idempotent CREATE l1/l2/l3_seed_catalog + ALTER l4
+- [x] 7 unit test — `tests/test_process_catalog_service.py`, tümü yeşil
 
 ---
 
@@ -610,7 +618,7 @@ S5-01 (ADR-002 auth)
 | S5-04 | I-01 Transport | P3 | 5 | L | ✅ FDD-I01 | S1-05, S1-01 |
 | S5-05 | I-08 Stakeholder | P3 | 5 | M | ✅ FDD-I08 | S3-01 |
 | S6-01 | I-04 KB | P3 | 6 | M | ✅ FDD-I04 | S4-01, S5-03 |
-| S7-01 | I-07 1YG Catalog | Backlog | 7 | M+L | — | S3-01, Legal onay |
+| S7-01 | I-07 1YG Catalog | ✅ Tamamlandı | 7 | M+L | — | S3-01, Legal onay |
 | S7-02 | I-02 Auth Concept | Backlog | 7 | XL | — | S5-01, S1-05 |
 | S8-01 | I-05 Faz B | Backlog | 8 | XL | — | S5-02, S4-02 |
 
