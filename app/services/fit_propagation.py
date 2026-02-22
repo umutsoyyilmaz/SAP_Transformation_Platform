@@ -37,17 +37,20 @@ from app.models.explore import (
     ProcessLevel,
     ProcessStep,
 )
+from app.services.helpers.scoped_queries import get_scoped_or_none
 
 
 # ── L4 Propagation ──────────────────────────────────────────────────────────
 
-def propagate_fit_from_step(process_step: ProcessStep, *, is_final_session: bool = True) -> dict:
+def propagate_fit_from_step(process_step: ProcessStep, *, project_id: int | None = None, is_final_session: bool = True) -> dict:
     """
     Propagate a process step's fit_decision to its L4 process level,
     then cascade upward to L3 → L2.
 
     Args:
         process_step: The ProcessStep whose fit_decision changed.
+        project_id: Project scope for tenant isolation. Scopes the ProcessLevel
+            lookups — prevents cross-project hierarchy pollution.
         is_final_session: If False (interim session), skip L3/L2 propagation (GAP-10).
 
     Returns:
@@ -59,7 +62,12 @@ def propagate_fit_from_step(process_step: ProcessStep, *, is_final_session: bool
         return result
 
     # Update L4 process_level.fit_status
-    l4 = db.session.get(ProcessLevel, process_step.process_level_id)
+    # FK navigation from process_step; scope with project_id when available
+    l4 = (
+        get_scoped_or_none(ProcessLevel, process_step.process_level_id, project_id=project_id)
+        if project_id
+        else db.session.get(ProcessLevel, process_step.process_level_id)
+    )
     if not l4 or l4.level != 4:
         return result
 
@@ -70,14 +78,14 @@ def propagate_fit_from_step(process_step: ProcessStep, *, is_final_session: bool
         # GAP-10: interim sessions don't propagate upward
         return result
 
-    # Find L3 parent and recalculate
-    l3 = db.session.get(ProcessLevel, l4.parent_id) if l4.parent_id else None
+    # Find L3 parent and recalculate; use l4.project_id for scope
+    l3 = get_scoped_or_none(ProcessLevel, l4.parent_id, project_id=l4.project_id) if l4.parent_id else None
     if l3 and l3.level == 3:
         recalculate_l3_consolidated(l3)
         result["l3_recalculated"] = True
 
-        # Find L2 parent and recalculate readiness
-        l2 = db.session.get(ProcessLevel, l3.parent_id) if l3.parent_id else None
+        # Find L2 parent and recalculate readiness; use l3.project_id for scope
+        l2 = get_scoped_or_none(ProcessLevel, l3.parent_id, project_id=l3.project_id) if l3.parent_id else None
         if l2 and l2.level == 2:
             recalculate_l2_readiness(l2)
             result["l2_recalculated"] = True

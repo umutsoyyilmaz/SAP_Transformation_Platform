@@ -29,11 +29,17 @@ from app.models.explore import (
     ProcessStep,
 )
 from app.services.fit_propagation import recalculate_l2_readiness
+from app.services.helpers.scoped_queries import get_scoped_or_none
 
 
-def check_signoff_readiness(l3_id: str) -> dict:
+def check_signoff_readiness(l3_id: str, project_id: int | None = None) -> dict:
     """
     Check whether an L3 process level meets all sign-off pre-conditions.
+
+    Args:
+        l3_id: ProcessLevel ID (must be L3).
+        project_id: Project scope for tenant isolation. Prevents cross-project
+            sign-off readiness reads when provided.
 
     Returns:
         {
@@ -46,7 +52,11 @@ def check_signoff_readiness(l3_id: str) -> dict:
             }
         }
     """
-    l3 = db.session.get(ProcessLevel, l3_id)
+    l3 = (
+        get_scoped_or_none(ProcessLevel, l3_id, project_id=project_id)
+        if project_id
+        else db.session.get(ProcessLevel, l3_id)
+    )
     if not l3 or l3.level != 3:
         raise ValueError(f"Not a valid L3 process level: {l3_id}")
 
@@ -135,6 +145,7 @@ def signoff_l3(
     user_id: str,
     fit_decision: str,
     *,
+    project_id: int | None = None,
     rationale: str | None = None,
     force: bool = False,
 ) -> dict:
@@ -145,13 +156,18 @@ def signoff_l3(
         l3_id: ProcessLevel ID (must be L3)
         user_id: Who is signing off
         fit_decision: "fit", "gap", or "partial_fit"
+        project_id: Project scope for tenant isolation.
         rationale: Required if overriding system suggestion
         force: Skip readiness check (for PM override)
 
     Returns:
         {"l3_id", "fit_decision", "is_override", "l2_readiness_updated"}
     """
-    l3 = db.session.get(ProcessLevel, l3_id)
+    l3 = (
+        get_scoped_or_none(ProcessLevel, l3_id, project_id=project_id)
+        if project_id
+        else db.session.get(ProcessLevel, l3_id)
+    )
     if not l3 or l3.level != 3:
         raise ValueError(f"Not a valid L3 process level: {l3_id}")
 
@@ -160,7 +176,7 @@ def signoff_l3(
 
     # Check readiness
     if not force:
-        readiness = check_signoff_readiness(l3_id)
+        readiness = check_signoff_readiness(l3_id, project_id=project_id)
         if not readiness["ready"]:
             blocker_msgs = [b["message"] for b in readiness["blockers"]]
             raise ValueError(f"L3 not ready for sign-off: {'; '.join(blocker_msgs)}")
@@ -182,9 +198,9 @@ def signoff_l3(
     l3.consolidated_decided_by = user_id
     l3.consolidated_decided_at = now
 
-    # Recalculate L2 readiness
+    # Recalculate L2 readiness; use l3.project_id for FK navigation scope
     l2_updated = False
-    l2 = db.session.get(ProcessLevel, l3.parent_id) if l3.parent_id else None
+    l2 = get_scoped_or_none(ProcessLevel, l3.parent_id, project_id=l3.project_id) if l3.parent_id else None
     if l2 and l2.level == 2:
         recalculate_l2_readiness(l2)
         l2_updated = True
@@ -202,9 +218,14 @@ def override_l3_fit(
     user_id: str,
     new_fit: str,
     rationale: str,
+    project_id: int | None = None,
 ) -> dict:
     """Override L3 consolidated fit status with business justification."""
-    l3 = db.session.get(ProcessLevel, l3_id)
+    l3 = (
+        get_scoped_or_none(ProcessLevel, l3_id, project_id=project_id)
+        if project_id
+        else db.session.get(ProcessLevel, l3_id)
+    )
     if not l3 or l3.level != 3:
         raise ValueError(f"Not a valid L3 process level: {l3_id}")
 
@@ -231,14 +252,22 @@ def override_l3_fit(
     }
 
 
-def get_consolidated_view(l3_id: str) -> dict:
+def get_consolidated_view(l3_id: str, project_id: int | None = None) -> dict:
     """
     Get comprehensive consolidated view for an L3 process level.
+
+    Args:
+        l3_id: ProcessLevel ID (must be L3).
+        project_id: Project scope for tenant isolation.
 
     Returns:
         L4 breakdown, blocking items, sign-off status, signoff_ready flag
     """
-    l3 = db.session.get(ProcessLevel, l3_id)
+    l3 = (
+        get_scoped_or_none(ProcessLevel, l3_id, project_id=project_id)
+        if project_id
+        else db.session.get(ProcessLevel, l3_id)
+    )
     if not l3 or l3.level != 3:
         raise ValueError(f"Not a valid L3 process level: {l3_id}")
 

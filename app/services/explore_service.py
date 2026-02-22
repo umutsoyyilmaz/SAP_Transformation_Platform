@@ -205,7 +205,7 @@ def update_process_step_service(step_id: str, data: dict, *, project_id: int):
         # has project_id so we enforce it explicitly for defence in depth.
         ws = get_scoped_or_none(ExploreWorkshop, step.workshop_id, project_id=project_id)
         is_final = ws.session_number >= ws.total_sessions if ws else True
-        propagation = propagate_fit_from_step(step, is_final_session=is_final)
+        propagation = propagate_fit_from_step(step, project_id=project_id, is_final_session=is_final)
     db.session.commit()
     result = step.to_dict()
     result["propagation"] = propagation
@@ -408,7 +408,7 @@ def set_fit_decision_bulk_service(ws_id: str, data: dict, *, project_id: int):
     step.assessed_by = data.get("assessed_by")
     db.session.commit()
     try:
-        propagate_fit_from_step(step)
+        propagate_fit_from_step(step, project_id=project_id)
         db.session.commit()
     except Exception:
         logger.exception("Fit propagation failed for step %s", step.id)

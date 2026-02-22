@@ -38,6 +38,7 @@ from app.models.explore import (
     REQUIREMENT_TRANSITIONS,
 )
 from app.services.code_generator import generate_backlog_item_code, generate_config_item_code
+from app.services.helpers.scoped_queries import get_scoped_or_none
 from app.services.permission import PermissionDenied, has_permission
 
 
@@ -147,7 +148,7 @@ def transition_requirement(
     Raises:
         TransitionError, BlockedByOpenItemsError, PermissionDenied
     """
-    req = db.session.get(ExploreRequirement, requirement_id)
+    req = get_scoped_or_none(ExploreRequirement, requirement_id, project_id=project_id)
     if not req:
         raise ValueError(f"Requirement not found: {requirement_id}")
 
@@ -329,8 +330,8 @@ def convert_requirement(requirement_id: str, user_id: str, project_id: int,
 
     Returns dict with conversion result or raises TransitionError.
     """
-    req = db.session.get(ExploreRequirement, requirement_id)
-    if not req or req.project_id != project_id:
+    req = get_scoped_or_none(ExploreRequirement, requirement_id, project_id=project_id)
+    if not req:
         raise TransitionError(requirement_id, "convert", "unknown",
                               f"Requirement {requirement_id} not found")
 
@@ -445,12 +446,9 @@ def unconvert_requirement(
     from app.models.testing import TestCase, Defect
     from app.models.audit import write_audit
 
-    req = db.session.get(ExploreRequirement, requirement_id)
+    req = get_scoped_or_none(ExploreRequirement, requirement_id, project_id=project_id)
     if not req:
         raise ValueError(f"Requirement not found: {requirement_id}")
-
-    if req.project_id != project_id:
-        raise ValueError(f"Requirement {requirement_id} not in project {project_id}")
 
     # Permission check
     if not skip_permission:

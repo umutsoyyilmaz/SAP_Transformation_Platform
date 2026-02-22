@@ -31,6 +31,7 @@ from app.models.testing import (
 from app.models.program import Program
 from app.models.requirement import Requirement
 from app.models.explore import ExploreRequirement
+from app.services.helpers.scoped_queries import get_scoped_or_none
 
 logger = logging.getLogger(__name__)
 
@@ -927,14 +928,15 @@ def generate_from_process(suite, scope_item_ids, test_level="sit", uat_category=
         ))
 
         for i, ps in enumerate(fit_steps, 1):
-            l4 = db.session.get(ProcessLevel, ps.process_level_id)
+            # FK navigation from l3-scoped step; use l3.project_id for defence in depth
+            l4 = get_scoped_or_none(ProcessLevel, ps.process_level_id, project_id=l3.project_id)
             l4_name = l4.name if l4 else f"Step {i}"
             module_code = l4.process_area_code if l4 else ""
 
             is_checkpoint = False
             if i > 1:
                 prev_ps = fit_steps[i - 2]
-                prev_l4 = db.session.get(ProcessLevel, prev_ps.process_level_id)
+                prev_l4 = get_scoped_or_none(ProcessLevel, prev_ps.process_level_id, project_id=l3.project_id)
                 if prev_l4 and l4 and prev_l4.process_area_code != l4.process_area_code:
                     is_checkpoint = True
 

@@ -39,6 +39,7 @@ from app.models.explore import (
     OpenItemComment,
     RequirementOpenItemLink,
 )
+from app.services.helpers.scoped_queries import get_scoped_or_none
 from app.services.permission import PermissionDenied, has_permission
 
 
@@ -100,11 +101,16 @@ def _add_activity_log(oi: ExploreOpenItem, user_id: str, log_type: str, content:
     db.session.add(comment)
 
 
-def _check_unblocked_requirements(open_item_id: str) -> list[dict]:
+def _check_unblocked_requirements(open_item_id: str, project_id: int) -> list[dict]:
     """
     After closing a blocking OI, check all linked requirements.
     If ALL blocking OIs for a requirement are now closed, return those requirements
     as "unblocked".
+
+    Args:
+        open_item_id: UUID of the closed open item.
+        project_id: Project scope — prevents cross-project ExploreRequirement and
+            ExploreOpenItem reads when traversing OI → requirement links.
     """
     unblocked = []
 
@@ -116,7 +122,7 @@ def _check_unblocked_requirements(open_item_id: str) -> list[dict]:
     )
 
     for link in links:
-        req = db.session.get(ExploreRequirement, link.requirement_id)
+        req = get_scoped_or_none(ExploreRequirement, link.requirement_id, project_id=project_id)
         if not req:
             continue
 
@@ -129,7 +135,7 @@ def _check_unblocked_requirements(open_item_id: str) -> list[dict]:
 
         all_resolved = True
         for bl in blocking_links:
-            oi = db.session.get(ExploreOpenItem, bl.open_item_id)
+            oi = get_scoped_or_none(ExploreOpenItem, bl.open_item_id, project_id=project_id)
             if oi and oi.status in ("open", "in_progress", "blocked"):
                 all_resolved = False
                 break
@@ -176,7 +182,7 @@ def transition_open_item(
     Raises:
         OITransitionError, PermissionDenied
     """
-    oi = db.session.get(ExploreOpenItem, open_item_id)
+    oi = get_scoped_or_none(ExploreOpenItem, open_item_id, project_id=project_id)
     if not oi:
         raise ValueError(f"Open item not found: {open_item_id}")
 
@@ -210,7 +216,7 @@ def transition_open_item(
         _add_activity_log(oi, user_id, "status_change",
                           f"Closed: {resolution}")
         # Check if any requirements are now unblocked
-        unblocked = _check_unblocked_requirements(open_item_id)
+        unblocked = _check_unblocked_requirements(open_item_id, project_id)
 
     elif action == "mark_blocked":
         oi.blocked_reason = blocked_reason
@@ -271,7 +277,7 @@ def reassign_open_item(
     skip_permission: bool = False,
 ) -> dict:
     """Reassign an open item and create activity log."""
-    oi = db.session.get(ExploreOpenItem, open_item_id)
+    oi = get_scoped_or_none(ExploreOpenItem, open_item_id, project_id=project_id)
     if not oi:
         raise ValueError(f"Open item not found: {open_item_id}")
 

@@ -19,7 +19,7 @@ from app.models.explore import (
     ProcessStep, ProcessLevel, ExploreDecision, ExploreOpenItem,
     ExploreRequirement, ExploreWorkshopDocument,
 )
-from app.services.helpers.scoped_queries import get_scoped
+from app.services.helpers.scoped_queries import get_scoped, get_scoped_or_none
 
 
 class MinutesGeneratorService:
@@ -155,7 +155,8 @@ class MinutesGeneratorService:
             for i, s in enumerate(steps, 1):
                 fit = s.fit_decision or "—"
                 notes = (s.notes or "")[:80]
-                pl = db.session.get(ProcessLevel, s.process_level_id)
+                # FK navigation from ws-scoped step — project_id from ws for defence in depth
+                pl = get_scoped_or_none(ProcessLevel, s.process_level_id, project_id=ws.project_id)
                 l4_code = pl.code if pl else "—"
                 _a(f"| {i} | {l4_code} | **{fit}** | {notes} |")
             _a("")
@@ -249,7 +250,7 @@ class MinutesGeneratorService:
             "open_items_open": sum(1 for o in open_items if o.status in ("open", "in_progress")),
             "requirements_count": len(requirements),
             "key_gaps": [
-                (lambda pl: pl.code if pl else "??")(db.session.get(ProcessLevel, s.process_level_id))
+                (lambda pl: pl.code if pl else "??")(get_scoped_or_none(ProcessLevel, s.process_level_id, project_id=ws.project_id))
                 for s in steps if s.fit_decision == "gap"
             ][:10],
         }

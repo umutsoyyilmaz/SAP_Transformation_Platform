@@ -698,8 +698,9 @@ def consolidate_fit(l3_id):
 
 def get_consolidated_view_endpoint(l3_id):
     """L4 breakdown + blocking items + sign-off status + signoff_ready flag."""
+    project_id = request.args.get("project_id", type=int)
     try:
-        view = get_consolidated_view(l3_id)
+        view = get_consolidated_view(l3_id, project_id=project_id)
         return jsonify(view)
     except ValueError as e:
         return api_error(E.VALIDATION_INVALID, str(e))
@@ -708,6 +709,7 @@ def get_consolidated_view_endpoint(l3_id):
 def override_fit_endpoint(l3_id):
     """Override L3 consolidated fit status with business rationale."""
     data = request.get_json(silent=True) or {}
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
     user_id = data.get("user_id", "system")
     new_fit = data.get("fit_decision")
     rationale = data.get("rationale")
@@ -716,7 +718,7 @@ def override_fit_endpoint(l3_id):
         return api_error(E.VALIDATION_REQUIRED, "fit_decision and rationale are required")
 
     try:
-        result = override_l3_fit(l3_id, user_id, new_fit, rationale)
+        result = override_l3_fit(l3_id, user_id, new_fit, rationale, project_id=project_id)
         db.session.commit()
         return jsonify(result)
     except ValueError as e:
@@ -726,6 +728,7 @@ def override_fit_endpoint(l3_id):
 def signoff_endpoint(l3_id):
     """Execute L3 sign-off."""
     data = request.get_json(silent=True) or {}
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
     user_id = data.get("user_id", "system")
     fit_decision = data.get("fit_decision")
     rationale = data.get("rationale")
@@ -735,7 +738,7 @@ def signoff_endpoint(l3_id):
         return api_error(E.VALIDATION_REQUIRED, "fit_decision is required")
 
     try:
-        result = signoff_l3(l3_id, user_id, fit_decision, rationale=rationale, force=force)
+        result = signoff_l3(l3_id, user_id, fit_decision, project_id=project_id, rationale=rationale, force=force)
         db.session.commit()
         return jsonify(result)
     except ValueError as e:
