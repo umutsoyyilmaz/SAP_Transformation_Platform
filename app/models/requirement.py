@@ -177,6 +177,39 @@ class Requirement(db.Model):
         return f"<Requirement {self.id}: {self.code or self.title[:30]}>"
 
 
+# ── Write-block (B-01 S1-05) ─────────────────────────────────────────────────
+# The `requirements` table is frozen.  All new requirements MUST be created via
+# ExploreRequirement (explore_requirements table).  This listener fires at the
+# ORM level before any INSERT reaches the DB, giving a clear error message to
+# catch any code path that still writes to the legacy table.
+#
+# TESTING bypass: When the Flask app is running in TESTING mode (TESTING=True),
+# the block is skipped so that legacy fixture helpers in existing tests can
+# continue to seed data without mass-migrating the entire test suite at once.
+# The block should be tested explicitly by temporarily setting TESTING=False
+# (see test_legacy_requirement_write_block_raises_runtime_error).
+from sqlalchemy import event as _sa_event  # noqa: E402 (local import for clarity)
+
+
+@_sa_event.listens_for(Requirement, "before_insert")
+def _block_requirement_insert(mapper, connection, target) -> None:  # noqa: ANN001
+    """Raise RuntimeError on any ORM INSERT into the frozen requirements table.
+
+    Bypassed when the Flask app has TESTING=True to allow legacy test fixtures
+    to keep seeding data while the broader test-suite migration is in progress.
+    """
+    from flask import current_app, has_app_context
+
+    if has_app_context() and current_app.config.get("TESTING", False):
+        return  # Allow seeding in tests — full block only in prod/dev
+
+    raise RuntimeError(
+        "The `requirements` table is write-blocked (B-01 migration, S1-05). "
+        "Create new requirements via ExploreRequirement "
+        "(app/models/explore/requirement.py) instead."
+    )
+
+
 class OpenItem(db.Model):
     """
     .. deprecated:: Sprint-3

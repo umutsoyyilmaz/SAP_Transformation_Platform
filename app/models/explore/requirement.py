@@ -411,6 +411,49 @@ class ExploreRequirement(db.Model):
         comment="pending | synced | sync_error | out_of_sync",
     )
 
+    # ── B-01 Consolidation fields (S1-05) ────────────────────────────────
+    # All nullable=True: reviewer audit A3 — existing rows have no values;
+    # constraints tighten in a later migration once data is populated.
+
+    requirement_type = db.Column(
+        db.String(32),
+        nullable=True,
+        default="functional",
+        comment="business | functional | technical | non_functional | integration",
+    )
+    moscow_priority = db.Column(
+        db.String(20),
+        nullable=True,
+        comment="must_have | should_have | could_have | wont_have (MoSCoW)",
+    )
+    source = db.Column(
+        db.String(32),
+        nullable=True,
+        default="workshop",
+        comment="workshop | stakeholder | regulation | gap_analysis | standard_process",
+    )
+    # Self-referential FK: Epic → Feature → User Story hierarchy.
+    # String(36) to match the UUID primary key (FDD draft incorrectly listed Integer).
+    parent_id = db.Column(
+        db.String(36),
+        db.ForeignKey("explore_requirements.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Epic → Feature → User Story hierarchy; self-referential",
+    )
+    external_id = db.Column(
+        db.String(100),
+        nullable=True,
+        index=True,
+        comment="SAP Cloud ALM / Jira / ServiceNow external ID",
+    )
+    legacy_requirement_id = db.Column(
+        db.Integer,
+        nullable=True,
+        index=True,
+        comment="requirements.id of the migrated legacy row — for backward trace",
+    )
+
     # Backlog linkage — REMOVED (ADR: WRICEF traces via BacklogItem.explore_requirement_id)
     # Canonical direction: BacklogItem.explore_requirement_id → ExploreRequirement.id (N:1)
     # Previously: backlog_item_id, config_item_id columns here (bidirectional 1:1). Removed
@@ -459,6 +502,15 @@ class ExploreRequirement(db.Model):
     # Workshop relationship
     workshop = db.relationship(
         "ExploreWorkshop", foreign_keys=[workshop_id], uselist=False,
+    )
+
+    # Self-referential parent/children for Epic → Feature → User Story hierarchy.
+    # parent_id FK defined above; this relationship provides ORM traversal.
+    children = db.relationship(
+        "ExploreRequirement",
+        foreign_keys="ExploreRequirement.parent_id",
+        backref=db.backref("parent", remote_side="ExploreRequirement.id"),
+        lazy="select",
     )
 
     # ── 1:N Backlog/Config relationships (canonical direction) ────────
@@ -557,6 +609,13 @@ class ExploreRequirement(db.Model):
             "config_item_ids": [ci.id for ci in self.linked_config_items],
             "deferred_to_phase": self.deferred_to_phase,
             "rejection_reason": self.rejection_reason,
+            # B-01 consolidation fields (S1-05)
+            "requirement_type": self.requirement_type,
+            "moscow_priority": self.moscow_priority,
+            "source": self.source,
+            "parent_id": self.parent_id,
+            "external_id": self.external_id,
+            "legacy_requirement_id": self.legacy_requirement_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             # Resolved detail fields
