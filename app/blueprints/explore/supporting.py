@@ -52,7 +52,10 @@ def explore_health():
 def get_workshop_dependencies(workshop_id):
     """List dependencies for a workshop (both outgoing and incoming)."""
     direction = request.args.get("direction", "all")
-    result = explore_service.get_workshop_dependencies_service(workshop_id, direction)
+    project_id = request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    result = explore_service.get_workshop_dependencies_service(workshop_id, direction, project_id=project_id)
     if isinstance(result, tuple):
         return result
     return jsonify(result)
@@ -62,7 +65,10 @@ def get_workshop_dependencies(workshop_id):
 def create_workshop_dependency(workshop_id):
     """Create a dependency from this workshop to another."""
     data = request.get_json(silent=True) or {}
-    result = explore_service.create_workshop_dependency_service(workshop_id, data)
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    result = explore_service.create_workshop_dependency_service(workshop_id, data, project_id=project_id)
     if isinstance(result, tuple):
         payload, status = result
         if isinstance(payload, dict):
@@ -74,7 +80,11 @@ def create_workshop_dependency(workshop_id):
 @explore_bp.route("/workshop-dependencies/<dep_id>/resolve", methods=["PUT"])
 def resolve_workshop_dependency(dep_id):
     """Mark a workshop dependency as resolved."""
-    result = explore_service.resolve_workshop_dependency_service(dep_id)
+    data = request.get_json(silent=True) or {}
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    result = explore_service.resolve_workshop_dependency_service(dep_id, project_id=project_id)
     if isinstance(result, tuple):
         return result
     return jsonify(result)
@@ -114,7 +124,10 @@ def list_attachments():
 @explore_bp.route("/attachments/<att_id>", methods=["GET"])
 def get_attachment(att_id):
     """Get a single attachment by ID."""
-    result = explore_service.get_attachment_service(att_id)
+    project_id = request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    result = explore_service.get_attachment_service(att_id, project_id=project_id)
     if isinstance(result, tuple):
         return result
     return jsonify(result)
@@ -123,7 +136,10 @@ def get_attachment(att_id):
 @explore_bp.route("/attachments/<att_id>", methods=["DELETE"])
 def delete_attachment(att_id):
     """Delete an attachment record."""
-    result = explore_service.delete_attachment_service(att_id)
+    project_id = request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    result = explore_service.delete_attachment_service(att_id, project_id=project_id)
     if isinstance(result, tuple):
         return result
     return jsonify(result)
@@ -162,7 +178,10 @@ def list_scope_change_requests():
 @explore_bp.route("/scope-change-requests/<scr_id>", methods=["GET"])
 def get_scope_change_request(scr_id):
     """Get a single scope change request with change logs."""
-    result = explore_service.get_scope_change_request_service(scr_id)
+    project_id = request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    result = explore_service.get_scope_change_request_service(scr_id, project_id=project_id)
     if isinstance(result, tuple):
         return result
     return jsonify(result)
@@ -172,7 +191,10 @@ def get_scope_change_request(scr_id):
 def transition_scope_change_request(scr_id):
     """Apply a status transition to a scope change request."""
     data = request.get_json(silent=True) or {}
-    result = explore_service.transition_scope_change_request_service(scr_id, data)
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    result = explore_service.transition_scope_change_request_service(scr_id, data, project_id=project_id)
     if isinstance(result, tuple):
         payload, status = result
         if isinstance(payload, dict):
@@ -188,7 +210,10 @@ def implement_scope_change_request(scr_id):
     Applies the proposed change to the process level and creates change logs.
     """
     data = request.get_json(silent=True) or {}
-    result = explore_service.implement_scope_change_request_service(scr_id, data)
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    result = explore_service.implement_scope_change_request_service(scr_id, data, project_id=project_id)
     if isinstance(result, tuple):
         return result
     return jsonify(result)

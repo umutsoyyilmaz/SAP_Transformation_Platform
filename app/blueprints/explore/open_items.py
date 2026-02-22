@@ -86,7 +86,10 @@ def create_open_item_flat():
 @explore_bp.route("/open-items/<oi_id>", methods=["GET"])
 def get_open_item(oi_id):
     """Get a single open item."""
-    result = explore_service.get_open_item_service(oi_id)
+    project_id = request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    result = explore_service.get_open_item_service(oi_id, project_id=project_id)
     if isinstance(result, tuple):
         return result
     return jsonify(result)
@@ -96,7 +99,10 @@ def get_open_item(oi_id):
 def update_open_item(oi_id):
     """Update open item fields (not status — use transition)."""
     data = request.get_json(silent=True) or {}
-    result = explore_service.update_open_item_service(oi_id, data)
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    result = explore_service.update_open_item_service(oi_id, data, project_id=project_id)
     if isinstance(result, tuple):
         return result
     return jsonify(result)
@@ -117,8 +123,12 @@ def transition_open_item_endpoint(oi_id):
     if not action:
         return api_error(E.VALIDATION_REQUIRED, "action is required")
 
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+
     try:
-        result = explore_service.transition_open_item_service(oi_id, data)
+        result = explore_service.transition_open_item_service(oi_id, data, project_id=project_id)
         if isinstance(result, tuple):
             return result
         return jsonify(result)
@@ -139,8 +149,12 @@ def reassign_open_item_endpoint(oi_id):
     if not new_assignee_id or not new_assignee_name:
         return api_error(E.VALIDATION_REQUIRED, "assignee_id and assignee_name are required")
 
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+
     try:
-        result = explore_service.reassign_open_item_service(oi_id, data)
+        result = explore_service.reassign_open_item_service(oi_id, data, project_id=project_id)
         if isinstance(result, tuple):
             return result
         return jsonify(result)
@@ -158,7 +172,11 @@ def add_comment(oi_id):
     if not content:
         return api_error(E.VALIDATION_REQUIRED, "content is required")
 
-    result = explore_service.add_open_item_comment_service(oi_id, data)
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+
+    result = explore_service.add_open_item_comment_service(oi_id, data, project_id=project_id)
     if not isinstance(result, tuple):
         return result
     payload, status_code = result

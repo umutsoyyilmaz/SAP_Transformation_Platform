@@ -7,7 +7,7 @@ HTTP parsing/validation and response handling.
 import logging
 from datetime import date, datetime, timezone
 
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, select
 
 from app.models import db
 from app.models.explore import (
@@ -41,6 +41,7 @@ from app.services.open_item_lifecycle import (
     transition_open_item,
 )
 from app.services.permission import PermissionDenied
+from app.services.helpers.scoped_queries import get_scoped_or_none
 from app.utils.errors import E, api_error
 
 logger = logging.getLogger(__name__)
@@ -93,17 +94,23 @@ def list_cross_module_flags_service(status: str | None, target_area: str | None)
     return {"items": [f.to_dict() for f in flags], "total": len(flags)}
 
 
-def create_cross_module_flag_service(step_id: str, data: dict):
-    """Create cross-module flag for a process step.
+def create_cross_module_flag_service(step_id: str, data: dict, *, project_id: int):
+    """Create cross-module flag for a process step, scoped to the caller's project.
 
     Args:
         step_id: Process step ID.
         data: Request payload.
+        project_id: Caller's project — verified via step → workshop join.
 
     Returns:
-        Response tuple or error response.
+        Response tuple or 404 error response.
     """
-    step = db.session.get(ProcessStep, step_id)
+    stmt = (
+        select(ProcessStep)
+        .join(ExploreWorkshop, ExploreWorkshop.id == ProcessStep.workshop_id)
+        .where(ProcessStep.id == step_id, ExploreWorkshop.project_id == project_id)
+    )
+    step = db.session.execute(stmt).scalar_one_or_none()
     if not step:
         return api_error(E.NOT_FOUND, "Process step not found")
     flag = CrossModuleFlag(
@@ -120,17 +127,26 @@ def create_cross_module_flag_service(step_id: str, data: dict):
     return flag.to_dict(), 201
 
 
-def update_cross_module_flag_service(flag_id: str, data: dict):
-    """Update status and resolution info for a cross-module flag.
+def update_cross_module_flag_service(flag_id: str, data: dict, *, project_id: int):
+    """Update status and resolution info for a cross-module flag, scoped to the caller's project.
+
+    Scope chain: CrossModuleFlag → ProcessStep → ExploreWorkshop.project_id (2 JOINs).
 
     Args:
         flag_id: Flag ID.
         data: Request payload.
+        project_id: Caller's project — verified via 2-join chain.
 
     Returns:
-        Updated flag payload or error response.
+        Updated flag payload or 404 error response.
     """
-    flag = db.session.get(CrossModuleFlag, flag_id)
+    stmt = (
+        select(CrossModuleFlag)
+        .join(ProcessStep, ProcessStep.id == CrossModuleFlag.process_step_id)
+        .join(ExploreWorkshop, ExploreWorkshop.id == ProcessStep.workshop_id)
+        .where(CrossModuleFlag.id == flag_id, ExploreWorkshop.project_id == project_id)
+    )
+    flag = db.session.execute(stmt).scalar_one_or_none()
     if not flag:
         return api_error(E.NOT_FOUND, "Cross-module flag not found")
     if "status" in data:
@@ -143,17 +159,23 @@ def update_cross_module_flag_service(flag_id: str, data: dict):
     return flag.to_dict()
 
 
-def update_process_step_service(step_id: str, data: dict):
-    """Update process-step fields and propagate fit decision changes.
+def update_process_step_service(step_id: str, data: dict, *, project_id: int):
+    """Update process-step fields and propagate fit decision changes, scoped to the caller's project.
 
     Args:
         step_id: Process step ID.
         data: Request payload.
+        project_id: Caller's project — verified via step → workshop join.
 
     Returns:
-        Updated step payload or error response.
+        Updated step payload or 404 error response.
     """
-    step = db.session.get(ProcessStep, step_id)
+    stmt = (
+        select(ProcessStep)
+        .join(ExploreWorkshop, ExploreWorkshop.id == ProcessStep.workshop_id)
+        .where(ProcessStep.id == step_id, ExploreWorkshop.project_id == project_id)
+    )
+    step = db.session.execute(stmt).scalar_one_or_none()
     if not step:
         return api_error(E.NOT_FOUND, "Process step not found")
     user_id = data.get("user_id", "system")
@@ -188,17 +210,23 @@ def update_process_step_service(step_id: str, data: dict):
     return result
 
 
-def create_decision_service(step_id: str, data: dict):
-    """Create decision linked to process step.
+def create_decision_service(step_id: str, data: dict, *, project_id: int):
+    """Create decision linked to process step, scoped to the caller's project.
 
     Args:
         step_id: Process step ID.
         data: Request payload.
+        project_id: Caller's project — verified via step → workshop join.
 
     Returns:
-        Decision payload and HTTP status.
+        Decision payload and HTTP status, or 404 error response.
     """
-    step = db.session.get(ProcessStep, step_id)
+    stmt = (
+        select(ProcessStep)
+        .join(ExploreWorkshop, ExploreWorkshop.id == ProcessStep.workshop_id)
+        .where(ProcessStep.id == step_id, ExploreWorkshop.project_id == project_id)
+    )
+    step = db.session.execute(stmt).scalar_one_or_none()
     if not step:
         return api_error(E.NOT_FOUND, "Process step not found")
     ws = db.session.get(ExploreWorkshop, step.workshop_id)
@@ -221,17 +249,23 @@ def create_decision_service(step_id: str, data: dict):
     return dec.to_dict(), 201
 
 
-def create_step_open_item_service(step_id: str, data: dict):
-    """Create open item under a process step.
+def create_step_open_item_service(step_id: str, data: dict, *, project_id: int):
+    """Create open item under a process step, scoped to the caller's project.
 
     Args:
         step_id: Process step ID.
         data: Request payload.
+        project_id: Caller's project — verified via step → workshop join.
 
     Returns:
-        Open item payload and HTTP status.
+        Open item payload and HTTP status, or 404 error response.
     """
-    step = db.session.get(ProcessStep, step_id)
+    stmt = (
+        select(ProcessStep)
+        .join(ExploreWorkshop, ExploreWorkshop.id == ProcessStep.workshop_id)
+        .where(ProcessStep.id == step_id, ExploreWorkshop.project_id == project_id)
+    )
+    step = db.session.execute(stmt).scalar_one_or_none()
     if not step:
         return api_error(E.NOT_FOUND, "Process step not found")
     ws = db.session.get(ExploreWorkshop, step.workshop_id)
@@ -259,17 +293,23 @@ def create_step_open_item_service(step_id: str, data: dict):
     return oi.to_dict(), 201
 
 
-def create_step_requirement_service(step_id: str, data: dict):
-    """Create requirement under a process step.
+def create_step_requirement_service(step_id: str, data: dict, *, project_id: int):
+    """Create requirement under a process step, scoped to the caller's project.
 
     Args:
         step_id: Process step ID.
         data: Request payload.
+        project_id: Caller's project — verified via step → workshop join.
 
     Returns:
-        Requirement payload and HTTP status.
+        Requirement payload and HTTP status, or 404 error response.
     """
-    step = db.session.get(ProcessStep, step_id)
+    stmt = (
+        select(ProcessStep)
+        .join(ExploreWorkshop, ExploreWorkshop.id == ProcessStep.workshop_id)
+        .where(ProcessStep.id == step_id, ExploreWorkshop.project_id == project_id)
+    )
+    step = db.session.execute(stmt).scalar_one_or_none()
     if not step:
         return api_error(E.NOT_FOUND, "Process step not found")
     ws = db.session.get(ExploreWorkshop, step.workshop_id)
@@ -306,15 +346,19 @@ def create_step_requirement_service(step_id: str, data: dict):
     return req.to_dict(), 201
 
 
-def list_fit_decisions_service(ws_id: str):
-    """List fit decisions for all steps in workshop.
+def list_fit_decisions_service(ws_id: str, *, project_id: int):
+    """List fit decisions for all steps in workshop, scoped to the caller's project.
 
     Args:
         ws_id: Workshop ID.
+        project_id: Caller's project — must own the workshop.
 
     Returns:
-        List payload.
+        List payload or 404 error response.
     """
+    ws = get_scoped_or_none(ExploreWorkshop, ws_id, project_id=project_id)
+    if not ws:
+        return api_error(E.NOT_FOUND, "Workshop not found")
     steps = ProcessStep.query.filter_by(workshop_id=ws_id).order_by(ProcessStep.sort_order).all()
     result = []
     for s in steps:
@@ -328,16 +372,20 @@ def list_fit_decisions_service(ws_id: str):
     return result
 
 
-def set_fit_decision_bulk_service(ws_id: str, data: dict):
-    """Set fit decision for one step in a workshop.
+def set_fit_decision_bulk_service(ws_id: str, data: dict, *, project_id: int):
+    """Set fit decision for one step in a workshop, scoped to the caller's project.
 
     Args:
         ws_id: Workshop ID.
         data: Request payload.
+        project_id: Caller's project — must own the workshop.
 
     Returns:
-        Updated step payload or error response.
+        Updated step payload or 404 error response.
     """
+    _ws = get_scoped_or_none(ExploreWorkshop, ws_id, project_id=project_id)
+    if not _ws:
+        return api_error(E.NOT_FOUND, "Workshop not found")
     step = db.session.get(ProcessStep, data.get("step_id"))
     if not step or step.workshop_id != ws_id:
         return api_error(E.NOT_FOUND, "Step not found in this workshop")
@@ -427,32 +475,34 @@ def create_open_item_flat_service(data: dict):
     return oi.to_dict(), 201
 
 
-def get_open_item_service(oi_id: str):
-    """Get open item by id.
+def get_open_item_service(oi_id: str, *, project_id: int):
+    """Get open item by id, scoped to the caller's project.
 
     Args:
         oi_id: Open item ID.
+        project_id: Caller's project — must match oi.project_id.
 
     Returns:
-        Open item payload or error response.
+        Open item payload or 404 error response.
     """
-    oi = db.session.get(ExploreOpenItem, oi_id)
+    oi = get_scoped_or_none(ExploreOpenItem, oi_id, project_id=project_id)
     if not oi:
         return api_error(E.NOT_FOUND, "Open item not found")
     return oi.to_dict()
 
 
-def update_open_item_service(oi_id: str, data: dict):
-    """Update open item editable fields.
+def update_open_item_service(oi_id: str, data: dict, *, project_id: int):
+    """Update open item editable fields, scoped to the caller's project.
 
     Args:
         oi_id: Open item ID.
         data: Request payload.
+        project_id: Caller's project — must match oi.project_id.
 
     Returns:
-        Updated open item payload.
+        Updated open item payload or 404 error response.
     """
-    oi = db.session.get(ExploreOpenItem, oi_id)
+    oi = get_scoped_or_none(ExploreOpenItem, oi_id, project_id=project_id)
     if not oi:
         return api_error(E.NOT_FOUND, "Open item not found")
     for field in ["title", "description", "priority", "category", "process_area", "wave"]:
@@ -464,17 +514,18 @@ def update_open_item_service(oi_id: str, data: dict):
     return oi.to_dict()
 
 
-def transition_open_item_service(oi_id: str, data: dict):
-    """Run open item lifecycle transition.
+def transition_open_item_service(oi_id: str, data: dict, *, project_id: int):
+    """Run open item lifecycle transition, scoped to the caller's project.
 
     Args:
         oi_id: Open item ID.
         data: Request payload.
+        project_id: Caller's project — must match oi.project_id.
 
     Returns:
-        Transition result payload or error response.
+        Transition result payload or 404 error response.
     """
-    oi = db.session.get(ExploreOpenItem, oi_id)
+    oi = get_scoped_or_none(ExploreOpenItem, oi_id, project_id=project_id)
     if not oi:
         return api_error(E.NOT_FOUND, "Open item not found")
     try:
@@ -494,17 +545,18 @@ def transition_open_item_service(oi_id: str, data: dict):
         return api_error(E.FORBIDDEN, str(exc))
 
 
-def reassign_open_item_service(oi_id: str, data: dict):
-    """Reassign open item owner.
+def reassign_open_item_service(oi_id: str, data: dict, *, project_id: int):
+    """Reassign open item owner, scoped to the caller's project.
 
     Args:
         oi_id: Open item ID.
         data: Request payload.
+        project_id: Caller's project — must match oi.project_id.
 
     Returns:
-        Reassignment result payload or error response.
+        Reassignment result payload or 404 error response.
     """
-    oi = db.session.get(ExploreOpenItem, oi_id)
+    oi = get_scoped_or_none(ExploreOpenItem, oi_id, project_id=project_id)
     if not oi:
         return api_error(E.NOT_FOUND, "Open item not found")
     try:
@@ -522,17 +574,18 @@ def reassign_open_item_service(oi_id: str, data: dict):
         return api_error(E.FORBIDDEN, str(exc))
 
 
-def add_open_item_comment_service(oi_id: str, data: dict):
-    """Add comment/activity entry for an open item.
+def add_open_item_comment_service(oi_id: str, data: dict, *, project_id: int):
+    """Add comment/activity entry for an open item, scoped to the caller's project.
 
     Args:
         oi_id: Open item ID.
         data: Request payload.
+        project_id: Caller's project — must match oi.project_id.
 
     Returns:
-        Created comment payload and status.
+        Created comment payload and status, or 404 error response.
     """
-    oi = db.session.get(ExploreOpenItem, oi_id)
+    oi = get_scoped_or_none(ExploreOpenItem, oi_id, project_id=project_id)
     if not oi:
         return api_error(E.NOT_FOUND, "Open item not found")
     comment = OpenItemComment(
@@ -583,17 +636,18 @@ def open_item_stats_service(project_id: int):
     }
 
 
-def get_workshop_dependencies_service(workshop_id: str, direction: str):
-    """List dependencies for a workshop.
+def get_workshop_dependencies_service(workshop_id: str, direction: str, *, project_id: int):
+    """List dependencies for a workshop, scoped to the caller's project.
 
     Args:
         workshop_id: Workshop ID.
         direction: all, out, or in.
+        project_id: Caller's project — must own the workshop.
 
     Returns:
-        Dependency payload or error response.
+        Dependency payload or 404 error response.
     """
-    ws = db.session.get(ExploreWorkshop, workshop_id)
+    ws = get_scoped_or_none(ExploreWorkshop, workshop_id, project_id=project_id)
     if not ws:
         return api_error(E.NOT_FOUND, "Workshop not found")
 
@@ -607,17 +661,21 @@ def get_workshop_dependencies_service(workshop_id: str, direction: str):
     return result
 
 
-def create_workshop_dependency_service(workshop_id: str, data: dict):
-    """Create a dependency between workshops.
+def create_workshop_dependency_service(workshop_id: str, data: dict, *, project_id: int):
+    """Create a dependency between workshops, scoped to the caller's project.
+
+    Both source and target workshops must belong to the caller's project.
+    This prevents cross-project dependency graph manipulation.
 
     Args:
         workshop_id: Source workshop ID.
         data: Request payload.
+        project_id: Caller's project — both workshops must be owned by this project.
 
     Returns:
         Created dependency payload and status, or error response.
     """
-    ws = db.session.get(ExploreWorkshop, workshop_id)
+    ws = get_scoped_or_none(ExploreWorkshop, workshop_id, project_id=project_id)
     if not ws:
         return api_error(E.NOT_FOUND, "Workshop not found")
 
@@ -627,7 +685,7 @@ def create_workshop_dependency_service(workshop_id: str, data: dict):
     if depends_on_id == workshop_id:
         return api_error(E.VALIDATION_CONSTRAINT, "Cannot depend on self")
 
-    target = db.session.get(ExploreWorkshop, depends_on_id)
+    target = get_scoped_or_none(ExploreWorkshop, depends_on_id, project_id=project_id)
     if not target:
         return api_error(E.NOT_FOUND, "Target workshop not found")
 
@@ -652,16 +710,24 @@ def create_workshop_dependency_service(workshop_id: str, data: dict):
     return dep.to_dict(), 201
 
 
-def resolve_workshop_dependency_service(dep_id: str):
-    """Resolve workshop dependency.
+def resolve_workshop_dependency_service(dep_id: str, *, project_id: int):
+    """Resolve workshop dependency, scoped to the caller's project.
+
+    Scope chain: WorkshopDependency → ExploreWorkshop.project_id (1 JOIN).
 
     Args:
         dep_id: Dependency ID.
+        project_id: Caller's project — verified via dependency → workshop join.
 
     Returns:
-        Updated dependency payload or error response.
+        Updated dependency payload or 404 error response.
     """
-    dep = db.session.get(WorkshopDependency, dep_id)
+    stmt = (
+        select(WorkshopDependency)
+        .join(ExploreWorkshop, ExploreWorkshop.id == WorkshopDependency.workshop_id)
+        .where(WorkshopDependency.id == dep_id, ExploreWorkshop.project_id == project_id)
+    )
+    dep = db.session.execute(stmt).scalar_one_or_none()
     if not dep:
         return api_error(E.NOT_FOUND, "Dependency not found")
     if dep.status == "resolved":
@@ -735,31 +801,33 @@ def list_attachments_service(filters: dict):
     return {"items": [a.to_dict() for a in atts], "total": len(atts)}
 
 
-def get_attachment_service(att_id: str):
-    """Get attachment by id.
+def get_attachment_service(att_id: str, *, project_id: int):
+    """Get attachment by id, scoped to the caller's project.
 
     Args:
         att_id: Attachment ID.
+        project_id: Caller's project — must match att.project_id.
 
     Returns:
-        Attachment payload or error response.
+        Attachment payload or 404 error response.
     """
-    att = db.session.get(Attachment, att_id)
+    att = get_scoped_or_none(Attachment, att_id, project_id=project_id)
     if not att:
         return api_error(E.NOT_FOUND, "Attachment not found")
     return att.to_dict()
 
 
-def delete_attachment_service(att_id: str):
-    """Delete attachment by id.
+def delete_attachment_service(att_id: str, *, project_id: int):
+    """Delete attachment by id, scoped to the caller's project.
 
     Args:
         att_id: Attachment ID.
+        project_id: Caller's project — must match att.project_id.
 
     Returns:
-        Delete result or error response.
+        Delete result or 404 error response.
     """
-    att = db.session.get(Attachment, att_id)
+    att = get_scoped_or_none(Attachment, att_id, project_id=project_id)
     if not att:
         return api_error(E.NOT_FOUND, "Attachment not found")
     db.session.delete(att)
@@ -840,16 +908,17 @@ def list_scope_change_requests_service(filters: dict):
     return {"items": [s.to_dict() for s in scrs], "total": len(scrs)}
 
 
-def get_scope_change_request_service(scr_id: str):
-    """Get scope change request with logs.
+def get_scope_change_request_service(scr_id: str, *, project_id: int):
+    """Get scope change request with logs, scoped to the caller's project.
 
     Args:
         scr_id: SCR ID.
+        project_id: Caller's project — must match scr.project_id.
 
     Returns:
-        SCR payload or error response.
+        SCR payload or 404 error response.
     """
-    scr = db.session.get(ScopeChangeRequest, scr_id)
+    scr = get_scoped_or_none(ScopeChangeRequest, scr_id, project_id=project_id)
     if not scr:
         return api_error(E.NOT_FOUND, "Scope change request not found")
     result = scr.to_dict()
@@ -857,17 +926,18 @@ def get_scope_change_request_service(scr_id: str):
     return result
 
 
-def transition_scope_change_request_service(scr_id: str, data: dict):
-    """Apply status transition to scope change request.
+def transition_scope_change_request_service(scr_id: str, data: dict, *, project_id: int):
+    """Apply status transition to scope change request, scoped to the caller's project.
 
     Args:
         scr_id: SCR ID.
         data: Request payload.
+        project_id: Caller's project — must match scr.project_id.
 
     Returns:
-        Transition payload or error response.
+        Transition payload or 404 error response.
     """
-    scr = db.session.get(ScopeChangeRequest, scr_id)
+    scr = get_scoped_or_none(ScopeChangeRequest, scr_id, project_id=project_id)
     if not scr:
         return api_error(E.NOT_FOUND, "Scope change request not found")
 
@@ -909,17 +979,18 @@ def transition_scope_change_request_service(scr_id: str, data: dict):
     }
 
 
-def implement_scope_change_request_service(scr_id: str, data: dict):
-    """Implement approved scope change request.
+def implement_scope_change_request_service(scr_id: str, data: dict, *, project_id: int):
+    """Implement approved scope change request, scoped to the caller's project.
 
     Args:
         scr_id: SCR ID.
         data: Request payload.
+        project_id: Caller's project — must match scr.project_id.
 
     Returns:
-        Implementation payload or error response.
+        Implementation payload or 404 error response.
     """
-    scr = db.session.get(ScopeChangeRequest, scr_id)
+    scr = get_scoped_or_none(ScopeChangeRequest, scr_id, project_id=project_id)
     if not scr:
         return api_error(E.NOT_FOUND, "Scope change request not found")
     if scr.status != "approved":

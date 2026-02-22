@@ -48,7 +48,11 @@ def create_cross_module_flag(step_id):
     if not description:
         return api_error(E.VALIDATION_REQUIRED, "description is required")
 
-    result = explore_service.create_cross_module_flag_service(step_id, data)
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+
+    result = explore_service.create_cross_module_flag_service(step_id, data, project_id=project_id)
     if not isinstance(result, tuple):
         return result
     payload, status_code = result
@@ -64,7 +68,12 @@ def update_cross_module_flag(flag_id):
         new_status = data["status"]
         if new_status not in ("open", "discussed", "resolved"):
             return api_error(E.VALIDATION_INVALID, "Invalid status")
-    result = explore_service.update_cross_module_flag_service(flag_id, data)
+
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+
+    result = explore_service.update_cross_module_flag_service(flag_id, data, project_id=project_id)
     if isinstance(result, tuple):
         return result
     return jsonify(result)
@@ -84,7 +93,11 @@ def update_process_step(step_id):
         if new_fit not in ("fit", "gap", "partial_fit", None):
             return api_error(E.VALIDATION_INVALID, "Invalid fit_decision")
 
-    result = explore_service.update_process_step_service(step_id, data)
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+
+    result = explore_service.update_process_step_service(step_id, data, project_id=project_id)
     if isinstance(result, tuple):
         return result
     return jsonify(result)
@@ -104,7 +117,11 @@ def create_decision(step_id):
     if not text or not decided_by:
         return api_error(E.VALIDATION_REQUIRED, "text and decided_by are required")
 
-    result = explore_service.create_decision_service(step_id, data)
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+
+    result = explore_service.create_decision_service(step_id, data, project_id=project_id)
     if not isinstance(result, tuple):
         return result
     payload, status_code = result
@@ -119,7 +136,11 @@ def create_open_item(step_id):
     if not title:
         return api_error(E.VALIDATION_REQUIRED, "title is required")
 
-    result = explore_service.create_step_open_item_service(step_id, data)
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+
+    result = explore_service.create_step_open_item_service(step_id, data, project_id=project_id)
     if not isinstance(result, tuple):
         return result
     payload, status_code = result
@@ -134,7 +155,11 @@ def create_requirement(step_id):
     if not title:
         return api_error(E.VALIDATION_REQUIRED, "title is required")
 
-    result = explore_service.create_step_requirement_service(step_id, data)
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+
+    result = explore_service.create_step_requirement_service(step_id, data, project_id=project_id)
     if not isinstance(result, tuple):
         return result
     payload, status_code = result
@@ -149,21 +174,31 @@ def create_requirement(step_id):
 @explore_bp.route("/workshops/<ws_id>/fit-decisions", methods=["GET"])
 def list_fit_decisions(ws_id):
     """List process steps with their fit decisions for a workshop."""
-    result = explore_service.list_fit_decisions_service(ws_id)
+    project_id = request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    result = explore_service.list_fit_decisions_service(ws_id, project_id=project_id)
+    if isinstance(result, tuple):
+        return result
     return jsonify(result)
 
 
 @explore_bp.route("/workshops/<ws_id>/fit-decisions", methods=["POST"])
 def set_fit_decision_bulk(ws_id):
     """Set fit_decision on a process step within a workshop.
-    Body: { step_id, fit_decision, notes? }
+    Body: { step_id, fit_decision, notes?, project_id }
     """
     data = request.get_json(silent=True) or {}
     step_id = data.get("step_id")
     fit = data.get("fit_decision")
     if not step_id or not fit:
         return api_error(E.VALIDATION_REQUIRED, "step_id and fit_decision required")
-    result = explore_service.set_fit_decision_bulk_service(ws_id, data)
+
+    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    if not project_id:
+        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+
+    result = explore_service.set_fit_decision_bulk_service(ws_id, data, project_id=project_id)
     if isinstance(result, tuple):
         return result
     return jsonify(result)
