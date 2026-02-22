@@ -1,8 +1,8 @@
 # Sprint Planı — Bağımlılık Sıralı Master Liste
 
-**Hazırlayan:** Reviewer Agent  
-**Tarih:** 2026-02-22  
-**Kaynak:** FDD Audit (AUDIT-PLATFORM-FUNCTIONAL-2026-02-22.md) + Reviewer Audit Notları  
+**Hazırlayan:** Reviewer Agent
+**Tarih:** 2026-02-22
+**Kaynak:** FDD Audit (AUDIT-PLATFORM-FUNCTIONAL-2026-02-22.md) + Reviewer Audit Notları
 **Pipeline:** Tüm item'lar FDD belgelerine referans verir
 
 ---
@@ -96,9 +96,9 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | S1-05, S2-01, S2-02, S2-03, S2-04, S5-04 |
 
 **Yapılacaklar:**
-- [ ] Tech lead oturumu: Option A (ExploreRequirement canonical) vs Option B (bridge pattern)
-- [ ] ADR belgesi imzalanacak
-- [ ] Karar S1-05'e başlamadan önce alınacak
+- [x] Tech lead oturumu: Option A (ExploreRequirement canonical) vs Option B (bridge pattern)
+- [x] ADR belgesi imzalanacak — `docs/plans/ADR-001-requirement-consolidation.md`
+- [x] Karar S1-05'e başlamadan önce alınacak
 
 ---
 
