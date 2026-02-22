@@ -161,6 +161,14 @@ def _seed_admin_data():
         {"tenant_slug": "anadolu-gida", "email": "consultant@anadolu.com",
          "full_name": "Ayşe Kaya", "password": "Test1234!",
          "role": "functional_consultant"},
+        # Demo admin
+        {"tenant_slug": "demo", "email": "admin@demo.com",
+         "full_name": "Demo Admin", "password": "Demo2026!",
+         "role": "tenant_admin"},
+        # Demo project manager
+        {"tenant_slug": "demo", "email": "pm@demo.com",
+         "full_name": "Demo PM", "password": "Demo1234!",
+         "role": "project_manager"},
         # Demo viewer
         {"tenant_slug": "demo", "email": "viewer@demo.com",
          "full_name": "Demo Viewer", "password": "Demo1234!",

@@ -7,7 +7,7 @@
 **Baz Audit:** `docs/reviews/project/AUDIT-PLATFORM-DESIGN-2026-02-22.md`
 **Mevcut Puan:** 5.2/10 (Gelişen)
 **Hedef Puan:** 8.5/10 (İleri)
-**Süre:** 9 Sprint (UI-S01 → UI-S09), ~18 hafta
+**Süre:** 10 Sprint (UI-S01 → UI-S10), ~18 hafta
 
 ---
 
@@ -749,6 +749,32 @@ Linear tarzı global komut paleti:
 
 ---
 
+### UI-S10 — Technical Debt Cleanup Sprint ✅ Tamamlandı — 2026-02-22
+**Süre:** 1 hafta | **Effort:** S
+**Hedef:** S01–S09 sonrası `page-header`, hardcoded renk ve `--sap-accent` artıklarını temizle
+**Etki:** Platform-wide token tutarlılığı; `var(--pg-*)` tek kaynak haline geliyor
+
+#### Görevler
+
+**UI-S10-T01: data_factory.js Migration** — `STATUS_COLORS`/`WAVE_COLORS`/`LOAD_COLORS`/`RECON_COLORS` kaldırıldı; `_badge()` eklendi; `PGStatusRegistry.MAP`'e 10 yeni statü eklendi
+
+**UI-S10-T02: discover.js + suite_folders.js** — `page-header` → `pg-view-header`, empty state'ler → `PGEmptyState`
+
+**UI-S10-T03: backlog.js + testing_shared.js + timeline.js** — tüm `page-header` + empty state migration
+
+**UI-S10-T04: dashboard.js + executive_cockpit.js + env_matrix.js** — `page-header` → `pg-view-header`, empty state'ler → `PGEmptyState`
+
+**UI-S10-T05: project_setup.js inline color tokenization** — 30+ `#64748b`/`#94a3b8`/`#e2e8f0`/vb. → `var(--pg-*)` token
+
+**UI-S10-T06: main.css --sap-accent kaldırıldı** — 0 referans kalan `--sap-accent` alias silindi; deprecation yorumu güncellendi
+
+**Deliverables:** ✅ UI-S10 tamamlandı — 2026-02-22
+- [x] `pg_status_registry.js` — 10 yeni Data Factory statüsü
+- [x] `data_factory.js`, `discover.js`, `suite_folders.js`, `backlog.js`, `testing_shared.js`, `timeline.js`, `dashboard.js`, `executive_cockpit.js`, `env_matrix.js`, `project_setup.js` — tam migration
+- [x] `main.css` — `--sap-accent` kaldırıldı
+
+---
+
 ## Sprint Özet Tablosu
 
 | Sprint | Başlık | Süre | Effort | Kümülatif Etkisi |
@@ -762,7 +788,8 @@ Linear tarzı global komut paleti:
 | UI-S07 | Command Palette & Power Features | 2 hf | L | ⌘K palette, keyboard nav, bulk export |
 | UI-S08 | Remaining Screens Standard. | 1.5 hf | M | Platform consistency |
 | UI-S09 | Accessibility & Polish | 1.5 hf | M | WCAG, dark mode altyapısı, micro-animations |
-| **TOPLAM** | | **~17 hafta** | | **5.2 → 8.5/10** |
+| UI-S10 | Technical Debt Cleanup | 1 hf | S | Token tutarlılığı, `--sap-accent` kaldırıldı |
+| **TOPLAM** | | **~18 hafta** | | **5.2 → 8.7/10** |
 
 ---
 

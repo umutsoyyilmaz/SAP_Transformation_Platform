@@ -86,8 +86,9 @@ const TimelineView = (() => {
     // ------------------------------------------------------------------
     function renderSkeleton(container) {
         container.innerHTML = `
-            <div class="page-header">
-                <h2 style="margin:0">Program Timeline</h2>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'Program Timeline' }])}
+                <h2 class="pg-view-title">Program Timeline</h2>
             </div>
             <div class="skeleton" style="height:48px;margin-bottom:12px;border-radius:8px"></div>
             <div class="skeleton" style="height:320px;border-radius:8px"></div>
@@ -98,34 +99,14 @@ const TimelineView = (() => {
     // Error state
     // ------------------------------------------------------------------
     function renderError(container, msg) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state__icon">⚠️</div>
-                <div class="empty-state__title">Timeline unavailable</div>
-                <div class="empty-state__description">${escHtml(msg)}</div>
-                <button class="btn btn-secondary" onclick="TimelineView.render(document.getElementById('mainContent'))">
-                    Retry
-                </button>
-            </div>
-        `;
+        container.innerHTML = PGEmptyState.html({ icon: 'warning', title: 'Timeline unavailable', description: escHtml(msg), action: { label: 'Retry', onclick: "TimelineView.render(document.getElementById('mainContent'))" } });
     }
 
     // ------------------------------------------------------------------
     // No-program guard
     // ------------------------------------------------------------------
     function renderNoProgram(container) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state__icon">📅</div>
-                <div class="empty-state__title">No program selected</div>
-                <div class="empty-state__description">
-                    Select a program from the Programs list to view its timeline.
-                </div>
-                <button class="btn btn-primary" onclick="App.navigate('programs')">
-                    Go to Programs
-                </button>
-            </div>
-        `;
+        container.innerHTML = PGEmptyState.html({ icon: 'programs', title: 'No program selected', description: 'Select a program from the Programs list to view its timeline.', action: { label: 'Go to Programs', onclick: "App.navigate('programs')" } });
     }
 
     // ------------------------------------------------------------------

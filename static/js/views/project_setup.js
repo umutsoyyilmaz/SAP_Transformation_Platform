@@ -118,7 +118,7 @@ const ProjectSetupView = (() => {
 
             renderHierarchyContent();
         } catch (err) {
-            c.innerHTML = `<div class="empty-state"><p>⚠️ ${esc(err.message || 'Load failed')}</p></div>`;
+            c.innerHTML = PGEmptyState.html({ icon: 'warning', title: 'Load failed', description: esc(err.message || '') });
         }
     }
 
@@ -179,7 +179,7 @@ const ProjectSetupView = (() => {
             ],
             actionsHtml: `
                 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                    <div style="display:flex;border:1px solid #e2e8f0;border-radius:var(--exp-radius-md);overflow:hidden">
+                    <div style="display:flex;border:1px solid var(--pg-color-border);border-radius:var(--exp-radius-md);overflow:hidden">
                         <button class="view-toggle-btn${_viewMode === 'tree' ? ' active' : ''}" onclick="ProjectSetupView.setViewMode('tree')">🌳 Tree</button>
                         <button class="view-toggle-btn${_viewMode === 'table' ? ' active' : ''}" onclick="ProjectSetupView.setViewMode('table')">📊 Table</button>
                     </div>
@@ -202,9 +202,9 @@ const ProjectSetupView = (() => {
         return `
             <div class="card" style="padding:0;overflow:hidden">
                 <div style="padding:8px 0">
-                    ${nodes || '<div style="padding:16px;color:var(--sap-text-secondary)">No results found.</div>'}
+                    ${nodes || '<div style="padding:16px;color:var(--pg-color-text-secondary)">No results found.</div>'}
                 </div>
-                <div style="padding:12px;border-top:1px solid #f1f5f9">
+                <div style="padding:12px;border-top:1px solid var(--pg-color-border)">
                     ${ExpUI.actionButton({ label: '➕ Add L1 Area', variant: 'secondary', size: 'sm', onclick: 'ProjectSetupView.openCreateDialog(1, null)' })}
                 </div>
             </div>`;
@@ -241,7 +241,7 @@ const ProjectSetupView = (() => {
                         <span style="font-size:11px;font-weight:700;color:${levelColor}">L${lvl}</span>
                     </span>
 
-                    <code style="font-family:var(--exp-font-mono);font-size:11px;color:#64748b;min-width:80px;margin-right:8px">${esc(node.code || '')}</code>
+                    <code style="font-family:var(--exp-font-mono);font-size:11px;color:var(--pg-color-text-secondary);min-width:80px;margin-right:8px">${esc(node.code || '')}</code>
 
                     <span style="flex:1;font-weight:${lvl <= 2 ? 600 : 400};font-size:14px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
                         onclick="ProjectSetupView.openEditDialog('${node.id}',${lvl})" title="${esc(node.name || '')}">${esc(node.name || '')}</span>
@@ -249,10 +249,10 @@ const ProjectSetupView = (() => {
                     ${scopeBadge}
 
                     ${node.process_area_code
-                        ? `<span style="font-size:11px;font-weight:600;color:#94a3b8;min-width:28px;text-align:center">${esc(node.process_area_code)}</span>`
+                        ? `<span style="font-size:11px;font-weight:600;color:var(--pg-color-text-tertiary);min-width:28px;text-align:center">${esc(node.process_area_code)}</span>`
                         : ''}
 
-                    ${node.wave ? `<span style="font-size:10px;color:#94a3b8;margin-left:4px">W${node.wave}</span>` : ''}
+                    ${node.wave ? `<span style="font-size:10px;color:var(--pg-color-text-tertiary);margin-left:4px">W${node.wave}</span>` : ''}
 
                     <span class="setup-node__actions" style="margin-left:8px">
                         ${lvl < 4 ? `<button class="btn-icon" title="Add L${lvl + 1}" onclick="event.stopPropagation();ProjectSetupView.openCreateDialog(${lvl + 1},'${node.id}')">+</button>` : ''}
@@ -286,7 +286,7 @@ const ProjectSetupView = (() => {
                         ${flat.map(node => renderTableRow(node)).join('')}
                     </tbody>
                     <tfoot>
-                        <tr id="inlineAddRow" style="background:#f8fafc">
+                        <tr id="inlineAddRow" style="background:var(--pg-color-bg)">
                             <td>
                                 <select id="addLevel" class="inline-input" style="width:100%">
                                     <option value="1">L1</option>
@@ -342,14 +342,14 @@ const ProjectSetupView = (() => {
             </td>
             <td><code style="font-family:var(--exp-font-mono);font-size:11px">${esc(node.code || '')}</code></td>
             <td style="font-weight:${lvl <= 2 ? 600 : 400}">${esc(node.name || '')}</td>
-            <td style="font-size:11px;color:#64748b">${esc(node.process_area_code || '—')}</td>
+            <td style="font-size:11px;color:var(--pg-color-text-secondary)">${esc(node.process_area_code || '—')}</td>
             <td>${ExpUI.pill({
                 label: (node.scope_status || 'pending').replace(/_/g, ' '),
                 variant: node.scope_status === 'in_scope' ? 'success' : node.scope_status === 'out_of_scope' ? 'danger' : 'warning',
                 size: 'sm',
             })}</td>
-            <td style="font-size:12px;color:#64748b">${node.wave ? 'W' + node.wave : '—'}</td>
-            <td style="font-size:11px;color:#94a3b8">${parentNode ? esc(parentNode.code || '') : '—'}</td>
+            <td style="font-size:12px;color:var(--pg-color-text-secondary)">${node.wave ? 'W' + node.wave : '—'}</td>
+            <td style="font-size:11px;color:var(--pg-color-text-tertiary)">${parentNode ? esc(parentNode.code || '') : '—'}</td>
             <td style="text-align:right" onclick="event.stopPropagation()">
                 <button class="btn-icon" onclick="ProjectSetupView.openEditDialog('${node.id}',${lvl})">✏️</button>
                 <button class="btn-icon btn-icon--danger" onclick="ProjectSetupView.confirmDelete('${node.id}','${esc(node.name || '')}')">🗑️</button>
@@ -362,17 +362,17 @@ const ProjectSetupView = (() => {
             <div style="padding:60px 20px;text-align:center;max-width:800px;margin:0 auto">
                 <div style="font-size:56px;margin-bottom:12px">🏗️</div>
                 <h2 style="margin-bottom:8px;font-size:22px">No Process Hierarchy Defined</h2>
-                <p style="color:#64748b;margin-bottom:32px;font-size:14px">
+                <p style="color:var(--pg-color-text-secondary);margin-bottom:32px;font-size:14px">
                     Build your L1 → L4 process structure to start your SAP project
                 </p>
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;text-align:left">
                     <div class="card" style="padding:24px;cursor:pointer;border:2px solid transparent;transition:all 0.2s"
                         onclick="ProjectSetupView.openTemplateImport()"
-                        onmouseenter="this.style.borderColor='var(--sap-blue)';this.style.boxShadow='var(--exp-shadow-md)'"
+                        onmouseenter="this.style.borderColor='var(--pg-color-primary)';this.style.boxShadow='var(--exp-shadow-md)'"
                         onmouseleave="this.style.borderColor='transparent';this.style.boxShadow=''">
                         <div style="font-size:32px;margin-bottom:12px">📚</div>
                         <div style="font-weight:700;margin-bottom:6px">Import SAP Template</div>
-                        <div style="font-size:13px;color:#64748b;line-height:1.5">
+                        <div style="font-size:13px;color:var(--pg-color-text-secondary);line-height:1.5">
                             Pre-built L1→L4 hierarchy from SAP Best Practice catalog.
                             Select areas to import.
                         </div>
@@ -386,7 +386,7 @@ const ProjectSetupView = (() => {
                         <div style="position:absolute;top:12px;right:12px">${ExpUI.pill({ label: 'Coming Soon', variant: 'pending', size: 'sm' })}</div>
                         <div style="font-size:32px;margin-bottom:12px">🤖</div>
                         <div style="font-weight:700;margin-bottom:6px">AI-Suggested Hierarchy</div>
-                        <div style="font-size:13px;color:#64748b;line-height:1.5">
+                        <div style="font-size:13px;color:var(--pg-color-text-secondary);line-height:1.5">
                             AI generates a customized hierarchy based on your industry,
                             SAP modules, and company profile.
                         </div>
@@ -399,7 +399,7 @@ const ProjectSetupView = (() => {
                         onmouseleave="this.style.borderColor='transparent';this.style.boxShadow=''">
                         <div style="font-size:32px;margin-bottom:12px">✍️</div>
                         <div style="font-weight:700;margin-bottom:6px">Start from Scratch</div>
-                        <div style="font-size:13px;color:#64748b;line-height:1.5">
+                        <div style="font-size:13px;color:var(--pg-color-text-secondary);line-height:1.5">
                             Grid entry or paste from Excel. Add multiple levels at once.
                         </div>
                         <div style="margin-top:12px">${ExpUI.pill({ label: 'Flexible', variant: 'draft', size: 'sm' })}</div>
@@ -425,11 +425,11 @@ const ProjectSetupView = (() => {
 
         const html = `<div class="modal-content" style="max-width:820px;padding:24px;max-height:85vh;overflow-y:auto">
             <h2 style="margin-bottom:4px">✍️ Start from Scratch</h2>
-            <p style="color:#64748b;font-size:13px;margin-bottom:16px">
+            <p style="color:var(--pg-color-text-secondary);font-size:13px;margin-bottom:16px">
                 Add process levels manually — one at a time or bulk entry
             </p>
 
-            <div style="display:flex;gap:0;margin-bottom:16px;border:1px solid #e2e8f0;border-radius:var(--exp-radius-md);overflow:hidden;width:fit-content">
+            <div style="display:flex;gap:0;margin-bottom:16px;border:1px solid var(--pg-color-border);border-radius:var(--exp-radius-md);overflow:hidden;width:fit-content">
                 <button class="view-toggle-btn${_bulkMode === 'grid' ? ' active' : ''}" onclick="ProjectSetupView._setBulkMode('grid')">📊 Grid Entry</button>
                 <button class="view-toggle-btn${_bulkMode === 'paste' ? ' active' : ''}" onclick="ProjectSetupView._setBulkMode('paste')">📋 Paste from Excel</button>
             </div>
@@ -438,8 +438,8 @@ const ProjectSetupView = (() => {
                 ${_bulkMode === 'grid' ? renderGridMode() : renderPasteMode()}
             </div>
 
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid #e2e8f0">
-                <div id="bulkStatus" style="font-size:12px;color:#94a3b8">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--pg-color-border)">
+                <div id="bulkStatus" style="font-size:12px;color:var(--pg-color-text-tertiary)">
                     ${_bulkMode === 'grid'
                         ? `Filled: <strong>${filledCount}</strong> / ${_gridRows.length} rows`
                         : `Parsed: <strong>${parsedCount}</strong> rows`}
@@ -522,7 +522,7 @@ const ProjectSetupView = (() => {
     function renderPasteMode() {
         return `
             <div style="margin-bottom:12px">
-                <div style="font-size:12px;color:#64748b;margin-bottom:8px;font-family:var(--exp-font-mono)">
+                <div style="font-size:12px;color:var(--pg-color-text-secondary);margin-bottom:8px;font-family:var(--exp-font-mono)">
                     Format: <strong>Level</strong> ⇥ <strong>Code</strong> ⇥ <strong>Name</strong> ⇥ <strong>Module</strong> ⇥ <strong>Parent Code</strong>
                 </div>
                 <textarea id="pasteArea" rows="10" class="form-input"
@@ -533,7 +533,7 @@ const ProjectSetupView = (() => {
 
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
                 ${ExpUI.actionButton({ label: '📥 Download Template (.tsv)', variant: 'ghost', size: 'sm', onclick: 'ProjectSetupView._downloadTemplate()' })}
-                <span style="font-size:11px;color:#94a3b8">— or copy this format from your own Excel</span>
+                <span style="font-size:11px;color:var(--pg-color-text-tertiary)">— or copy this format from your own Excel</span>
             </div>
 
             <div id="bulkPastePreview">
@@ -554,10 +554,10 @@ const ProjectSetupView = (() => {
             .join(' · ');
 
         return `
-            <div class="card" style="padding:12px 16px;background:#f8fafc">
+            <div class="card" style="padding:12px 16px;background:var(--pg-color-bg)">
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
                     <span style="color:var(--exp-fit);font-weight:600">✅ ${validRows.length} rows parsed</span>
-                    <span style="font-size:12px;color:#64748b">${summary}</span>
+                    <span style="font-size:12px;color:var(--pg-color-text-secondary)">${summary}</span>
                 </div>
 
                 <table class="data-table" style="font-size:12px">
@@ -566,13 +566,13 @@ const ProjectSetupView = (() => {
                     </thead>
                     <tbody>
                         ${_parsedRows.map(r => `
-                            <tr${r.error ? ' style="background:#fef2f2"' : ''}>
+                            <tr${r.error ? ' style="background:var(--pg-color-red-50)"' : ''}>
                                 <td><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:18px;border-radius:3px;background:var(--exp-l${r.level}-bg);color:var(--exp-l${r.level});font-size:10px;font-weight:700">L${r.level}</span></td>
                                 <td><code style="font-size:11px">${esc(r.code || 'Auto')}</code></td>
                                 <td>${esc(r.name || '')}</td>
-                                <td style="color:#64748b">${esc(r.module || '—')}</td>
-                                <td style="color:#94a3b8;font-size:11px">${esc(r.parent_code || '—')}</td>
-                                <td>${r.error ? `<span style="color:#dc2626;font-size:11px">⚠ ${esc(r.error)}</span>` : '<span style="color:var(--exp-fit)">✓</span>'}</td>
+                                <td style="color:var(--pg-color-text-secondary)">${esc(r.module || '—')}</td>
+                                <td style="color:var(--pg-color-text-tertiary);font-size:11px">${esc(r.parent_code || '—')}</td>
+                                <td>${r.error ? `<span style="color:var(--pg-color-negative);font-size:11px">⚠ ${esc(r.error)}</span>` : '<span style="color:var(--exp-fit)">✓</span>'}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -867,8 +867,8 @@ const ProjectSetupView = (() => {
         App.openModal(`
             <h2>Delete Process Level</h2>
             <p style="margin:8px 0">This will delete <strong>${esc(name || preview.target.name)}</strong> and its descendants.</p>
-            <div class="card" style="background:#fff5f5;border:1px solid #f6caca">
-                <p style="color:#b91c1c"><strong>Warning:</strong> This action cannot be undone.</p>
+            <div class="card" style="background:var(--pg-color-red-50);border:1px solid var(--pg-color-negative)">
+                <p style="color:var(--pg-color-negative)"><strong>Warning:</strong> This action cannot be undone.</p>
                 <p>Will delete ${preview.descendants_count} descendants (${Object.keys(byLevel).map(k => `${k}: ${byLevel[k]}`).join(', ')}).</p>
             </div>
             <div style="text-align:right;margin-top:16px">
@@ -899,12 +899,12 @@ const ProjectSetupView = (() => {
             </div>
             <div style="display:flex;flex-direction:column;gap:10px">
                 ${TEMPLATE_L1.map((t, idx) => `
-                    <label style="display:flex;gap:10px;align-items:flex-start;border:1px solid #e5e7eb;border-radius:8px;padding:8px">
+                    <label style="display:flex;gap:10px;align-items:flex-start;border:1px solid var(--pg-color-border);border-radius:8px;padding:8px">
                         <input type="checkbox" class="tplCheck" data-code="${t.code}" data-index="${idx}">
                         <div>
-                            <div><strong>${t.name}</strong> <span style="color:#6b7280">(${t.code} · ${t.module})</span></div>
-                            <div style="color:#6b7280;font-size:12px">${t.desc}</div>
-                            <div style="color:#6b7280;font-size:12px">${t.stats}</div>
+                            <div><strong>${t.name}</strong> <span style="color:var(--pg-color-text-secondary)">(${t.code} · ${t.module})</span></div>
+                            <div style="color:var(--pg-color-text-secondary);font-size:12px">${t.desc}</div>
+                            <div style="color:var(--pg-color-text-secondary);font-size:12px">${t.stats}</div>
                         </div>
                     </label>
                 `).join('')}
@@ -956,13 +956,13 @@ const ProjectSetupView = (() => {
         const html = `<div class="modal-content" style="max-width:480px;padding:32px;text-align:center">
             <div style="font-size:48px;margin-bottom:16px">🤖</div>
             <h2 style="margin-bottom:8px">AI-Suggested Hierarchy</h2>
-            <p style="color:#64748b;margin-bottom:20px;line-height:1.6">
+            <p style="color:var(--pg-color-text-secondary);margin-bottom:20px;line-height:1.6">
                 AI will analyze your project's industry, SAP modules, and company profile to generate
                 a customized L1→L2→L3 process hierarchy.
             </p>
-            <div style="background:#f8fafc;border-radius:var(--exp-radius-lg);padding:16px;margin-bottom:20px;text-align:left">
+            <div style="background:var(--pg-color-bg);border-radius:var(--exp-radius-lg);padding:16px;margin-bottom:20px;text-align:left">
                 <div style="font-size:13px;font-weight:600;margin-bottom:8px">What AI will do:</div>
-                <div style="font-size:13px;color:#64748b;line-height:1.8">
+                <div style="font-size:13px;color:var(--pg-color-text-secondary);line-height:1.8">
                     ✦ Analyze your industry & company profile<br>
                     ✦ Map relevant SAP modules to processes<br>
                     ✦ Generate L1→L2→L3 hierarchy with SAP Best Practice codes<br>
@@ -1105,12 +1105,7 @@ const ProjectSetupView = (() => {
     function renderPlaceholder() {
         const c = document.getElementById('setupContent');
         const label = _currentTab.charAt(0).toUpperCase() + _currentTab.slice(1);
-        c.innerHTML = `
-            <div class="empty-state" style="margin-top:20px">
-                <div class="empty-state__icon">🧩</div>
-                <div class="empty-state__title">${label} — coming soon</div>
-                <p>This tab will be available in a future sprint.</p>
-            </div>`;
+        c.innerHTML = PGEmptyState.html({ icon: 'settings', title: `${label} — coming soon`, description: 'This tab will be available in a future sprint.' });
     }
 
     function flattenTree(nodes, result = []) {

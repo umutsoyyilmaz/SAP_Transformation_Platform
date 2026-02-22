@@ -19,22 +19,13 @@ const DataFactoryView = (() => {
     let _objSearch = '';
     let _objFilters = {};
 
-    const STATUS_COLORS = {
-        draft: '#a9b4be', profiled: '#0070f2', cleansed: '#e76500',
-        ready: '#30914c', migrated: '#107e3e', archived: '#556b82',
-    };
-    const WAVE_COLORS = {
-        planned: '#0070f2', in_progress: '#e76500', completed: '#30914c', cancelled: '#bb0000',
-    };
-    const LOAD_COLORS = {
-        pending: '#a9b4be', running: '#0070f2', completed: '#30914c', failed: '#bb0000', aborted: '#556b82',
-    };
-    const RECON_COLORS = {
-        pending: '#a9b4be', matched: '#30914c', variance: '#e76500', failed: '#bb0000',
-    };
     const RULE_ICONS = {
         not_null: '🔒', unique: '🔑', range: '📏', regex: '🔤', lookup: '🔍', custom: '⚙️',
     };
+
+    function _badge(status) {
+        return PGStatusRegistry.badge(status, { label: fmtStatus(status) });
+    }
 
     function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
     function fmtNum(n) { return (n ?? 0).toLocaleString('tr-TR'); }
@@ -57,29 +48,27 @@ const DataFactoryView = (() => {
         _pid = prog ? prog.id : null;
 
         if (!_pid) {
-            main.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">🗄️</div>
-                    <div class="empty-state__title">Data Factory</div>
-                    <p>Go to <a href="#" onclick="App.navigate('programs');return false">Programs</a> to select one first.</p>
-                </div>`;
+            main.innerHTML = PGEmptyState.html({ icon: 'data', title: 'Data Factory', description: 'Select a program to access the Data Factory.', action: { label: 'Go to Programs', onclick: "App.navigate('programs')" } });
             return;
         }
 
         main.innerHTML = `
-            <div class="page-header">
-                <h2>🗄️ Data Factory</h2>
-                <div class="page-header__actions">
-                    <button class="btn btn-primary" onclick="DataFactoryView.showCreateObject()">+ New Data Object</button>
-                    <button class="btn btn-secondary" onclick="DataFactoryView.showCreateWave()">+ New Wave</button>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'Data Factory' }])}
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <h2 class="pg-view-title">Data Factory</h2>
+                    <div style="display:flex;gap:8px">
+                        <button class="pg-btn pg-btn--secondary pg-btn--sm" onclick="DataFactoryView.showCreateWave()">+ New Wave</button>
+                        <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="DataFactoryView.showCreateObject()">+ New Data Object</button>
+                    </div>
                 </div>
             </div>
             <div class="tabs" id="dfTabs" style="margin-bottom:1rem">
-                <button class="tab active" data-tab="objects" onclick="DataFactoryView.switchTab('objects')">📦 Data Objects</button>
-                <button class="tab" data-tab="waves" onclick="DataFactoryView.switchTab('waves')">🌊 Migration Waves</button>
-                <button class="tab" data-tab="cleansing" onclick="DataFactoryView.switchTab('cleansing')">🧹 Cleansing</button>
-                <button class="tab" data-tab="loads" onclick="DataFactoryView.switchTab('loads')">🔄 Load Cycles</button>
-                <button class="tab" data-tab="dashboard" onclick="DataFactoryView.switchTab('dashboard')">📊 Dashboard</button>
+                <button class="tab active" data-tab="objects" onclick="DataFactoryView.switchTab('objects')">Data Objects</button>
+                <button class="tab" data-tab="waves" onclick="DataFactoryView.switchTab('waves')">Migration Waves</button>
+                <button class="tab" data-tab="cleansing" onclick="DataFactoryView.switchTab('cleansing')">Cleansing</button>
+                <button class="tab" data-tab="loads" onclick="DataFactoryView.switchTab('loads')">Load Cycles</button>
+                <button class="tab" data-tab="dashboard" onclick="DataFactoryView.switchTab('dashboard')">Dashboard</button>
             </div>
             <div id="dfContent"><div style="text-align:center;padding:40px"><div class="spinner"></div></div></div>
         `;
@@ -125,13 +114,7 @@ const DataFactoryView = (() => {
     function renderObjects() {
         const c = document.getElementById('dfContent');
         if (!_objects.length) {
-            c.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">📦</div>
-                    <div class="empty-state__title">No data objects yet</div>
-                    <p>Create your first data object to start the migration lifecycle.</p>
-                    <button class="btn btn-primary" onclick="DataFactoryView.showCreateObject()">+ New Data Object</button>
-                </div>`;
+            c.innerHTML = PGEmptyState.html({ icon: 'data', title: 'No data objects yet', description: 'Create your first data object to start the migration lifecycle.', action: { label: '+ New Data Object', onclick: 'DataFactoryView.showCreateObject()' } });
             return;
         }
 
@@ -144,21 +127,21 @@ const DataFactoryView = (() => {
 
         c.innerHTML = `
             <div class="kpi-row" style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap">
-                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--sap-card-bg, #fff);border-radius:8px;padding:16px;box-shadow:var(--sap-shadow-sm)">
-                    <div style="font-size:13px;color:var(--sap-text-secondary)">Data Objects</div>
-                    <div style="font-size:28px;font-weight:700;color:var(--sap-accent)">${total}</div>
+                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--pg-color-surface);border-radius:var(--pg-radius-md);padding:var(--pg-sp-4);box-shadow:var(--pg-shadow-sm)">
+                    <div style="font-size:13px;color:var(--pg-color-text-secondary)">Data Objects</div>
+                    <div style="font-size:28px;font-weight:700;color:var(--pg-color-primary)">${total}</div>
                 </div>
-                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--sap-card-bg, #fff);border-radius:8px;padding:16px;box-shadow:var(--sap-shadow-sm)">
-                    <div style="font-size:13px;color:var(--sap-text-secondary)">Avg Quality</div>
-                    <div style="font-size:28px;font-weight:700;color:${parseFloat(avgScore) >= 85 ? '#30914c' : '#e76500'}">${avgScore}%</div>
+                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--pg-color-surface);border-radius:var(--pg-radius-md);padding:var(--pg-sp-4);box-shadow:var(--pg-shadow-sm)">
+                    <div style="font-size:13px;color:var(--pg-color-text-secondary)">Avg Quality</div>
+                    <div style="font-size:28px;font-weight:700;color:${parseFloat(avgScore) >= 85 ? 'var(--pg-color-positive)' : 'var(--pg-color-warning)'}">${avgScore}%</div>
                 </div>
-                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--sap-card-bg, #fff);border-radius:8px;padding:16px;box-shadow:var(--sap-shadow-sm)">
-                    <div style="font-size:13px;color:var(--sap-text-secondary)">Total Records</div>
-                    <div style="font-size:28px;font-weight:700;color:var(--sap-accent)">${fmtNum(totalRecs)}</div>
+                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--pg-color-surface);border-radius:var(--pg-radius-md);padding:var(--pg-sp-4);box-shadow:var(--pg-shadow-sm)">
+                    <div style="font-size:13px;color:var(--pg-color-text-secondary)">Total Records</div>
+                    <div style="font-size:28px;font-weight:700;color:var(--pg-color-primary)">${fmtNum(totalRecs)}</div>
                 </div>
-                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--sap-card-bg, #fff);border-radius:8px;padding:16px;box-shadow:var(--sap-shadow-sm)">
-                    <div style="font-size:13px;color:var(--sap-text-secondary)">Ready / Migrated</div>
-                    <div style="font-size:28px;font-weight:700;color:#30914c">${readyCount} / ${total}</div>
+                <div class="kpi-card" style="flex:1;min-width:160px;background:var(--pg-color-surface);border-radius:var(--pg-radius-md);padding:var(--pg-sp-4);box-shadow:var(--pg-shadow-sm)">
+                    <div style="font-size:13px;color:var(--pg-color-text-secondary)">Ready / Migrated</div>
+                    <div style="font-size:28px;font-weight:700;color:var(--pg-color-positive)">${readyCount} / ${total}</div>
                 </div>
             </div>
 
@@ -181,7 +164,7 @@ const DataFactoryView = (() => {
             filters: [
                 {
                     id: 'status', label: 'Status', type: 'multi', color: '#10b981',
-                    options: Object.keys(STATUS_COLORS).map(s => ({ value: s, label: fmtStatus(s) })),
+                    options: ['draft','profiled','cleansed','ready','migrated','archived'].map(s => ({ value: s, label: fmtStatus(s) })),
                     selected: _objFilters.status || [],
                 },
                 {
@@ -195,7 +178,7 @@ const DataFactoryView = (() => {
                     selected: _objFilters.owner || [],
                 },
             ],
-            actionsHtml: `<span style="font-size:12px;color:#94a3b8" id="objItemCount"></span>`,
+            actionsHtml: `<span style="font-size:12px;color:var(--pg-color-text-tertiary)" id="objItemCount"></span>`,
         });
     }
 
@@ -270,7 +253,7 @@ const DataFactoryView = (() => {
                     ${filtered.map(o => `
                         <tr onclick="DataFactoryView.showObjectDetail(${o.id})" style="cursor:pointer" class="clickable-row">
                             <td><strong>${esc(o.name)}</strong>
-                                ${o.description ? `<br><small style="color:var(--sap-text-secondary)">${esc(o.description)}</small>` : ''}
+                                ${o.description ? `<br><small style="color:var(--pg-color-text-secondary)">${esc(o.description)}</small>` : ''}
                             </td>
                             <td><span class="badge badge-info">${esc(o.source_system)}</span></td>
                             <td><code>${esc(o.target_table || '—')}</code></td>
@@ -280,7 +263,7 @@ const DataFactoryView = (() => {
                                     ? `<span class="badge ${qualityClass(o.quality_score)}">${o.quality_score.toFixed(1)}%</span>`
                                     : '<span class="badge badge-secondary">—</span>'}
                             </td>
-                            <td><span class="badge" style="background:${STATUS_COLORS[o.status] || '#a9b4be'}22;color:${STATUS_COLORS[o.status] || '#a9b4be'}">${fmtStatus(o.status)}</span></td>
+                            <td>${_badge(o.status)}</td>
                             <td>${esc(o.owner || '—')}</td>
                             <td>
                                 <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();DataFactoryView.deleteObject(${o.id})">🗑️</button>
@@ -298,25 +281,20 @@ const DataFactoryView = (() => {
     function renderWaves() {
         const c = document.getElementById('dfContent');
         if (!_waves.length) {
-            c.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">🌊</div>
-                    <div class="empty-state__title">No migration waves defined</div>
-                    <button class="btn btn-primary" onclick="DataFactoryView.showCreateWave()">+ New Wave</button>
-                </div>`;
+            c.innerHTML = PGEmptyState.html({ icon: 'data', title: 'No migration waves defined', action: { label: '+ New Wave', onclick: 'DataFactoryView.showCreateWave()' } });
             return;
         }
 
         c.innerHTML = `
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">
                 ${_waves.map(w => `
-                    <div class="card" onclick="DataFactoryView.showWaveDetail(${w.id})" style="border-left:4px solid ${WAVE_COLORS[w.status] || '#a9b4be'};cursor:pointer">
+                    <div class="card" onclick="DataFactoryView.showWaveDetail(${w.id})" style="border-left:4px solid ${PGStatusRegistry.colors(w.status).fg};cursor:pointer">
                         <div style="padding:16px">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                                <h3 style="margin:0;font-size:15px">🌊 ${esc(w.name)}</h3>
-                                <span class="badge" style="background:${WAVE_COLORS[w.status]}22;color:${WAVE_COLORS[w.status]}">${fmtStatus(w.status)}</span>
+                                <h3 style="margin:0;font-size:15px">${esc(w.name)}</h3>
+                                ${_badge(w.status)}
                             </div>
-                            ${w.description ? `<p style="color:var(--sap-text-secondary);font-size:13px;margin:4px 0 12px">${esc(w.description)}</p>` : ''}
+                            ${w.description ? `<p style="color:var(--pg-color-text-secondary);font-size:13px;margin:4px 0 12px">${esc(w.description)}</p>` : ''}
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
                                 <div><strong>Planned:</strong> ${fmtDate(w.planned_start)} → ${fmtDate(w.planned_end)}</div>
                                 <div><strong>Actual:</strong> ${fmtDate(w.actual_start)} → ${fmtDate(w.actual_end)}</div>
@@ -487,7 +465,7 @@ const DataFactoryView = (() => {
                                 <td>${esc(c.load_type)}</td>
                                 <td style="text-align:right;color:#30914c">${c.records_loaded != null ? fmtNum(c.records_loaded) : '—'}</td>
                                 <td style="text-align:right;color:#bb0000">${c.records_failed != null ? fmtNum(c.records_failed) : '—'}</td>
-                                <td><span class="badge" style="background:${LOAD_COLORS[c.status] || '#a9b4be'}22;color:${LOAD_COLORS[c.status] || '#a9b4be'}">${fmtStatus(c.status)}</span></td>
+                                <td>${_badge(c.status)}</td>
                                 <td>${fmtDate(c.started_at)}</td>
                                 <td>${fmtDate(c.completed_at)}</td>
                                 <td>
@@ -531,14 +509,14 @@ const DataFactoryView = (() => {
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
                     <!-- Quality Score Card -->
                     <div class="card" style="padding:20px">
-                        <h3 style="margin:0 0 4px">📊 Data Quality Overview</h3>
-                        <p style="color:var(--sap-text-secondary);font-size:13px;margin:0 0 16px">${qs.total_objects} objects</p>
+                        <h3 style="margin:0 0 4px">Data Quality Overview</h3>
+                        <p style="color:var(--pg-color-text-secondary);font-size:13px;margin:0 0 16px">${qs.total_objects} objects</p>
                         <div style="display:flex;align-items:center;gap:20px;margin-bottom:16px">
                             <div style="text-align:center">
-                                <div style="font-size:48px;font-weight:700;color:${qs.avg_quality_score >= 85 ? '#30914c' : qs.avg_quality_score >= 70 ? '#e76500' : '#bb0000'}">
+                                <div style="font-size:48px;font-weight:700;color:${qs.avg_quality_score >= 85 ? 'var(--pg-color-positive)' : qs.avg_quality_score >= 70 ? 'var(--pg-color-warning)' : 'var(--pg-color-negative)'}">
                                     ${qs.avg_quality_score ? qs.avg_quality_score.toFixed(1) : '0'}%
                                 </div>
-                                <div style="font-size:12px;color:var(--sap-text-secondary)">Avg Quality Score</div>
+                                <div style="font-size:12px;color:var(--pg-color-text-secondary)">Avg Quality Score</div>
                             </div>
                             <div style="flex:1">
                                 <canvas id="dfQualityChart" height="180"></canvas>
@@ -548,24 +526,24 @@ const DataFactoryView = (() => {
 
                     <!-- Status Breakdown Card -->
                     <div class="card" style="padding:20px">
-                        <h3 style="margin:0 0 16px">📦 Object Status Breakdown</h3>
+                        <h3 style="margin:0 0 16px">Object Status Breakdown</h3>
                         <div style="display:flex;flex-wrap:wrap;gap:12px">
                             ${Object.entries(byStatus).map(([s, cnt]) => `
-                                <div style="text-align:center;min-width:80px;padding:12px;border-radius:8px;background:${STATUS_COLORS[s] || '#a9b4be'}11">
-                                    <div style="font-size:24px;font-weight:700;color:${STATUS_COLORS[s] || '#a9b4be'}">${cnt}</div>
-                                    <div style="font-size:12px;color:var(--sap-text-secondary)">${fmtStatus(s)}</div>
+                                <div style="text-align:center;min-width:80px;padding:12px;border-radius:8px;background:${PGStatusRegistry.colors(s).bg}">
+                                    <div style="font-size:24px;font-weight:700;color:${PGStatusRegistry.colors(s).fg}">${cnt}</div>
+                                    <div style="font-size:12px;color:var(--pg-color-text-secondary)">${fmtStatus(s)}</div>
                                 </div>
                             `).join('')}
                         </div>
-                        ${Object.keys(byStatus).length === 0 ? '<p style="color:var(--sap-text-secondary)">No data yet.</p>' : ''}
+                        ${Object.keys(byStatus).length === 0 ? '<p style="color:var(--pg-color-text-secondary)">No data yet.</p>' : ''}
                     </div>
                 </div>
 
                 <!-- Environment Comparison -->
                 <div class="card" style="padding:20px">
-                    <h3 style="margin:0 0 16px">🔄 Environment Load Comparison</h3>
+                    <h3 style="margin:0 0 16px">Environment Load Comparison</h3>
                     ${Object.keys(envs).length === 0
-                        ? '<p style="color:var(--sap-text-secondary)">No load cycles yet.</p>'
+                        ? '<p style="color:var(--pg-color-text-secondary)">No load cycles yet.</p>'
                         : `
                         <table class="data-table" style="font-size:13px">
                             <thead>
@@ -592,8 +570,8 @@ const DataFactoryView = (() => {
                                         <td style="text-align:right;color:#bb0000">${fmtNum(d.records_failed)}</td>
                                         <td>
                                             <div style="display:flex;align-items:center;gap:8px">
-                                                <div style="flex:1;height:8px;background:#e8e8e8;border-radius:4px;overflow:hidden">
-                                                    <div style="width:${rate}%;height:100%;background:${parseInt(rate) >= 80 ? '#30914c' : '#e76500'};border-radius:4px"></div>
+                                                <div style="flex:1;height:8px;background:var(--pg-color-border);border-radius:4px;overflow:hidden">
+                                                    <div style="width:${rate}%;height:100%;background:${parseInt(rate) >= 80 ? 'var(--pg-color-positive)' : 'var(--pg-color-warning)'};border-radius:4px"></div>
                                                 </div>
                                                 <span style="font-weight:600;font-size:12px">${rate}%</span>
                                             </div>
@@ -789,11 +767,11 @@ const DataFactoryView = (() => {
                     <div><strong>Target:</strong> <code>${esc(obj.target_table || '—')}</code></div>
                     <div><strong>Records:</strong> ${fmtNum(obj.record_count)}</div>
                     <div><strong>Quality:</strong> ${obj.quality_score != null ? obj.quality_score.toFixed(1) + '%' : '—'}</div>
-                    <div><strong>Status:</strong> <span class="badge" style="background:${STATUS_COLORS[obj.status]}22;color:${STATUS_COLORS[obj.status]}">${fmtStatus(obj.status)}</span></div>
+                    <div><strong>Status:</strong> ${_badge(obj.status)}</div>
                     <div><strong>Owner:</strong> ${esc(obj.owner || '—')}</div>
                 </div>
-                ${obj.description ? `<p style="color:var(--sap-text-secondary);font-size:13px">${esc(obj.description)}</p>` : ''}
-                <div style="display:flex;gap:12px;font-size:13px;color:var(--sap-text-secondary)">
+                ${obj.description ? `<p style="color:var(--pg-color-text-secondary);font-size:13px">${esc(obj.description)}</p>` : ''}
+                <div style="display:flex;gap:12px;font-size:13px;color:var(--pg-color-text-secondary)">
                     <span>🧹 ${obj.task_count ?? 0} cleansing tasks</span>
                     <span>🔄 ${obj.load_count ?? 0} load cycles</span>
                 </div>
@@ -825,13 +803,13 @@ const DataFactoryView = (() => {
             _modal(`🌊 ${esc(wave.name)}`, `
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;margin-bottom:16px">
                     <div><strong>Wave #:</strong> ${wave.wave_number}</div>
-                    <div><strong>Status:</strong> <span class="badge" style="background:${WAVE_COLORS[wave.status]}22;color:${WAVE_COLORS[wave.status]}">${fmtStatus(wave.status)}</span></div>
+                    <div><strong>Status:</strong> ${_badge(wave.status)}</div>
                     <div><strong>Planned:</strong> ${fmtDate(wave.planned_start)} → ${fmtDate(wave.planned_end)}</div>
                     <div><strong>Actual:</strong> ${fmtDate(wave.actual_start)} → ${fmtDate(wave.actual_end)}</div>
                     <div><strong>Load Cycles:</strong> ${wave.load_cycle_count ?? 0}</div>
                     <div><strong>Records Loaded:</strong> ${fmtNum(wave.total_loaded)}</div>
                 </div>
-                ${wave.description ? `<p style="color:var(--sap-text-secondary);font-size:13px">${esc(wave.description)}</p>` : ''}
+                ${wave.description ? `<p style="color:var(--pg-color-text-secondary);font-size:13px">${esc(wave.description)}</p>` : ''}
                 <div style="margin-top:16px">
                     <label style="font-weight:600">Update Status:</label>
                     <div style="display:flex;gap:8px;margin-top:8px">
@@ -1031,8 +1009,8 @@ const DataFactoryView = (() => {
             const recons = await API.get(`/data-factory/loads/${lcId}/recons`);
             const list = Array.isArray(recons) ? recons : (recons.items || []);
 
-            _modal(`🔎 Reconciliations — Load #${lcId}`, list.length === 0
-                ? `<p style="color:var(--sap-text-secondary)">No reconciliation records.</p>
+            _modal(`Reconciliations — Load #${lcId}`, list.length === 0
+                ? `<p style="color:var(--pg-color-text-secondary)">No reconciliation records.</p>
                    <button class="btn btn-primary btn-sm" onclick="DataFactoryView.createRecon(${lcId})">+ Add Reconciliation</button>`
                 : `
                 <table class="data-table" style="font-size:13px">
@@ -1047,7 +1025,7 @@ const DataFactoryView = (() => {
                                 <td style="text-align:right">${fmtNum(r.match_count)}</td>
                                 <td style="text-align:right;color:${r.variance === 0 ? '#30914c' : '#bb0000'}">${fmtNum(r.variance)}</td>
                                 <td>${fmtPct(r.variance_pct)}</td>
-                                <td><span class="badge" style="background:${RECON_COLORS[r.status]}22;color:${RECON_COLORS[r.status]}">${fmtStatus(r.status)}</span></td>
+                                <td>${_badge(r.status)}</td>
                                 <td style="font-size:12px">${esc(r.notes || '')}</td>
                                 <td><button class="btn btn-sm btn-secondary" onclick="DataFactoryView.calcRecon(${r.id}, ${lcId})">Calc</button></td>
                             </tr>

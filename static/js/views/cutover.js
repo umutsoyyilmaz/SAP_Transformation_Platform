@@ -1081,6 +1081,234 @@ const CutoverView = (() => {
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    //  WAR ROOM — Cutover Clock (FDD-I03 / S5-03)
+    // ═══════════════════════════════════════════════════════════════════
+
+    let _warRoomTimer = null;
+
+    /** Start 30-second polling for the war-room live status panel. */
+    function startWarRoomPolling(planId, programId, tenantId) {
+        stopWarRoomPolling();
+        _refreshWarRoom(planId, programId, tenantId);
+        _warRoomTimer = setInterval(
+            () => _refreshWarRoom(planId, programId, tenantId),
+            30_000
+        );
+    }
+
+    /** Stop the 30-second war-room polling timer. */
+    function stopWarRoomPolling() {
+        if (_warRoomTimer) {
+            clearInterval(_warRoomTimer);
+            _warRoomTimer = null;
+        }
+    }
+
+    /** Fetch live-status snapshot and re-render the war-room panel. */
+    async function _refreshWarRoom(planId, programId, tenantId) {
+        try {
+            const data = await API.get(
+                `/cutover/plans/${planId}/live-status?program_id=${programId}&tenant_id=${tenantId}`
+            );
+            _renderWarRoomPanel(data);
+        } catch (e) {
+            console.error('War room refresh failed:', e.message);
+        }
+    }
+
+    /** Render the war-room HTML panel from a live-status snapshot. */
+    function _renderWarRoomPanel(snap) {
+        const container = document.getElementById('warRoomPanel');
+        if (!container) return;
+
+        const clock = snap.clock || {};
+        const tasks = snap.tasks || {};
+        const gng   = snap.go_no_go || {};
+        const ws    = snap.workstreams || {};
+
+        const elapsed   = clock.elapsed_minutes != null ? `${clock.elapsed_minutes} min` : '--';
+        const delay     = clock.total_delay_minutes > 0
+            ? `<span class="badge bg-danger ms-2">+${clock.total_delay_minutes} min behind</span>`
+            : `<span class="badge bg-success ms-2">On schedule</span>`;
+
+        // Workstream rows
+        let wsRows = '';
+        for (const [name, counts] of Object.entries(ws)) {
+            const pct = counts.total > 0 ? Math.round((counts.completed / counts.total) * 100) : 0;
+            wsRows += `
+            <tr>
+                <td class="text-capitalize">${name}</td>
+                <td>${counts.total}</td>
+                <td>${counts.completed}</td>
+                <td>${counts.in_progress}</td>
+                <td>
+                  <div class="progress" style="height:8px">
+                    <div class="progress-bar" style="width:${pct}%"></div>
+                  </div>
+                  <small>${pct}%</small>
+                </td>
+            </tr>`;
+        }
+
+        // Critical path tasks
+        let cpRows = '';
+        for (const t of (snap.critical_path_tasks || [])) {
+            const statusBadge = t.status === 'completed'
+                ? 'bg-success'
+                : t.status === 'in_progress'
+                    ? 'bg-primary'
+                    : 'bg-secondary';
+            const delayBadge = t.delay_minutes > 0
+                ? `<span class="badge bg-danger ms-1">+${t.delay_minutes}m</span>`
+                : '';
+            const issueBadge = t.issue_note
+                ? `<span class="badge bg-warning text-dark ms-1" title="${t.issue_note}">⚠️ Issue</span>`
+                : '';
+            cpRows += `
+            <tr>
+                <td><code>${t.code || '#'}</code></td>
+                <td>${t.title}</td>
+                <td><span class="badge ${statusBadge}">${t.status}</span>${delayBadge}${issueBadge}</td>
+            </tr>`;
+        }
+
+        container.innerHTML = `
+        <div class="card mb-3 border-${clock.is_behind_schedule ? 'danger' : 'success'}">
+          <div class="card-header d-flex align-items-center gap-2">
+            <strong>⏱ Cutover Clock</strong>
+            ${delay}
+            <span class="ms-auto text-muted small">Auto-refresh: 30s</span>
+          </div>
+          <div class="card-body row text-center">
+            <div class="col-3">
+              <div class="fs-4 fw-bold">${elapsed}</div>
+              <small class="text-muted">Elapsed</small>
+            </div>
+            <div class="col-3">
+              <div class="fs-4 fw-bold">${tasks.completed || 0}/${tasks.total || 0}</div>
+              <small class="text-muted">Tasks Done</small>
+            </div>
+            <div class="col-3">
+              <div class="fs-4 fw-bold text-warning">${tasks.in_progress || 0}</div>
+              <small class="text-muted">In Progress</small>
+            </div>
+            <div class="col-3">
+              <div class="fs-4 fw-bold text-danger">${tasks.blocked || 0}</div>
+              <small class="text-muted">Blocked</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <h6>Go / No-Go</h6>
+            <span class="badge bg-success me-1">✅ ${gng.passed || 0} Passed</span>
+            <span class="badge bg-warning text-dark me-1">⏳ ${gng.pending || 0} Pending</span>
+            <span class="badge bg-danger me-1">❌ ${gng.failed || 0} Failed</span>
+          </div>
+          <div class="col-md-6 text-end">
+            <button class="btn btn-sm btn-outline-secondary"
+              onclick="CutoverView.refreshCriticalPath()">
+              Recalculate Critical Path
+            </button>
+          </div>
+        </div>
+
+        <h6>Workstreams</h6>
+        <table class="table table-sm table-bordered">
+          <thead><tr><th>Workstream</th><th>Total</th><th>Done</th><th>Active</th><th>Progress</th></tr></thead>
+          <tbody>${wsRows || '<tr><td colspan="5" class="text-muted text-center">No workstreams assigned</td></tr>'}</tbody>
+        </table>
+
+        <h6>Critical Path Tasks</h6>
+        <table class="table table-sm table-bordered">
+          <thead><tr><th>Code</th><th>Title</th><th>Status</th></tr></thead>
+          <tbody>${cpRows || '<tr><td colspan="3" class="text-muted text-center">No critical path calculated yet</td></tr>'}</tbody>
+        </table>`;
+    }
+
+    /** Start the cutover clock (transition plan to executing). */
+    async function startCutoverClock() {
+        if (!_activePlan) { App.toast('No plan selected', 'warning'); return; }
+        if (!confirm('Start the cutover clock? This transitions the plan to EXECUTING status.')) return;
+        const programId = _activePlan.program_id;
+        const tenantId  = App.currentTenantId?.() || _activePlan.tenant_id;
+        try {
+            await API.post(`/cutover/plans/${_activePlan.id}/start-clock`, {
+                program_id: programId,
+                tenant_id: tenantId,
+            });
+            App.toast('Cutover clock started!', 'success');
+            startWarRoomPolling(_activePlan.id, programId, tenantId);
+            renderTab();
+        } catch (e) { App.toast(e.message, 'error'); }
+    }
+
+    /** Recalculate critical path for the active plan. */
+    async function refreshCriticalPath() {
+        if (!_activePlan) return;
+        const programId = _activePlan.program_id;
+        const tenantId  = App.currentTenantId?.() || _activePlan.tenant_id;
+        try {
+            const res = await API.get(
+                `/cutover/plans/${_activePlan.id}/critical-path?program_id=${programId}&tenant_id=${tenantId}`
+            );
+            App.toast(`Critical path: ${res.count} tasks identified`, 'success');
+            _refreshWarRoom(_activePlan.id, programId, tenantId);
+        } catch (e) { App.toast(e.message, 'error'); }
+    }
+
+    /** Start a runbook task from the war-room table. */
+    async function startRunbookTask(taskId) {
+        if (!_activePlan) return;
+        const programId = _activePlan.program_id;
+        const tenantId  = App.currentTenantId?.() || _activePlan.tenant_id;
+        try {
+            await API.post(`/cutover/tasks/${taskId}/start-task`, {
+                program_id: programId,
+                tenant_id: tenantId,
+            });
+            App.toast('Task started', 'success');
+            renderTab();
+        } catch (e) { App.toast(e.message, 'error'); }
+    }
+
+    /** Complete a runbook task from the war-room table. */
+    async function completeRunbookTask(taskId) {
+        if (!_activePlan) return;
+        const programId = _activePlan.program_id;
+        const tenantId  = App.currentTenantId?.() || _activePlan.tenant_id;
+        const notes = prompt('Optional completion notes:') || '';
+        try {
+            await API.post(`/cutover/tasks/${taskId}/complete-task`, {
+                program_id: programId,
+                tenant_id: tenantId,
+                notes: notes || undefined,
+            });
+            App.toast('Task completed', 'success');
+            renderTab();
+        } catch (e) { App.toast(e.message, 'error'); }
+    }
+
+    /** Flag an issue on a runbook task from the war-room table. */
+    async function flagTaskIssue(taskId) {
+        if (!_activePlan) return;
+        const note = prompt('Describe the issue:');
+        if (!note || !note.trim()) return;
+        const programId = _activePlan.program_id;
+        const tenantId  = App.currentTenantId?.() || _activePlan.tenant_id;
+        try {
+            await API.post(`/cutover/tasks/${taskId}/flag-issue`, {
+                program_id: programId,
+                tenant_id: tenantId,
+                note: note.trim(),
+            });
+            App.toast('Issue flagged', 'warning');
+            renderTab();
+        } catch (e) { App.toast(e.message, 'error'); }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     //  PUBLIC API
     // ═══════════════════════════════════════════════════════════════════
     return {
@@ -1108,5 +1336,10 @@ const CutoverView = (() => {
         transitionIncident, deleteIncident,
         // SLA
         seedSLA, deleteSLA,
+        // War Room (FDD-I03)
+        startCutoverClock,
+        startWarRoomPolling, stopWarRoomPolling,
+        refreshCriticalPath,
+        startRunbookTask, completeRunbookTask, flagTaskIssue,
     };
 })();

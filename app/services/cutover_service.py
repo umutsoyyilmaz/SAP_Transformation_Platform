@@ -1254,3 +1254,582 @@ def seed_sla_targets_for_plan(plan_id: int) -> list[HypercareSLA]:
     db.session.commit()
     logger.info("Seeded %d SLA targets for plan_id=%s", len(items), plan_id)
     return items
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# War Room — Cutover Clock (FDD-I03 / S5-03)
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+def start_cutover_clock(tenant_id: int, program_id: int, plan_id: int) -> dict:
+    """Start the cutover clock — transition plan to 'executing' and record actual_start.
+
+    Business rule: Only plans in 'ready' status can be started. Starting the clock
+    marks the official cutover execution window. All elapsed time is measured from
+    actual_start. A plan can only be started once (actual_start is set idempotency-safe).
+
+    Args:
+        tenant_id: Tenant scope for isolation.
+        program_id: Program owning the plan — enforces tenant/program isolation.
+        plan_id: Target CutoverPlan PK.
+
+    Returns:
+        Serialized CutoverPlan dict with updated status and actual_start.
+
+    Raises:
+        ValueError: If plan is not in 'ready' status, or does not belong to tenant/program.
+    """
+    plan = db.session.execute(
+        select(CutoverPlan).where(
+            CutoverPlan.id == plan_id,
+            CutoverPlan.program_id == program_id,
+            CutoverPlan.tenant_id == tenant_id,
+        )
+    ).scalar_one_or_none()
+    if not plan:
+        raise ValueError(f"CutoverPlan {plan_id} not found for tenant {tenant_id}")
+    if plan.status != "ready":
+        raise ValueError(
+            f"Cannot start clock: plan is '{plan.status}', expected 'ready'. "
+            "Approve and rehearse the plan before starting execution."
+        )
+    now = datetime.now(timezone.utc)
+    plan.status = "executing"
+    plan.actual_start = now
+    db.session.commit()
+    logger.info(
+        "Cutover clock started",
+        extra={
+            "tenant_id": tenant_id,
+            "plan_id": plan_id,
+            "actual_start": now.isoformat(),
+        },
+    )
+    return plan.to_dict()
+
+
+def start_task(tenant_id: int, program_id: int, task_id: int, executor_id: int | None = None) -> dict:
+    """Mark a runbook task as in_progress and record actual_start.
+
+    Business rule: A task can only be started if all predecessor tasks are
+    completed (enforce finish_to_start constraint). Only tasks in 'not_started'
+    status can be started.
+
+    Args:
+        tenant_id: Tenant scope for isolation.
+        program_id: Program owning the task (for scope verification).
+        task_id: Target RunbookTask PK.
+        executor_id: Optional TeamMember PK of the person starting the task.
+
+    Returns:
+        Serialized RunbookTask dict.
+
+    Raises:
+        ValueError: If task cannot be started (wrong status or blocked predecessors).
+    """
+    task = _get_task_for_tenant(tenant_id, program_id, task_id)
+    if task.status != "not_started":
+        raise ValueError(
+            f"Cannot start task {task_id}: status is '{task.status}', expected 'not_started'."
+        )
+    # Check all predecessors are completed
+    predecessors = list(task.predecessors)
+    for dep in predecessors:
+        pred_task = db.session.get(RunbookTask, dep.predecessor_id)
+        if pred_task and pred_task.status not in {"completed", "skipped"}:
+            raise ValueError(
+                f"Task {task_id} is blocked by predecessor task {dep.predecessor_id} "
+                f"(status: {pred_task.status}). Complete predecessors first."
+            )
+    now = datetime.now(timezone.utc)
+    task.status = "in_progress"
+    task.actual_start = now
+    if executor_id:
+        task.responsible_id = executor_id
+    db.session.commit()
+    logger.info(
+        "RunbookTask started",
+        extra={"tenant_id": tenant_id, "task_id": task_id, "executor_id": executor_id},
+    )
+    return task.to_dict()
+
+
+def complete_task(
+    tenant_id: int,
+    program_id: int,
+    task_id: int,
+    executor_id: int | None = None,
+    notes: str | None = None,
+) -> dict:
+    """Complete a runbook task, calculate delay_minutes, unlock dependents.
+
+    Business rule: delay_minutes = (actual_end - planned_end) in minutes.
+    A negative value means the task finished early. None if planned_end is not set.
+    If the task is on the critical path and delay > 0, a warning is logged.
+    Completing a task unlocks (marks not_started) any successors whose other
+    predecessors are also done — this is handled by the UI/service polling, not
+    auto-transitioned here, because a task might have multiple predecessors.
+
+    Args:
+        tenant_id: Tenant scope for isolation.
+        program_id: Program owning the task.
+        task_id: Target RunbookTask PK.
+        executor_id: Optional TeamMember PK who completed the task.
+        notes: Optional completion notes.
+
+    Returns:
+        Serialized RunbookTask dict with delay_minutes populated.
+
+    Raises:
+        ValueError: If task is not in 'in_progress' status.
+    """
+    task = _get_task_for_tenant(tenant_id, program_id, task_id)
+    if task.status != "in_progress":
+        raise ValueError(
+            f"Cannot complete task {task_id}: status is '{task.status}', expected 'in_progress'."
+        )
+    now = datetime.now(timezone.utc)
+    task.status = "completed"
+    task.actual_end = now
+    task.executed_at = now
+    if executor_id:
+        task.responsible_id = executor_id
+        member = db.session.get(__import__("app.models.program", fromlist=["TeamMember"]).TeamMember, executor_id)
+        if member:
+            task.executed_by = member.name
+
+    # Calculate actual_duration_min
+    if task.actual_start:
+        delta = now - task.actual_start
+        task.actual_duration_min = int(delta.total_seconds() / 60)
+
+    # Calculate delay_minutes vs planned_end
+    if task.planned_end:
+        # Ensure both datetimes are timezone-aware for comparison
+        planned_end = task.planned_end
+        if planned_end.tzinfo is None:
+            from datetime import timezone as _tz
+            planned_end = planned_end.replace(tzinfo=_tz.utc)
+        delay = int((now - planned_end).total_seconds() / 60)
+        task.delay_minutes = delay
+        if task.is_critical_path and delay > 0:
+            logger.warning(
+                "Critical path task delayed",
+                extra={
+                    "tenant_id": tenant_id,
+                    "task_id": task_id,
+                    "delay_minutes": delay,
+                    "task_title": task.title[:100],
+                },
+            )
+
+    if notes:
+        task.notes = (task.notes or "") + f"\n[{now.isoformat()}] {notes}"
+
+    db.session.commit()
+    logger.info(
+        "RunbookTask completed",
+        extra={
+            "tenant_id": tenant_id,
+            "task_id": task_id,
+            "delay_minutes": task.delay_minutes,
+        },
+    )
+    return task.to_dict()
+
+
+def flag_issue(tenant_id: int, program_id: int, task_id: int, note: str) -> dict:
+    """Flag a war-room issue on a runbook task.
+
+    Business rule: issue_note is appended with timestamp — not overwritten —
+    so multiple issues can be recorded. An empty note string raises ValidationError
+    to prevent accidental blank flags.
+
+    Args:
+        tenant_id: Tenant scope for isolation.
+        program_id: Program owning the task.
+        task_id: Target RunbookTask PK.
+        note: Non-empty string describing the issue.
+
+    Returns:
+        Serialized RunbookTask dict with issue_note populated.
+
+    Raises:
+        ValueError: If note is empty or task not found.
+    """
+    if not note or not note.strip():
+        raise ValueError("Issue note cannot be empty.")
+    task = _get_task_for_tenant(tenant_id, program_id, task_id)
+    now = datetime.now(timezone.utc)
+    timestamp_prefix = f"[{now.strftime('%Y-%m-%d %H:%M')} UTC] "
+    if task.issue_note:
+        task.issue_note = task.issue_note + f"\n{timestamp_prefix}{note.strip()}"
+    else:
+        task.issue_note = f"{timestamp_prefix}{note.strip()}"
+    db.session.commit()
+    logger.info(
+        "RunbookTask issue flagged",
+        extra={"tenant_id": tenant_id, "task_id": task_id, "note_length": len(note)},
+    )
+    return task.to_dict()
+
+
+def get_cutover_live_status(tenant_id: int, program_id: int, plan_id: int) -> dict:
+    """Return a war-room snapshot of the cutover plan — designed for 30s polling.
+
+    Returns a single dict suitable for the live-status dashboard containing:
+    - clock: elapsed time, planned total, ETA, behind-schedule flag
+    - go_no_go: passed / pending / failed counts
+    - tasks: total, completed, in_progress, blocked, pending counts
+    - workstreams: per-workstream task counts
+    - critical_path_tasks: list of critical-path task summaries
+
+    Args:
+        tenant_id: Tenant scope for isolation.
+        program_id: Program owning the plan.
+        plan_id: Target CutoverPlan PK.
+
+    Returns:
+        War-room snapshot dict.
+
+    Raises:
+        ValueError: If plan not found for this tenant/program.
+    """
+    plan = db.session.execute(
+        select(CutoverPlan).where(
+            CutoverPlan.id == plan_id,
+            CutoverPlan.program_id == program_id,
+            CutoverPlan.tenant_id == tenant_id,
+        )
+    ).scalar_one_or_none()
+    if not plan:
+        raise ValueError(f"CutoverPlan {plan_id} not found for tenant {tenant_id}")
+
+    now = datetime.now(timezone.utc)
+
+    # ── Clock metrics ─────────────────────────────────────────────────────
+    elapsed_minutes: int | None = None
+    estimated_completion: str | None = None
+    is_behind_schedule = False
+    total_delay_minutes = 0
+
+    if plan.actual_start:
+        actual_start = plan.actual_start
+        if actual_start.tzinfo is None:
+            actual_start = actual_start.replace(tzinfo=timezone.utc)
+        elapsed_minutes = int((now - actual_start).total_seconds() / 60)
+
+    # Sum delay_minutes of all completed critical-path tasks
+    delayed_tasks = db.session.execute(
+        select(RunbookTask).join(
+            CutoverScopeItem,
+            CutoverScopeItem.id == RunbookTask.scope_item_id,
+        ).where(
+            CutoverScopeItem.cutover_plan_id == plan_id,
+            RunbookTask.tenant_id == tenant_id,
+            RunbookTask.is_critical_path == True,  # noqa: E712
+            RunbookTask.delay_minutes > 0,
+        )
+    ).scalars().all()
+    total_delay_minutes = sum(t.delay_minutes for t in delayed_tasks if t.delay_minutes)
+    if total_delay_minutes > 0:
+        is_behind_schedule = True
+
+    # ── All tasks for this plan ───────────────────────────────────────────
+    all_tasks = db.session.execute(
+        select(RunbookTask).join(
+            CutoverScopeItem,
+            CutoverScopeItem.id == RunbookTask.scope_item_id,
+        ).where(
+            CutoverScopeItem.cutover_plan_id == plan_id,
+            RunbookTask.tenant_id == tenant_id,
+        )
+    ).scalars().all()
+
+    status_counts: dict[str, int] = {}
+    workstream_counts: dict[str, dict[str, int]] = {}
+    critical_path_tasks = []
+
+    for t in all_tasks:
+        # Status tally
+        status_counts[t.status] = status_counts.get(t.status, 0) + 1
+
+        # Workstream tally
+        ws = t.workstream or "unassigned"
+        if ws not in workstream_counts:
+            workstream_counts[ws] = {"total": 0, "completed": 0, "in_progress": 0}
+        workstream_counts[ws]["total"] += 1
+        if t.status == "completed":
+            workstream_counts[ws]["completed"] += 1
+        elif t.status == "in_progress":
+            workstream_counts[ws]["in_progress"] += 1
+
+        # Critical path summary
+        if t.is_critical_path:
+            critical_path_tasks.append({
+                "id": t.id,
+                "code": t.code,
+                "title": t.title,
+                "status": t.status,
+                "delay_minutes": t.delay_minutes,
+                "issue_note": t.issue_note,
+            })
+
+    # blocked = in not_started but has an incomplete predecessor
+    blocked_count = _count_blocked_tasks(all_tasks)
+
+    # ── Go/No-Go summary ─────────────────────────────────────────────────
+    gng_items = db.session.execute(
+        select(GoNoGoItem).where(
+            GoNoGoItem.cutover_plan_id == plan_id,
+        )
+    ).scalars().all()
+    gng_passed = sum(1 for g in gng_items if g.verdict == "go")
+    gng_failed = sum(1 for g in gng_items if g.verdict == "no_go")
+    gng_pending = sum(1 for g in gng_items if g.verdict == "pending")
+
+    return {
+        "plan_id": plan_id,
+        "plan_status": plan.status,
+        "clock": {
+            "started_at": plan.actual_start.isoformat() if plan.actual_start else None,
+            "elapsed_minutes": elapsed_minutes,
+            "planned_total_minutes": plan.planned_duration_minutes if hasattr(plan, "planned_duration_minutes") else None,
+            "estimated_completion": estimated_completion,
+            "is_behind_schedule": is_behind_schedule,
+            "total_delay_minutes": total_delay_minutes,
+        },
+        "go_no_go": {
+            "passed": gng_passed,
+            "pending": gng_pending,
+            "failed": gng_failed,
+        },
+        "tasks": {
+            "total": len(all_tasks),
+            "completed": status_counts.get("completed", 0),
+            "in_progress": status_counts.get("in_progress", 0),
+            "blocked": blocked_count,
+            "pending": status_counts.get("not_started", 0),
+            "failed": status_counts.get("failed", 0),
+        },
+        "workstreams": workstream_counts,
+        "critical_path_tasks": critical_path_tasks,
+    }
+
+
+def calculate_critical_path(tenant_id: int, program_id: int, plan_id: int) -> list[int]:
+    """Calculate critical-path task IDs for a cutover plan using DFS topological sort.
+
+    The critical path is defined as the longest chain of dependent tasks by
+    planned_duration_min. Tasks on the critical path have is_critical_path=True
+    set on them (side-effect — persisted to DB).
+
+    IMPORTANT: Cycle detection is mandatory. If a circular dependency exists
+    (e.g. Task A → B → A), this function raises ValueError to prevent infinite
+    recursion. Cycles indicate data integrity issues and must be resolved manually.
+
+    Algorithm:
+        1. Build adjacency list (successor graph) for all tasks in plan.
+        2. DFS with visited + in_stack sets (standard cycle detection).
+        3. Compute longest-path weights based on planned_duration_min.
+        4. Walk backward from the sink (max-weight node) to find the path.
+        5. Set is_critical_path=True on critical path tasks, False on others.
+        6. Commit.
+
+    Args:
+        tenant_id: Tenant scope for isolation.
+        program_id: Program owning the plan.
+        plan_id: Target CutoverPlan PK.
+
+    Returns:
+        List of RunbookTask PKs in critical-path order (from start to end).
+
+    Raises:
+        ValueError: If plan not found, or if circular dependency detected.
+    """
+    plan = db.session.execute(
+        select(CutoverPlan).where(
+            CutoverPlan.id == plan_id,
+            CutoverPlan.program_id == program_id,
+            CutoverPlan.tenant_id == tenant_id,
+        )
+    ).scalar_one_or_none()
+    if not plan:
+        raise ValueError(f"CutoverPlan {plan_id} not found for tenant {tenant_id}")
+
+    # Load all tasks for this plan
+    all_tasks = db.session.execute(
+        select(RunbookTask).join(
+            CutoverScopeItem,
+            CutoverScopeItem.id == RunbookTask.scope_item_id,
+        ).where(
+            CutoverScopeItem.cutover_plan_id == plan_id,
+            RunbookTask.tenant_id == tenant_id,
+        )
+    ).scalars().all()
+
+    if not all_tasks:
+        return []
+
+    task_ids = {t.id for t in all_tasks}
+    task_map = {t.id: t for t in all_tasks}
+
+    # Load all dependencies for these tasks
+    deps = db.session.execute(
+        select(TaskDependency).where(
+            TaskDependency.predecessor_id.in_(task_ids),
+            TaskDependency.successor_id.in_(task_ids),
+        )
+    ).scalars().all()
+
+    # Build successor adjacency list: predecessor_id → [successor_id, ...]
+    successors_of: dict[int, list[int]] = {tid: [] for tid in task_ids}
+    predecessors_of: dict[int, list[int]] = {tid: [] for tid in task_ids}
+    for dep in deps:
+        successors_of[dep.predecessor_id].append(dep.successor_id)
+        predecessors_of[dep.successor_id].append(dep.predecessor_id)
+
+    # ── Step 1: Cycle detection via DFS with in-stack tracking ───────────
+    visited: set[int] = set()
+    in_stack: set[int] = set()
+
+    def _dfs_cycle_check(node: int) -> None:
+        """DFS cycle detection — raises ValueError on cycle."""
+        visited.add(node)
+        in_stack.add(node)
+        for neighbor in successors_of.get(node, []):
+            if neighbor not in visited:
+                _dfs_cycle_check(neighbor)
+            elif neighbor in in_stack:
+                raise ValueError(
+                    f"Circular dependency detected in RunbookTask graph: "
+                    f"task {node} → task {neighbor} forms a cycle. "
+                    "Resolve the circular dependency before calculating the critical path."
+                )
+        in_stack.discard(node)
+
+    for tid in task_ids:
+        if tid not in visited:
+            _dfs_cycle_check(tid)
+
+    # ── Step 2: Compute longest path (critical path) ──────────────────────
+    # Weight of each task = planned_duration_min (or 1 if None)
+    def weight(tid: int) -> int:
+        return task_map[tid].planned_duration_min or 1
+
+    # Topological sort (Kahn's algorithm)
+    in_degree = {tid: len(predecessors_of[tid]) for tid in task_ids}
+    queue = [tid for tid in task_ids if in_degree[tid] == 0]
+    topo_order = []
+    while queue:
+        node = queue.pop(0)
+        topo_order.append(node)
+        for succ in successors_of[node]:
+            in_degree[succ] -= 1
+            if in_degree[succ] == 0:
+                queue.append(succ)
+
+    # Longest path DP
+    dist: dict[int, int] = {tid: weight(tid) for tid in task_ids}
+    prev: dict[int, int | None] = {tid: None for tid in task_ids}
+
+    for node in topo_order:
+        for succ in successors_of[node]:
+            candidate = dist[node] + weight(succ)
+            if candidate > dist[succ]:
+                dist[succ] = candidate
+                prev[succ] = node
+
+    # Find sink (no successors) with maximum distance
+    sinks = [tid for tid in task_ids if not successors_of[tid]]
+    if not sinks:
+        sinks = list(task_ids)
+
+    end_node = max(sinks, key=lambda tid: dist[tid])
+
+    # Walk backward to reconstruct path
+    critical_path: list[int] = []
+    current: int | None = end_node
+    while current is not None:
+        critical_path.append(current)
+        current = prev[current]
+    critical_path.reverse()
+
+    critical_set = set(critical_path)
+
+    # ── Step 3: Update is_critical_path flags ─────────────────────────────
+    for task in all_tasks:
+        task.is_critical_path = task.id in critical_set
+
+    db.session.commit()
+    logger.info(
+        "Critical path calculated",
+        extra={
+            "tenant_id": tenant_id,
+            "plan_id": plan_id,
+            "critical_path_task_count": len(critical_path),
+        },
+    )
+    return critical_path
+
+
+# ── Internal helpers (war room) ──────────────────────────────────────────────
+
+
+def _get_task_for_tenant(tenant_id: int, program_id: int, task_id: int) -> "RunbookTask":
+    """Fetch a RunbookTask scoped to tenant + program.
+
+    Joins RunbookTask → CutoverScopeItem → CutoverPlan → program_id check.
+    Returns the task or raises ValueError (404-safe — does not leak existence).
+
+    Args:
+        tenant_id: Tenant scope.
+        program_id: Program owning the task.
+        task_id: RunbookTask PK.
+
+    Returns:
+        RunbookTask instance.
+
+    Raises:
+        ValueError: If task not found or belongs to different tenant/program.
+    """
+    task = db.session.execute(
+        select(RunbookTask)
+        .join(CutoverScopeItem, CutoverScopeItem.id == RunbookTask.scope_item_id)
+        .join(CutoverPlan, CutoverPlan.id == CutoverScopeItem.cutover_plan_id)
+        .where(
+            RunbookTask.id == task_id,
+            RunbookTask.tenant_id == tenant_id,
+            CutoverPlan.program_id == program_id,
+        )
+    ).scalar_one_or_none()
+    if not task:
+        raise ValueError(
+            f"RunbookTask {task_id} not found for tenant {tenant_id} program {program_id}"
+        )
+    return task
+
+
+def _count_blocked_tasks(all_tasks: list["RunbookTask"]) -> int:
+    """Count tasks that are not_started but have at least one non-completed predecessor.
+
+    A task is 'blocked' if it is in not_started status AND has predecessor tasks
+    that are not in {completed, skipped} status. Tasks with zero predecessors are
+    always unblocked.
+
+    Args:
+        all_tasks: Pre-loaded list of RunbookTask instances for the plan.
+
+    Returns:
+        Count of blocked tasks.
+    """
+    completed_ids = {t.id for t in all_tasks if t.status in {"completed", "skipped"}}
+    blocked = 0
+    for task in all_tasks:
+        if task.status != "not_started":
+            continue
+        # Use already-loaded predecessors relationship (dynamic)
+        pred_ids = [d.predecessor_id for d in task.predecessors]
+        if pred_ids and not all(pid in completed_ids for pid in pred_ids):
+            blocked += 1
+    return blocked

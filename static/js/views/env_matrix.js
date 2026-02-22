@@ -17,24 +17,22 @@ const EnvMatrixView = (() => {
         const main = document.getElementById('mainContent');
         const prog = App.getActiveProgram();
         if (!prog) {
-            main.innerHTML = `
-                <div class="page-header"><h1>Environment Matrix</h1></div>
-                <div class="empty-state">
-                    <div class="empty-state__icon">🖥️</div>
-                    <div class="empty-state__title">No Program Selected</div>
-                </div>`;
+            main.innerHTML = PGEmptyState.html({ icon: 'test', title: 'No Program Selected', description: 'Select a program to view the environment matrix.' });
             return;
         }
 
         main.innerHTML = `
-            <div class="page-header">
-                <h1>🖥️ Environment Matrix</h1>
-                <div class="page-header__actions">
-                    <button class="btn btn-primary" onclick="EnvMatrixView.addEnvironment()">+ Add Environment</button>
-                    <select id="f6EnvModuleFilter" onchange="EnvMatrixView.loadMatrix()"
-                            class="form-select f6-filter-select">
-                        <option value="">All Modules</option>
-                    </select>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'Environment Matrix' }])}
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <h2 class="pg-view-title">Environment Matrix</h2>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <select id="f6EnvModuleFilter" onchange="EnvMatrixView.loadMatrix()"
+                                class="form-select f6-filter-select" style="height:32px;font-size:13px">
+                            <option value="">All Modules</option>
+                        </select>
+                        <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="EnvMatrixView.addEnvironment()">+ Add Environment</button>
+                    </div>
                 </div>
             </div>
             <div class="f6-env-tabs">
@@ -90,23 +88,12 @@ const EnvMatrixView = (() => {
     // ── Render Matrix ────────────────────────────────────────────────────
     function renderMatrix(container) {
         if (!environments.length) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">🖥️</div>
-                    <div class="empty-state__title">No Environments Defined</div>
-                    <p>Add environments to build the test matrix.</p>
-                    <button class="btn btn-primary" onclick="EnvMatrixView.addEnvironment()">+ Add Environment</button>
-                </div>`;
+            container.innerHTML = PGEmptyState.html({ icon: 'test', title: 'No Environments Defined', description: 'Add environments to build the test matrix.', action: { label: '+ Add Environment', onclick: 'EnvMatrixView.addEnvironment()' } });
             return;
         }
 
         if (!matrix.length) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">📊</div>
-                    <div class="empty-state__title">No Execution Data</div>
-                    <p>Run test executions with environment results to populate the matrix.</p>
-                </div>`;
+            container.innerHTML = PGEmptyState.html({ icon: 'reports', title: 'No Execution Data', description: 'Run test executions with environment results to populate the matrix.' });
             return;
         }
 
@@ -157,12 +144,7 @@ const EnvMatrixView = (() => {
     function renderEnvironmentsList() {
         const container = document.getElementById('f6EnvContent');
         if (!environments.length) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">🖥️</div>
-                    <div class="empty-state__title">No Environments</div>
-                    <button class="btn btn-primary" onclick="EnvMatrixView.addEnvironment()">+ Add Environment</button>
-                </div>`;
+            container.innerHTML = PGEmptyState.html({ icon: 'test', title: 'No Environments', action: { label: '+ Add Environment', onclick: 'EnvMatrixView.addEnvironment()' } });
             return;
         }
 

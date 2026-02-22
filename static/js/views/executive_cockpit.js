@@ -78,22 +78,17 @@ const ExecutiveCockpitView = (() => {
         const prog = App.getActiveProgram();
 
         if (!prog) {
-            main.innerHTML = `
-                <div class="page-header"><h1>Executive Cockpit</h1></div>
-                <div class="empty-state">
-                    <div class="empty-state__icon">📊</div>
-                    <div class="empty-state__title">No Program Selected</div>
-                    <p>Select a program to view the executive cockpit.</p>
-                    <br>
-                    <button class="btn btn-primary" onclick="App.navigate('programs')">Go to Programs</button>
-                </div>`;
+            main.innerHTML = PGEmptyState.html({ icon: 'cockpit', title: 'No Program Selected', description: 'Select a program to view the executive cockpit.', action: { label: 'Go to Programs', onclick: "App.navigate('programs')" } });
             return;
         }
 
         main.innerHTML = `
-            <div class="page-header">
-                <h1>Executive Cockpit</h1>
-                <span class="badge badge-${esc(prog.status)}">${esc(prog.name)}</span>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'Executive Cockpit' }])}
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <h2 class="pg-view-title">Executive Cockpit</h2>
+                    <span class="badge badge-${esc(prog.status)}">${esc(prog.name)}</span>
+                </div>
             </div>
             <div class="cockpit-loading">
                 <div class="spinner"></div>
@@ -110,27 +105,14 @@ const ExecutiveCockpitView = (() => {
             const explore = exploreRes.status === 'fulfilled' ? exploreRes.value : null;
 
             if (!full) {
-                main.innerHTML = `
-                    <div class="page-header"><h1>Executive Cockpit</h1></div>
-                    <div class="empty-state">
-                        <div class="empty-state__icon">⚠️</div>
-                        <div class="empty-state__title">Unable to load metrics</div>
-                        <p>Health data is not available for this program.</p>
-                    </div>`;
+                main.innerHTML = PGEmptyState.html({ icon: 'warning', title: 'Unable to load metrics', description: 'Health data is not available for this program.' });
                 return;
             }
 
             _renderCockpit(main, prog, full, explore);
 
         } catch (err) {
-            console.error('Executive Cockpit error:', err);
-            main.innerHTML = `
-                <div class="page-header"><h1>Executive Cockpit</h1></div>
-                <div class="empty-state">
-                    <div class="empty-state__icon">❌</div>
-                    <div class="empty-state__title">Error Loading Cockpit</div>
-                    <p>${esc(err.message || 'Unknown error')}</p>
-                </div>`;
+            main.innerHTML = PGEmptyState.html({ icon: 'warning', title: 'Error Loading Cockpit', description: esc(err.message || 'Unknown error') });
         }
     }
 
@@ -155,9 +137,12 @@ const ExecutiveCockpitView = (() => {
         const currentPhase = full.current_phase || 'N/A';
 
         main.innerHTML = `
-            <div class="page-header">
-                <h1>Executive Cockpit</h1>
-                <span class="badge badge-${esc(prog.status)}">${esc(prog.name)}</span>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'Executive Cockpit' }])}
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <h2 class="pg-view-title">Executive Cockpit</h2>
+                    <span class="badge badge-${esc(prog.status)}">${esc(prog.name)}</span>
+                </div>
             </div>
 
             <!-- Top KPI strip -->

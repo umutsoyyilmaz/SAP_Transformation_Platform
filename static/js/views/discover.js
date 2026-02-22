@@ -67,25 +67,23 @@ const DiscoverView = (() => {
         rootEl = container;
 
         if (!programId) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">🔍</div>
-                    <div class="empty-state__title">No program selected</div>
-                    <p>Select a program from the Programs view to access the Discover phase.</p>
-                </div>`;
+            container.innerHTML = PGEmptyState.html({ icon: 'explore', title: 'No program selected', description: 'Select a program from the Programs view to access the Discover phase.' });
             return;
         }
 
         container.innerHTML = `
-            <div class="page-header">
-                <h1>🔍 Discover Phase</h1>
-                <span class="badge badge-info" id="discoverGateBadge">Loading gate…</span>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'Discover Phase' }])}
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <h2 class="pg-view-title">Discover Phase</h2>
+                    <span class="badge badge-info" id="discoverGateBadge">Loading gate…</span>
+                </div>
             </div>
             <div id="discoverGateBanner" class="discover-gate-banner"></div>
             <div class="discover-tabs">
-                <button class="discover-tab active" data-tab="charter">📋 Project Charter</button>
-                <button class="discover-tab" data-tab="landscape">🖥️ System Landscape</button>
-                <button class="discover-tab" data-tab="scope">📊 Scope Assessment</button>
+                <button class="discover-tab active" data-tab="charter">Project Charter</button>
+                <button class="discover-tab" data-tab="landscape">System Landscape</button>
+                <button class="discover-tab" data-tab="scope">Scope Assessment</button>
             </div>
             <div id="discoverTabBody" class="discover-tab-body">
                 <div class="spinner-center"><div class="spinner"></div></div>

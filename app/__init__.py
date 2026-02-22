@@ -277,6 +277,8 @@ def create_app(config_name=None):
     from app.blueprints.reporting_bp import reporting_bp
     from app.blueprints.audit_bp import audit_bp
     from app.blueprints.cutover_bp import cutover_bp
+    from app.blueprints.transport_bp import transport_bp
+    from app.blueprints.stakeholder_bp import stakeholder_bp
     from app.blueprints.notification_bp import notification_bp
     from app.blueprints.run_sustain_bp import run_sustain_bp
     from app.blueprints.pwa_bp import pwa_bp
@@ -320,6 +322,8 @@ def create_app(config_name=None):
     app.register_blueprint(reporting_bp)
     app.register_blueprint(audit_bp)
     app.register_blueprint(cutover_bp)
+    app.register_blueprint(transport_bp)
+    app.register_blueprint(stakeholder_bp)
     app.register_blueprint(notification_bp)
     app.register_blueprint(run_sustain_bp)
     app.register_blueprint(pwa_bp)

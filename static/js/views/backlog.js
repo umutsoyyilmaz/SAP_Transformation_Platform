@@ -89,25 +89,22 @@ const BacklogView = (() => {
         const main = document.getElementById('mainContent');
 
         if (!programId) {
-            main.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">⚙️</div>
-                    <div class="empty-state__title">Backlog</div>
-                    <p>Go to <a href="#" onclick="App.navigate('programs');return false">Programs</a> to select one first.</p>
-                </div>`;
+            main.innerHTML = PGEmptyState.html({ icon: 'backlog', title: 'Backlog', description: 'Select a program to access the development backlog.', action: { label: 'Go to Programs', onclick: "App.navigate('programs')" } });
             return;
         }
 
         main.innerHTML = `
-            ${PGBreadcrumb.html([{label:'Programs',onclick:'App.navigate("programs")'},{label:'Backlog'}])}
-            <div class="page-header" style="margin-bottom:20px">
-                <div>
-                    <h2 style="margin:0">Backlog</h2>
-                    <p style="color:#64748b;margin:4px 0 0;font-size:13px">Development objects, config items, and sprint planning</p>
-                </div>
-                <div class="page-header__actions">
-                    ${ExpUI.actionButton({ label: '📈 Stats', variant: 'secondary', size: 'md', onclick: 'BacklogView.showStats()' })}
-                    ${ExpUI.actionButton({ label: '+ New Item', variant: 'primary', size: 'md', onclick: 'BacklogView.showCreateSelector()' })}
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{label:'Programs',onclick:'App.navigate("programs")'},{label:'Backlog'}])}
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div>
+                        <h2 class="pg-view-title" style="margin:0">Backlog</h2>
+                        <p style="color:var(--pg-color-text-secondary);margin:4px 0 0;font-size:13px">Development objects, config items, and sprint planning</p>
+                    </div>
+                    <div style="display:flex;gap:8px">
+                        ${ExpUI.actionButton({ label: 'Stats', variant: 'secondary', size: 'md', onclick: 'BacklogView.showStats()' })}
+                        ${ExpUI.actionButton({ label: '+ New Item', variant: 'primary', size: 'md', onclick: 'BacklogView.showCreateSelector()' })}
+                    </div>
                 </div>
             </div>
             <div class="tabs" style="margin-bottom:16px">
@@ -222,13 +219,7 @@ const BacklogView = (() => {
     function renderList() {
         const c = document.getElementById('backlogContent');
         if (items.length === 0) {
-            c.innerHTML = `
-                <div class="empty-state" style="padding:40px">
-                    <div class="empty-state__icon">⚙️</div>
-                    <div class="empty-state__title">No backlog items yet</div>
-                    <p>Create your first WRICEF item to build the development backlog.</p><br>
-                    ${ExpUI.actionButton({ label: '+ New Item', variant: 'primary', size: 'md', onclick: 'BacklogView.showCreateModal()' })}
-                </div>`;
+            c.innerHTML = PGEmptyState.html({ icon: 'backlog', title: 'No backlog items yet', description: 'Create your first WRICEF item to build the development backlog.', action: { label: '+ New Item', onclick: 'BacklogView.showCreateModal()' } });
             return;
         }
 
@@ -402,12 +393,7 @@ const BacklogView = (() => {
             <div style="margin-top:12px;display:flex;justify-content:flex-end">
                 ${ExpUI.actionButton({ label: '+ New Sprint', variant: 'primary', size: 'sm', onclick: 'BacklogView.showCreateSprintModal()' })}
             </div>
-            ${sprints.length === 0 ? `
-                <div class="empty-state" style="margin-top:20px">
-                    <div class="empty-state__icon">🏃</div>
-                    <div class="empty-state__title">No sprints yet</div>
-                    <p>Create sprints to plan and group your backlog items into iterations.</p>
-                </div>` :
+            ${sprints.length === 0 ? PGEmptyState.html({ icon: 'backlog', title: 'No sprints yet', description: 'Create sprints to plan and group your backlog items into iterations.' }) :
                 sprints.map(s => {
                     const sprintItems = items.filter(i => i.sprint_id === s.id);
                     const totalPts = sprintItems.reduce((sum, i) => sum + (i.story_points || 0), 0);
@@ -486,12 +472,7 @@ const BacklogView = (() => {
     function renderConfigItems() {
         const c = document.getElementById('backlogContent');
         c.innerHTML = `
-            ${configItems.length === 0 ? `
-                <div class="empty-state" style="margin-top:20px">
-                    <div class="empty-state__icon">⚙️</div>
-                    <div class="empty-state__title">No config items yet</div>
-                    <p>Create configuration items to track SAP customizing changes.</p>
-                </div>` : `
+            ${configItems.length === 0 ? PGEmptyState.html({ icon: 'backlog', title: 'No config items yet', description: 'Create configuration items to track SAP customizing changes.' }) : `
             <div id="ciFilterBar" style="margin-bottom:8px"></div>
             <div id="ciListTable"></div>`}`;
 
@@ -722,16 +703,14 @@ const BacklogView = (() => {
         const main = document.getElementById('mainContent');
 
         main.innerHTML = `
-            <div class="page-header">
-                <div>
-                    <button class="btn btn-secondary btn-sm" onclick="BacklogView.render()">← Back</button>
-                    <h1 style="display:inline;margin-left:12px">
-                        ⚙️ ${escHtml(ci.code || '')} ${escHtml(ci.title)}
-                    </h1>
-                    ${PGStatusRegistry.badge(ci.status, { label: STATUS_LABELS[ci.status] || ci.status })}
-                </div>
-                <div>
-                    <button class="btn btn-primary" onclick="BacklogView.showEditConfigModal(${ci.id})">Edit</button>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{label:'Backlog',onclick:'BacklogView.render()'},{label:escHtml(ci.code||ci.title)}])}
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <h2 class="pg-view-title" style="margin:0">${escHtml(ci.code || '')} ${escHtml(ci.title)}</h2>
+                        ${PGStatusRegistry.badge(ci.status, { label: STATUS_LABELS[ci.status] || ci.status })}
+                    </div>
+                    <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="BacklogView.showEditConfigModal(${ci.id})">Edit</button>
                 </div>
             </div>
 
@@ -834,18 +813,18 @@ const BacklogView = (() => {
         const ts = i.technical_spec || (fs ? fs.technical_spec : null);
 
         main.innerHTML = `
-            <div class="page-header">
-                <div>
-                    <button class="btn btn-secondary btn-sm" onclick="BacklogView.render()">← Back</button>
-                    <h1 style="display:inline;margin-left:12px">
-                        <span class="wricef-badge" style="background:${w.color}">${w.icon} ${w.label}</span>
-                        ${escHtml(i.code || '')} ${escHtml(i.title)}
-                    </h1>
-                    ${PGStatusRegistry.badge(i.status, { label: STATUS_LABELS[i.status] || i.status })}
-                </div>
-                <div>
-                    <button class="btn btn-secondary" onclick="BacklogView.showMoveModal()">🔀 Move</button>
-                    <button class="btn btn-primary" onclick="BacklogView.showEditModal()">Edit</button>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{label:'Backlog',onclick:'BacklogView.render()'},{label:escHtml(i.code||i.title)}])}
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <span class="wricef-badge" style="background:${w.color}">${w.label}</span>
+                        <h2 class="pg-view-title" style="margin:0">${escHtml(i.code || '')} ${escHtml(i.title)}</h2>
+                        ${PGStatusRegistry.badge(i.status, { label: STATUS_LABELS[i.status] || i.status })}
+                    </div>
+                    <div style="display:flex;gap:8px">
+                        <button class="pg-btn pg-btn--secondary pg-btn--sm" onclick="BacklogView.showMoveModal()">Move</button>
+                        <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="BacklogView.showEditModal()">Edit</button>
+                    </div>
                 </div>
             </div>
 

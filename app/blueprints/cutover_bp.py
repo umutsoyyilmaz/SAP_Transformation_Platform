@@ -620,3 +620,158 @@ def hypercare_metrics(plan_id):
         return err
     metrics = cutover_service.compute_hypercare_metrics(plan)
     return jsonify(metrics)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# War Room — Cutover Clock (FDD-I03 / S5-03) — 6 routes
+# ═════════════════════════════════════════════════════════════════════════════
+
+@cutover_bp.route("/plans/<int:plan_id>/start-clock", methods=["POST"])
+def start_cutover_clock(plan_id: int):
+    """Start the cutover clock — transition plan to 'executing'.
+
+    Body: { "program_id": int, "tenant_id": int }
+    Returns: serialized CutoverPlan with actual_start set.
+    """
+    data = request.get_json(silent=True) or {}
+    program_id = data.get("program_id")
+    tenant_id = data.get("tenant_id")
+    if not program_id or not tenant_id:
+        return jsonify({"error": "program_id and tenant_id are required"}), 400
+    try:
+        result = cutover_service.start_cutover_clock(
+            tenant_id=tenant_id,
+            program_id=program_id,
+            plan_id=plan_id,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 422
+    return jsonify(result), 200
+
+
+@cutover_bp.route("/plans/<int:plan_id>/live-status", methods=["GET"])
+def get_live_status(plan_id: int):
+    """Return war-room snapshot for 30s-polling dashboard.
+
+    Query params: program_id (required), tenant_id (required)
+    Returns: war-room snapshot dict (clock, tasks, go_no_go, workstreams, critical_path).
+    """
+    program_id = request.args.get("program_id", type=int)
+    tenant_id = request.args.get("tenant_id", type=int)
+    if not program_id or not tenant_id:
+        return jsonify({"error": "program_id and tenant_id query params are required"}), 400
+    try:
+        snapshot = cutover_service.get_cutover_live_status(
+            tenant_id=tenant_id,
+            program_id=program_id,
+            plan_id=plan_id,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+    return jsonify(snapshot), 200
+
+
+@cutover_bp.route("/tasks/<int:task_id>/start-task", methods=["POST"])
+def start_task(task_id: int):
+    """Mark a runbook task as in_progress and record actual_start.
+
+    Body: { "program_id": int, "tenant_id": int, "executor_id": int (optional) }
+    """
+    data = request.get_json(silent=True) or {}
+    program_id = data.get("program_id")
+    tenant_id = data.get("tenant_id")
+    if not program_id or not tenant_id:
+        return jsonify({"error": "program_id and tenant_id are required"}), 400
+    executor_id = data.get("executor_id")
+    try:
+        result = cutover_service.start_task(
+            tenant_id=tenant_id,
+            program_id=program_id,
+            task_id=task_id,
+            executor_id=executor_id,
+        )
+    except ValueError as exc:
+        # Could be "not found" (404) or "wrong status" (422)
+        msg = str(exc)
+        code = 404 if "not found" in msg.lower() else 422
+        return jsonify({"error": msg}), code
+    return jsonify(result), 200
+
+
+@cutover_bp.route("/tasks/<int:task_id>/complete-task", methods=["POST"])
+def complete_task(task_id: int):
+    """Complete a runbook task, calculate delay_minutes, log execution.
+
+    Body: { "program_id": int, "tenant_id": int, "executor_id": int (optional), "notes": str (optional) }
+    """
+    data = request.get_json(silent=True) or {}
+    program_id = data.get("program_id")
+    tenant_id = data.get("tenant_id")
+    if not program_id or not tenant_id:
+        return jsonify({"error": "program_id and tenant_id are required"}), 400
+    try:
+        result = cutover_service.complete_task(
+            tenant_id=tenant_id,
+            program_id=program_id,
+            task_id=task_id,
+            executor_id=data.get("executor_id"),
+            notes=data.get("notes"),
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        code = 404 if "not found" in msg.lower() else 422
+        return jsonify({"error": msg}), code
+    return jsonify(result), 200
+
+
+@cutover_bp.route("/tasks/<int:task_id>/flag-issue", methods=["POST"])
+def flag_issue(task_id: int):
+    """Flag a war-room issue on a runbook task.
+
+    Body: { "program_id": int, "tenant_id": int, "note": str (required) }
+    """
+    data = request.get_json(silent=True) or {}
+    program_id = data.get("program_id")
+    tenant_id = data.get("tenant_id")
+    note = data.get("note", "").strip()
+    if not program_id or not tenant_id:
+        return jsonify({"error": "program_id and tenant_id are required"}), 400
+    if not note:
+        return jsonify({"error": "note is required and cannot be empty"}), 400
+    try:
+        result = cutover_service.flag_issue(
+            tenant_id=tenant_id,
+            program_id=program_id,
+            task_id=task_id,
+            note=note,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        code = 404 if "not found" in msg.lower() else 422
+        return jsonify({"error": msg}), code
+    return jsonify(result), 200
+
+
+@cutover_bp.route("/plans/<int:plan_id>/critical-path", methods=["GET"])
+def get_critical_path(plan_id: int):
+    """Calculate and return critical-path task IDs for a cutover plan.
+
+    Query params: program_id (required), tenant_id (required)
+    Side-effect: sets is_critical_path=True on critical-path tasks.
+    Returns: { "critical_path_task_ids": [int, ...], "count": int }
+    """
+    program_id = request.args.get("program_id", type=int)
+    tenant_id = request.args.get("tenant_id", type=int)
+    if not program_id or not tenant_id:
+        return jsonify({"error": "program_id and tenant_id query params are required"}), 400
+    try:
+        task_ids = cutover_service.calculate_critical_path(
+            tenant_id=tenant_id,
+            program_id=program_id,
+            plan_id=plan_id,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        code = 409 if "circular" in msg.lower() else 404
+        return jsonify({"error": msg}), code
+    return jsonify({"critical_path_task_ids": task_ids, "count": len(task_ids)}), 200

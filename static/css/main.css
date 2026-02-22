@@ -4,8 +4,9 @@
    ============================================ */
 
 /* ── CSS Variables (SAP Fiori Horizon Palette) ─────────────────────────── */
-/* UI-S01: All --sap-* variables @deprecated — use --pg-* from pg-tokens.css */
-/* Will be removed in UI-S02. Keep as aliases for backward compat.            */
+/* UI-S01: --sap-* aliases @deprecated — use --pg-* from pg-tokens.css       */
+/* Kept as backward-compat aliases while JS/CSS views migrate to --pg-*.     */
+/* UI-S10: Removed --sap-accent (0 remaining uses). Others still referenced. */
 :root {
     /* Primary @deprecated → use --pg-color-primary */
     --sap-blue:           var(--pg-color-primary, #0070f2);
@@ -42,9 +43,6 @@
     --shadow:             var(--pg-shadow-sm, 0 1px 4px rgba(0,0,0,0.08));
     --shadow-sm:          var(--pg-shadow-sm, 0 1px 4px rgba(0,0,0,0.08));
     --shadow-md:          var(--pg-shadow-md, 0 4px 16px rgba(0,0,0,0.10));
-
-    /* Accent @deprecated → use --pg-color-primary */
-    --sap-accent:         var(--pg-color-primary, #0070f2);
 
     /* Transitions @deprecated → use --pg-t-normal */
     --transition:         var(--pg-t-slow, 0.2s ease);

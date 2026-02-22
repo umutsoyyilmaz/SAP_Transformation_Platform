@@ -537,6 +537,34 @@ class RunbookTask(db.Model):
 
     notes = db.Column(db.Text, default="")
 
+    # ── War Room fields (FDD-I03 / S5-03) ────────────────────────────────
+    workstream = db.Column(
+        db.String(50),
+        nullable=True,
+        comment="technical | basis | functional | data | interface | communication",
+    )
+    delay_minutes = db.Column(
+        db.Integer,
+        nullable=True,
+        comment="Auto-calculated: actual_end - planned_end in minutes. Negative = early.",
+    )
+    is_critical_path = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+        comment="Set by calculate_critical_path() in cutover_service.",
+    )
+    parallel_group = db.Column(
+        db.String(20),
+        nullable=True,
+        comment="A | B | C — parallel execution lanes within a workstream.",
+    )
+    issue_note = db.Column(
+        db.Text,
+        nullable=True,
+        comment="War-room issue flag. Set via flag_issue() endpoint.",
+    )
+
     # Metadata
     created_at = db.Column(
         db.DateTime(timezone=True),
@@ -554,6 +582,11 @@ class RunbookTask(db.Model):
             "status IN ('not_started','in_progress','completed',"
             "'failed','skipped','rolled_back')",
             name="ck_runbook_task_status",
+        ),
+        db.CheckConstraint(
+            "workstream IS NULL OR workstream IN ("
+            "'technical','basis','functional','data','interface','communication')",
+            name="ck_runbook_task_workstream",
         ),
     )
 
@@ -601,6 +634,12 @@ class RunbookTask(db.Model):
             "linked_entity_type": self.linked_entity_type,
             "linked_entity_id": self.linked_entity_id,
             "notes": self.notes,
+            # War Room fields (FDD-I03)
+            "workstream": self.workstream,
+            "delay_minutes": self.delay_minutes,
+            "is_critical_path": self.is_critical_path,
+            "parallel_group": self.parallel_group,
+            "issue_note": self.issue_note,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

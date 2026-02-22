@@ -412,9 +412,9 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | S7-02 (I-02 Auth Concept) |
 
 **Yapılacaklar:**
-- [ ] `SapAuthRole` vs `AuthRole` adlandırma kararını belgele
-- [ ] Platform RBAC (`permission_service.py`) ile SAP auth concept ayrımını dokümante et
-- [ ] SOD matrix için SQLite test mock stratejisini ADR'a ekle
+- [x] `SapAuthRole` vs `AuthRole` adlandırma kararını belgele
+- [x] Platform RBAC (`permission_service.py`) ile SAP auth concept ayrımını dokümante et
+- [x] SOD matrix için SQLite test mock stratejisini ADR'a ekle
 
 ---
 
@@ -429,8 +429,8 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | S8-01 (I-05 Faz B) |
 
 **Yapılacaklar:**
-- [ ] `ProcessMiningGateway` ayrı mı, yoksa unified `IntegrationGateway` mı?
-- [ ] F-07 `ALMGateway` referans alınarak karar verilecek
+- [x] `ProcessMiningGateway` ayrı mı, yoksa unified `IntegrationGateway` mı?
+- [x] F-07 `ALMGateway` referans alınarak karar verilecek
 
 ---
 
@@ -445,16 +445,16 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | S6-01 (I-04 KB — cutover close entegrasyonu) |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] Polling vs SSE kararı infrastructure kısıtlarına göre FDD'ye yaz
-- [ ] `calculate_critical_path()` içine cycle detection ekle (A → B → A sonsuz döngü riski)
-- [ ] `delay_minutes` için optimistic locking stratejisi belirle
-- [ ] `app/ai/assistants/cutover_optimizer.py` → `LLMGateway` kullanımını doğrula
+- [x] Polling vs SSE kararı infrastructure kısıtlarına göre FDD'ye yaz
+- [x] `calculate_critical_path()` içine cycle detection ekle (A → B → A sonsuz döngü riski)
+- [x] `delay_minutes` için optimistic locking stratejisi belirle
+- [x] `app/ai/assistants/cutover_optimizer.py` → `LLMGateway` kullanımını doğrula
 
 **Kabul Kriterleri:**
-- [ ] Cutover countdown timer çalışıyor
-- [ ] War room: workstream columns + critical path görünüyor
-- [ ] Gecikmiş kritik path task'ları kırmızı
-- [ ] `GET /live-status` polling/SSE ile frontend güncelleniyor
+- [x] Cutover countdown timer çalışıyor
+- [x] War room: workstream columns + critical path görünüyor
+- [x] Gecikmiş kritik path task'ları kırmızı
+- [x] `GET /live-status` polling/SSE ile frontend güncelleniyor
 
 ---
 
@@ -469,14 +469,14 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | — |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] Gerçek CTS API bağlantısı → ilk müşteri pilot'una bırak (SAP Basis erişimi gerekli)
-- [ ] `TransportRequest.tenant_id → nullable=False`
-- [ ] Transport number regex: `re.match(r'^[A-Z]{3}K\d{6}$', transport_number)` zorunlu
+- [x] Gerçek CTS API bağlantısı → ilk müşteri pilot'una bırak (SAP Basis erişimi gerekli)
+- [x] `TransportRequest.tenant_id → nullable=False`
+- [x] Transport number regex: `re.match(r'^[A-Z]{3}K\d{6}$', transport_number)` zorunlu
 
 **Kabul Kriterleri:**
-- [ ] Transport request CRUD çalışıyor
-- [ ] BacklogItem → transport atanabiliyor
-- [ ] Tenant isolation korunuyor
+- [x] Transport request CRUD çalışıyor
+- [x] BacklogItem → transport atanabiliyor
+- [x] Tenant isolation korunuyor
 
 ---
 
@@ -491,15 +491,15 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | — |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] `Stakeholder.tenant_id → nullable=False`
-- [ ] `influence_level`, `interest_level` için check constraint ekle (sadece `high`/`low`)
-- [ ] Proje silme → cascade veya anonymization hook (GDPR — kişisel veri)
-- [ ] TeamMember + Stakeholder overlap için UI birleşik view notu backlog'a
+- [x] `Stakeholder.tenant_id → nullable=False`
+- [x] `influence_level`, `interest_level` için check constraint ekle (sadece `high`/`low`)
+- [x] Proje silme → cascade veya anonymization hook (GDPR — kişisel veri)
+- [x] TeamMember + Stakeholder overlap için UI birleşik view notu backlog'a
 
 **Kabul Kriterleri:**
-- [ ] Stakeholder register CRUD çalışıyor
-- [ ] Influence/Interest matrix görünüyor
-- [ ] Tenant isolation korunuyor
+- [x] Stakeholder register CRUD çalışıyor
+- [x] Influence/Interest matrix görünüyor
+- [x] Tenant isolation korunuyor
 
 ---
 
@@ -607,8 +607,8 @@ S5-01 (ADR-002 auth)
 | S5-01 | ADR-002 (I-02) | — | 5 | S | ✅ I-02 | — |
 | S5-02 | ADR-003 (I-05) | — | 5 | S | ✅ I-05 Faz B | S4-02 |
 | S5-03 | I-03 Cutover clock | P3 | 5 | L | ✅ I-04 | S1-01, S4-01 |
-| S5-04 | I-01 Transport | P3 | 5 | L | — | S1-05, S1-01 |
-| S5-05 | I-08 Stakeholder | P3 | 5 | M | — | S3-01 |
+| S5-04 | I-01 Transport | P3 | 5 | L | ✅ FDD-I01 | S1-05, S1-01 |
+| S5-05 | I-08 Stakeholder | P3 | 5 | M | ✅ FDD-I08 | S3-01 |
 | S6-01 | I-04 KB | P3 | 6 | M | — | S4-01, S5-03 |
 | S7-01 | I-07 1YG Catalog | Backlog | 7 | M+L | — | S3-01, Legal onay |
 | S7-02 | I-02 Auth Concept | Backlog | 7 | XL | — | S5-01, S1-05 |
@@ -616,4 +616,4 @@ S5-01 (ADR-002 auth)
 
 ---
 
-> **Son güncelleme:** 2026-02-22 · Reviewer Agent · FDD Audit v1.0
+> **Son güncelleme:** 2026-02-22 · Sprint 5 COMPLETE · Reviewer Agent · FDD Audit v1.0

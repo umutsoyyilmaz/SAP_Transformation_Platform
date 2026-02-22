@@ -26,23 +26,19 @@ const DashboardView = (() => {
         const prog = App.getActiveProgram();
 
         if (!prog) {
-            main.innerHTML = `
-                <div class="page-header"><h1>Dashboard</h1></div>
-                <div class="empty-state">
-                    <div class="empty-state__icon">📊</div>
-                    <div class="empty-state__title">No Program Selected</div>
-                    <p>Select a program to configure your dashboard.</p>
-                </div>`;
+            main.innerHTML = PGEmptyState.html({ icon: 'dashboard', title: 'No Program Selected', description: 'Select a program to configure your dashboard.', action: { label: 'Go to Programs', onclick: "App.navigate('programs')" } });
             return;
         }
 
         main.innerHTML = `
-            ${PGBreadcrumb.html([{label:'Programs',onclick:'App.navigate("programs")'},{label:'Dashboard'}])}
-            <div class="page-header">
-                <h1>Dashboard — ${esc(prog.name)}</h1>
-                <div>
-                    <button class="btn btn-primary" onclick="DashboardView.openAddGadget()">+ Add Gadget</button>
-                    <button class="btn btn-secondary" onclick="DashboardView.saveLayout()">💾 Save Layout</button>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{label:'Programs',onclick:'App.navigate("programs")'},{label:'Dashboard'}])}
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <h2 class="pg-view-title">Dashboard — ${esc(prog.name)}</h2>
+                    <div style="display:flex;gap:8px">
+                        <button class="pg-btn pg-btn--secondary pg-btn--sm" onclick="DashboardView.saveLayout()">Save Layout</button>
+                        <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="DashboardView.openAddGadget()">+ Add Gadget</button>
+                    </div>
                 </div>
             </div>
             <div id="dashboardGrid" class="f5-dashboard-grid">
@@ -84,12 +80,7 @@ const DashboardView = (() => {
 
             await renderGadgets(prog.id);
         } catch (err) {
-            document.getElementById('dashboardGrid').innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">⚠️</div>
-                    <div class="empty-state__title">Error</div>
-                    <p>${esc(err.message || 'Unknown error')}</p>
-                </div>`;
+            document.getElementById('dashboardGrid').innerHTML = PGEmptyState.html({ icon: 'warning', title: 'Error', description: esc(err.message || 'Unknown error') });
         }
     }
 
@@ -98,12 +89,7 @@ const DashboardView = (() => {
         grid.innerHTML = '';
 
         if (gadgets.length === 0) {
-            grid.innerHTML = `
-                <div class="empty-state" style="grid-column:1/-1">
-                    <div class="empty-state__icon">📊</div>
-                    <div class="empty-state__title">Empty Dashboard</div>
-                    <p>Click "Add Gadget" to customize your dashboard.</p>
-                </div>`;
+            grid.innerHTML = `<div style="grid-column:1/-1">${PGEmptyState.html({ icon: 'dashboard', title: 'Empty Dashboard', description: 'Click "Add Gadget" to customize your dashboard.' })}</div>`;
             return;
         }
 

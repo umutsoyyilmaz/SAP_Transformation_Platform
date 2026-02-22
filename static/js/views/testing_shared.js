@@ -20,13 +20,7 @@ const TestingShared = (() => {
     }
 
     function noProgramHtml(title) {
-        return `
-            <div class="page-header"><h1>${title}</h1></div>
-            <div class="empty-state">
-                <div class="empty-state__icon">📋</div>
-                <div class="empty-state__title">No Program Selected</div>
-                <p>Go to <a href="#" onclick="App.navigate('programs');return false">Programs</a> to select one.</p>
-            </div>`;
+        return PGEmptyState.html({ icon: 'test', title: title || 'No Program Selected', description: 'Select a program to continue.', action: { label: 'Go to Programs', onclick: "App.navigate('programs')" } });
     }
 
     return { esc, getProgram, noProgramHtml, get pid() { return selectedProgramId; } };

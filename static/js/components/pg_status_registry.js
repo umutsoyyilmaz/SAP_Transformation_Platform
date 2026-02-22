@@ -57,6 +57,20 @@ const PGStatusRegistry = (() => {
         pending:     { bg: '#fef9c3', fg: '#713f12' },
         completed:   { bg: '#dcfce7', fg: '#14532d' },
         in_progress: { bg: '#dbeafe', fg: '#1e3a8a' },
+
+        // ── Data Factory — Object lifecycle ───────────────
+        profiled:    { bg: '#dbeafe', fg: '#1e40af' },
+        cleansed:    { bg: '#ffedd5', fg: '#9a3412' },
+        migrated:    { bg: '#d1fae5', fg: '#065f46' },
+        archived:    { bg: '#e2e8f0', fg: '#334155' },
+
+        // ── Data Factory — Load / Wave / Recon ────────────
+        planned:     { bg: '#dbeafe', fg: '#1e3a8a' },
+        running:     { bg: '#fef9c3', fg: '#713f12' },
+        failed:      { bg: '#fee2e2', fg: '#991b1b' },
+        aborted:     { bg: '#fee2e2', fg: '#7f1d1d' },
+        matched:     { bg: '#dcfce7', fg: '#14532d' },
+        variance:    { bg: '#ffedd5', fg: '#9a3412' },
     };
 
     /** Statüse göre renk döndür. Bilinmeyen statüs → nötr gri. */

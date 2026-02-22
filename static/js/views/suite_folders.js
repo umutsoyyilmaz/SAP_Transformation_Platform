@@ -18,20 +18,16 @@ const SuiteFoldersView = (() => {
         const main = document.getElementById('mainContent');
         const prog = App.getActiveProgram();
         if (!prog) {
-            main.innerHTML = `
-                <div class="page-header"><h1>Suite Folders</h1></div>
-                <div class="empty-state">
-                    <div class="empty-state__icon">📁</div>
-                    <div class="empty-state__title">No Program Selected</div>
-                </div>`;
+            main.innerHTML = PGEmptyState.html({ icon: 'test', title: 'No Program Selected', description: 'Select a program to manage test suite folders.' });
             return;
         }
 
         main.innerHTML = `
-            <div class="page-header">
-                <h1>📁 Suite Folders</h1>
-                <div class="page-header__actions">
-                    <button class="btn btn-primary" onclick="SuiteFoldersView.createFolder()">+ New Folder</button>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'Suite Folders' }])}
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <h2 class="pg-view-title">Suite Folders</h2>
+                    <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="SuiteFoldersView.createFolder()">+ New Folder</button>
                 </div>
             </div>
             <div class="f6-layout">
@@ -55,10 +51,7 @@ const SuiteFoldersView = (() => {
                         <button class="btn btn-sm btn-danger" onclick="SuiteFoldersView.bulkAction('delete')">Delete</button>
                     </div>
                     <div id="f6FolderContent" class="f6-folder-content">
-                        <div class="empty-state">
-                            <div class="empty-state__icon">📂</div>
-                            <div class="empty-state__title">Select a folder to view test cases</div>
-                        </div>
+                        ${PGEmptyState.html({ icon: 'test', title: 'Select a folder to view test cases' })}
                     </div>
                 </div>
             </div>`;
@@ -172,10 +165,7 @@ const SuiteFoldersView = (() => {
                     <h3>${esc(folder.name)}</h3>
                     <span class="f6-tree-badge">${folder.module || ''}</span>
                 </div>
-                <div class="empty-state">
-                    <div class="empty-state__icon">📋</div>
-                    <div class="empty-state__title">No test cases in this folder</div>
-                </div>`;
+                ${PGEmptyState.html({ icon: 'test', title: 'No test cases in this folder' })}`;
             return;
         }
 
