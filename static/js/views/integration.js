@@ -50,21 +50,19 @@ const IntegrationView = (() => {
         _pid = prog ? prog.id : null;
 
         if (!_pid) {
-            main.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">🔌</div>
-                    <div class="empty-state__title">Integration Factory</div>
-                    <p>Go to <a href="#" onclick="App.navigate('programs');return false">Programs</a> to select one first.</p>
-                </div>`;
+            main.innerHTML = PGEmptyState.html({ icon: 'integration', title: 'Integration Factory', description: 'Devam etmek için önce bir program seç.', action: { label: 'Programlara Git', onclick: "App.navigate('programs')" } });
             return;
         }
 
         main.innerHTML = `
-            <div class="page-header">
-                <h2>🔌 Integration Factory</h2>
-                <div class="page-header__actions">
-                    <button class="btn btn-primary" onclick="IntegrationView.showCreateInterface()">+ New Interface</button>
-                    <button class="btn btn-secondary" onclick="IntegrationView.showCreateWave()">+ New Wave</button>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'Integration Factory' }])}
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <h2 class="pg-view-title">Integration Factory</h2>
+                    <div style="display:flex;gap:var(--pg-sp-2)">
+                        <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="IntegrationView.showCreateInterface()">+ New Interface</button>
+                        <button class="pg-btn pg-btn--ghost pg-btn--sm" onclick="IntegrationView.showCreateWave()">+ New Wave</button>
+                    </div>
                 </div>
             </div>
             <div class="tabs" style="margin-bottom:1rem">
@@ -117,11 +115,7 @@ const IntegrationView = (() => {
     // ══════════════════════════════════════════════════════════════════════
     function renderInventory(c) {
         if (_interfaces.length === 0) {
-            c.innerHTML = `<div class="empty-state">
-                <div class="empty-state__icon">🔌</div>
-                <div class="empty-state__title">No Interfaces Yet</div>
-                <p>Click <strong>+ New Interface</strong> to add one.</p>
-            </div>`;
+            c.innerHTML = PGEmptyState.html({ icon: 'integration', title: 'Henüz Interface Yok', description: 'İlk interface\'i oluşturmak için + New Interface butonuna tıkla.', action: { label: '+ New Interface', onclick: 'IntegrationView.showCreateInterface()' } });
             return;
         }
 
@@ -229,8 +223,7 @@ const IntegrationView = (() => {
                 <td>${PROTO_LABELS[i.protocol] || esc(i.protocol)}</td>
                 <td>${esc(i.module || '—')}</td>
                 <td>${esc(i.source_system || '—')} → ${esc(i.target_system || '—')}</td>
-                <td><span class="badge" style="background:${STATUS_COLORS[i.status]||'#a9b4be'};color:#fff">
-                    ${STATUS_LABELS[i.status] || esc(i.status)}</span></td>
+                <td>${_statusBadge(i.status)}</td>
                 <td>${esc(i.checklist_progress)}</td>
                 <td>${esc(i.priority)}</td>
             </tr>`).join('');
@@ -258,7 +251,7 @@ const IntegrationView = (() => {
             const ifaceRows = waveIfaces.map(i => `
                 <div class="wave-iface-item" style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--sapGroup_ContentBorderColor)">
                     <span>${DIR_ICONS[i.direction]||''} <strong>${esc(i.code||i.name)}</strong> — ${esc(i.name)}</span>
-                    <span class="badge" style="background:${STATUS_COLORS[i.status]||'#a9b4be'};color:#fff;font-size:11px">${STATUS_LABELS[i.status]||esc(i.status)}</span>
+                    ${_statusBadge(i.status)}
                 </div>`).join('') || '<p class="text-muted" style="padding:8px 0">No interfaces assigned</p>';
 
             return `
@@ -315,7 +308,7 @@ const IntegrationView = (() => {
                 <td>${esc(i.name)}</td>
                 <td>${DIR_ICONS[i.direction]||''} ${PROTO_LABELS[i.protocol]||esc(i.protocol)}</td>
                 <td>${esc(i.source_system||'—')} → ${esc(i.target_system||'—')}</td>
-                <td><span class="badge" style="background:${STATUS_COLORS[i.status]||'#a9b4be'};color:#fff">${STATUS_LABELS[i.status]||esc(i.status)}</span></td>
+                <td>${_statusBadge(i.status)}</td>
                 <td>${progress}</td>
                 <td>
                     <button class="btn btn-sm btn-secondary" onclick="IntegrationView.showConnTests(${i.id})">🔍 Tests</button>
@@ -415,7 +408,7 @@ const IntegrationView = (() => {
 
             const connRows = (i.connectivity_tests || []).map(ct => `
                 <tr>
-                    <td><span class="badge" style="background:${CONN_COLORS[ct.result]||'#a9b4be'};color:#fff">${esc(ct.result)}</span></td>
+                    <td>${_connBadge(ct.result)}</td>
                     <td>${esc(ct.environment)}</td>
                     <td>${ct.response_time_ms != null ? ct.response_time_ms + ' ms' : '—'}</td>
                     <td>${esc(ct.tested_by||'—')}</td>
@@ -716,7 +709,7 @@ const IntegrationView = (() => {
             const iface = _interfaces.find(i => i.id === ifaceId);
             const rows = tests.map(t => `
                 <tr>
-                    <td><span class="badge" style="background:${CONN_COLORS[t.result]||'#a9b4be'};color:#fff">${esc(t.result)}</span></td>
+                    <td>${_connBadge(t.result)}</td>
                     <td>${esc(t.environment)}</td>
                     <td>${t.response_time_ms != null ? t.response_time_ms + ' ms' : '—'}</td>
                     <td>${esc(t.tested_by||'—')}</td>
@@ -857,6 +850,14 @@ const IntegrationView = (() => {
         API.post(`/interfaces/${ifaceId}/checklist`, { title })
             .then(() => { App.toast('Item added', 'success'); showDetail(ifaceId); })
             .catch(e => App.toast(`Error: ${e.message}`, 'error'));
+    }
+
+    // ── Badge helpers (token-based) ──────────────────────────────────────
+    function _statusBadge(s) {
+        return PGStatusRegistry.badge(s, { label: STATUS_LABELS[s] || s });
+    }
+    function _connBadge(result) {
+        return PGStatusRegistry.badge(result);
     }
 
     // ══════════════════════════════════════════════════════════════════════

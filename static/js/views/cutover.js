@@ -31,8 +31,7 @@ const CutoverView = (() => {
     };
 
     function badge(status) {
-        const c = STATUS_COLORS[status] || '#5B738B';
-        return `<span class="badge" style="background:${c}22;color:${c}">${fmtStatus(status)}</span>`;
+        return PGStatusRegistry.badge(status, { label: fmtStatus(status) });
     }
 
     // ── Main render ──────────────────────────────────────────────────
@@ -42,20 +41,16 @@ const CutoverView = (() => {
         _pid = prog ? prog.id : null;
 
         if (!_pid) {
-            main.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">🚀</div>
-                    <div class="empty-state__title">Cutover Hub</div>
-                    <p>Go to <a href="#" onclick="App.navigate('programs');return false">Programs</a> to select one first.</p>
-                </div>`;
+            main.innerHTML = PGEmptyState.html({ icon: 'cutover', title: 'Cutover Hub', description: 'Devam etmek için önce bir program seç.', action: { label: 'Programlara Git', onclick: "App.navigate('programs')" } });
             return;
         }
 
         main.innerHTML = `
-            <div class="page-header">
-                <h2>🚀 Cutover Hub</h2>
-                <div class="page-header__actions">
-                    <button class="btn btn-primary" onclick="CutoverView.showCreatePlan()">+ New Plan</button>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'Cutover Hub' }])}
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <h2 class="pg-view-title">Cutover Hub</h2>
+                    <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="CutoverView.showCreatePlan()">+ New Plan</button>
                 </div>
             </div>
             <div class="tabs" id="cutTabs" style="margin-bottom:1rem">

@@ -50,6 +50,7 @@ const App = (() => {
         'discover':     () => DiscoverView.render(document.getElementById('mainContent')),
         'timeline':     () => TimelineView.render(document.getElementById('mainContent')),
         'raci':         () => RaciView.render(document.getElementById('mainContent')),
+        'hypercare':     () => HypercareView.render(document.getElementById('mainContent')),
         'project-setup': () => ProjectSetupView.render(),
         'ai-insights': () => AIInsightsView.render(),
         'ai-query':   () => AIQueryView.render(),
@@ -70,7 +71,7 @@ const App = (() => {
         'executive-cockpit',
         'backlog', 'test-planning', 'test-execution', 'defect-management', 'approvals', 'integration', 'data-factory', 'cutover', 'raid',
         'test-case-detail',
-        'reports', 'dashboard-f5', 'suite-folders', 'env-matrix', 'bdd-editor', 'data-driven', 'exploratory', 'evidence', 'custom-fields', 'integrations', 'observability', 'gate-criteria', 'project-setup', 'ai-insights', 'ai-query', 'discover', 'timeline', 'raci',
+        'reports', 'dashboard-f5', 'suite-folders', 'env-matrix', 'bdd-editor', 'data-driven', 'exploratory', 'evidence', 'custom-fields', 'integrations', 'observability', 'gate-criteria', 'project-setup', 'ai-insights', 'ai-query', 'discover', 'timeline', 'raci', 'hypercare',
         'explore-dashboard', 'explore-hierarchy', 'explore-workshops', 'explore-workshop-detail', 'explore-requirements',
     ]);
 
@@ -154,6 +155,14 @@ const App = (() => {
 
         // Render the view
         views[viewName](...args);
+
+        // Page transition animation (UI-S09-T04)
+        const main = document.getElementById('mainContent');
+        if (main) {
+            main.classList.remove('pg-view-enter');
+            void main.offsetWidth; // force reflow to restart animation
+            main.classList.add('pg-view-enter');
+        }
     }
 
     // ── Dashboard ────────────────────────────────────────────────────────
@@ -372,6 +381,12 @@ const App = (() => {
 
         // Initialize sidebar collapse (UI-S03-T03)
         initSidebarCollapse();
+
+        // Initialize a11y utilities (UI-S09-T02/T03)
+        if (typeof PGa11y !== 'undefined') {
+            PGa11y.initThemeToggle();
+            PGa11y.initModalFocusTrap();
+        }
 
         // Render default view
         navigate('dashboard');

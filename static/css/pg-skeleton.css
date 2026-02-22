@@ -1,0 +1,47 @@
+/* UI-S02-T04 — pg-skeleton.css: Shimmer loading animasyonu */
+.pg-skeleton {
+    display: block;
+    background: linear-gradient(
+        90deg,
+        var(--pg-color-bg, #f5f6f7) 0%,
+        var(--pg-color-border, #d9d9d9) 50%,
+        var(--pg-color-bg, #f5f6f7) 100%
+    );
+    background-size: 200% 100%;
+    animation: pg-shimmer 1.4s ease infinite;
+    border-radius: var(--pg-radius-sm, 3px);
+}
+
+@keyframes pg-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.pg-skeleton-row {
+    display: flex;
+    gap: var(--pg-sp-4, 16px);
+    padding: var(--pg-sp-2, 8px) 0;
+    align-items: center;
+}
+
+.pg-skeleton-table {
+    display: flex;
+    flex-direction: column;
+}
+
+.pg-skeleton-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pg-sp-3, 12px);
+    padding: var(--pg-sp-6, 24px);
+    background: var(--pg-color-surface, #ffffff);
+    border-radius: var(--pg-radius-lg, 10px);
+    border: 1px solid var(--pg-color-border, #d9d9d9);
+    box-shadow: var(--pg-shadow-sm);
+}
+
+.pg-skeleton-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--pg-sp-4, 16px);
+}

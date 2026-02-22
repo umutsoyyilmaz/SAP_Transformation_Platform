@@ -38,15 +38,16 @@ const ApprovalsView = (function () {
         await _loadPending();
 
         main.innerHTML = `
-            <div style="max-width:960px;margin:0 auto;padding:var(--sp-md)">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--sp-md)">
-                    <h2 style="margin:0;font-size:var(--tm-font-lg, 16px)">✅ Approval Inbox</h2>
-                    <span class="tm-badge" style="background:var(--tm-info-light, #e8f0fe);color:var(--tm-info, #174ea6)">
-                        ${_pendingRecords.length} pending
-                    </span>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'Onay Gelen Kutusu' }])}
+                <h2 class="pg-view-title">Onay Gelen Kutusu</h2>
+            </div>
+            <div style="max-width:960px;margin:0 auto;padding:var(--pg-sp-4)">
+                <div style="display:flex;justify-content:flex-end;align-items:center;margin-bottom:var(--pg-sp-4)">
+                    ${PGStatusRegistry.badge('pending', { label: _pendingRecords.length + ' bekliyor' })}
                 </div>
 
-                <div id="approvalTabBar" style="margin-bottom:var(--sp-md)"></div>
+                <div id="approvalTabBar" style="margin-bottom:var(--pg-sp-4)"></div>
                 <div id="approvalContent"></div>
             </div>
         `;
@@ -76,26 +77,22 @@ const ApprovalsView = (function () {
 
     function _renderPending(el) {
         if (_pendingRecords.length === 0) {
-            el.innerHTML = `
-                <div class="tm-card" style="padding:var(--sp-lg);text-align:center">
-                    <div style="font-size:40px;margin-bottom:var(--sp-sm)">🎉</div>
-                    <p class="tm-muted">No pending approvals. You're all caught up!</p>
-                </div>`;
+            el.innerHTML = PGEmptyState.html({ icon: 'approvals', title: 'Bekleyen onay yok', description: 'Tüm onaylar işlendi.' });
             return;
         }
 
         el.innerHTML = '<div id="approvalGrid"></div>';
         TMDataGrid.render(document.getElementById('approvalGrid'), {
             columns: [
-                { key: 'entity_type', label: 'Type', width: '100px', render: (r) => `<span class="tm-badge">${_esc(r.entity_type)}</span>` },
+                { key: 'entity_type', label: 'Type', width: '100px', render: (r) => PGStatusRegistry.badge(r.entity_type, { label: _esc(r.entity_type) }) },
                 { key: 'entity_id', label: 'Entity ID', width: '80px', render: (r) => `#${r.entity_id}` },
                 { key: 'workflow_name', label: 'Workflow', width: '160px' },
                 { key: 'stage', label: 'Stage', width: '60px', render: (r) => `L${r.stage}` },
                 { key: 'stage_role', label: 'Role', width: '120px' },
                 { key: 'created_at', label: 'Submitted', width: '140px', render: (r) => _esc((r.created_at || '').slice(0, 16)) },
                 { key: '_actions', label: 'Actions', width: '180px', render: (r) => `
-                    <button class="tm-toolbar__btn tm-toolbar__btn--primary" style="font-size:11px" onclick="ApprovalsView.decide(${r.id}, 'approved')">✓ Approve</button>
-                    <button class="tm-toolbar__btn" style="font-size:11px;color:var(--tm-fail)" onclick="ApprovalsView.decide(${r.id}, 'rejected')">✗ Reject</button>
+                    <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="ApprovalsView.decide(${r.id}, 'approved')">Onayla</button>
+                    <button class="pg-btn pg-btn--danger pg-btn--sm" onclick="ApprovalsView.decide(${r.id}, 'rejected')">Reddet</button>
                 ` },
             ],
             rows: _pendingRecords,
@@ -109,10 +106,10 @@ const ApprovalsView = (function () {
         // We'll fetch history via entity status endpoint—since there's no "all records" endpoint,
         // we show a summary based on pending count
         el.innerHTML = `
-            <div class="tm-card" style="padding:var(--sp-md)">
-                <p class="tm-muted">
-                    Approval history is shown in each entity's detail page → History tab.<br>
-                    Use "Submit for Approval" from Test Planning or Test Case Detail to start a workflow.
+            <div class="pg-card" style="padding:var(--pg-sp-5)">
+                <p style="color:var(--pg-color-text-secondary);font-size:13px">
+                    Onay geçmişi her entity'nin detay sayfasında → Geçmiş sekmesinde gösterilir.<br>
+                    Yeni onay başlatmak için Test Planlama veya Test Case Detayından "Onaya Gönder"i kullan.
                 </p>
             </div>`;
     }
@@ -153,11 +150,10 @@ const ApprovalsView = (function () {
             if (data.status === 'not_submitted') {
                 containerEl.innerHTML = `
                     <div class="tm-approval-banner tm-approval-banner--draft">
-                        <span class="tm-approval-banner__icon">📝</span>
-                        <span class="tm-approval-banner__text">Not submitted for approval</span>
-                        <button class="tm-toolbar__btn tm-toolbar__btn--primary" style="font-size:11px"
+                        <span class="tm-approval-banner__text" style="color:var(--pg-color-text-secondary)">Onaya gönderilmedi</span>
+                        <button class="pg-btn pg-btn--primary pg-btn--sm"
                             onclick="ApprovalsView.submitEntity('${_esc(entityType)}', ${entityId})">
-                            Submit for Approval
+                            Onaya Gönder
                         </button>
                     </div>`;
                 return;

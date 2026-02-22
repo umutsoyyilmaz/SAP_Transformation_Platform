@@ -3,14 +3,16 @@ SAP Transformation Management Platform
 Cutover Hub domain models — Sprint 13 + Hypercare extension.
 
 Models:
-    - CutoverPlan:        top-level cutover plan for a program (one active plan per go-live)
-    - CutoverScopeItem:   category-based grouping of runbook tasks
-    - RunbookTask:        individual executable step within a scope item
-    - TaskDependency:     predecessor → successor relationship between runbook tasks
-    - Rehearsal:          dry-run execution record with findings and timing comparison
-    - GoNoGoItem:         readiness checklist item for go/no-go decision
-    - HypercareIncident:  post-go-live incident tracker with SLA tracking
-    - HypercareSLA:       SLA response / resolution targets per severity level
+    - CutoverPlan:               top-level cutover plan for a program (one active plan per go-live)
+    - CutoverScopeItem:          category-based grouping of runbook tasks
+    - RunbookTask:               individual executable step within a scope item
+    - TaskDependency:            predecessor → successor relationship between runbook tasks
+    - Rehearsal:                 dry-run execution record with findings and timing comparison
+    - GoNoGoItem:                readiness checklist item for go/no-go decision
+    - HypercareIncident:         post-go-live incident tracker with SLA deadline tracking (FDD-B03)
+    - HypercareSLA:              SLA response / resolution targets per severity level
+    - PostGoliveChangeRequest:   change requests raised during hypercare window (FDD-B03)
+    - IncidentComment:           audit-log comments on hypercare incidents (FDD-B03)
 
 Architecture:
     Program ──1:N──▶ CutoverPlan ──1:N──▶ CutoverScopeItem ──1:N──▶ RunbookTask
@@ -944,7 +946,7 @@ class HypercareIncident(db.Model):
     tenant_id = db.Column(
         db.Integer,
         db.ForeignKey("tenants.id", ondelete="SET NULL"),
-        nullable=True,
+        nullable=False,  # security audit fix A2 (S4-01): tenant isolation enforced
         index=True,
     )
     cutover_plan_id = db.Column(
@@ -1003,6 +1005,54 @@ class HypercareIncident(db.Model):
 
     notes = db.Column(db.Text, default="")
 
+    # ── FDD-B03 additions: classification, SLA deadlines, root cause, CR link ──
+
+    # Incident classification
+    incident_type = db.Column(
+        db.String(30), nullable=True,
+        comment="system_down | data_issue | performance | authorization | interface | other",
+    )
+    affected_module = db.Column(
+        db.String(20), nullable=True, comment="SAP module: FI | MM | SD | HCM | PP | etc."
+    )
+    affected_users_count = db.Column(db.Integer, nullable=True)
+    assigned_to_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+        comment="Platform user assigned to resolve the incident",
+    )
+
+    # SLA deadline tracking — auto-calculated in hypercare_service on incident creation
+    first_response_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    sla_response_breached = db.Column(db.Boolean, nullable=False, default=False)
+    sla_resolution_breached = db.Column(db.Boolean, nullable=False, default=False)
+    sla_response_deadline = db.Column(
+        db.DateTime(timezone=True), nullable=True,
+        comment="Auto-calculated: created_at + HypercareSLA.response_target_min",
+    )
+    sla_resolution_deadline = db.Column(
+        db.DateTime(timezone=True), nullable=True,
+        comment="Auto-calculated: created_at + HypercareSLA.resolution_target_min",
+    )
+
+    # Root cause analysis
+    root_cause = db.Column(db.Text, nullable=True)
+    root_cause_category = db.Column(
+        db.String(30), nullable=True,
+        comment="config | data | training | process | development | external",
+    )
+    linked_backlog_item_id = db.Column(
+        db.Integer, db.ForeignKey("backlog_items.id", ondelete="SET NULL"), nullable=True,
+        comment="If root cause is a WRICEF/backlog item, link here",
+    )
+
+    # Post-go-live change request link
+    requires_change_request = db.Column(db.Boolean, nullable=False, default=False)
+    change_request_id = db.Column(
+        db.Integer,
+        db.ForeignKey("post_golive_change_requests.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     # Metadata
     created_at = db.Column(
         db.DateTime(timezone=True),
@@ -1034,6 +1084,7 @@ class HypercareIncident(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "tenant_id": self.tenant_id,
             "cutover_plan_id": self.cutover_plan_id,
             "code": self.code,
             "title": self.title,
@@ -1052,6 +1103,21 @@ class HypercareIncident(db.Model):
             "linked_entity_type": self.linked_entity_type,
             "linked_entity_id": self.linked_entity_id,
             "notes": self.notes,
+            # FDD-B03 additions
+            "incident_type": self.incident_type,
+            "affected_module": self.affected_module,
+            "affected_users_count": self.affected_users_count,
+            "assigned_to_id": self.assigned_to_id,
+            "first_response_at": self.first_response_at.isoformat() if self.first_response_at else None,
+            "sla_response_breached": self.sla_response_breached,
+            "sla_resolution_breached": self.sla_resolution_breached,
+            "sla_response_deadline": self.sla_response_deadline.isoformat() if self.sla_response_deadline else None,
+            "sla_resolution_deadline": self.sla_resolution_deadline.isoformat() if self.sla_resolution_deadline else None,
+            "root_cause": self.root_cause,
+            "root_cause_category": self.root_cause_category,
+            "linked_backlog_item_id": self.linked_backlog_item_id,
+            "requires_change_request": self.requires_change_request,
+            "change_request_id": self.change_request_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -1194,3 +1260,125 @@ def seed_default_sla_targets(cutover_plan_id):
     db.session.add_all(items)
     db.session.flush()
     return items
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 9. PostGoliveChangeRequest — FDD-B03
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class PostGoliveChangeRequest(db.Model):
+    """Change request raised during the hypercare window after go-live.
+
+    Can originate from a hypercare incident or directly from a user.
+    Unlike normal backlog items, production-system changes require Change
+    Board approval before implementation.
+
+    Lifecycle: draft → pending_approval → approved | rejected
+                     → in_progress → implemented → closed
+
+    Architecture note: program_id used (not project_id) — the platform uses
+    'programs' not 'projects' as the top-level entity.
+    """
+
+    __tablename__ = "post_golive_change_requests"
+
+    id = db.Column(db.Integer, primary_key=True)
+    program_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    tenant_id = db.Column(
+        db.Integer, db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=False, index=True,
+    )
+
+    cr_number = db.Column(
+        db.String(20), nullable=False, unique=True, index=True,
+        comment="Auto-generated sequential: CR-001, CR-002 …",
+    )
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    change_type = db.Column(
+        db.String(20), nullable=False,
+        comment="config | development | data | authorization | emergency",
+    )
+    priority = db.Column(
+        db.String(5), nullable=False, default="P3",
+        comment="P1 | P2 | P3 | P4",
+    )
+    status = db.Column(
+        db.String(30), nullable=False, default="draft",
+        comment="draft | pending_approval | approved | rejected | in_progress | implemented | closed",
+    )
+    requested_by_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    approved_by_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    approved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    planned_implementation_date = db.Column(db.Date, nullable=True)
+    actual_implementation_date = db.Column(db.Date, nullable=True)
+    impact_assessment = db.Column(db.Text, nullable=True)
+    test_required = db.Column(db.Boolean, nullable=False, default=True)
+    rollback_plan = db.Column(db.Text, nullable=True)
+    rejection_reason = db.Column(db.Text, nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        db.Index("ix_pgcr_tenant_program", "tenant_id", "program_id"),
+        db.CheckConstraint(
+            "priority IN ('P1','P2','P3','P4')",
+            name="ck_pgcr_priority",
+        ),
+    )
+
+    def to_dict(self) -> dict:
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+    def __repr__(self) -> str:
+        return f"<PostGoliveChangeRequest {self.cr_number} [{self.status}]>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 10. IncidentComment — FDD-B03
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class IncidentComment(db.Model):
+    """Audit-trail comment on a hypercare incident.
+
+    Supports both internal consultant notes (is_internal=True, not shown to
+    customer) and external update messages visible to the customer.
+    is_internal prevents sensitive debugging info from reaching the customer.
+    """
+
+    __tablename__ = "incident_comments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    incident_id = db.Column(
+        db.Integer, db.ForeignKey("hypercare_incidents.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    author_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    content = db.Column(db.Text, nullable=False)
+    is_internal = db.Column(
+        db.Boolean, nullable=False, default=False,
+        comment="True = consultant-only note; False = visible to customer",
+    )
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    def to_dict(self) -> dict:
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+    def __repr__(self) -> str:
+        return f"<IncidentComment {self.id} on incident={self.incident_id}>"

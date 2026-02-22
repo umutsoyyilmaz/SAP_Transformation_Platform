@@ -34,7 +34,7 @@
     font-size: 14px;
 }
 .pwa-install-banner__btn {
-    background: var(--sap-blue, #0070f2);
+    background: var(--pg-color-primary);
     color: #fff;
     border: none;
     border-radius: 6px;
@@ -59,7 +59,7 @@
     top: -44px;
     left: 0;
     right: 0;
-    background: var(--sap-warning, #e76500);
+    background: var(--pg-color-warning);
     color: #fff;
     text-align: center;
     padding: 10px;
@@ -86,7 +86,7 @@ body.is-offline .main-content {
     display: none;
     background: none;
     border: none;
-    color: var(--sap-shell-text, #fff);
+    color: #fff;
     font-size: 22px;
     cursor: pointer;
     padding: 8px;
@@ -123,8 +123,8 @@ body.is-offline .main-content {
     left: 0;
     right: 0;
     height: 56px;
-    background: var(--sap-card-bg, #fff);
-    border-top: 1px solid var(--sap-border, #d9d9d9);
+    background: var(--pg-color-surface);
+    border-top: 1px solid var(--pg-color-border);
     z-index: 100;
     padding-bottom: env(safe-area-inset-bottom, 0);
 }
@@ -141,7 +141,7 @@ body.is-offline .main-content {
     justify-content: center;
     gap: 2px;
     text-decoration: none;
-    color: var(--sap-text-secondary, #6a6d70);
+    color: var(--pg-color-text-secondary);
     font-size: 10px;
     font-weight: 500;
     cursor: pointer;
@@ -152,7 +152,7 @@ body.is-offline .main-content {
     padding: 0;
 }
 .bottom-nav__item.active {
-    color: var(--sap-blue, #0070f2);
+    color: var(--pg-color-primary);
 }
 .bottom-nav__item-icon {
     font-size: 20px;
@@ -169,7 +169,7 @@ body.is-offline .main-content {
     display: none;
     text-align: center;
     padding: 12px;
-    color: var(--sap-text-secondary, #6a6d70);
+    color: var(--pg-color-text-secondary);
     font-size: 12px;
     font-weight: 600;
 }
@@ -452,6 +452,54 @@ body.is-offline .main-content {
 @media (display-mode: standalone) {
     .pwa-install-banner {
         display: none !important;
+    }
+}
+
+/* ── pg-* Component Responsive Rules (UI-S09-T05) ──────────────────────── */
+
+/* Tablet (≤ 1200px) */
+@media (max-width: 1200px) {
+    .pg-dashboard-grid  { grid-template-columns: 1fr 1fr; }
+    .pg-dash-kpis       { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* Mobile (≤ 768px) */
+@media (max-width: 768px) {
+    /* pg-* dashboard */
+    .pg-dashboard-grid  { grid-template-columns: 1fr; }
+    .pg-dash-kpis       { grid-template-columns: repeat(2, 1fr); }
+
+    /* pg-panel: full-width on mobile */
+    .pg-panel           { width: 100% !important; }
+    .has-panel          { margin-right: 0 !important; }
+
+    /* pg-view-header stacks on small screens */
+    .pg-view-header     { flex-direction: column; align-items: flex-start; gap: 4px; }
+
+    /* pg-btn: touch-friendly */
+    .pg-btn             { min-height: 40px; }
+
+    /* Hide secondary table columns on mobile */
+    .pg-table-col--secondary { display: none; }
+
+    /* pg-steps: shrink text */
+    .pg-steps__label    { font-size: 10px; }
+}
+
+/* Phone (≤ 480px) */
+@media (max-width: 480px) {
+    .pg-dash-kpis       { grid-template-columns: 1fr 1fr; }
+    .pg-kpi-card        { padding: 12px; }
+    .pg-kpi-card__value { font-size: 22px; }
+}
+
+/* Touch: disable hover lift animations */
+@media (pointer: coarse) {
+    .pg-btn:hover,
+    .pg-kpi-card:hover,
+    .pg-program-card:hover {
+        transform: none;
+        box-shadow: var(--pg-shadow-sm);
     }
 }
 

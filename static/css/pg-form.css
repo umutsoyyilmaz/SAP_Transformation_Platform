@@ -1,0 +1,108 @@
+/* UI-S02-T02 — pg-form.css: Standart form element stilleri */
+.pg-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: var(--pg-sp-4, 16px);
+}
+
+.pg-field--error .pg-input,
+.pg-field--error .pg-select {
+    border-color: var(--pg-color-negative, #dc2626);
+}
+
+.pg-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--pg-color-text-secondary, #6a6d70);
+    letter-spacing: 0.4px;
+}
+
+.pg-label__req {
+    color: var(--pg-color-negative, #dc2626);
+    margin-left: 2px;
+}
+
+.pg-input,
+.pg-select {
+    width: 100%;
+    border: 1px solid var(--pg-color-border, #d9d9d9);
+    border-radius: var(--pg-radius-md, 6px);
+    background: var(--pg-color-surface, #ffffff);
+    color: var(--pg-color-text, #32363a);
+    font-family: var(--font-family, 'Inter', sans-serif);
+    font-size: 13px;
+    padding: 7px 10px;
+    transition: border-color var(--pg-t-normal, 150ms ease),
+                box-shadow var(--pg-t-normal, 150ms ease);
+    outline: none;
+    box-sizing: border-box;
+}
+
+.pg-input:focus,
+.pg-select:focus {
+    border-color: var(--pg-color-primary, #0070f2);
+    box-shadow: 0 0 0 3px rgba(0, 112, 242, 0.12);
+}
+
+.pg-input:disabled,
+.pg-select:disabled {
+    background: var(--pg-color-bg, #f5f6f7);
+    color: var(--pg-color-text-tertiary, #9aa0a6);
+    cursor: not-allowed;
+}
+
+.pg-input--textarea {
+    resize: vertical;
+    min-height: 72px;
+    line-height: 1.5;
+    padding: 8px 10px;
+}
+
+.pg-hint {
+    font-size: 11px;
+    color: var(--pg-color-text-tertiary, #9aa0a6);
+    margin: 0;
+}
+
+.pg-error-msg {
+    font-size: 11px;
+    color: var(--pg-color-negative, #dc2626);
+    margin: 0;
+}
+
+.pg-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.pg-checkbox input[type=checkbox] {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--pg-color-primary, #0070f2);
+    cursor: pointer;
+}
+
+.pg-checkbox__label {
+    font-size: 13px;
+    color: var(--pg-color-text, #32363a);
+}
+
+/* Form row (2-column) */
+.pg-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--pg-sp-3, 12px);
+}
+
+/* Form actions footer */
+.pg-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--pg-sp-2, 8px);
+    margin-top: var(--pg-sp-5, 20px);
+    padding-top: var(--pg-sp-4, 16px);
+    border-top: 1px solid var(--pg-color-border, #d9d9d9);
+}

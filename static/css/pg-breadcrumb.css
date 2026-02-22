@@ -1,0 +1,37 @@
+/* UI-S02-T05 — pg-breadcrumb.css: Breadcrumb navigasyon stilleri */
+.pg-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--pg-color-text-tertiary, #9aa0a6);
+    margin-bottom: var(--pg-sp-4, 16px);
+    padding: var(--pg-sp-1, 4px) 0;
+}
+
+.pg-breadcrumb__link {
+    color: var(--pg-color-text-secondary, #6a6d70);
+    text-decoration: none;
+    padding: 2px 4px;
+    border-radius: var(--pg-radius-sm, 3px);
+    transition: background var(--pg-t-fast, 100ms ease),
+                color var(--pg-t-fast, 100ms ease);
+}
+
+.pg-breadcrumb__link:hover {
+    background: var(--pg-color-bg, #f5f6f7);
+    color: var(--pg-color-primary, #0070f2);
+    text-decoration: none;
+}
+
+.pg-breadcrumb__current {
+    color: var(--pg-color-text, #32363a);
+    font-weight: 500;
+}
+
+.pg-breadcrumb__sep {
+    color: var(--pg-color-border-strong, #c4c9d0);
+    user-select: none;
+    padding: 0 2px;
+}

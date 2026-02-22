@@ -37,6 +37,7 @@ const DashboardView = (() => {
         }
 
         main.innerHTML = `
+            ${PGBreadcrumb.html([{label:'Programs',onclick:'App.navigate("programs")'},{label:'Dashboard'}])}
             <div class="page-header">
                 <h1>Dashboard — ${esc(prog.name)}</h1>
                 <div>

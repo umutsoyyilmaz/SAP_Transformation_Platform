@@ -3,196 +3,222 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login — SAP Transformation Platform</title>
+    <title>Perga — Navigate Complexity</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/pg-tokens.css">
+    <link rel="stylesheet" href="/static/css/pg-form.css">
+    <link rel="stylesheet" href="/static/css/pg-button.css">
     <link rel="stylesheet" href="/static/css/login.css">
     <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
     <meta name="theme-color" content="#354a5f">
 </head>
-<body>
-    <div class="login-page">
-        <div class="login-card">
-            <div class="login-card__header">
-                <div class="login-card__logo">
-                    SAP <span>Transformation Platform</span>
-                </div>
-                <p class="login-card__subtitle">Sign in to your account</p>
-            </div>
+<body class="pg-login-body">
+<div class="pg-login-shell">
 
-            <form class="login-card__form" id="loginForm" autocomplete="on">
-                <!-- Tenant Selector -->
-                <div class="form-group">
-                    <label for="tenantSelect">Organization</label>
-                    <select id="tenantSelect" name="tenant" required>
+    <!-- ── Left: Brand Panel ─────────────────────────────────── -->
+    <aside class="pg-login-brand">
+        <div class="pg-login-brand__inner">
+            <div class="pg-login-brand__logo">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="rgba(255,255,255,0.15)"/>
+                    <path d="M8 8h10a6 6 0 0 1 0 12H8V8z" fill="white"/>
+                    <path d="M8 20h12a4 4 0 0 1 0 8H8v-8z" fill="rgba(255,255,255,0.6)"/>
+                </svg>
+                <span class="pg-login-brand__name">Perga</span>
+            </div>
+            <h1 class="pg-login-brand__tagline">Navigate<br>Complexity</h1>
+            <ul class="pg-login-brand__features">
+                <li>SAP S/4HANA transformation management</li>
+                <li>Requirements and GAP analysis</li>
+                <li>WRICEF and configuration tracking</li>
+                <li>Test scenarios and defect management</li>
+                <li>RAID log and approval workflows</li>
+            </ul>
+            <div class="pg-login-brand__badge">Enterprise SaaS</div>
+        </div>
+    </aside>
+
+    <!-- ── Right: Form Panel ─────────────────────────────────── -->
+    <main class="pg-login-form-panel">
+        <div class="pg-login-card">
+            <h2 class="pg-login-card__title">Welcome Back</h2>
+            <p class="pg-login-card__sub">Sign in to continue</p>
+
+            <!-- Error message -->
+            <div class="pg-login-alert" id="loginError" role="alert" hidden></div>
+
+            <form class="pg-login-form" id="loginForm" autocomplete="on">
+                <!-- Organization selector -->
+                <div class="pg-field">
+                    <label class="pg-label" for="tenantSelect">Organization</label>
+                    <select class="pg-input" id="tenantSelect" name="tenant" required>
                         <option value="">Loading organizations...</option>
                     </select>
                 </div>
 
                 <!-- Email -->
-                <div class="form-group">
-                    <label for="emailInput">Email</label>
-                    <input type="email" id="emailInput" name="email" required
-                           placeholder="you@company.com" autocomplete="email">
+                <div class="pg-field">
+                    <label class="pg-label" for="emailInput">Email</label>
+                    <input class="pg-input" id="emailInput" name="email" type="email"
+                           placeholder="you@company.com" required autocomplete="email">
                 </div>
 
                 <!-- Password -->
-                <div class="form-group">
-                    <label for="passwordInput">Password</label>
-                    <div class="password-wrapper">
-                        <input type="password" id="passwordInput" name="password" required
-                               placeholder="••••••••" autocomplete="current-password">
-                        <button type="button" class="password-toggle" id="passwordToggle" tabindex="-1">👁</button>
+                <div class="pg-field">
+                    <label class="pg-label" for="passwordInput">Password</label>
+                    <div class="pg-input-wrap">
+                        <input class="pg-input" id="passwordInput" name="password" type="password"
+                               placeholder="••••••••" required autocomplete="current-password">
+                        <button type="button" class="pg-input-toggle" id="passwordToggle" tabindex="-1">👁</button>
                     </div>
                 </div>
 
-                <!-- Error message -->
-                <div class="login-card__error" id="loginError" role="alert"></div>
-
                 <!-- Submit -->
-                <button type="submit" class="login-card__submit" id="loginBtn">
+                <button type="submit" class="pg-btn pg-btn--primary pg-login-submit" id="loginBtn">
                     <span id="loginBtnText">Sign In</span>
-                    <span id="loginBtnSpinner" class="spinner-sm" hidden></span>
+                    <span id="loginBtnSpinner" class="pg-login-spinner" hidden></span>
                 </button>
             </form>
 
-            <div class="login-card__footer">
-                <p>Powered by <strong>Perga</strong></p>
+            <div class="pg-login-footer">
+                Powered by <strong>Perga</strong>
             </div>
         </div>
-    </div>
+    </main>
+</div>
 
-    <script>
-    (() => {
-        'use strict';
+<script>
+(() => {
+    'use strict';
 
-        const form = document.getElementById('loginForm');
-        const tenantSelect = document.getElementById('tenantSelect');
-        const emailInput = document.getElementById('emailInput');
-        const passwordInput = document.getElementById('passwordInput');
-        const errorEl = document.getElementById('loginError');
-        const loginBtn = document.getElementById('loginBtn');
-        const btnText = document.getElementById('loginBtnText');
-        const btnSpinner = document.getElementById('loginBtnSpinner');
-        const passwordToggle = document.getElementById('passwordToggle');
+    const form = document.getElementById('loginForm');
+    const tenantSelect = document.getElementById('tenantSelect');
+    const emailInput = document.getElementById('emailInput');
+    const passwordInput = document.getElementById('passwordInput');
+    const errorEl = document.getElementById('loginError');
+    const loginBtn = document.getElementById('loginBtn');
+    const btnText = document.getElementById('loginBtnText');
+    const btnSpinner = document.getElementById('loginBtnSpinner');
+    const passwordToggle = document.getElementById('passwordToggle');
 
-        // If already authenticated, redirect to app
-        const existingToken = localStorage.getItem('sap_access_token');
-        if (existingToken) {
-            window.location.href = '/';
-            return;
-        }
+    // If already authenticated, redirect to app
+    const existingToken = localStorage.getItem('sap_access_token');
+    if (existingToken) {
+        window.location.href = '/';
+        return;
+    }
 
-        // Load tenants
-        async function loadTenants() {
-            try {
-                const res = await fetch('/api/v1/auth/tenants');
-                const tenants = await res.json();
-                tenantSelect.innerHTML = '';
+    // Load tenants
+    async function loadTenants() {
+        try {
+            const res = await fetch('/api/v1/auth/tenants');
+            const tenants = await res.json();
+            tenantSelect.innerHTML = '';
 
-                if (!tenants.length) {
-                    tenantSelect.innerHTML = '<option value="">No organizations available</option>';
-                    return;
-                }
-
-                if (tenants.length === 1) {
-                    tenantSelect.innerHTML = `<option value="${tenants[0].slug}">${tenants[0].name}</option>`;
-                } else {
-                    tenantSelect.innerHTML = '<option value="">Select organization...</option>' +
-                        '<option value="__platform_admin__">Platform Admin</option>' +
-                        tenants.map(t => `<option value="${t.slug}">${t.name}</option>`).join('');
-                }
-
-                // Restore last used tenant
-                const lastTenant = localStorage.getItem('sap_last_tenant');
-                if (lastTenant) {
-                    tenantSelect.value = lastTenant;
-                }
-            } catch (err) {
-                tenantSelect.innerHTML = '<option value="">Failed to load organizations</option>';
-            }
-        }
-
-        // Password toggle
-        passwordToggle.addEventListener('click', () => {
-            const isPassword = passwordInput.type === 'password';
-            passwordInput.type = isPassword ? 'text' : 'password';
-            passwordToggle.textContent = isPassword ? '🙈' : '👁';
-        });
-
-        // Login
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            errorEl.textContent = '';
-            errorEl.hidden = true;
-
-            const tenant_slug = tenantSelect.value;
-            const email = emailInput.value.trim();
-            const password = passwordInput.value;
-
-            if (!tenant_slug) {
-                showError('Please select an organization');
+            if (!tenants.length) {
+                tenantSelect.innerHTML = '<option value="">No organizations available</option>';
                 return;
             }
 
-            // Platform admin login (no tenant)
-            const isPlatformAdmin = tenant_slug === '__platform_admin__';
-            const loginBody = isPlatformAdmin
-                ? { email, password }
-                : { email, password, tenant_slug };
-
-            // Disable button
-            loginBtn.disabled = true;
-            btnText.textContent = 'Signing in...';
-            btnSpinner.hidden = false;
-
-            try {
-                const res = await fetch('/api/v1/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(loginBody),
-                });
-
-                const data = await res.json();
-
-                if (!res.ok) {
-                    showError(data.error || 'Login failed');
-                    return;
-                }
-
-                // Store tokens and user info
-                localStorage.setItem('sap_access_token', data.access_token);
-                localStorage.setItem('sap_refresh_token', data.refresh_token);
-                localStorage.setItem('sap_user', JSON.stringify(data.user));
-                if (!isPlatformAdmin) localStorage.setItem('sap_last_tenant', tenant_slug);
-
-                // Redirect: platform admin → platform admin panel, others → app
-                window.location.href = isPlatformAdmin ? '/platform-admin' : '/';
-
-            } catch (err) {
-                showError('Network error. Please try again.');
-            } finally {
-                loginBtn.disabled = false;
-                btnText.textContent = 'Sign In';
-                btnSpinner.hidden = true;
+            if (tenants.length === 1) {
+                tenantSelect.innerHTML = `<option value="${tenants[0].slug}">${tenants[0].name}</option>`;
+            } else {
+                tenantSelect.innerHTML = '<option value="">Select organization...</option>' +
+                    '<option value="__platform_admin__">Platform Admin</option>' +
+                    tenants.map(t => `<option value="${t.slug}">${t.name}</option>`).join('');
             }
-        });
 
-        function showError(msg) {
-            errorEl.textContent = msg;
-            errorEl.hidden = false;
+            // Restore last used tenant
+            const lastTenant = localStorage.getItem('sap_last_tenant');
+            if (lastTenant) {
+                tenantSelect.value = lastTenant;
+            }
+        } catch (err) {
+            tenantSelect.innerHTML = '<option value="">Failed to load organizations</option>';
+        }
+    }
+
+    // Password toggle
+    passwordToggle.addEventListener('click', () => {
+        const isPassword = passwordInput.type === 'password';
+        passwordInput.type = isPassword ? 'text' : 'password';
+        passwordToggle.textContent = isPassword ? '🙈' : '👁';
+    });
+
+    // Login
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errorEl.textContent = '';
+        errorEl.hidden = true;
+
+        const tenant_slug = tenantSelect.value;
+        const email = emailInput.value.trim();
+        const password = passwordInput.value;
+
+        if (!tenant_slug) {
+            showError('Please select an organization');
+            return;
         }
 
-        // Handle Enter key in password field
-        passwordInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') form.requestSubmit();
-        });
+        // Platform admin login (no tenant)
+        const isPlatformAdmin = tenant_slug === '__platform_admin__';
+        const loginBody = isPlatformAdmin
+            ? { email, password }
+            : { email, password, tenant_slug };
 
-        // Init
-        loadTenants();
-        emailInput.focus();
-    })();
-    </script>
+        // Disable button
+        loginBtn.disabled = true;
+        btnText.textContent = 'Signing in...';
+        btnSpinner.hidden = false;
+
+        try {
+            const res = await fetch('/api/v1/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(loginBody),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                showError(data.error || 'Login failed');
+                return;
+            }
+
+            // Store tokens and user info
+            localStorage.setItem('sap_access_token', data.access_token);
+            localStorage.setItem('sap_refresh_token', data.refresh_token);
+            localStorage.setItem('sap_user', JSON.stringify(data.user));
+            if (!isPlatformAdmin) localStorage.setItem('sap_last_tenant', tenant_slug);
+
+            // Redirect: platform admin → platform admin panel, others → app
+            window.location.href = isPlatformAdmin ? '/platform-admin' : '/';
+
+        } catch (err) {
+            showError('Network error. Please try again.');
+        } finally {
+            loginBtn.disabled = false;
+            btnText.textContent = 'Sign In';
+            btnSpinner.hidden = true;
+        }
+    });
+
+    function showError(msg) {
+        errorEl.textContent = msg;
+        errorEl.hidden = false;
+    }
+
+    // Handle Enter key in password field
+    passwordInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') form.requestSubmit();
+    });
+
+    // Init
+    loadTenants();
+    emailInput.focus();
+})();
+</script>
 </body>
 </html>

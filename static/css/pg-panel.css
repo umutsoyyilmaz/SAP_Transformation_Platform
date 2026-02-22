@@ -1,0 +1,123 @@
+/* ============================================================
+   Perga Design System — pg-panel.css
+   UI-S05-T03: Slide-in detail panel
+   ============================================================ */
+
+.pg-panel {
+    position: fixed;
+    right: 0;
+    top: var(--pg-header-height, 48px);
+    bottom: 0;
+    width: 420px;
+    background: var(--pg-color-surface);
+    border-left: 1px solid var(--pg-color-border);
+    box-shadow: var(--pg-shadow-xl, -8px 0 24px rgba(0,0,0,0.12));
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform var(--pg-t-slow, 250ms ease);
+    z-index: var(--pg-z-dropdown, 110);
+}
+
+.pg-panel--open {
+    transform: translateX(0);
+}
+
+/* ── Header ────────────────────────────────────────────────── */
+.pg-panel__header {
+    display: flex;
+    align-items: center;
+    gap: var(--pg-sp-3);
+    padding: var(--pg-sp-4) var(--pg-sp-5);
+    border-bottom: 1px solid var(--pg-color-border);
+    background: var(--pg-color-bg);
+    flex-shrink: 0;
+}
+
+.pg-panel__title {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--pg-color-text);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pg-panel__close {
+    flex-shrink: 0;
+}
+
+/* ── Body ──────────────────────────────────────────────────── */
+.pg-panel__body {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--pg-sp-5);
+}
+
+.pg-panel__section {
+    margin-bottom: var(--pg-sp-5);
+}
+
+.pg-panel__section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--pg-color-text-tertiary);
+    margin: 0 0 var(--pg-sp-3);
+}
+
+.pg-panel__dl {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: var(--pg-sp-2) var(--pg-sp-3);
+    font-size: 13px;
+}
+
+.pg-panel__dt {
+    color: var(--pg-color-text-secondary);
+    font-weight: 500;
+}
+
+.pg-panel__dd {
+    color: var(--pg-color-text);
+    margin: 0;
+}
+
+.pg-panel__actions {
+    display: flex;
+    gap: var(--pg-sp-2);
+    padding: var(--pg-sp-4) var(--pg-sp-5);
+    border-top: 1px solid var(--pg-color-border);
+    background: var(--pg-color-bg);
+    flex-shrink: 0;
+}
+
+/* ── Main content shrinks when panel is open ───────────────── */
+.has-panel {
+    margin-right: 420px;
+    transition: margin-right var(--pg-t-slow, 250ms ease);
+}
+
+/* ── Kanban card hover (UI-S05-T04) ────────────────────────── */
+.kanban-card {
+    transition: transform var(--pg-t-normal, 150ms ease),
+                box-shadow var(--pg-t-normal, 150ms ease);
+}
+
+.kanban-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--pg-shadow-md, 0 4px 12px rgba(0,0,0,0.12));
+}
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 900px) {
+    .pg-panel {
+        width: 100%;
+    }
+    .has-panel {
+        margin-right: 0;
+    }
+}

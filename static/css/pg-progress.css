@@ -1,0 +1,62 @@
+/* ============================================================
+   Perga Design System — pg-progress.css
+   UI-S06-T02: Segmented test execution progress bar
+   ============================================================ */
+
+/* ── Progress Bar ───────────────────────────────────────────── */
+.pg-progress-bar {
+    display: flex;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--pg-color-bg);
+    gap: 1px;
+}
+
+.pg-progress-bar__seg {
+    transition: width var(--pg-t-slow, 250ms ease);
+    height: 100%;
+}
+
+.pg-progress-bar__seg--pass    { background: #16a34a; }
+.pg-progress-bar__seg--fail    { background: #dc2626; }
+.pg-progress-bar__seg--blocked { background: #ca8a04; }
+.pg-progress-bar__seg--not-run { background: var(--pg-color-border-strong, #c4c4c4); }
+
+/* ── Legend ─────────────────────────────────────────────────── */
+.pg-progress-legend {
+    display: flex;
+    gap: var(--pg-sp-4, 12px);
+    margin-top: var(--pg-sp-2, 6px);
+    flex-wrap: wrap;
+}
+
+.pg-progress-legend__item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--pg-color-text-secondary);
+}
+
+.pg-progress-legend__item::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    display: inline-block;
+}
+
+.pg-progress-legend__item--pass::before    { background: #16a34a; }
+.pg-progress-legend__item--fail::before    { background: #dc2626; }
+.pg-progress-legend__item--blocked::before { background: #ca8a04; }
+.pg-progress-legend__item--not-run::before { background: var(--pg-color-border-strong, #c4c4c4); }
+
+/* ── Wrapper (for use in cycle header) ─────────────────────── */
+.pg-progress-wrap {
+    padding: var(--pg-sp-3, 8px) var(--pg-sp-4, 12px);
+    background: var(--pg-color-surface);
+    border: 1px solid var(--pg-color-border);
+    border-radius: var(--pg-radius-md, 6px);
+    margin-bottom: var(--pg-sp-4, 12px);
+}

@@ -360,15 +360,15 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | S5-03 (I-03 Cutover clock), S6-01 (I-04 KB) |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] `HypercareIncident.tenant_id` nullable durumunu kontrol et → `nullable=False` yap
+- [x] `HypercareIncident.tenant_id` nullable durumunu kontrol et → `nullable=False` yap
 - [ ] SLA breach notification — APScheduler vs webhook kararı verilmeli, FDD'ye ekle
 - [ ] `Defect` severity ile `HypercareIncident` severity (p1/p2/p3/p4) terminolojisini hizala
 
 **Kabul Kriterleri:**
-- [ ] Incident oluşturulduğunda priority'ye göre SLA deadline'ları otomatik hesaplanıyor
-- [ ] SLA ihlalinde `sla_response_breached = True` yazılıyor
-- [ ] `GET /hypercare/metrics` P1-P4 bazında açık incident sayılarını döndürüyor
-- [ ] Tenant isolation korunuyor
+- [x] Incident oluşturulduğunda priority'ye göre SLA deadline'ları otomatik hesaplanıyor
+- [x] SLA ihlalinde `sla_response_breached = True` yazılıyor
+- [x] `GET /hypercare/metrics` P1-P4 bazında açık incident sayılarını döndürüyor
+- [x] Tenant isolation korunuyor
 
 ---
 

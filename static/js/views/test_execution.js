@@ -26,7 +26,10 @@ const TestExecutionView = (() => {
         }
 
         main.innerHTML = `
-            <div class="page-header"><h1>▶️ Test Execution</h1></div>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{label:'Programs',onclick:'App.navigate("programs")'},{label:'Test Execution'}])}
+                <h2 class="pg-view-title">Test Execution</h2>
+            </div>
             <div class="tabs" id="testExecTabs">
                 <div class="tab active" data-tab="plans" onclick="TestExecutionView.switchTab('plans')">📅 Plans & Cycles</div>
                 <div class="tab" data-tab="traceability" onclick="TestExecutionView.switchTab('traceability')">🔗 Traceability</div>
@@ -59,6 +62,29 @@ const TestExecutionView = (() => {
         }
     }
 
+    // ── Progress Bar ─────────────────────────────────────────────────────
+    function _renderProgressBar({ total, pass, fail, blocked, not_run }) {
+        const pctPass    = total ? Math.round(pass    / total * 100) : 0;
+        const pctFail    = total ? Math.round(fail    / total * 100) : 0;
+        const pctBlocked = total ? Math.round(blocked / total * 100) : 0;
+        const pctNotRun  = total ? Math.round(not_run / total * 100) : 0;
+
+        return `
+            <div class="pg-progress-bar" title="${pass} geçti · ${fail} başarısız · ${blocked} bloke · ${not_run} koşulmadı">
+                <div class="pg-progress-bar__seg pg-progress-bar__seg--pass"    style="width:${pctPass}%"   ></div>
+                <div class="pg-progress-bar__seg pg-progress-bar__seg--fail"    style="width:${pctFail}%"   ></div>
+                <div class="pg-progress-bar__seg pg-progress-bar__seg--blocked" style="width:${pctBlocked}%"></div>
+                <div class="pg-progress-bar__seg pg-progress-bar__seg--not-run" style="width:${pctNotRun}%" ></div>
+            </div>
+            <div class="pg-progress-legend">
+                <span class="pg-progress-legend__item pg-progress-legend__item--pass">${pass} Geçti</span>
+                <span class="pg-progress-legend__item pg-progress-legend__item--fail">${fail} Başarısız</span>
+                <span class="pg-progress-legend__item pg-progress-legend__item--blocked">${blocked} Bloke</span>
+                <span class="pg-progress-legend__item pg-progress-legend__item--not-run">${not_run} Bekliyor</span>
+            </div>
+        `;
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // PLANS & CYCLES TAB
     // ═══════════════════════════════════════════════════════════════════════
@@ -69,13 +95,7 @@ const TestExecutionView = (() => {
         const container = document.getElementById('testContent');
 
         if (testPlans.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">📅</div>
-                    <div class="empty-state__title">No test plans yet</div>
-                    <p>Create a test plan to organize test cycles.</p><br>
-                    <button class="btn btn-primary" onclick="TestExecutionView.showPlanModal()">+ New Test Plan</button>
-                </div>`;
+            container.innerHTML = PGEmptyState.html({ icon: 'test', title: 'Henüz test planı yok', description: 'Test döngüleri düzenlemek için test planı oluştur.', action: { label: '+ Yeni Test Planı', onclick: 'TestExecutionView.showPlanModal()' } });
             return;
         }
         if (!_selectedPlanId || !testPlans.some(p => Number(p.id) === Number(_selectedPlanId))) {
@@ -378,10 +398,12 @@ const TestExecutionView = (() => {
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modalContainer');
 
-        const resultBadge = (r) => {
-            const c = { pass: '#107e3e', fail: '#c4314b', blocked: '#e9730c', not_run: '#888', deferred: '#6a4fa0' };
-            return `<span class="badge" style="background:${c[r] || '#888'};color:#fff">${r}</span>`;
-        };
+        const resultBadge = (r) => PGStatusRegistry.badge(r);
+
+        const passCount    = execs.filter(e => e.result === 'pass').length;
+        const failCount    = execs.filter(e => e.result === 'fail').length;
+        const blockedCount = execs.filter(e => e.result === 'blocked').length;
+        const notRunCount  = execs.filter(e => !e.result || e.result === 'not_run' || e.result === 'deferred').length;
 
         modal.innerHTML = `
             <div class="modal-header"><h2>${data.name} — Executions</h2>
@@ -391,6 +413,7 @@ const TestExecutionView = (() => {
                     <button class="btn btn-primary btn-sm" onclick="TestExecutionView.showExecModal(${cycleId})">+ Add Execution</button>
                     <button class="btn btn-sm" style="background:#0070f3;color:#fff" onclick="TestExecutionView.viewCycleRuns(${cycleId})">▶ Test Runs</button>
                 </div>
+                ${execs.length > 0 ? `<div class="pg-progress-wrap">${_renderProgressBar({ total: execs.length, pass: passCount, fail: failCount, blocked: blockedCount, not_run: notRunCount })}</div>` : ''}
                 ${execs.length === 0 ? '<p style="color:#999">No executions yet. Add test case executions to this cycle.</p>' : `
                 <table class="data-table">
                     <thead><tr><th>Test Case</th><th>Result</th><th>Steps</th><th>Attempt</th><th>Tester</th><th>Duration</th><th>Actions</th></tr></thead>
@@ -719,10 +742,7 @@ const TestExecutionView = (() => {
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modalContainer');
 
-        const resultBadge = (r) => {
-            const c = {pass:'#107e3e',fail:'#c4314b',blocked:'#e9730c',not_run:'#888',skipped:'#6a4fa0',deferred:'#6a4fa0'};
-            return `<span class="badge" style="background:${c[r]||'#888'};color:#fff">${r}</span>`;
-        };
+        const resultBadge = (r) => PGStatusRegistry.badge(r);
 
         const resultMap = {};
         stepResults.forEach(sr => { resultMap[sr.step_no] = sr; });
@@ -875,14 +895,8 @@ const TestExecutionView = (() => {
         const overlay = document.getElementById('modalOverlay');
         const modal = document.getElementById('modalContainer');
 
-        const statusBadge = (s) => {
-            const c = {not_started:'#888',in_progress:'#0070f3',completed:'#107e3e',aborted:'#c4314b'};
-            return `<span class="badge" style="background:${c[s]||'#888'};color:#fff">${s.replace('_',' ')}</span>`;
-        };
-        const resultBadge = (r) => {
-            const c = {pass:'#107e3e',fail:'#c4314b',blocked:'#e9730c',not_run:'#888',deferred:'#6a4fa0'};
-            return `<span class="badge" style="background:${c[r]||'#888'};color:#fff">${r}</span>`;
-        };
+        const statusBadge = (s) => PGStatusRegistry.badge(s, { label: (s || '').replace(/_/g, ' ') });
+        const resultBadge = (r) => PGStatusRegistry.badge(r);
 
         modal.innerHTML = `
             <div class="modal-header"><h2>Test Runs — Cycle #${cycleId}</h2>

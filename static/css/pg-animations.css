@@ -1,0 +1,82 @@
+/* ============================================================
+   Perga Design System — pg-animations.css
+   UI-S09-T04: Micro-interactions & page transitions
+   ============================================================ */
+
+/* ── prefers-reduced-motion: kill all animations ─────────────
+   WCAG 2.1 SC 2.3.3 (AAA) — respected here as best-practice  */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration:       0.01ms !important;
+        animation-iteration-count: 1     !important;
+        transition-duration:      0.01ms !important;
+        scroll-behavior:          auto   !important;
+    }
+}
+
+/* ── Page / View Transition ─────────────────────────────────── */
+/* Applied to #mainContent by navigate() on every view switch   */
+.pg-view-enter {
+    animation: pg-view-in 160ms ease forwards;
+}
+
+@keyframes pg-view-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0);   }
+}
+
+/* ── Reusable Utility Animations ─────────────────────────────── */
+.pg-fade-in {
+    animation: pg-fade-in 200ms ease forwards;
+}
+@keyframes pg-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.pg-slide-up {
+    animation: pg-slide-up 220ms ease forwards;
+}
+@keyframes pg-slide-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0);    }
+}
+
+.pg-slide-in-right {
+    animation: pg-slide-in-right 250ms ease forwards;
+}
+@keyframes pg-slide-in-right {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0);    }
+}
+
+/* ── Interactive Element Transitions ─────────────────────────── */
+/* Button hover lift */
+.pg-btn {
+    transition: transform var(--pg-t-fast), box-shadow var(--pg-t-fast),
+                background var(--pg-t-fast), border-color var(--pg-t-fast);
+}
+.pg-btn:not([disabled]):hover {
+    transform: translateY(-1px);
+    box-shadow: var(--pg-shadow-sm);
+}
+.pg-btn:not([disabled]):active {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+/* Card hover elevation */
+.pg-kpi-card,
+.pg-program-card {
+    transition: box-shadow var(--pg-t-normal), transform var(--pg-t-normal);
+}
+.pg-kpi-card:hover,
+.pg-program-card:hover {
+    box-shadow: var(--pg-shadow-md);
+    transform: translateY(-2px);
+}
+
+/* Sidebar item transition */
+.sidebar__item {
+    transition: background var(--pg-t-fast), color var(--pg-t-fast);
+}

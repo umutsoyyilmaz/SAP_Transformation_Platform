@@ -1,0 +1,137 @@
+/* ============================================================
+   Perga Design System — pg-tokens.css
+   UI-S01-T01: Unified token system (--pg-* prefix)
+   Replaces: --sap-* (main.css) + --tm-* (design-tokens.css)
+   ============================================================ */
+:root {
+
+    /* ── Primitive Tokens ──────────────────────────────────── */
+    --pg-color-blue-50:    #ebf5ff;
+    --pg-color-blue-100:   #dbeafe;
+    --pg-color-blue-600:   #0070f2;
+    --pg-color-blue-700:   #0054b5;
+    --pg-color-slate-50:   #f8fafc;
+    --pg-color-slate-100:  #f1f5f9;
+    --pg-color-slate-200:  #e2e8f0;
+    --pg-color-slate-400:  #94a3b8;
+    --pg-color-slate-500:  #64748b;
+    --pg-color-slate-700:  #334155;
+    --pg-color-slate-800:  #1e293b;
+    --pg-color-slate-900:  #0f172a;
+    --pg-color-green-50:   #f0fdf4;
+    --pg-color-green-600:  #16a34a;
+    --pg-color-red-50:     #fef2f2;
+    --pg-color-red-600:    #dc2626;
+    --pg-color-yellow-50:  #fefce8;
+    --pg-color-yellow-600: #ca8a04;
+
+    /* ── Semantic Tokens ───────────────────────────────────── */
+    --pg-color-primary:        var(--pg-color-blue-600);
+    --pg-color-primary-hover:  var(--pg-color-blue-700);
+    --pg-color-primary-light:  var(--pg-color-blue-50);
+    --pg-color-surface:        #ffffff;
+    --pg-color-bg:             #f5f6f7;
+    --pg-color-border:         #d9d9d9;
+    --pg-color-border-strong:  #c4c9d0;
+    --pg-color-text:           #32363a;
+    --pg-color-text-secondary: #6a6d70;
+    --pg-color-text-tertiary:  #767b80; /* WCAG 1.4.3 — 4.5:1 on #fff */
+    --pg-color-positive:       var(--pg-color-green-600);
+    --pg-color-negative:       var(--pg-color-red-600);
+    --pg-color-warning:        #e76500;
+
+    /* ── Component Tokens ──────────────────────────────────── */
+    --pg-btn-primary-bg:     var(--pg-color-primary);
+    --pg-btn-primary-hover:  var(--pg-color-primary-hover);
+    --pg-sidebar-bg:         #1d2d3e;
+    --pg-sidebar-text:       #bdc3c7;
+    --pg-sidebar-hover:      #2c3e50;
+    --pg-sidebar-active:     var(--pg-color-primary);
+    --pg-sidebar-width:      260px;
+    --pg-sidebar-collapsed:  56px;
+    --pg-header-bg:          #354a5f;
+    --pg-header-height:      48px;
+
+    /* ── Spacing (4px base grid) ───────────────────────────── */
+    --pg-sp-1:   4px;
+    --pg-sp-2:   8px;
+    --pg-sp-3:   12px;
+    --pg-sp-4:   16px;
+    --pg-sp-5:   20px;
+    --pg-sp-6:   24px;
+    --pg-sp-8:   32px;
+    --pg-sp-10:  40px;
+    --pg-sp-12:  48px;
+
+    /* ── Border Radius ─────────────────────────────────────── */
+    --pg-radius-sm:  3px;
+    --pg-radius-md:  6px;
+    --pg-radius-lg:  10px;
+    --pg-radius-xl:  16px;
+
+    /* ── Shadow ────────────────────────────────────────────── */
+    --pg-shadow-sm:  0 1px 2px rgba(15,23,42,0.06);
+    --pg-shadow-md:  0 4px 14px rgba(15,23,42,0.08);
+    --pg-shadow-lg:  0 10px 30px rgba(15,23,42,0.12);
+    --pg-shadow-xl:  0 20px 60px rgba(15,23,42,0.16);
+
+    /* ── Z-index ───────────────────────────────────────────── */
+    --pg-z-sidebar:    90;
+    --pg-z-header:    100;
+    --pg-z-dropdown:  100;
+    --pg-z-modal-bg:  200;
+    --pg-z-modal:     210;
+    --pg-z-toast:     300;
+    --pg-z-palette:   400;
+
+    /* ── Transition ────────────────────────────────────────── */
+    --pg-t-fast:    100ms ease;
+    --pg-t-normal:  150ms ease;
+    --pg-t-slow:    250ms ease;
+}
+
+/* ── Accessibility: Focus Visible ──────────────────────────── */
+/* WCAG 2.1 SC 2.4.7 — visible focus for keyboard users        */
+:focus-visible {
+    outline: 2px solid var(--pg-color-primary);
+    outline-offset: 2px;
+    border-radius: var(--pg-radius-sm);
+}
+/* Suppress mouse-click focus ring                             */
+:focus:not(:focus-visible) { outline: none; }
+
+/* ── Accessibility: Skip Link ──────────────────────────────── */
+/* WCAG 2.1 SC 2.4.1                                           */
+.pg-skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    background: var(--pg-color-primary);
+    color: #fff;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    z-index: 9999;
+    border-radius: 0 0 var(--pg-radius-md) 0;
+    text-decoration: none;
+}
+.pg-skip-link:focus { left: 0; }
+
+/* ── Dark Mode Override Layer ──────────────────────────────── */
+/* UI-S09-T03: class-based toggle; localStorage.pg_theme       */
+[data-theme="dark"] {
+    --pg-color-surface:          #1e2433;
+    --pg-color-bg:               #161b27;
+    --pg-color-border:           #2a3142;
+    --pg-color-border-strong:    #3a4158;
+    --pg-color-text:             #e2e8f0;
+    --pg-color-text-secondary:   #94a3b8;
+    --pg-color-text-tertiary:    #64748b;
+    --pg-color-primary-light:    rgba(0, 112, 242, 0.15);
+    --pg-sidebar-bg:             #0f1420;
+    --pg-header-bg:              #1a2030;
+    --pg-shadow-sm:              0 1px 2px rgba(0,0,0,0.3);
+    --pg-shadow-md:              0 4px 14px rgba(0,0,0,0.4);
+    --pg-shadow-lg:              0 10px 30px rgba(0,0,0,0.5);
+    --pg-shadow-xl:              0 20px 60px rgba(0,0,0,0.6);
+}

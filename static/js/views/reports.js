@@ -20,9 +20,7 @@ const ReportsView = (() => {
     const CATEGORY_KEYS = ['coverage', 'execution', 'defect', 'traceability', 'ai_insights', 'plan'];
 
     function ragBadge(rag) {
-        const color = RAG_COLORS[rag] || '#999';
-        const label = RAG_LABELS[rag] || rag || '—';
-        return `<span style="display:inline-block;padding:4px 12px;background:${color};color:#fff;border-radius:4px;font-weight:600;font-size:13px">${label}</span>`;
+        return PGStatusRegistry.badge(rag, { label: RAG_LABELS[rag] || rag || '—' });
     }
 
     function pctBar(pct, color) {
@@ -42,22 +40,19 @@ const ReportsView = (() => {
         const prog = App.getActiveProgram();
 
         if (!prog) {
-            main.innerHTML = `
-                <div class="page-header"><h1>Reports & Dashboards</h1></div>
-                <div class="empty-state">
-                    <div class="empty-state__icon">📊</div>
-                    <div class="empty-state__title">No Program Selected</div>
-                    <p>Select a program to view reports.</p>
-                </div>`;
+            main.innerHTML = PGEmptyState.html({ icon: 'reports', title: 'Program Seçilmedi', description: 'Raporları görüntülemek için önce bir program seç.', action: { label: 'Programlara Git', onclick: "App.navigate('programs')" } });
             return;
         }
 
         main.innerHTML = `
-            <div class="page-header">
-                <h1>Reports — ${esc(prog.name)}</h1>
-                <div>
-                    <button class="btn btn-secondary" onclick="ReportsView.exportXlsx()">📥 Excel</button>
-                    <button class="btn btn-secondary" onclick="ReportsView.exportPdf()">📄 Print</button>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'Raporlar' }])}
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <h2 class="pg-view-title">Raporlar — ${esc(prog.name)}</h2>
+                    <div style="display:flex;gap:var(--pg-sp-2)">
+                        <button class="pg-btn pg-btn--ghost pg-btn--sm" onclick="ReportsView.exportXlsx()">Excel</button>
+                        <button class="pg-btn pg-btn--ghost pg-btn--sm" onclick="ReportsView.exportPdf()">Print</button>
+                    </div>
                 </div>
             </div>
             <!-- Tab Navigation -->
@@ -320,12 +315,7 @@ const ReportsView = (() => {
             const resp = await API.get(`/reports/definitions?program_id=${prog.id}`);
             const defs = resp.definitions || [];
             if (defs.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state__icon">💾</div>
-                        <div class="empty-state__title">No Saved Reports</div>
-                        <p>Run a preset report from the catalog and save it for quick access.</p>
-                    </div>`;
+                container.innerHTML = PGEmptyState.html({ icon: 'reports', title: 'Kayıtlı Rapor Yok', description: 'Katalogdan bir preset raporu çalıştır ve kaydet.' });
                 return;
             }
             container.innerHTML = `
@@ -397,12 +387,7 @@ const ReportsView = (() => {
     }
 
     function statusBadge(status) {
-        const colors = {
-            active: '#0070f3', completed: '#27AE60', planned: '#a9b4be',
-            not_started: '#a9b4be', on_hold: '#F39C12',
-        };
-        const c = colors[status] || '#a9b4be';
-        return `<span style="display:inline-block;padding:2px 8px;background:${c}22;color:${c};border-radius:4px;font-size:12px;font-weight:600">${status || '—'}</span>`;
+        return PGStatusRegistry.badge(status);
     }
 
     function exportXlsx() {

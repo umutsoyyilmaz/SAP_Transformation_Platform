@@ -37,26 +37,48 @@ const BacklogView = (() => {
         cancelled: 'Cancelled',
     };
 
-    function _priorityBadge(p) {
-        const colors = { critical:'#dc2626', high:'#f97316', medium:'#f59e0b', low:'#22c55e' };
-        const bg = { critical:'#fee2e2', high:'#fff7ed', medium:'#fefce8', low:'#f0fdf4' };
-        const label = (p || '').charAt(0).toUpperCase() + (p || '').slice(1);
-        return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:${bg[p] || '#f1f5f9'};color:${colors[p] || '#64748b'}">
-            <span style="width:6px;height:6px;border-radius:50%;background:${colors[p] || '#94a3b8'}"></span>${label}
-        </span>`;
+    // ── Sprint Velocity Spark Bar (UI-S05-T05) ────────────────────────────
+    function _sparkBar(values, color = '#0070f2', height = 28) {
+        if (!values || values.length === 0) return '';
+        const max = Math.max(...values, 1);
+        const barW = 18;
+        const gap  = 3;
+        const w    = values.length * (barW + gap) - gap;
+        const bars = values.map((v, i) => {
+            const h = Math.max(2, Math.round(v / max * height));
+            const y = height - h;
+            return `<rect x="${i * (barW + gap)}" y="${y}" width="${barW}" height="${h}" rx="2"
+                fill="${color}" opacity="${i === values.length - 1 ? 1 : 0.45}"/>`;
+        }).join('');
+        return `<svg width="${w}" height="${height}" viewBox="0 0 ${w} ${height}" style="overflow:visible;vertical-align:middle">${bars}</svg>`;
     }
 
-    function _statusBadge(s) {
-        const map = {
-            new:'#dbeafe', design:'#e0e7ff', build:'#fef3c7', test:'#fce7f3',
-            deploy:'#d1fae5', closed:'#f1f5f9', blocked:'#fee2e2', cancelled:'#f1f5f9',
-        };
-        const textMap = {
-            new:'#1e40af', design:'#3730a3', build:'#92400e', test:'#9d174d',
-            deploy:'#065f46', closed:'#475569', blocked:'#991b1b', cancelled:'#475569',
-        };
-        const label = STATUS_LABELS[s] || s || '—';
-        return `<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:${map[s] || '#f1f5f9'};color:${textMap[s] || '#475569'};white-space:nowrap">${label}</span>`;
+    // ── Filter Chip Bar (UI-S05-T02) ─────────────────────────────────────
+    const _filterKeyLabel = (key) => ({ status: 'Durum', priority: 'Öncelik', wricef_type: 'Tür', sprint: 'Sprint', assignee: 'Atanan', module: 'Modül' })[key] || key;
+
+    function _renderFilterBar(filters, clearFn, clearAllFn) {
+        const active = Object.entries(filters).filter(([, v]) => v && (Array.isArray(v) ? v.length > 0 : v !== 'all'));
+        if (active.length === 0) return '';
+
+        const chips = active.flatMap(([k, v]) => {
+            const vals = Array.isArray(v) ? v : [v];
+            return vals.map(val => `
+                <span class="pg-filter-chip">
+                    <span class="pg-filter-chip__key">${_filterKeyLabel(k)}</span>
+                    <span class="pg-filter-chip__val">${val}</span>
+                    <button class="pg-filter-chip__clear" onclick="${clearFn}('${k}','${val}')" aria-label="Filtreyi kaldır">×</button>
+                </span>
+            `);
+        }).join('');
+
+        return `
+            <div class="pg-filter-bar">
+                <div class="pg-filter-bar__chips">${chips}</div>
+                <div class="pg-filter-bar__actions">
+                    <button class="pg-btn pg-btn--ghost pg-btn--sm" onclick="${clearAllFn}()">Tümünü Temizle</button>
+                </div>
+            </div>
+        `;
     }
 
     // ── Main render ──────────────────────────────────────────────────────
@@ -77,6 +99,7 @@ const BacklogView = (() => {
         }
 
         main.innerHTML = `
+            ${PGBreadcrumb.html([{label:'Programs',onclick:'App.navigate("programs")'},{label:'Backlog'}])}
             <div class="page-header" style="margin-bottom:20px">
                 <div>
                     <h2 style="margin:0">Backlog</h2>
@@ -163,7 +186,10 @@ const BacklogView = (() => {
                             <span class="kanban-column__count">${(boardData.columns[status] || []).length}</span>
                         </div>
                         <div class="kanban-column__body" data-status="${status}">
-                            ${(boardData.columns[status] || []).map(item => _renderKanbanCard(item)).join('')}
+                            ${(boardData.columns[status] || []).length === 0
+                                ? PGEmptyState.html({ icon: 'build', title: 'Bu sütunda item yok' })
+                                : (boardData.columns[status] || []).map(item => _renderKanbanCard(item)).join('')
+                            }
                         </div>
                     </div>
                 `).join('')}
@@ -179,7 +205,7 @@ const BacklogView = (() => {
             <div class="kanban-card" data-id="${item.id}" onclick="BacklogView.openDetail(${item.id})">
                 <div class="kanban-card__header">
                     <span class="wricef-badge" style="background:${w.color}">${w.icon} ${w.label[0]}</span>
-                    <span class="badge badge-${item.priority}">${item.priority}</span>
+                    ${PGStatusRegistry.badge(item.priority)}
                     ${linkCount > 0 ? `<span class="trace-badge" title="${linkCount} linked items">🔗${linkCount}</span>` : ''}
                 </div>
                 <div class="kanban-card__title">${escHtml(item.title)}</div>
@@ -207,6 +233,7 @@ const BacklogView = (() => {
         }
 
         c.innerHTML = `
+            <div id="blChipBar"></div>
             <div id="blFilterBar" style="margin-bottom:8px"></div>
             <div id="blListTable"></div>`;
 
@@ -233,6 +260,9 @@ const BacklogView = (() => {
             if (values.length === 0) return;
             filtered = filtered.filter(i => values.includes(String(i[key])));
         });
+
+        const chipBar = document.getElementById('blChipBar');
+        if (chipBar) chipBar.innerHTML = _renderFilterBar(_listFilters, 'BacklogView.clearListFilter', 'BacklogView.clearAllListFilters');
 
         const countEl = document.getElementById('blItemCount');
         if (countEl) countEl.textContent = `${filtered.length} of ${items.length}`;
@@ -284,6 +314,24 @@ const BacklogView = (() => {
         applyListFilter();
     }
 
+    function clearListFilter(key, val) {
+        if (!_listFilters[key]) return;
+        if (Array.isArray(_listFilters[key])) {
+            _listFilters[key] = _listFilters[key].filter(v => v !== val);
+            if (_listFilters[key].length === 0) delete _listFilters[key];
+        } else {
+            delete _listFilters[key];
+        }
+        renderListFilterBar();
+        applyListFilter();
+    }
+
+    function clearAllListFilters() {
+        _listFilters = {};
+        renderListFilterBar();
+        applyListFilter();
+    }
+
     function onListFilterChange(update) {
         if (update._clearAll) {
             _listFilters = {};
@@ -327,8 +375,8 @@ const BacklogView = (() => {
                     ${linkCount > 0 ? `<span style="margin-left:4px;font-size:10px;color:#94a3b8">🔗${linkCount}</span>` : ''}
                 </td>
                 <td><span style="font-size:12px;color:#64748b">${escHtml(i.module || '—')}</span></td>
-                <td>${_statusBadge(i.status)}</td>
-                <td>${_priorityBadge(i.priority)}</td>
+                <td>${PGStatusRegistry.badge(i.status, { label: STATUS_LABELS[i.status] || i.status || '—' })}</td>
+                <td>${PGStatusRegistry.badge(i.priority)}</td>
                 <td style="text-align:center;font-weight:600;color:#64748b">${i.story_points || '—'}</td>
                 <td><span style="font-size:12px;color:#64748b">${escHtml(i.assigned_to || '—')}</span></td>
                 <td style="text-align:right" onclick="event.stopPropagation()">
@@ -369,7 +417,7 @@ const BacklogView = (() => {
                             <div class="card-header">
                                 <div>
                                     <h3>${escHtml(s.name)}</h3>
-                                    <span class="badge badge-${s.status}">${s.status}</span>
+                                    ${PGStatusRegistry.badge(s.status)}
                                     ${s.start_date ? `<span style="color:var(--sap-text-secondary);margin-left:12px">${s.start_date} → ${s.end_date || '?'}</span>` : ''}
                                 </div>
                                 <div style="display:flex;gap:4px">
@@ -389,6 +437,12 @@ const BacklogView = (() => {
                                 ${s.capacity_points ? `<span><strong>${s.capacity_points}</strong> capacity</span>` : ''}
                                 ${s.velocity != null ? `<span><strong>${s.velocity}</strong> velocity</span>` : ''}
                             </div>
+                            ${totalPts > 0 ? `
+                            <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
+                                <span style="font-size:11px;color:var(--pg-color-text-tertiary)">Velocity</span>
+                                ${_sparkBar([donePts, totalPts - donePts > 0 ? totalPts - donePts : 0].concat(s.velocity ? [s.velocity] : []), '#0070f2', 24)}
+                                ${s.capacity_points ? `<span style="font-size:11px;color:var(--pg-color-text-tertiary)">${Math.round(totalPts / s.capacity_points * 100)}% capacity</span>` : ''}
+                            </div>` : ''}
                             ${sprintItems.length > 0 ? `
                                 <table class="data-table" style="margin-top:12px">
                                     <thead><tr><th>Type</th><th>Code</th><th>Title</th><th>Status</th><th>SP</th></tr></thead>
@@ -399,7 +453,7 @@ const BacklogView = (() => {
                                                 <td><span class="wricef-badge" style="background:${w.color}">${w.icon}</span></td>
                                                 <td>${escHtml(i.code || '—')}</td>
                                                 <td>${escHtml(i.title)}</td>
-                                                <td><span class="badge badge-${i.status}">${STATUS_LABELS[i.status] || i.status}</span></td>
+                                                <td>${PGStatusRegistry.badge(i.status, { label: STATUS_LABELS[i.status] || i.status })}</td>
                                                 <td>${i.story_points || '—'}</td>
                                             </tr>`;
                                         }).join('')}
@@ -556,8 +610,8 @@ const BacklogView = (() => {
                 <td><span style="font-weight:500">${escHtml(ci.title)}</span></td>
                 <td><span style="font-size:12px;color:#64748b">${escHtml(ci.module || '—')}</span></td>
                 <td><span style="font-size:12px;color:#64748b">${escHtml(ci.config_key || '—')}</span></td>
-                <td>${_statusBadge(ci.status)}</td>
-                <td>${_priorityBadge(ci.priority)}</td>
+                <td>${PGStatusRegistry.badge(ci.status, { label: STATUS_LABELS[ci.status] || ci.status || '—' })}</td>
+                <td>${PGStatusRegistry.badge(ci.priority)}</td>
                 <td><span style="font-size:12px;color:#64748b">${escHtml(ci.assigned_to || '—')}</span></td>
                 <td style="text-align:right" onclick="event.stopPropagation()">
                     <button class="btn-icon" onclick="BacklogView.showEditConfigModal(${ci.id})" title="Edit">
@@ -674,7 +728,7 @@ const BacklogView = (() => {
                     <h1 style="display:inline;margin-left:12px">
                         ⚙️ ${escHtml(ci.code || '')} ${escHtml(ci.title)}
                     </h1>
-                    <span class="badge badge-${ci.status}" style="margin-left:8px">${STATUS_LABELS[ci.status] || ci.status}</span>
+                    ${PGStatusRegistry.badge(ci.status, { label: STATUS_LABELS[ci.status] || ci.status })}
                 </div>
                 <div>
                     <button class="btn btn-primary" onclick="BacklogView.showEditConfigModal(${ci.id})">Edit</button>
@@ -687,7 +741,7 @@ const BacklogView = (() => {
                     <dl class="detail-list">
                         <dt>Module</dt><dd>${escHtml(ci.module || '—')}</dd>
                         <dt>Config Key</dt><dd>${escHtml(ci.config_key || '—')}</dd>
-                        <dt>Priority</dt><dd><span class="badge badge-${ci.priority}">${ci.priority}</span></dd>
+                        <dt>Priority</dt><dd>${PGStatusRegistry.badge(ci.priority)}</dd>
                         <dt>Assigned To</dt><dd>${escHtml(ci.assigned_to || '—')}</dd>
                         <dt>Transport Request</dt><dd>${escHtml(ci.transport_request || '—')}</dd>
                     </dl>
@@ -704,7 +758,7 @@ const BacklogView = (() => {
                 ${fs ? `
                     <dl class="detail-list">
                         <dt>Title</dt><dd>${escHtml(fs.title)}</dd>
-                        <dt>Status</dt><dd><span class="badge badge-${fs.status}">${fs.status}</span></dd>
+                        <dt>Status</dt><dd>${PGStatusRegistry.badge(fs.status)}</dd>
                         <dt>Version</dt><dd>${fs.version || '—'}</dd>
                     </dl>
                 ` : '<p style="color:var(--sap-text-secondary)">No functional specification linked.</p>'}
@@ -727,8 +781,48 @@ const BacklogView = (() => {
         try {
             currentItem = await API.get(`/backlog/${id}?include_specs=true`);
         } catch (err) { App.toast(err.message, 'error'); return; }
-        renderDetail();
+
+        const i = currentItem;
+        const w = WRICEF[i.wricef_type] || WRICEF.enhancement;
+        const sprint = sprints.find(s => s.id === i.sprint_id);
+
+        PGPanel.open({
+            title: `${escHtml(i.code || w.label)} — ${escHtml(i.title)}`,
+            content: `
+                <div class="pg-panel__section">
+                    <p class="pg-panel__section-title">Sınıflandırma</p>
+                    <dl class="pg-panel__dl">
+                        <dt class="pg-panel__dt">Tür</dt>
+                        <dd class="pg-panel__dd"><span class="wricef-badge" style="background:${w.color}">${w.icon} ${w.label}</span></dd>
+                        <dt class="pg-panel__dt">Durum</dt>
+                        <dd class="pg-panel__dd">${PGStatusRegistry.badge(i.status, { label: STATUS_LABELS[i.status] || i.status })}</dd>
+                        <dt class="pg-panel__dt">Öncelik</dt>
+                        <dd class="pg-panel__dd">${PGStatusRegistry.badge(i.priority)}</dd>
+                        <dt class="pg-panel__dt">Modül</dt>
+                        <dd class="pg-panel__dd">${escHtml(i.module || '—')}</dd>
+                        <dt class="pg-panel__dt">Sprint</dt>
+                        <dd class="pg-panel__dd">${sprint ? escHtml(sprint.name) : 'Atanmamış'}</dd>
+                        <dt class="pg-panel__dt">Atanan</dt>
+                        <dd class="pg-panel__dd">${escHtml(i.assigned_to || '—')}</dd>
+                        <dt class="pg-panel__dt">Puan (SP)</dt>
+                        <dd class="pg-panel__dd">${i.story_points || '—'}</dd>
+                    </dl>
+                </div>
+                ${i.description ? `
+                <div class="pg-panel__section">
+                    <p class="pg-panel__section-title">Açıklama</p>
+                    <p style="font-size:13px;color:var(--pg-color-text-secondary);margin:0;line-height:1.6">${escHtml(i.description)}</p>
+                </div>` : ''}
+                <div class="pg-panel__actions">
+                    <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="BacklogView.showEditModal();PGPanel.close()">Düzenle</button>
+                    <button class="pg-btn pg-btn--secondary pg-btn--sm" onclick="BacklogView.renderDetail()">Tam Detay</button>
+                    <button class="pg-btn pg-btn--ghost pg-btn--sm" onclick="PGPanel.close()">Kapat</button>
+                </div>
+            `,
+        });
     }
+
+    function renderDetail() {
 
     function renderDetail() {
         const i = currentItem;
@@ -747,7 +841,7 @@ const BacklogView = (() => {
                         <span class="wricef-badge" style="background:${w.color}">${w.icon} ${w.label}</span>
                         ${escHtml(i.code || '')} ${escHtml(i.title)}
                     </h1>
-                    <span class="badge badge-${i.status}" style="margin-left:8px">${STATUS_LABELS[i.status] || i.status}</span>
+                    ${PGStatusRegistry.badge(i.status, { label: STATUS_LABELS[i.status] || i.status })}
                 </div>
                 <div>
                     <button class="btn btn-secondary" onclick="BacklogView.showMoveModal()">🔀 Move</button>
@@ -793,7 +887,7 @@ const BacklogView = (() => {
                         <dt>WRICEF Type</dt><dd><span class="wricef-badge" style="background:${w.color}">${w.icon} ${w.label}</span></dd>
                         <dt>Sub Type</dt><dd>${escHtml(i.sub_type || '—')}</dd>
                         <dt>Module</dt><dd>${escHtml(i.module || '—')}</dd>
-                        <dt>Priority</dt><dd><span class="badge badge-${i.priority}">${i.priority}</span></dd>
+                        <dt>Priority</dt><dd>${PGStatusRegistry.badge(i.priority)}</dd>
                         <dt>Complexity</dt><dd>${i.complexity}</dd>
                     </dl>
                 </div>
@@ -886,7 +980,7 @@ const BacklogView = (() => {
                 ${fs ? `
                     <dl class="detail-list">
                         <dt>Title</dt><dd>${escHtml(fs.title)}</dd>
-                        <dt>Status</dt><dd><span class="badge badge-${fs.status}">${fs.status}</span></dd>
+                        <dt>Status</dt><dd>${PGStatusRegistry.badge(fs.status)}</dd>
                         <dt>Version</dt><dd>${fs.version || '—'}</dd>
                         <dt>Author</dt><dd>${escHtml(fs.author || '—')}</dd>
                         <dt>Reviewer</dt><dd>${escHtml(fs.reviewer || '—')}</dd>
@@ -1542,7 +1636,8 @@ const BacklogView = (() => {
 
     // Public API
     return {
-        render, switchTab, applyListFilter, setListSearch, onListFilterChange,
+        render, switchTab, renderDetail, applyListFilter, setListSearch, onListFilterChange,
+        clearListFilter, clearAllListFilters,
         setConfigSearch, onConfigFilterChange, applyConfigFilter,
         showCreateModal, showCreateSelector, createWricefFromSelector,
         createConfigFromSelector, showEditModal, saveItem,

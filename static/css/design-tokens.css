@@ -1,4 +1,5 @@
 /* F1 — Test Management Design Tokens (QMetry-style compact foundation) */
+/* UI-S01: --tm-* vars aliased to --pg-* source of truth (pg-tokens.css) */
 :root {
     /* ── Color: Neutral ────────────────────── */
     --tm-bg: #f7f8fa;
@@ -99,4 +100,24 @@
     --tm-z-modal: 210;
     --tm-z-toast: 300;
     --tm-z-context-menu: 150;
+
+    /* ── UI-S01: --pg-* aliases for backward compat ─────── */
+    /* These map legacy --tm-* consumers to the new token system. */
+    /* Remove after UI-S02 migration is complete.               */
+    --tm-accent:          var(--pg-color-primary);
+    --tm-accent-hover:    var(--pg-color-primary-hover);
+    --tm-accent-light:    var(--pg-color-primary-light);
+    --tm-bg:              var(--pg-color-bg);
+    --tm-surface:         var(--pg-color-surface);
+    --tm-border:          var(--pg-color-border);
+    --tm-border-strong:   var(--pg-color-border-strong);
+    --tm-text-primary:    var(--pg-color-text);
+    --tm-text-secondary:  var(--pg-color-text-secondary);
+    --tm-text-tertiary:   var(--pg-color-text-tertiary);
+    --tm-shadow-sm:       var(--pg-shadow-sm);
+    --tm-shadow-md:       var(--pg-shadow-md);
+    --tm-shadow-lg:       var(--pg-shadow-lg);
+    --tm-transition-fast:   var(--pg-t-fast);
+    --tm-transition-normal: var(--pg-t-normal);
+    --tm-transition-slow:   var(--pg-t-slow);
 }

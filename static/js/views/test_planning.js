@@ -55,7 +55,10 @@ const TestPlanningView = (() => {
         }
 
         main.innerHTML = `
-            <div class="page-header"><h1>📋 Test Planning</h1></div>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{label:'Programs',onclick:'App.navigate("programs")'},{label:'Test Planning'}])}
+                <h2 class="pg-view-title">Test Planning</h2>
+            </div>
             <div id="testPlanningTabs"></div>
             <div class="card" id="testContent">
                 <div style="text-align:center;padding:40px"><div class="spinner"></div></div>
@@ -109,13 +112,7 @@ const TestPlanningView = (() => {
         const container = document.getElementById('testContent');
 
         if (plans.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">📅</div>
-                    <div class="empty-state__title">No test plans yet</div>
-                    <p>Create your first test plan, then add scope (L3 process, scenario, requirement).</p><br>
-                    <button class="btn btn-primary" onclick="TestPlanningView.showPlanModal()">+ New Test Plan</button>
-                </div>`;
+            container.innerHTML = PGEmptyState.html({ icon: 'test', title: 'Henüz test planı yok', description: 'İlk test planını oluştur, ardından kapsam (L3 süreç, senaryo, gereksinim) ekle.', action: { label: '+ Yeni Test Planı', onclick: 'TestPlanningView.showPlanModal()' } });
             return;
         }
 
@@ -238,9 +235,9 @@ const TestPlanningView = (() => {
             onRowClick: (rowId) => TestPlanDetailView.open(Number(rowId), { from: 'planning' }),
             columns: [
                 { key: 'name', label: 'Plan Name', width: '260px', render: (p) => `<strong>${esc(p.name || '-')}</strong>${p.description ? `<div style="font-size:11px;color:#64748b">${esc(p.description)}</div>` : ''}` },
-                { key: 'plan_type', label: 'Type', width: '95px', render: (p) => `<span class="badge" style="background:#0070f3;color:#fff">${TYPE_LBL[p.plan_type] || (p.plan_type || '—').toUpperCase()}</span>` },
-                { key: 'environment', label: 'Env', width: '80px', render: (p) => p.environment ? `<span class="badge" style="background:#6a4fa0;color:#fff">${esc(p.environment)}</span>` : '-' },
-                { key: 'status', label: 'Status', width: '95px', render: (p) => `<span class="badge" style="background:${STATUS_CLR[p.status] || '#888'};color:#fff">${esc(p.status || '-')}</span>` },
+                { key: 'plan_type', label: 'Type', width: '95px', render: (p) => PGStatusRegistry.badge(p.plan_type, { label: TYPE_LBL[p.plan_type] || (p.plan_type || '—').toUpperCase() }) },
+                { key: 'environment', label: 'Env', width: '80px', render: (p) => p.environment ? PGStatusRegistry.badge('env', { label: esc(p.environment) }) : '-' },
+                { key: 'status', label: 'Status', width: '95px', render: (p) => PGStatusRegistry.badge(p.status) },
                 { key: 'start_date', label: 'Start', width: '95px', render: (p) => esc(p.start_date || '-') },
                 { key: 'end_date', label: 'End', width: '95px', render: (p) => esc(p.end_date || '-') },
                 {
@@ -342,13 +339,7 @@ const TestPlanningView = (() => {
         const container = document.getElementById('testContent');
 
         if (testCases.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">📋</div>
-                    <div class="empty-state__title">No test cases yet</div>
-                    <p>Create your first test case to build the test catalog.</p><br>
-                    <button class="btn btn-primary" onclick="TestPlanningView.showCaseModal()">+ New Test Case</button>
-                </div>`;
+            container.innerHTML = PGEmptyState.html({ icon: 'test', title: 'Test case bulunamadı', description: 'Test kataloğunu oluşturmak için ilk test caseni ekle.', action: { label: '+ Yeni Test Case', onclick: 'TestPlanningView.showCaseModal()' } });
             return;
         }
 
@@ -523,18 +514,8 @@ const TestPlanningView = (() => {
             },
         });
 
-        const layerBadge = (layer) => {
-            const colors = {
-                unit: '#0070f3', sit: '#e9730c', uat: '#107e3e', regression: '#a93e7e',
-                e2e: '#6a4fa0', performance: '#6a4fa0', cutover_rehearsal: '#c4314b',
-            };
-            return `<span class="badge" style="background:${colors[layer] || '#888'};color:#fff">${(layer || 'N/A').toUpperCase()}</span>`;
-        };
-
-        const statusBadge = (status) => {
-            const colors = { draft: '#888', ready: '#0070f3', approved: '#107e3e', in_review: '#e5a800', deprecated: '#c4314b' };
-            return `<span class="badge" style="background:${colors[status] || '#888'};color:#fff">${status || '-'}</span>`;
-        };
+        const layerBadge = (layer) => PGStatusRegistry.badge(layer, { label: (layer || 'N/A').toUpperCase() });
+        const statusBadge = (status) => PGStatusRegistry.badge(status);
 
         TMDataGrid.render(gridEl, {
             rows: list,
@@ -560,14 +541,8 @@ const TestPlanningView = (() => {
     async function filterCatalog() { applyCatalogFilter(); }
 
     function _renderCatalogTable(list) {
-        const layerBadge = (l) => {
-            const colors = { unit: '#0070f3', sit: '#e9730c', uat: '#107e3e', regression: '#a93e7e', e2e: '#6a4fa0', performance: '#6a4fa0', cutover_rehearsal: '#c4314b' };
-            return `<span class="badge" style="background:${colors[l] || '#888'};color:#fff">${(l || 'N/A').toUpperCase()}</span>`;
-        };
-        const statusBadge = (s) => {
-            const colors = { draft: '#888', ready: '#0070f3', approved: '#107e3e', in_review: '#e5a800', deprecated: '#c4314b' };
-            return `<span class="badge" style="background:${colors[s] || '#888'};color:#fff">${s}</span>`;
-        };
+        const layerBadge = (l) => PGStatusRegistry.badge(l, { label: (l || 'N/A').toUpperCase() });
+        const statusBadge = (s) => PGStatusRegistry.badge(s);
         return `<table class="data-table">
                 <thead><tr>
                     <th>Code</th><th>Title</th><th>Layer</th><th>Module</th><th>Status</th>

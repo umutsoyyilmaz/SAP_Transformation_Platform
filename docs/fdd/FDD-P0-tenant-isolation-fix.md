@@ -20,6 +20,14 @@
 #### Adım 1: Helper Utility Oluştur
 `app/services/helpers/scoped_queries.py` — tüm servisler bunu import edecek.
 
+> **🔍 REVIEWER AUDIT NOTU (2026-02-22):**
+> Bu FDD'nin tamamlanması **B-03 (Run/Hypercare)** için sert bağımlılıktır.
+> `run_sustain_service.py` ve `cutover.py` modelleri de aynı `Model.query.get(pk)` açığını taşıyor.
+> B-03 Sprint 4'e planlandı — bu fix Sprint 1'de tamamlanmadan B-03 implement edilmemelidir.
+> Ayrıca bu dosyadaki `get_scoped()` helper, B-04 (SignoffRecord), F-06 (RaciEntry),
+> I-01 (TransportRequest), I-08 (Stakeholder) FDD'lerinde de kullanılmalı — tüm yeni model
+> sorgularında `nullable=True tenant_id` pattern'i yerine bu utility standart olarak benimsenmeli.
+
 ```python
 """
 Tenant-scoped query helpers.

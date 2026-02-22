@@ -1,0 +1,153 @@
+/* pg-command-palette.css — UI-S07-T01 */
+
+.pg-palette-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15,23,42,0.45);
+    backdrop-filter: blur(2px);
+    z-index: var(--pg-z-palette, 400);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: min(15vh, 120px);
+}
+
+.pg-palette {
+    width: 560px;
+    max-width: calc(100vw - 32px);
+    background: var(--pg-color-surface);
+    border-radius: var(--pg-radius-xl);
+    box-shadow: var(--pg-shadow-xl), 0 0 0 1px rgba(0,0,0,0.08);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: palette-in 120ms ease;
+}
+@keyframes palette-in {
+    from { opacity: 0; transform: scale(0.97) translateY(-6px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.pg-palette__search {
+    display: flex;
+    align-items: center;
+    gap: var(--pg-sp-3);
+    padding: var(--pg-sp-4) var(--pg-sp-5);
+    border-bottom: 1px solid var(--pg-color-border);
+}
+.pg-palette__search-icon { color: var(--pg-color-text-tertiary); flex-shrink: 0; }
+.pg-palette__input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 15px;
+    color: var(--pg-color-text);
+    background: transparent;
+    font-family: inherit;
+}
+.pg-palette__input::placeholder { color: var(--pg-color-text-tertiary); }
+.pg-palette__esc {
+    background: var(--pg-color-bg);
+    border: 1px solid var(--pg-color-border);
+    border-radius: 4px;
+    font-size: 10px;
+    color: var(--pg-color-text-tertiary);
+    padding: 2px 6px;
+    font-family: inherit;
+    flex-shrink: 0;
+}
+
+.pg-palette__results { max-height: 340px; overflow-y: auto; padding: var(--pg-sp-2) 0; }
+.pg-palette__group-header {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--pg-color-text-tertiary);
+    padding: var(--pg-sp-3) var(--pg-sp-5) var(--pg-sp-1);
+}
+
+.pg-palette__item {
+    display: flex;
+    align-items: center;
+    gap: var(--pg-sp-3);
+    padding: var(--pg-sp-3) var(--pg-sp-5);
+    cursor: pointer;
+    transition: background var(--pg-t-fast);
+    border-radius: 0;
+}
+.pg-palette__item:hover { background: var(--pg-color-bg); }
+.pg-palette__item--selected { background: var(--pg-color-primary-light); }
+
+.pg-palette__item-icon { color: var(--pg-color-text-tertiary); flex-shrink: 0; }
+.pg-palette__item-label { flex: 1; font-size: 13px; color: var(--pg-color-text); }
+.pg-palette__item-shortcut {
+    font-size: 10px;
+    color: var(--pg-color-text-tertiary);
+    background: var(--pg-color-bg);
+    border: 1px solid var(--pg-color-border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-family: inherit;
+}
+.pg-palette__match { background: #fef9c3; border-radius: 2px; font-style: normal; color: inherit; }
+
+.pg-palette__empty {
+    padding: var(--pg-sp-8);
+    text-align: center;
+    color: var(--pg-color-text-tertiary);
+    font-size: 13px;
+}
+.pg-palette__footer {
+    display: flex;
+    gap: var(--pg-sp-4);
+    padding: var(--pg-sp-3) var(--pg-sp-5);
+    border-top: 1px solid var(--pg-color-border);
+    background: var(--pg-color-bg);
+    font-size: 11px;
+    color: var(--pg-color-text-tertiary);
+}
+.pg-palette__footer kbd {
+    background: var(--pg-color-surface);
+    border: 1px solid var(--pg-color-border);
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-family: inherit;
+    color: var(--pg-color-text-secondary);
+}
+
+/* Shortcut help dialog */
+.pg-shortcut-help {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--pg-sp-6);
+    padding: var(--pg-sp-2) 0;
+}
+.pg-shortcut-help__group-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--pg-color-text-tertiary);
+    margin-bottom: var(--pg-sp-3);
+}
+.pg-shortcut-help__row {
+    display: flex;
+    align-items: center;
+    gap: var(--pg-sp-3);
+    padding: var(--pg-sp-2) 0;
+    font-size: 13px;
+    color: var(--pg-color-text);
+}
+.pg-shortcut-help__kbd {
+    background: var(--pg-color-bg);
+    border: 1px solid var(--pg-color-border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: var(--pg-font-mono, 'JetBrains Mono', monospace);
+    color: var(--pg-color-text-secondary);
+    white-space: nowrap;
+    min-width: 48px;
+    text-align: center;
+}

@@ -753,7 +753,7 @@ const ExploreRequirementHubView = (() => {
         const isReqTab = _activeTab === 'requirements';
 
         main.innerHTML = `<div class="explore-page">
-            ${typeof DemoFlow !== 'undefined' && DemoFlow.isActive() ? DemoFlow.breadcrumbHTML() : ''}
+            ${PGBreadcrumb.html([{label:'Programs',onclick:'App.navigate("programs")'},{label:'Explore'},{label:'Requirements & Open Items'}])}
             <div class="explore-page__header">
                 <div>
                     <h1 class="explore-page__title">Requirements & Open Items</h1>

@@ -17,9 +17,10 @@ const AIInsightsView = (() => {
 
         const main = document.getElementById('mainContent');
         main.innerHTML = `
-            <div class="page-header">
-                <h1>🧠 AI Insights</h1>
-                <p class="page-header__sub">Smart search, flaky-test detection, predictive coverage, suite optimisation & maintenance.</p>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'AI Insights' }])}
+                <h2 class="pg-view-title">AI Insights</h2>
+                <p style="font-size:13px;color:var(--pg-color-text-secondary);margin:var(--pg-sp-1) 0 0">Smart search, flaky-test detection, predictive coverage & maintenance.</p>
             </div>
 
             <!-- Tab Bar -->
@@ -405,10 +406,8 @@ const AIInsightsView = (() => {
     }
 
     // ── Init ─────────────────────────────────────────────────────────────
-    // Register global ⌘K listener on load
-    if (typeof document !== 'undefined') {
-        document.addEventListener('DOMContentLoaded', _initGlobalSearch);
-    }
+    // Note: Global ⌘K / Ctrl+K is handled by PGCommandPalette (UI-S07).
+    // _initGlobalSearch() / _openGlobalSearchModal() kept for historical reference.
 
     return {
         render,

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SSO Yönetimi — Perga Platform</title>
+    <link rel="stylesheet" href="/static/css/pg-tokens.css">
     <link rel="stylesheet" href="/static/css/admin.css">
     <style>
         /* ── SSO Admin Styles ── */
@@ -358,7 +359,7 @@ function renderConfigs(configs) {
                         ${c.display_name || c.provider_name}
                     </h3>
                     <span class="provider-badge ${c.provider_type}">${c.provider_type.toUpperCase()}</span>
-                    <span style="color:#888; font-size:0.85rem; margin-left:8px;">${c.provider_name}</span>
+                    <span style="color:var(--pg-color-text-tertiary); font-size:0.85rem; margin-left:8px;">${c.provider_name}</span>
                 </div>
                 <div style="display:flex; gap:8px;">
                     <button class="btn btn-sm btn-secondary" onclick='showEditConfigModal(${JSON.stringify(c)})'>Düzenle</button>

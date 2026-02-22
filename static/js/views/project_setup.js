@@ -41,20 +41,15 @@ const ProjectSetupView = (() => {
         const main = document.getElementById('mainContent');
 
         if (!_pid) {
-            main.innerHTML = `
-                <div class="page-header"><h1>Project Setup</h1></div>
-                <div class="empty-state">
-                    <div class="empty-state__icon">⚙️</div>
-                    <div class="empty-state__title">Select a Program</div>
-                    <p>Go to <a href="#" onclick="App.navigate('programs');return false">Programs</a> to select one.</p>
-                </div>`;
+            main.innerHTML = PGEmptyState.html({ icon: 'settings', title: 'Proje Kurulumu', description: 'Devam etmek için önce bir program seç.', action: { label: 'Programlara Git', onclick: "App.navigate('programs')" } });
             return;
         }
 
         main.innerHTML = `
-            <div class="page-header" style="display:flex;flex-direction:column;gap:6px">
-                <h1>⚙️ Project Setup</h1>
-                <p style="color:var(--sap-text-secondary)">Configure project structure and process hierarchy</p>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'Proje Kurulumu' }])}
+                <h2 class="pg-view-title">Proje Kurulumu</h2>
+                <p style="font-size:13px;color:var(--pg-color-text-secondary)">Proje yapısını ve süreç hiyerarşisini yapılandır</p>
             </div>
             <div class="exp-tabs" style="margin-bottom:16px">
                 <button class="exp-tab ${_currentTab === 'hierarchy' ? 'exp-tab--active' : ''}" onclick="ProjectSetupView.switchTab('hierarchy')">🏗️ Process Hierarchy</button>
@@ -1090,6 +1085,21 @@ const ProjectSetupView = (() => {
         const el = document.getElementById('hierarchyContent');
         if (!el) return;
         el.innerHTML = _viewMode === 'tree' ? renderTreeContent() : renderTableView();
+    }
+
+    /**
+     * Adım göstergesi — wizard akışları için.
+     * @param {Array<{label: string}>} steps - Adım tanımları
+     * @param {number} activeIdx - Aktif adım index'i (0-tabanlı)
+     */
+    function _stepIndicator(steps, activeIdx) {
+        return `<div class="pg-steps">` + steps.map((s, i) => `
+            <div class="pg-steps__item${i === activeIdx ? ' pg-steps__item--active' : i < activeIdx ? ' pg-steps__item--done' : ''}">
+                <div class="pg-steps__circle">${i < activeIdx ? '✓' : i + 1}</div>
+                <span class="pg-steps__label">${s.label}</span>
+                ${i < steps.length - 1 ? '<div class="pg-steps__connector"></div>' : ''}
+            </div>
+        `).join('') + `</div>`;
     }
 
     function renderPlaceholder() {

@@ -21,9 +21,9 @@ const AIQueryView = (() => {
 
         const main = document.getElementById('mainContent');
         main.innerHTML = `
-            <div class="page-header">
-                <h1>🤖 AI Query Assistant</h1>
-                <p class="page-header__sub">Ask questions about your SAP transformation data in natural language.</p>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'AI Query Asistanı' }])}
+                <h2 class="pg-view-title">AI Query Asistanı</h2>
             </div>
 
             <div class="ai-query-layout">
@@ -64,9 +64,7 @@ const AIQueryView = (() => {
                 <div class="ai-query-history card">
                     <div class="card-header"><h2>History</h2></div>
                     <div id="aiQueryHistory" class="ai-query-history-list">
-                        <div class="empty-state" style="padding:1rem">
-                            <p>No queries yet</p>
-                        </div>
+                        ${PGEmptyState.html({ icon: 'ai', title: 'Henüz sorgu yok', description: 'Yukarıdan doğal dil sorgusu çalıştır.' })}
                     </div>
                 </div>
             </div>

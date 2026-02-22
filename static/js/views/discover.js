@@ -238,7 +238,7 @@ const DiscoverView = (() => {
                                <button type="submit" class="btn btn-primary">💾 Save Charter</button>
                            </div>`
                         : `<div class="form-actions">
-                               <span class="text-muted">Approved by ${esc(charter?.approved_by ?? "—")} 
+                               <span class="text-muted">Approved by ${esc(charter?.approved_by ?? "—")}
                                on ${esc((charter?.approved_at ?? "").slice(0, 10) || "—")}</span>
                            </div>`}
                 </form>

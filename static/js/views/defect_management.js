@@ -13,6 +13,7 @@ const DefectManagementView = (() => {
     let _defectFilters = {};
     let _defectTreeFilter = 'all';
     let _selectedDefectId = null;
+    let _panelDefect = null;
 
     // ── Main render ───────────────────────────────────────────────────
     async function render() {
@@ -25,7 +26,10 @@ const DefectManagementView = (() => {
         }
 
         main.innerHTML = `
-            <div class="page-header"><h1>🐛 Defect Management</h1></div>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{label:'Programs',onclick:'App.navigate("programs")'},{label:'Defect Management'}])}
+                <h2 class="pg-view-title">Defect Management</h2>
+            </div>
             <div class="card" id="testContent">
                 <div style="text-align:center;padding:40px"><div class="spinner"></div></div>
             </div>
@@ -43,13 +47,7 @@ const DefectManagementView = (() => {
         const container = document.getElementById('testContent');
 
         if (defects.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">🐛</div>
-                    <div class="empty-state__title">No defects logged</div>
-                    <p>No defects have been reported for this program.</p><br>
-                    <button class="btn btn-primary" onclick="DefectManagementView.showDefectModal()">+ Report Defect</button>
-                </div>`;
+            container.innerHTML = PGEmptyState.html({ icon: 'defect', title: 'Kayıtlı defect yok', description: 'Bu program için henüz defect raporlanmamış.', action: { label: '+ Defect Raporla', onclick: 'DefectManagementView.showDefectModal()' } });
             return;
         }
 
@@ -234,20 +232,17 @@ const DefectManagementView = (() => {
     }
 
     function _severityBadge(s) {
-        const c = { P1: '#c4314b', P2: '#e9730c', P3: '#e5a800', P4: '#888' };
-        return `<span class="badge" style="background:${c[s] || '#888'};color:#fff">${s || '-'}</span>`;
+        return PGStatusRegistry.badge(s);
     }
 
     function _statusBadge(s) {
-        const c = { new: '#0070f3', open: '#e9730c', in_progress: '#6a4fa0', fixed: '#107e3e', retest: '#e5a800', closed: '#888', rejected: '#555', reopened: '#c4314b' };
-        return `<span class="badge" style="background:${c[s] || '#888'};color:#fff">${s || '-'}</span>`;
+        return PGStatusRegistry.badge(s);
     }
 
     function _slaBadge(s) {
-        if (!s || s === 'n/a') return '<span class="badge" style="background:#ccc;color:#666">N/A</span>';
-        const c = { on_track: '#107e3e', warning: '#e5a800', breached: '#c4314b' };
-        const label = { on_track: '✓ On Track', warning: '⚠ Warning', breached: '🔴 Breached' };
-        return `<span class="badge" style="background:${c[s] || '#888'};color:#fff">${label[s] || s}</span>`;
+        if (!s || s === 'n/a') return PGStatusRegistry.badge('na', { label: 'N/A' });
+        const label = { on_track: 'On Track', warning: 'Warning', breached: 'Breached' };
+        return PGStatusRegistry.badge(s, { label: label[s] || s });
     }
 
     function _renderDefectTable(list) {
@@ -636,8 +631,47 @@ const DefectManagementView = (() => {
     }
 
     async function showDefectDetail(id) {
-        const d = await API.get(`/testing/defects/${id}`);
-        showDefectModal(d);
+        try {
+            const d = await API.get(`/testing/defects/${id}`);
+            _panelDefect = d;
+            PGPanel.open({
+                title: `${esc(d.code || 'Defect')} — ${esc(d.title)}`,
+                content: `
+                    <div class="pg-panel__section">
+                        <p class="pg-panel__section-title">Sınıflandırma</p>
+                        <dl class="pg-panel__dl">
+                            <dt class="pg-panel__dt">Severity</dt>
+                            <dd class="pg-panel__dd">${_severityBadge(d.severity)}</dd>
+                            <dt class="pg-panel__dt">Status</dt>
+                            <dd class="pg-panel__dd">${_statusBadge(d.status)}</dd>
+                            <dt class="pg-panel__dt">SLA</dt>
+                            <dd class="pg-panel__dd">${_slaBadge(d.sla_status)}</dd>
+                            <dt class="pg-panel__dt">Module</dt>
+                            <dd class="pg-panel__dd">${esc(d.module || '—')}</dd>
+                            <dt class="pg-panel__dt">Assigned To</dt>
+                            <dd class="pg-panel__dd">${esc(d.assigned_to || '—')}</dd>
+                            <dt class="pg-panel__dt">Aging</dt>
+                            <dd class="pg-panel__dd">${d.aging_days || 0}d</dd>
+                        </dl>
+                    </div>
+                    ${d.description ? `
+                    <div class="pg-panel__section">
+                        <p class="pg-panel__section-title">Açıklama</p>
+                        <p style="font-size:13px;color:var(--pg-color-text);line-height:1.5">${esc(d.description)}</p>
+                    </div>` : ''}
+                    <div class="pg-panel__actions">
+                        <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="DefectManagementView.editPanelDefect();PGPanel.close()">Düzenle</button>
+                        <button class="pg-btn pg-btn--ghost pg-btn--sm" onclick="PGPanel.close()">Kapat</button>
+                    </div>
+                `,
+            });
+        } catch (err) {
+            App.toast(err.message, 'error');
+        }
+    }
+
+    function editPanelDefect() {
+        if (_panelDefect) showDefectModal(_panelDefect);
     }
 
     async function deleteDefect(id) {
@@ -730,5 +764,6 @@ const DefectManagementView = (() => {
         runAITriage, applyTriageSuggestion,
         _switchDefectTab, addDefectComment, deleteDefectComment,
         addDefectLink, deleteDefectLink,
+        editPanelDefect,
     };
 })();

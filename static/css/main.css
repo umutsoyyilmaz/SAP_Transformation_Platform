@@ -4,48 +4,50 @@
    ============================================ */
 
 /* ── CSS Variables (SAP Fiori Horizon Palette) ─────────────────────────── */
+/* UI-S01: All --sap-* variables @deprecated — use --pg-* from pg-tokens.css */
+/* Will be removed in UI-S02. Keep as aliases for backward compat.            */
 :root {
-    /* Primary */
-    --sap-blue:           #0070f2;
-    --sap-blue-dark:      #0054b5;
-    --sap-blue-light:     #ebf5ff;
+    /* Primary @deprecated → use --pg-color-primary */
+    --sap-blue:           var(--pg-color-primary, #0070f2);
+    --sap-blue-dark:      var(--pg-color-primary-hover, #0054b5);
+    --sap-blue-light:     var(--pg-color-primary-light, #ebf5ff);
 
-    /* Semantic */
-    --sap-positive:       #30914c;
-    --sap-warning:        #e76500;
-    --sap-negative:       #cc1919;
-    --sap-information:    #0070f2;
+    /* Semantic @deprecated → use --pg-color-positive / --pg-color-negative / --pg-color-warning */
+    --sap-positive:       var(--pg-color-positive, #30914c);
+    --sap-warning:        var(--pg-color-warning, #e76500);
+    --sap-negative:       var(--pg-color-negative, #cc1919);
+    --sap-information:    var(--pg-color-primary, #0070f2);
 
-    /* Neutral */
-    --sap-shell-bg:       #354a5f;
+    /* Neutral @deprecated → use --pg-color-* equivalents */
+    --sap-shell-bg:       var(--pg-header-bg, #354a5f);
     --sap-shell-text:     #ffffff;
-    --sap-bg:             #f5f6f7;
-    --sap-card-bg:        #ffffff;
-    --sap-border:         #d9d9d9;
-    --sap-text-primary:   #32363a;
-    --sap-text-secondary: #6a6d70;
+    --sap-bg:             var(--pg-color-bg, #f5f6f7);
+    --sap-card-bg:        var(--pg-color-surface, #ffffff);
+    --sap-border:         var(--pg-color-border, #d9d9d9);
+    --sap-text-primary:   var(--pg-color-text, #32363a);
+    --sap-text-secondary: var(--pg-color-text-secondary, #6a6d70);
     --sap-text-link:      #0064d9;
 
-    /* Sidebar */
-    --sidebar-bg:         #1d2d3e;
-    --sidebar-hover:      #2c3e50;
-    --sidebar-active:     #0070f2;
-    --sidebar-text:       #bdc3c7;
-    --sidebar-width:      260px;
-    --sidebar-collapsed:  56px;
+    /* Sidebar @deprecated → use --pg-sidebar-* */
+    --sidebar-bg:         var(--pg-sidebar-bg, #1d2d3e);
+    --sidebar-hover:      var(--pg-sidebar-hover, #2c3e50);
+    --sidebar-active:     var(--pg-sidebar-active, #0070f2);
+    --sidebar-text:       var(--pg-sidebar-text, #bdc3c7);
+    --sidebar-width:      var(--pg-sidebar-width, 260px);
+    --sidebar-collapsed:  var(--pg-sidebar-collapsed, 56px);
 
-    /* Layout */
-    --header-height:      48px;
-    --radius:             8px;
-    --shadow:             0 1px 4px rgba(0,0,0,0.08);
-    --shadow-sm:          0 1px 4px rgba(0,0,0,0.08);
-    --shadow-md:          0 4px 16px rgba(0,0,0,0.10);
+    /* Layout @deprecated → use --pg-header-height / --pg-radius-* / --pg-shadow-* */
+    --header-height:      var(--pg-header-height, 48px);
+    --radius:             var(--pg-radius-lg, 8px);
+    --shadow:             var(--pg-shadow-sm, 0 1px 4px rgba(0,0,0,0.08));
+    --shadow-sm:          var(--pg-shadow-sm, 0 1px 4px rgba(0,0,0,0.08));
+    --shadow-md:          var(--pg-shadow-md, 0 4px 16px rgba(0,0,0,0.10));
 
-    /* Accent (alias for primary blue) */
-    --sap-accent:         #0070f2;
+    /* Accent @deprecated → use --pg-color-primary */
+    --sap-accent:         var(--pg-color-primary, #0070f2);
 
-    /* Transitions */
-    --transition:         0.2s ease;
+    /* Transitions @deprecated → use --pg-t-normal */
+    --transition:         var(--pg-t-slow, 0.2s ease);
 
     /* ── Typography Scale ─────────────────────────────────────────── */
     --font-family:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;

@@ -19,20 +19,18 @@ const RaidView = (() => {
         _programId = prog ? prog.id : null;
 
         if (!_programId) {
-            main.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">⚠️</div>
-                    <div class="empty-state__title">RAID Log</div>
-                    <p>Go to <a href="#" onclick="App.navigate('programs');return false">Programs</a> to select one first.</p>
-                </div>`;
+            main.innerHTML = PGEmptyState.html({ icon: 'raid', title: 'RAID Log', description: 'Devam etmek için önce bir program seç.', action: { label: 'Programlara Git', onclick: "App.navigate('programs')" } });
             return;
         }
 
         main.innerHTML = `
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{label:'Programs',onclick:'App.navigate("programs")'},{label:'RAID Log'}])}
+                <h2 class="pg-view-title">RAID Log</h2>
+            </div>
             <div class="page-header" style="margin-bottom:20px">
                 <div>
-                    <h2 style="margin:0">⚠️ RAID Log</h2>
-                    <p style="color:#64748b;margin:4px 0 0;font-size:13px">Risks, Actions, Issues & Decisions</p>
+                    <p style="color:var(--pg-color-text-secondary);margin:0;font-size:13px">Risks, Actions, Issues &amp; Decisions</p>
                 </div>
                 <div class="page-header__actions">
                     <div style="position:relative;display:inline-block" id="raidNewBtnWrap">
@@ -169,7 +167,7 @@ const RaidView = (() => {
             <div class="modal__body">
                 <table class="table"><thead><tr><th>Code</th><th>Title</th><th>RAG</th></tr></thead>
                 <tbody>${risks.map(r => `<tr><td>${r.code}</td><td>${r.title}</td>
-                    <td><span class="badge badge-${r.rag_status}">${r.rag_status}</span></td></tr>`).join('')}
+                    <td>${PGStatusRegistry.badge(r.rag_status)}</td></tr>`).join('')}
                 </tbody></table>
             </div>
         </div>`;
@@ -200,7 +198,7 @@ const RaidView = (() => {
             renderFilterBar(tab);
 
             if (!_allItems.length) {
-                container.innerHTML = `<div class="empty-state" style="padding:40px"><p>No ${tab} found.</p></div>`;
+                container.innerHTML = PGEmptyState.html({ icon: 'raid', title: `${tab.charAt(0).toUpperCase() + tab.slice(1)} bulunamadı` });
                 return;
             }
             container.innerHTML = renderTable(tab, _allItems);
@@ -367,7 +365,7 @@ const RaidView = (() => {
         if (countEl) countEl.textContent = `${items.length} of ${_allItems.length}`;
 
         if (!items.length) {
-            container.innerHTML = `<div class="empty-state" style="padding:40px"><p>No ${_currentTab} match your filters.</p></div>`;
+            container.innerHTML = PGEmptyState.html({ icon: 'raid', title: `Filtreyle eşleşen ${_currentTab} yok` });
             return;
         }
         container.innerHTML = renderTable(_currentTab, items);
@@ -390,31 +388,8 @@ const RaidView = (() => {
             return `<span style="display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:22px;border-radius:4px;background:${bg};color:${color};font-size:12px;font-weight:700">${score}</span>`;
         };
 
-        const statusBadge = (status) => {
-            const map = {
-                identified: '#dbeafe', analysed: '#e0e7ff', mitigating: '#fef3c7',
-                closed: '#f1f5f9', accepted: '#d1fae5',
-                open: '#dbeafe', in_progress: '#fef3c7', completed: '#d1fae5', cancelled: '#f1f5f9',
-                resolved: '#d1fae5', pending: '#e0e7ff', approved: '#d1fae5', rejected: '#fee2e2', deferred: '#f1f5f9',
-            };
-            const textMap = {
-                identified: '#1e40af', analysed: '#3730a3', mitigating: '#92400e',
-                closed: '#475569', accepted: '#065f46',
-                open: '#1e40af', in_progress: '#92400e', completed: '#065f46', cancelled: '#475569',
-                resolved: '#065f46', pending: '#3730a3', approved: '#065f46', rejected: '#991b1b', deferred: '#475569',
-            };
-            const label = (status || '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-            return `<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:${map[status] || '#f1f5f9'};color:${textMap[status] || '#475569'};white-space:nowrap">${label}</span>`;
-        };
-
-        const priorityBadge = (priority) => {
-            const colors = { critical: '#dc2626', high: '#f97316', medium: '#f59e0b', low: '#22c55e' };
-            const bg = { critical: '#fee2e2', high: '#fff7ed', medium: '#fefce8', low: '#f0fdf4' };
-            const label = (priority || '').charAt(0).toUpperCase() + (priority || '').slice(1);
-            return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:${bg[priority] || '#f1f5f9'};color:${colors[priority] || '#64748b'}">
-                <span style="width:6px;height:6px;border-radius:50%;background:${colors[priority] || '#94a3b8'}"></span>${label}
-            </span>`;
-        };
+        const statusBadge = (status) => PGStatusRegistry.badge(status);
+        const priorityBadge = (priority) => PGStatusRegistry.badge(priority);
 
         const colDefs = {
             risks: [
@@ -725,10 +700,18 @@ const RaidView = (() => {
         }
     }
 
+    // ── RAID Type Badge ──────────────────────────────────────────────────
+    function _raidTypeBadge(type) {
+        const LABELS = { R: 'Risk', A: 'Assumption', I: 'Issue', D: 'Dependency' };
+        const KEYS   = { R: 'risk', A: 'assumption', I: 'issue', D: 'dependency' };
+        return PGStatusRegistry.badge(KEYS[type] || type, { label: LABELS[type] || type });
+    }
+
     // ── Public API ───────────────────────────────────────────────────────
     return {
         render, switchTab, openDetail, openCreate, openEdit,
         submitCreate, submitEdit, deleteItem, showHeatmapCell,
         toggleNewMenu, setSearch, onFilterBarChange,
+        _raidTypeBadge,
     };
 })();

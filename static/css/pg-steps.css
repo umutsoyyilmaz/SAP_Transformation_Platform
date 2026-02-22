@@ -1,0 +1,80 @@
+/* pg-steps.css — UI-S08-T04 — Wizard adım göstergesi */
+
+.pg-steps {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    padding: var(--pg-sp-4) 0 var(--pg-sp-5);
+    overflow-x: auto;
+}
+
+.pg-steps__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--pg-sp-2);
+    flex: 1;
+    min-width: 80px;
+    position: relative;
+}
+
+.pg-steps__circle {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--pg-color-border-strong);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--pg-color-text-secondary);
+    background: var(--pg-color-surface);
+    transition: all var(--pg-t-base);
+    position: relative;
+    z-index: 1;
+}
+
+.pg-steps__item--active .pg-steps__circle {
+    border-color: var(--pg-color-primary);
+    background: var(--pg-color-primary);
+    color: #fff;
+    box-shadow: 0 0 0 3px var(--pg-color-primary-light);
+}
+
+.pg-steps__item--done .pg-steps__circle {
+    border-color: var(--pg-color-success, #16a34a);
+    background: var(--pg-color-success, #16a34a);
+    color: #fff;
+}
+
+.pg-steps__label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--pg-color-text-secondary);
+    text-align: center;
+    white-space: nowrap;
+}
+
+.pg-steps__item--active .pg-steps__label {
+    color: var(--pg-color-primary);
+    font-weight: 600;
+}
+
+.pg-steps__item--done .pg-steps__label {
+    color: var(--pg-color-text);
+}
+
+.pg-steps__connector {
+    position: absolute;
+    top: 14px;
+    left: calc(50% + 14px);
+    right: calc(-50% + 14px);
+    height: 2px;
+    background: var(--pg-color-border);
+    z-index: 0;
+}
+
+.pg-steps__item--done .pg-steps__connector {
+    background: var(--pg-color-success, #16a34a);
+}

@@ -1,0 +1,213 @@
+/* ============================================================
+   Perga Design System — pg-dashboard.css
+   UI-S04-T02: Dashboard-specific layout and component styles
+   ============================================================ */
+
+/* ── View Header ───────────────────────────────────────────── */
+.pg-view-header { margin-bottom: var(--pg-sp-6); }
+.pg-view-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--pg-color-text);
+    margin: 0 0 var(--pg-sp-2);
+    letter-spacing: -0.3px;
+}
+
+/* ── Dashboard Grid ────────────────────────────────────────── */
+.pg-dashboard-grid {
+    display: grid;
+    grid-template-columns: 280px 1fr 300px;
+    grid-template-rows: auto auto;
+    gap: var(--pg-sp-5);
+    align-items: start;
+}
+
+/* ── Base Card ─────────────────────────────────────────────── */
+.pg-dash-card {
+    background: var(--pg-color-surface);
+    border: 1px solid var(--pg-color-border);
+    border-radius: var(--pg-radius-lg);
+    padding: var(--pg-sp-6);
+    box-shadow: var(--pg-shadow-sm);
+}
+
+.pg-dash-card__header {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--pg-color-text-tertiary);
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    margin-bottom: var(--pg-sp-4);
+    display: flex;
+    align-items: center;
+    gap: var(--pg-sp-2);
+}
+
+.pg-dash-card__meta {
+    font-weight: 400;
+    font-size: 11px;
+    color: var(--pg-color-text-tertiary);
+    margin-left: auto;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+/* ── Health Score ──────────────────────────────────────────── */
+.pg-health-score { display: flex; align-items: center; gap: var(--pg-sp-4); }
+
+.pg-health-score__ring {
+    width: 80px;
+    height: 80px;
+    flex-shrink: 0;
+    transform: rotate(-90deg);
+}
+
+.pg-health-score__ring text {
+    transform: rotate(90deg);
+    transform-origin: center;
+}
+
+.pg-health-score__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+}
+
+.pg-health-score__items {
+    font-size: 11px;
+    color: var(--pg-color-text-tertiary);
+    line-height: 1.5;
+}
+
+/* ── KPI Row ───────────────────────────────────────────────── */
+.pg-dash-kpis {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(5, 1fr);
+    gap: var(--pg-sp-4);
+}
+
+.pg-kpi-card {
+    background: var(--pg-color-surface);
+    border: 1px solid var(--pg-color-border);
+    border-radius: var(--pg-radius-lg);
+    padding: var(--pg-sp-5) var(--pg-sp-4);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--pg-sp-1);
+    cursor: pointer;
+    transition: all var(--pg-t-normal);
+    box-shadow: var(--pg-shadow-sm);
+}
+
+.pg-kpi-card:hover {
+    border-color: var(--pg-color-primary);
+    box-shadow: var(--pg-shadow-md);
+    transform: translateY(-2px);
+}
+
+.pg-kpi-card:focus-visible {
+    outline: 2px solid var(--pg-color-primary);
+    outline-offset: 2px;
+}
+
+.pg-kpi-card__icon { color: var(--pg-color-text-tertiary); }
+.pg-kpi-card__value {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--pg-color-text);
+    letter-spacing: -1px;
+    line-height: 1;
+}
+.pg-kpi-card__label { font-size: 12px; color: var(--pg-color-text-secondary); }
+
+/* ── Action Feed ───────────────────────────────────────────── */
+.pg-dash-action {
+    display: flex;
+    align-items: center;
+    gap: var(--pg-sp-3);
+    padding: var(--pg-sp-3) var(--pg-sp-2);
+    border-bottom: 1px solid var(--pg-color-border);
+    cursor: pointer;
+    transition: background var(--pg-t-fast);
+    border-radius: var(--pg-radius-sm);
+    margin: 0 calc(-1 * var(--pg-sp-2));
+}
+
+.pg-dash-action:last-child { border-bottom: none; }
+.pg-dash-action:hover { background: var(--pg-color-bg); }
+.pg-dash-action__text { flex: 1; font-size: 13px; color: var(--pg-color-text); }
+.pg-dash-action__arrow { color: var(--pg-color-text-tertiary); font-size: 14px; }
+
+/* ── Activity Feed ─────────────────────────────────────────── */
+.pg-dash-activity-row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--pg-sp-3);
+    padding: var(--pg-sp-3) 0;
+    border-bottom: 1px solid var(--pg-color-border);
+}
+
+.pg-dash-activity-row:last-child { border-bottom: none; }
+
+.pg-dash-activity-row__avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--pg-color-primary-light, #ebf5ff);
+    color: var(--pg-color-primary);
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.pg-dash-activity-row__body {
+    flex: 1;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--pg-color-text-secondary);
+}
+
+.pg-dash-activity-row__user { font-weight: 600; color: var(--pg-color-text); }
+
+.pg-dash-activity-row__action,
+.pg-dash-activity-row__object { display: inline; }
+
+.pg-dash-activity-row__time {
+    font-size: 11px;
+    color: var(--pg-color-text-tertiary);
+    white-space: nowrap;
+}
+
+/* ── Empty / Helper ────────────────────────────────────────── */
+.pg-dash-empty {
+    color: var(--pg-color-text-tertiary);
+    font-size: 13px;
+    padding: var(--pg-sp-4) 0;
+    text-align: center;
+    margin: 0;
+}
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+    .pg-dashboard-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    .pg-dash-kpis {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .pg-dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+    .pg-dash-kpis {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}

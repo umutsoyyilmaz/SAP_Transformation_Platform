@@ -1,0 +1,88 @@
+/* UI-S01-T03 — pg-button.css: Standart button component */
+.pg-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid transparent;
+    border-radius: var(--pg-radius-md, 6px);
+    font-family: var(--font-family, 'Inter', sans-serif);
+    font-weight: 500;
+    font-size: 13px;
+    line-height: 1;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: all var(--pg-t-normal, 150ms ease);
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.pg-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── Sizes ─────────────────────────────────────────────── */
+.pg-btn--sm { font-size: 12px; padding: 5px 10px; }
+.pg-btn--lg { font-size: 14px; padding: 9px 18px; }
+
+/* ── Variants ──────────────────────────────────────────── */
+.pg-btn--primary {
+    background: var(--pg-color-primary, #0070f2);
+    color: #fff;
+}
+.pg-btn--primary:hover:not(:disabled) {
+    background: var(--pg-color-primary-hover, #0054b5);
+    transform: translateY(-1px);
+}
+
+.pg-btn--secondary {
+    background: #fff;
+    color: var(--pg-color-text, #32363a);
+    border-color: var(--pg-color-border, #d9d9d9);
+}
+.pg-btn--secondary:hover:not(:disabled) {
+    background: var(--pg-color-bg, #f5f6f7);
+    border-color: #b0b7c0;
+}
+
+.pg-btn--ghost {
+    background: transparent;
+    color: var(--pg-color-text, #32363a);
+}
+.pg-btn--ghost:hover:not(:disabled) {
+    background: var(--pg-color-bg, #f5f6f7);
+}
+
+.pg-btn--danger {
+    background: #dc2626;
+    color: #fff;
+}
+.pg-btn--danger:hover:not(:disabled) {
+    background: #b91c1c;
+}
+
+.pg-btn--icon {
+    padding: 6px;
+    background: transparent;
+    border: none;
+    color: var(--pg-color-text-secondary, #6a6d70);
+}
+.pg-btn--icon:hover:not(:disabled) {
+    background: var(--pg-color-bg, #f5f6f7);
+    color: var(--pg-color-text, #32363a);
+}
+
+/* ── Loading Spinner ───────────────────────────────────── */
+.pg-btn__spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: pg-spin 0.6s linear infinite;
+    display: inline-block;
+}
+
+@keyframes pg-spin {
+    to { transform: rotate(360deg); }
+}
