@@ -14,7 +14,12 @@ import logging
 
 from app.models import db
 from app.models.backlog import BacklogItem, ConfigItem, FunctionalSpec, TechnicalSpec
+# ExploreRequirement is the canonical requirement model (ADR-001).
+# ExploreRequirement replaces the legacy Requirement table as the single source
+# of truth for all new requirement data.
+from app.models.explore import ExploreRequirement
 from app.models.integration import Interface, Wave, ConnectivityTest, SwitchPlan
+# Legacy Requirement kept for backward-compatible read paths only (write-blocked).
 from app.models.requirement import Requirement
 from app.models.scenario import Scenario, Workshop
 from app.models.scope import Process, Analysis
@@ -23,13 +28,17 @@ from app.services.helpers.scoped_queries import get_scoped_or_none
 
 logger = logging.getLogger(__name__)
 
-# Supported entity types for chain traversal
+# Supported entity types for chain traversal.
+# ExploreRequirement is the canonical path (UUID PK) and is served by the
+# dedicated trace_explore_requirement() function in the blueprint.
+# "requirement" (integer PK) is the legacy path — kept for backward compat only.
 ENTITY_TYPES = {
     "scenario": Scenario,
     "workshop": Workshop,
     "process": Process,
     "analysis": Analysis,
-    "requirement": Requirement,
+    "explore_requirement": ExploreRequirement,  # canonical — ADR-001
+    "requirement": Requirement,                 # legacy — read-only, no new writes
     "backlog_item": BacklogItem,
     "config_item": ConfigItem,
     "functional_spec": FunctionalSpec,
@@ -99,6 +108,10 @@ def get_chain(
     elif entity_type == "config_item":
         _trace_config_upstream(entity, upstream)
         _trace_config_downstream(entity, downstream)
+    elif entity_type == "explore_requirement":
+        # Canonical path (ADR-001) — upstream via ProcessLevel hierarchy + downstream via explore_requirement_id FK
+        _build_explore_upstream_inline(entity, upstream)
+        _trace_requirement_downstream(entity, downstream)
     elif entity_type == "requirement":
         _trace_requirement_upstream(entity, upstream)
         _trace_requirement_downstream(entity, downstream)
@@ -181,23 +194,28 @@ def get_requirement_links(requirement_id: int, *, program_id: int | None = None)
 
 
 def get_program_traceability_summary(program_id: int) -> dict:
-    """
-    Build a program-level traceability summary showing coverage.
+    """Build a program-level traceability summary showing coverage.
+
+    ADR-001: Uses ExploreRequirement (canonical) as the requirement source.
+    BacklogItem.explore_requirement_id and ConfigItem.explore_requirement_id
+    are the canonical FKs; legacy requirement_id FKs are ignored here.
 
     Returns counts of linked vs unlinked items across the chain.
     """
-    requirements = Requirement.query.filter_by(program_id=program_id).all()
+    # Canonical requirement source (ADR-001)
+    requirements = ExploreRequirement.query.filter_by(project_id=program_id).all()
     backlog_items = BacklogItem.query.filter_by(program_id=program_id).all()
     config_items = ConfigItem.query.filter_by(program_id=program_id).all()
 
+    # Use canonical explore_requirement_id FK (not legacy requirement_id)
     req_with_backlog = set()
     req_with_config = set()
     for b in backlog_items:
-        if b.requirement_id:
-            req_with_backlog.add(b.requirement_id)
+        if b.explore_requirement_id:
+            req_with_backlog.add(b.explore_requirement_id)
     for c in config_items:
-        if c.requirement_id:
-            req_with_config.add(c.requirement_id)
+        if c.explore_requirement_id:
+            req_with_config.add(c.explore_requirement_id)
 
     linked_req_ids = req_with_backlog | req_with_config
     backlog_with_fs = sum(1 for b in backlog_items if b.functional_spec is not None)
@@ -215,10 +233,12 @@ def get_program_traceability_summary(program_id: int) -> dict:
     ).all()
     fs_with_ts = sum(1 for fs in fs_list if fs.technical_spec is not None)
 
-    # Sprint 5 — Test coverage
+    # Test coverage via explore_requirement_id (canonical)
     test_cases = TestCase.query.filter_by(program_id=program_id).all()
     defects = Defect.query.filter_by(program_id=program_id).all()
-    req_ids_with_tests = set(tc.requirement_id for tc in test_cases if tc.requirement_id)
+    req_ids_with_tests = set(
+        tc.explore_requirement_id for tc in test_cases if tc.explore_requirement_id
+    )
 
     return {
         "requirements": {
@@ -229,12 +249,12 @@ def get_program_traceability_summary(program_id: int) -> dict:
         },
         "backlog_items": {
             "total": len(backlog_items),
-            "with_requirement": sum(1 for b in backlog_items if b.requirement_id),
+            "with_requirement": sum(1 for b in backlog_items if b.explore_requirement_id),
             "with_functional_spec": backlog_with_fs,
         },
         "config_items": {
             "total": len(config_items),
-            "with_requirement": sum(1 for c in config_items if c.requirement_id),
+            "with_requirement": sum(1 for c in config_items if c.explore_requirement_id),
             "with_functional_spec": config_with_fs,
         },
         "functional_specs": {
@@ -243,7 +263,7 @@ def get_program_traceability_summary(program_id: int) -> dict:
         },
         "test_cases": {
             "total": len(test_cases),
-            "with_requirement": sum(1 for tc in test_cases if tc.requirement_id),
+            "with_requirement": sum(1 for tc in test_cases if tc.explore_requirement_id),
             "regression_flagged": sum(1 for tc in test_cases if tc.is_regression),
         },
         "defects": {
@@ -366,20 +386,39 @@ def _trace_requirement_upstream(req, chain):
 
 
 def _trace_requirement_downstream(req, chain):
-    """Requirement → BacklogItems + ConfigItems → FS → TS + TestCases → Defects."""
-    backlog_items = BacklogItem.query.filter_by(requirement_id=req.id).all()
+    """Requirement (legacy or ExploreRequirement) → BacklogItems + ConfigItems → TestCases → Defects.
+
+    ADR-001: If req.id is a UUID string (ExploreRequirement), use explore_requirement_id
+    as the canonical FK on child models.  If req.id is an integer (legacy Requirement),
+    fall back to the legacy requirement_id FK for backward compatibility.
+    """
+    is_explore = isinstance(req.id, str)  # UUID string → ExploreRequirement
+
+    if is_explore:
+        backlog_items = BacklogItem.query.filter_by(explore_requirement_id=req.id).all()
+    else:
+        backlog_items = BacklogItem.query.filter_by(requirement_id=req.id).all()
+
     for bi in backlog_items:
         chain.append({"type": "backlog_item", "id": bi.id, "title": bi.title,
                        "wricef_type": bi.wricef_type})
         _trace_backlog_downstream(bi, chain)
 
-    config_items = ConfigItem.query.filter_by(requirement_id=req.id).all()
+    if is_explore:
+        config_items = ConfigItem.query.filter_by(explore_requirement_id=req.id).all()
+    else:
+        config_items = ConfigItem.query.filter_by(requirement_id=req.id).all()
+
     for ci in config_items:
         chain.append({"type": "config_item", "id": ci.id, "title": ci.title})
         _trace_config_downstream(ci, chain)
 
-    # Sprint 5 extension: Requirement → Test Cases → Defects
-    test_cases = TestCase.query.filter_by(requirement_id=req.id).all()
+    # Test Cases — prefer explore_requirement_id
+    if is_explore:
+        test_cases = TestCase.query.filter_by(explore_requirement_id=req.id).all()
+    else:
+        test_cases = TestCase.query.filter_by(requirement_id=req.id).all()
+
     for tc in test_cases:
         chain.append({"type": "test_case", "id": tc.id, "title": tc.title,
                        "code": tc.code, "test_layer": tc.test_layer})

@@ -7,7 +7,7 @@ bypass tenant isolation — a critical security boundary in this multi-tenant
 SaaS platform.
 
 Why this module exists:
-  78 functions across services were identified using unscoped .query.get(pk),
+  78 functions across services were identified using unscoped Query.get(pk),
   creating cross-tenant data access vectors (ref: FDD-P0-tenant-isolation-fix).
   Centralising the fix here ensures:
   1. Consistent scoping pattern across all services

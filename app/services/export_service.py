@@ -345,7 +345,7 @@ def generate_fitgap_excel(
     pl_cache: dict[int, ProcessLevel] = {}
     for r in reqs:
         if r.process_level_id and r.process_level_id not in pl_cache:
-            pl = ProcessLevel.query.get(r.process_level_id)
+            pl = db.session.get(ProcessLevel, r.process_level_id)
             if pl:
                 pl_cache[r.process_level_id] = pl
 
@@ -355,7 +355,7 @@ def generate_fitgap_excel(
         visited: set[int] = set()
         current_id = pl_id
         while current_id and current_id not in visited:
-            pl = pl_cache.get(current_id) or ProcessLevel.query.get(current_id)
+            pl = pl_cache.get(current_id) or db.session.get(ProcessLevel, current_id)
             if not pl:
                 break
             pl_cache[current_id] = pl

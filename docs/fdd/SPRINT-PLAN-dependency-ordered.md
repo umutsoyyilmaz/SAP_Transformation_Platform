@@ -151,7 +151,7 @@ S5-01 (ADR-002 auth)
 **Kabul Kriterleri:**
 - [x] `requirements` tablosunda yeni kayıt oluşturulamıyor (ORM write-block, TESTING=False ortamında çalışır)
 - [ ] Tüm `requirements` kayıtları `explore_requirements`'a migrate edildi (production task — script hazır)
-- [ ] `traceability.py` yalnızca `ExploreRequirement` üzerinden çalışıyor (→ S2-02 kapsamında)
+- [x] `traceability.py` yalnızca `ExploreRequirement` üzerinden çalışıyor (→ S2-02 kapsamında)
 - [x] Tüm mevcut testler geçiyor (83 test: 82 passed, 1 xfailed)
 
 ---

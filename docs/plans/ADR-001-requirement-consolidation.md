@@ -1,10 +1,10 @@
 # ADR-001: Requirement Model Konsolidasyonu — ExploreRequirement Canonical
 
-**Durum:** ✅ Onaylandı  
-**Tarih:** 2026-02-22  
-**Yazar:** Umut Soyyılmaz  
-**İlgili FDD:** `FDD-B01-requirement-model-consolidation.md`  
-**Bloke Ettiği Sprint İtemleri:** S1-05, S2-01, S2-02, S2-03, S2-04, S5-04  
+**Durum:** ✅ Onaylandı
+**Tarih:** 2026-02-22
+**Yazar:** Umut Soyyılmaz
+**İlgili FDD:** `FDD-B01-requirement-model-consolidation.md`
+**Bloke Ettiği Sprint İtemleri:** S1-05, S2-01, S2-02, S2-03, S2-04, S5-04
 **Kapsam:** `Requirement`, `ExploreRequirement`, traceability, backlog, testing model katmanı
 
 ---
@@ -228,7 +228,7 @@ Kullanıcı hangi veriye baktığını bilemiyor; raporlarda kayıt eksikliği.
 - [ ] `requirements` tablosunda yeni kayıt oluşturulamıyor (write-blocked uygulama katmanında).
 - [ ] Tüm `requirements` kayıtları `explore_requirements`'a taşındı; veri bütünlüğü doğrulandı.
 - [ ] `backlog_items` ve `test_cases` tablolarında `requirement_id` (legacy int FK) kolonu yok.
-- [ ] `traceability.py` yalnızca `ExploreRequirement` modeli üzerinden çalışıyor.
+- [x] `traceability.py` yalnızca `ExploreRequirement` modeli üzerinden çalışıyor.
 - [ ] `requirement.js` frontend view'ı redirect edildi veya kaldırıldı.
 - [ ] MoSCoW priority ve parent-child hiyerarşisi `explore_requirements.js`'de görünüyor.
 - [ ] Mevcut tüm test'ler (`tests/`) geçiyor.

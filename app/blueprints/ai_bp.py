@@ -438,7 +438,11 @@ def usage_stats():
     total_cost = sum(entry.cost_usd for entry in logs)
     total_calls = len(logs)
     avg_latency = sum(entry.latency_ms for entry in logs) / max(total_calls, 1)
-    error_count = sum(1 for entry in logs if not entry.success)
+    # Use .is_(False) for correct SQL boolean semantics — avoids NULL comparison pitfalls
+    error_q = AIUsageLog.query.filter(AIUsageLog.created_at >= cutoff, AIUsageLog.success.is_(False))
+    if pid:
+        error_q = error_q.filter(AIUsageLog.program_id == pid)
+    error_count = error_q.count()
 
     # Group by model
     by_model = {}

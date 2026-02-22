@@ -118,7 +118,7 @@ def move_suite(sid):
 
     # Recalculate materialized path
     if new_parent_id:
-        parent_suite = TestSuite.query.get(new_parent_id)
+        parent_suite = db.session.get(TestSuite, new_parent_id)
         parent_path = (parent_suite.path or f"/{parent_suite.id}/").rstrip("/")
     else:
         parent_path = ""
@@ -329,7 +329,7 @@ def bulk_execute(pid):
 
     updated = 0
     for eid in execution_ids:
-        exe = TestExecution.query.get(eid)
+        exe = db.session.get(TestExecution, eid)
         if exe and exe.test_case and exe.test_case.program_id == pid:
             exe.result = result
             exe.notes = notes
