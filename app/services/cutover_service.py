@@ -16,7 +16,7 @@ Business logic for:
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 
 from app.models import db
 from app.models.cutover import (
@@ -51,12 +51,25 @@ def generate_plan_code(program_id: int) -> str:
     return f"CUT-{count + 1:03d}"
 
 
-def generate_task_code(cutover_plan_id: int) -> str:
+def generate_task_code(cutover_plan_id: int, *, program_id: int | None = None) -> str:
     """
     Generate next runbook task code: CUT-001-T001, CUT-001-T002, ...
     Requires the parent plan to exist (for its code prefix).
+
+    Args:
+        cutover_plan_id: PK of the parent CutoverPlan.
+        program_id: Optional program scope — scopes the CutoverPlan lookup when
+            provided. Callers should always pass this to enforce tenant isolation.
     """
-    plan = db.session.get(CutoverPlan, cutover_plan_id)
+    if program_id is not None:
+        plan = db.session.execute(
+            select(CutoverPlan).where(
+                CutoverPlan.id == cutover_plan_id,
+                CutoverPlan.program_id == program_id,
+            )
+        ).scalar_one_or_none()
+    else:
+        plan = db.session.get(CutoverPlan, cutover_plan_id)
     if not plan or not plan.code:
         prefix = "CUT-000"
     else:
@@ -138,8 +151,19 @@ def transition_task(task: RunbookTask, new_status: str, executed_by: str = "") -
     # Guard: cannot start unless all predecessors are completed/skipped
     if new_status == "in_progress":
         pred_deps = task.predecessors.all()
+        # Scope predecessor lookup by the same cutover plan (via CutoverScopeItem
+        # join) to prevent cross-plan information leakage from a compromised
+        # TaskDependency record.
+        plan_id_for_scope = task.scope_item.cutover_plan_id
         for dep in pred_deps:
-            pred_task = db.session.get(RunbookTask, dep.predecessor_id)
+            pred_task = db.session.execute(
+                select(RunbookTask)
+                .join(CutoverScopeItem, RunbookTask.scope_item_id == CutoverScopeItem.id)
+                .where(
+                    RunbookTask.id == dep.predecessor_id,
+                    CutoverScopeItem.cutover_plan_id == plan_id_for_scope,
+                )
+            ).scalar_one_or_none()
             if pred_task and pred_task.status not in ("completed", "skipped"):
                 return False, (
                     f"Predecessor {pred_task.code or pred_task.id} "
@@ -198,16 +222,38 @@ def transition_rehearsal(rehearsal: Rehearsal, new_status: str) -> tuple[bool, s
 # ── Dependency Validation ────────────────────────────────────────────────────
 
 
-def add_dependency(predecessor_id: int, successor_id: int,
-                   dependency_type: str = "finish_to_start",
-                   lag_minutes: int = 0) -> tuple[bool, str, TaskDependency | None]:
+def add_dependency(
+    predecessor_id: int,
+    successor_id: int,
+    dependency_type: str = "finish_to_start",
+    lag_minutes: int = 0,
+    *,
+    plan_id: int | None = None,
+) -> tuple[bool, str, TaskDependency | None]:
     """
     Add a task dependency with cycle detection.
     Returns (success, message, dependency_or_none).
+
+    Args:
+        predecessor_id: PK of the predecessor RunbookTask.
+        successor_id: PK of the successor RunbookTask.
+        dependency_type: One of finish_to_start | start_to_start | finish_to_finish.
+        lag_minutes: Lag time between tasks.
+        plan_id: Cutover plan PK — scopes both task lookups via CutoverScopeItem
+            join to prevent cross-plan task injection. Always pass this from callers.
     """
-    # Validate tasks exist
-    pred = db.session.get(RunbookTask, predecessor_id)
-    succ = db.session.get(RunbookTask, successor_id)
+    # Validate tasks exist — scoped by plan when plan_id is provided
+    if plan_id is not None:
+        _task_stmt = lambda task_pk: (
+            select(RunbookTask)
+            .join(CutoverScopeItem, RunbookTask.scope_item_id == CutoverScopeItem.id)
+            .where(RunbookTask.id == task_pk, CutoverScopeItem.cutover_plan_id == plan_id)
+        )
+        pred = db.session.execute(_task_stmt(predecessor_id)).scalar_one_or_none()
+        succ = db.session.execute(_task_stmt(successor_id)).scalar_one_or_none()
+    else:
+        pred = db.session.get(RunbookTask, predecessor_id)
+        succ = db.session.get(RunbookTask, successor_id)
     if not pred:
         return False, f"Predecessor task {predecessor_id} not found", None
     if not succ:
@@ -691,7 +737,7 @@ def list_tasks(si_id: int) -> list[RunbookTask]:
     )
 
 
-def create_task(si_id: int, plan_id: int, data: dict) -> RunbookTask:
+def create_task(si_id: int, plan_id: int, data: dict, *, program_id: int | None = None) -> RunbookTask:
     """Create a runbook task with an auto-generated code.
 
     The task code is derived from the parent plan's code (e.g.
@@ -701,11 +747,13 @@ def create_task(si_id: int, plan_id: int, data: dict) -> RunbookTask:
         si_id: Parent CutoverScopeItem primary key.
         plan_id: Grandparent CutoverPlan primary key (for code gen).
         data: Validated input dict with at least ``title``.
+        program_id: Program scope — passed to ``generate_task_code`` to scope
+            the CutoverPlan lookup. Callers should always provide this.
 
     Returns:
         The persisted RunbookTask instance.
     """
-    code = generate_task_code(plan_id)
+    code = generate_task_code(plan_id, program_id=program_id)
     task = RunbookTask(
         scope_item_id=si_id,
         code=code,

@@ -205,7 +205,14 @@ def create_task(si_id):
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
 
-    task = cutover_service.create_task(si_id, si.cutover_plan_id, data)
+    # Pass program_id to scope the plan lookup inside generate_task_code
+    # si.cutover_plan.program_id lazy-loads plan once
+    task = cutover_service.create_task(
+        si_id,
+        si.cutover_plan_id,
+        data,
+        program_id=si.cutover_plan.program_id if si.cutover_plan else None,
+    )
     return jsonify(task.to_dict(include_dependencies=True)), 201
 
 
@@ -274,6 +281,10 @@ def list_dependencies(task_id):
 @cutover_bp.route("/tasks/<int:task_id>/dependencies", methods=["POST"])
 def create_dependency(task_id):
     """Add a dependency where this task is the successor."""
+    # Load successor task first to derive plan_id for scope enforcement
+    succ_task, err = _get_or_404(RunbookTask, task_id, "RunbookTask")
+    if err:
+        return err
     data = request.get_json(silent=True) or {}
     if not data.get("predecessor_id"):
         return jsonify({"error": "predecessor_id is required"}), 400
@@ -283,6 +294,7 @@ def create_dependency(task_id):
         successor_id=task_id,
         dependency_type=data.get("dependency_type", "finish_to_start"),
         lag_minutes=data.get("lag_minutes", 0),
+        plan_id=succ_task.scope_item.cutover_plan_id,
     )
     if not ok:
         return jsonify({"error": msg}), 409

@@ -19,6 +19,7 @@ from app.models.requirement import Requirement
 from app.models.scenario import Scenario, Workshop
 from app.models.scope import Process, Analysis
 from app.models.testing import TestCase, Defect
+from app.services.helpers.scoped_queries import get_scoped_or_none
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,12 @@ ENTITY_TYPES = {
 }
 
 
-def get_chain(entity_type: str, entity_id: int) -> dict:
+def get_chain(
+    entity_type: str,
+    entity_id: int,
+    *,
+    program_id: int | None = None,
+) -> dict:
     """
     Build a traceability chain for the given entity.
 
@@ -56,6 +62,11 @@ def get_chain(entity_type: str, entity_id: int) -> dict:
     Args:
         entity_type: one of ENTITY_TYPES keys
         entity_id: primary key of the entity
+        program_id: Scope for models with a direct ``program_id`` column.
+            When provided, scopes the initial entity lookup to enforce tenant
+            isolation. Models without ``program_id`` (Scenario, Process, etc.)
+            fall back to an unscoped lookup; add project_id scoping separately
+            once those models carry the column.
 
     Returns:
         dict with chain information, or None if entity not found.
@@ -64,7 +75,13 @@ def get_chain(entity_type: str, entity_id: int) -> dict:
     if not model:
         return None
 
-    entity = db.session.get(model, entity_id)
+    # Scope the initial lookup by program_id when available on the model.
+    # FK-nav helpers further in the chain traverse DB-stored FK values from
+    # the verified entity, so only the entry point needs user-supplied scoping.
+    if program_id is not None and hasattr(model, "__table__") and "program_id" in model.__table__.c:
+        entity = get_scoped_or_none(model, entity_id, program_id=program_id)
+    else:
+        entity = db.session.get(model, entity_id)
     if not entity:
         return None
 
@@ -125,14 +142,22 @@ def get_chain(entity_type: str, entity_id: int) -> dict:
     }
 
 
-def get_requirement_links(requirement_id: int) -> dict:
+def get_requirement_links(requirement_id: int, *, program_id: int | None = None) -> dict:
     """
     Get all WRICEF items and Config items linked to a requirement.
+
+    Args:
+        requirement_id: Requirement primary key (user-supplied).
+        program_id: Scope for the Requirement lookup when provided.
 
     Returns:
         dict with backlog_items and config_items lists.
     """
-    req = db.session.get(Requirement, requirement_id)
+    req = (
+        get_scoped_or_none(Requirement, requirement_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(Requirement, requirement_id)
+    )
     if not req:
         return None
 

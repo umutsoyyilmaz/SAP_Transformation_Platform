@@ -9,6 +9,8 @@ All db.session.commit() calls for mutations live here; blueprints never commit.
 import logging
 from datetime import datetime, timezone
 
+from sqlalchemy import select
+
 from app.models import db
 from app.models.data_factory import (
     CleansingTask,
@@ -19,6 +21,7 @@ from app.models.data_factory import (
     TestDataSet,
     TestDataSetItem,
 )
+from app.services.helpers.scoped_queries import get_scoped_or_none
 
 logger = logging.getLogger(__name__)
 
@@ -79,16 +82,22 @@ def create_data_object(data: dict) -> dict:
     return obj.to_dict()
 
 
-def get_data_object_with_stats(obj_id: int) -> tuple[dict | None, dict | None]:
+def get_data_object_with_stats(obj_id: int, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Get a DataObject with aggregated task/load counts.
 
     Args:
         obj_id: DataObject primary key.
+        program_id: Program scope — scopes the lookup when provided to enforce
+            tenant isolation. Callers should always pass this.
 
     Returns:
         Tuple of (result dict, None) or (None, error dict).
     """
-    obj = db.session.get(DataObject, obj_id)
+    obj = (
+        get_scoped_or_none(DataObject, obj_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(DataObject, obj_id)
+    )
     if not obj:
         return None, {"error": "DataObject not found", "status": 404}
     d = obj.to_dict()
@@ -97,17 +106,22 @@ def get_data_object_with_stats(obj_id: int) -> tuple[dict | None, dict | None]:
     return d, None
 
 
-def update_data_object(obj_id: int, data: dict) -> tuple[dict | None, dict | None]:
+def update_data_object(obj_id: int, data: dict, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Update a DataObject.
 
     Args:
         obj_id: DataObject primary key.
         data: Fields to update.
+        program_id: Program scope — scopes the lookup when provided.
 
     Returns:
         Tuple of (serialized dict, None) or (None, error dict).
     """
-    obj = db.session.get(DataObject, obj_id)
+    obj = (
+        get_scoped_or_none(DataObject, obj_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(DataObject, obj_id)
+    )
     if not obj:
         return None, {"error": "DataObject not found", "status": 404}
     for f in ("name", "description", "source_system", "target_table",
@@ -118,16 +132,21 @@ def update_data_object(obj_id: int, data: dict) -> tuple[dict | None, dict | Non
     return obj.to_dict(), None
 
 
-def delete_data_object(obj_id: int) -> dict | None:
+def delete_data_object(obj_id: int, *, program_id: int | None = None) -> dict | None:
     """Delete a DataObject and its children.
 
     Args:
         obj_id: DataObject primary key.
+        program_id: Program scope — scopes the lookup when provided.
 
     Returns:
         Error dict if not found, None on success.
     """
-    obj = db.session.get(DataObject, obj_id)
+    obj = (
+        get_scoped_or_none(DataObject, obj_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(DataObject, obj_id)
+    )
     if not obj:
         return {"error": "DataObject not found", "status": 404}
     db.session.delete(obj)
@@ -180,16 +199,21 @@ def create_wave(data: dict) -> dict:
     return wave.to_dict()
 
 
-def get_wave_with_stats(wave_id: int) -> tuple[dict | None, dict | None]:
+def get_wave_with_stats(wave_id: int, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Get a MigrationWave with load cycle summary.
 
     Args:
         wave_id: MigrationWave primary key.
+        program_id: Program scope — scopes the lookup when provided.
 
     Returns:
         Tuple of (result dict, None) or (None, error dict).
     """
-    wave = db.session.get(MigrationWave, wave_id)
+    wave = (
+        get_scoped_or_none(MigrationWave, wave_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(MigrationWave, wave_id)
+    )
     if not wave:
         return None, {"error": "MigrationWave not found", "status": 404}
     d = wave.to_dict()
@@ -200,17 +224,22 @@ def get_wave_with_stats(wave_id: int) -> tuple[dict | None, dict | None]:
     return d, None
 
 
-def update_wave(wave_id: int, data: dict) -> tuple[dict | None, dict | None]:
+def update_wave(wave_id: int, data: dict, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Update a MigrationWave.
 
     Args:
         wave_id: MigrationWave primary key.
         data: Fields to update.
+        program_id: Program scope — scopes the lookup when provided.
 
     Returns:
         Tuple of (serialized dict, None) or (None, error dict).
     """
-    wave = db.session.get(MigrationWave, wave_id)
+    wave = (
+        get_scoped_or_none(MigrationWave, wave_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(MigrationWave, wave_id)
+    )
     if not wave:
         return None, {"error": "MigrationWave not found", "status": 404}
     for f in ("wave_number", "name", "description", "planned_start", "planned_end",
@@ -221,16 +250,21 @@ def update_wave(wave_id: int, data: dict) -> tuple[dict | None, dict | None]:
     return wave.to_dict(), None
 
 
-def delete_wave(wave_id: int) -> dict | None:
+def delete_wave(wave_id: int, *, program_id: int | None = None) -> dict | None:
     """Delete a MigrationWave.
 
     Args:
         wave_id: MigrationWave primary key.
+        program_id: Program scope — scopes the lookup when provided.
 
     Returns:
         Error dict if not found, None on success.
     """
-    wave = db.session.get(MigrationWave, wave_id)
+    wave = (
+        get_scoped_or_none(MigrationWave, wave_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(MigrationWave, wave_id)
+    )
     if not wave:
         return {"error": "MigrationWave not found", "status": 404}
     db.session.delete(wave)
@@ -256,17 +290,22 @@ def list_cleansing_tasks(data_object_id: int) -> list[dict]:
     return [t.to_dict() for t in tasks]
 
 
-def create_cleansing_task(obj_id: int, data: dict) -> tuple[dict | None, dict | None]:
+def create_cleansing_task(obj_id: int, data: dict, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Create a CleansingTask for a DataObject.
 
     Args:
         obj_id: Parent DataObject primary key.
         data: Validated input dict.
+        program_id: Program scope — scopes the DataObject lookup when provided.
 
     Returns:
         Tuple of (serialized task, None) or (None, error dict).
     """
-    obj = db.session.get(DataObject, obj_id)
+    obj = (
+        get_scoped_or_none(DataObject, obj_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(DataObject, obj_id)
+    )
     if not obj:
         return None, {"error": "DataObject not found", "status": 404}
     task = CleansingTask(
@@ -281,32 +320,50 @@ def create_cleansing_task(obj_id: int, data: dict) -> tuple[dict | None, dict | 
     return task.to_dict(), None
 
 
-def get_cleansing_task(task_id: int) -> tuple[dict | None, dict | None]:
+def get_cleansing_task(task_id: int, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Get a single CleansingTask by primary key.
 
     Args:
         task_id: CleansingTask primary key.
+        program_id: Program scope — scopes via DataObject join when provided.
+            CleansingTask has no direct program_id; scope chain: CleansingTask →
+            DataObject.program_id.
 
     Returns:
         Tuple of (serialized dict, None) or (None, error dict).
     """
-    task = db.session.get(CleansingTask, task_id)
+    if program_id is not None:
+        task = db.session.execute(
+            select(CleansingTask)
+            .join(DataObject, CleansingTask.data_object_id == DataObject.id)
+            .where(CleansingTask.id == task_id, DataObject.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        task = db.session.get(CleansingTask, task_id)
     if not task:
         return None, {"error": "CleansingTask not found", "status": 404}
     return task.to_dict(), None
 
 
-def update_cleansing_task(task_id: int, data: dict) -> tuple[dict | None, dict | None]:
+def update_cleansing_task(task_id: int, data: dict, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Update a CleansingTask.
 
     Args:
         task_id: CleansingTask primary key.
         data: Fields to update.
+        program_id: Program scope — scopes via DataObject join when provided.
 
     Returns:
         Tuple of (serialized dict, None) or (None, error dict).
     """
-    task = db.session.get(CleansingTask, task_id)
+    if program_id is not None:
+        task = db.session.execute(
+            select(CleansingTask)
+            .join(DataObject, CleansingTask.data_object_id == DataObject.id)
+            .where(CleansingTask.id == task_id, DataObject.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        task = db.session.get(CleansingTask, task_id)
     if not task:
         return None, {"error": "CleansingTask not found", "status": 404}
     for f in ("rule_type", "rule_expression", "description", "pass_count",
@@ -317,16 +374,24 @@ def update_cleansing_task(task_id: int, data: dict) -> tuple[dict | None, dict |
     return task.to_dict(), None
 
 
-def delete_cleansing_task(task_id: int) -> dict | None:
+def delete_cleansing_task(task_id: int, *, program_id: int | None = None) -> dict | None:
     """Delete a CleansingTask.
 
     Args:
         task_id: CleansingTask primary key.
+        program_id: Program scope — scopes via DataObject join when provided.
 
     Returns:
         Error dict if not found, None on success.
     """
-    task = db.session.get(CleansingTask, task_id)
+    if program_id is not None:
+        task = db.session.execute(
+            select(CleansingTask)
+            .join(DataObject, CleansingTask.data_object_id == DataObject.id)
+            .where(CleansingTask.id == task_id, DataObject.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        task = db.session.get(CleansingTask, task_id)
     if not task:
         return {"error": "CleansingTask not found", "status": 404}
     db.session.delete(task)
@@ -334,17 +399,25 @@ def delete_cleansing_task(task_id: int) -> dict | None:
     return None
 
 
-def run_cleansing_task(task_id: int, data: dict) -> tuple[dict | None, dict | None]:
+def run_cleansing_task(task_id: int, data: dict, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Simulate running a cleansing task (sets pass/fail counts + status).
 
     Args:
         task_id: CleansingTask primary key.
         data: Optional pass_count / fail_count overrides.
+        program_id: Program scope — scopes via DataObject join when provided.
 
     Returns:
         Tuple of (serialized task, None) or (None, error dict).
     """
-    task = db.session.get(CleansingTask, task_id)
+    if program_id is not None:
+        task = db.session.execute(
+            select(CleansingTask)
+            .join(DataObject, CleansingTask.data_object_id == DataObject.id)
+            .where(CleansingTask.id == task_id, DataObject.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        task = db.session.get(CleansingTask, task_id)
     if not task:
         return None, {"error": "CleansingTask not found", "status": 404}
     task.status = "running"
@@ -376,17 +449,22 @@ def list_load_cycles(data_object_id: int) -> list[dict]:
     return [c.to_dict() for c in cycles]
 
 
-def create_load_cycle(obj_id: int, data: dict) -> tuple[dict | None, dict | None]:
+def create_load_cycle(obj_id: int, data: dict, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Create a LoadCycle for a DataObject.
 
     Args:
         obj_id: Parent DataObject primary key.
         data: Validated input dict.
+        program_id: Program scope — scopes the DataObject lookup when provided.
 
     Returns:
         Tuple of (serialized cycle, None) or (None, error dict).
     """
-    obj = db.session.get(DataObject, obj_id)
+    obj = (
+        get_scoped_or_none(DataObject, obj_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(DataObject, obj_id)
+    )
     if not obj:
         return None, {"error": "DataObject not found", "status": 404}
     cycle = LoadCycle(
@@ -401,16 +479,26 @@ def create_load_cycle(obj_id: int, data: dict) -> tuple[dict | None, dict | None
     return cycle.to_dict(), None
 
 
-def get_load_cycle_with_stats(lc_id: int) -> tuple[dict | None, dict | None]:
+def get_load_cycle_with_stats(lc_id: int, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Get a LoadCycle with reconciliation summary.
 
     Args:
         lc_id: LoadCycle primary key.
+        program_id: Program scope — scopes via DataObject join when provided.
+            LoadCycle has no direct program_id; scope chain: LoadCycle →
+            DataObject.program_id.
 
     Returns:
         Tuple of (result dict, None) or (None, error dict).
     """
-    lc = db.session.get(LoadCycle, lc_id)
+    if program_id is not None:
+        lc = db.session.execute(
+            select(LoadCycle)
+            .join(DataObject, LoadCycle.data_object_id == DataObject.id)
+            .where(LoadCycle.id == lc_id, DataObject.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        lc = db.session.get(LoadCycle, lc_id)
     if not lc:
         return None, {"error": "LoadCycle not found", "status": 404}
     d = lc.to_dict()
@@ -418,17 +506,25 @@ def get_load_cycle_with_stats(lc_id: int) -> tuple[dict | None, dict | None]:
     return d, None
 
 
-def update_load_cycle(lc_id: int, data: dict) -> tuple[dict | None, dict | None]:
+def update_load_cycle(lc_id: int, data: dict, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Update a LoadCycle.
 
     Args:
         lc_id: LoadCycle primary key.
         data: Fields to update.
+        program_id: Program scope — scopes via DataObject join when provided.
 
     Returns:
         Tuple of (serialized dict, None) or (None, error dict).
     """
-    lc = db.session.get(LoadCycle, lc_id)
+    if program_id is not None:
+        lc = db.session.execute(
+            select(LoadCycle)
+            .join(DataObject, LoadCycle.data_object_id == DataObject.id)
+            .where(LoadCycle.id == lc_id, DataObject.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        lc = db.session.get(LoadCycle, lc_id)
     if not lc:
         return None, {"error": "LoadCycle not found", "status": 404}
     for f in ("wave_id", "environment", "load_type", "records_loaded",
@@ -439,16 +535,24 @@ def update_load_cycle(lc_id: int, data: dict) -> tuple[dict | None, dict | None]
     return lc.to_dict(), None
 
 
-def delete_load_cycle(lc_id: int) -> dict | None:
+def delete_load_cycle(lc_id: int, *, program_id: int | None = None) -> dict | None:
     """Delete a LoadCycle.
 
     Args:
         lc_id: LoadCycle primary key.
+        program_id: Program scope — scopes via DataObject join when provided.
 
     Returns:
         Error dict if not found, None on success.
     """
-    lc = db.session.get(LoadCycle, lc_id)
+    if program_id is not None:
+        lc = db.session.execute(
+            select(LoadCycle)
+            .join(DataObject, LoadCycle.data_object_id == DataObject.id)
+            .where(LoadCycle.id == lc_id, DataObject.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        lc = db.session.get(LoadCycle, lc_id)
     if not lc:
         return {"error": "LoadCycle not found", "status": 404}
     db.session.delete(lc)
@@ -456,16 +560,24 @@ def delete_load_cycle(lc_id: int) -> dict | None:
     return None
 
 
-def start_load_cycle(lc_id: int) -> tuple[dict | None, dict | None]:
+def start_load_cycle(lc_id: int, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Mark a load cycle as running.
 
     Args:
         lc_id: LoadCycle primary key.
+        program_id: Program scope — scopes via DataObject join when provided.
 
     Returns:
         Tuple of (serialized cycle, None) or (None, error dict).
     """
-    lc = db.session.get(LoadCycle, lc_id)
+    if program_id is not None:
+        lc = db.session.execute(
+            select(LoadCycle)
+            .join(DataObject, LoadCycle.data_object_id == DataObject.id)
+            .where(LoadCycle.id == lc_id, DataObject.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        lc = db.session.get(LoadCycle, lc_id)
     if not lc:
         return None, {"error": "LoadCycle not found", "status": 404}
     if lc.status not in ("pending", "failed"):
@@ -476,17 +588,25 @@ def start_load_cycle(lc_id: int) -> tuple[dict | None, dict | None]:
     return lc.to_dict(), None
 
 
-def complete_load_cycle(lc_id: int, data: dict) -> tuple[dict | None, dict | None]:
+def complete_load_cycle(lc_id: int, data: dict, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Mark a load cycle as completed or failed based on records_failed.
 
     Args:
         lc_id: LoadCycle primary key.
         data: Payload with records_loaded, records_failed, error_log.
+        program_id: Program scope — scopes via DataObject join when provided.
 
     Returns:
         Tuple of (serialized cycle, None) or (None, error dict).
     """
-    lc = db.session.get(LoadCycle, lc_id)
+    if program_id is not None:
+        lc = db.session.execute(
+            select(LoadCycle)
+            .join(DataObject, LoadCycle.data_object_id == DataObject.id)
+            .where(LoadCycle.id == lc_id, DataObject.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        lc = db.session.get(LoadCycle, lc_id)
     if not lc:
         return None, {"error": "LoadCycle not found", "status": 404}
     lc.records_loaded = data.get("records_loaded", lc.records_loaded or 0)
@@ -516,17 +636,26 @@ def list_reconciliations(load_cycle_id: int) -> list[dict]:
     return [r.to_dict() for r in recons]
 
 
-def create_reconciliation(lc_id: int, data: dict) -> tuple[dict | None, dict | None]:
+def create_reconciliation(lc_id: int, data: dict, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Create a Reconciliation for a LoadCycle.
 
     Args:
         lc_id: Parent LoadCycle primary key.
         data: Validated input dict.
+        program_id: Program scope — scopes the LoadCycle lookup via DataObject
+            join when provided.
 
     Returns:
         Tuple of (serialized reconciliation, None) or (None, error dict).
     """
-    lc = db.session.get(LoadCycle, lc_id)
+    if program_id is not None:
+        lc = db.session.execute(
+            select(LoadCycle)
+            .join(DataObject, LoadCycle.data_object_id == DataObject.id)
+            .where(LoadCycle.id == lc_id, DataObject.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        lc = db.session.get(LoadCycle, lc_id)
     if not lc:
         return None, {"error": "LoadCycle not found", "status": 404}
     recon = Reconciliation(
@@ -541,32 +670,51 @@ def create_reconciliation(lc_id: int, data: dict) -> tuple[dict | None, dict | N
     return recon.to_dict(), None
 
 
-def get_reconciliation(recon_id: int) -> tuple[dict | None, dict | None]:
+def get_reconciliation(recon_id: int, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Get a single Reconciliation by primary key.
 
     Args:
         recon_id: Reconciliation primary key.
+        program_id: Program scope — scopes via LoadCycle → DataObject join when
+            provided (Reconciliation has no direct program_id).
 
     Returns:
         Tuple of (serialized dict, None) or (None, error dict).
     """
-    recon = db.session.get(Reconciliation, recon_id)
+    if program_id is not None:
+        recon = db.session.execute(
+            select(Reconciliation)
+            .join(LoadCycle, Reconciliation.load_cycle_id == LoadCycle.id)
+            .join(DataObject, LoadCycle.data_object_id == DataObject.id)
+            .where(Reconciliation.id == recon_id, DataObject.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        recon = db.session.get(Reconciliation, recon_id)
     if not recon:
         return None, {"error": "Reconciliation not found", "status": 404}
     return recon.to_dict(), None
 
 
-def update_reconciliation(recon_id: int, data: dict) -> tuple[dict | None, dict | None]:
+def update_reconciliation(recon_id: int, data: dict, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Update a Reconciliation.
 
     Args:
         recon_id: Reconciliation primary key.
         data: Fields to update.
+        program_id: Program scope — scopes via LoadCycle → DataObject join when provided.
 
     Returns:
         Tuple of (serialized dict, None) or (None, error dict).
     """
-    recon = db.session.get(Reconciliation, recon_id)
+    if program_id is not None:
+        recon = db.session.execute(
+            select(Reconciliation)
+            .join(LoadCycle, Reconciliation.load_cycle_id == LoadCycle.id)
+            .join(DataObject, LoadCycle.data_object_id == DataObject.id)
+            .where(Reconciliation.id == recon_id, DataObject.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        recon = db.session.get(Reconciliation, recon_id)
     if not recon:
         return None, {"error": "Reconciliation not found", "status": 404}
     for f in ("source_count", "target_count", "match_count", "status", "notes"):
@@ -576,16 +724,25 @@ def update_reconciliation(recon_id: int, data: dict) -> tuple[dict | None, dict 
     return recon.to_dict(), None
 
 
-def delete_reconciliation(recon_id: int) -> dict | None:
+def delete_reconciliation(recon_id: int, *, program_id: int | None = None) -> dict | None:
     """Delete a Reconciliation.
 
     Args:
         recon_id: Reconciliation primary key.
+        program_id: Program scope — scopes via LoadCycle → DataObject join when provided.
 
     Returns:
         Error dict if not found, None on success.
     """
-    recon = db.session.get(Reconciliation, recon_id)
+    if program_id is not None:
+        recon = db.session.execute(
+            select(Reconciliation)
+            .join(LoadCycle, Reconciliation.load_cycle_id == LoadCycle.id)
+            .join(DataObject, LoadCycle.data_object_id == DataObject.id)
+            .where(Reconciliation.id == recon_id, DataObject.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        recon = db.session.get(Reconciliation, recon_id)
     if not recon:
         return {"error": "Reconciliation not found", "status": 404}
     db.session.delete(recon)
@@ -593,16 +750,25 @@ def delete_reconciliation(recon_id: int) -> dict | None:
     return None
 
 
-def calculate_reconciliation(recon_id: int) -> tuple[dict | None, dict | None]:
+def calculate_reconciliation(recon_id: int, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Calculate variance and update reconciliation status.
 
     Args:
         recon_id: Reconciliation primary key.
+        program_id: Program scope — scopes via LoadCycle → DataObject join when provided.
 
     Returns:
         Tuple of (serialized reconciliation, None) or (None, error dict).
     """
-    recon = db.session.get(Reconciliation, recon_id)
+    if program_id is not None:
+        recon = db.session.execute(
+            select(Reconciliation)
+            .join(LoadCycle, Reconciliation.load_cycle_id == LoadCycle.id)
+            .join(DataObject, LoadCycle.data_object_id == DataObject.id)
+            .where(Reconciliation.id == recon_id, DataObject.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        recon = db.session.get(Reconciliation, recon_id)
     if not recon:
         return None, {"error": "Reconciliation not found", "status": 404}
     recon.variance = recon.source_count - recon.target_count
@@ -756,16 +922,21 @@ def create_test_data_set(data: dict) -> dict:
     return ds.to_dict()
 
 
-def get_test_data_set_with_items(ds_id: int) -> tuple[dict | None, dict | None]:
+def get_test_data_set_with_items(ds_id: int, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Get a TestDataSet with its items.
 
     Args:
         ds_id: TestDataSet primary key.
+        program_id: Program scope — scopes the lookup when provided.
 
     Returns:
         Tuple of (result dict, None) or (None, error dict).
     """
-    ds = db.session.get(TestDataSet, ds_id)
+    ds = (
+        get_scoped_or_none(TestDataSet, ds_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(TestDataSet, ds_id)
+    )
     if not ds:
         return None, {"error": "TestDataSet not found", "status": 404}
     result = ds.to_dict()
@@ -773,17 +944,22 @@ def get_test_data_set_with_items(ds_id: int) -> tuple[dict | None, dict | None]:
     return result, None
 
 
-def update_test_data_set(ds_id: int, data: dict) -> tuple[dict | None, dict | None]:
+def update_test_data_set(ds_id: int, data: dict, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Update a TestDataSet.
 
     Args:
         ds_id: TestDataSet primary key.
         data: Fields to update.
+        program_id: Program scope — scopes the lookup when provided.
 
     Returns:
         Tuple of (serialized dict, None) or (None, error dict).
     """
-    ds = db.session.get(TestDataSet, ds_id)
+    ds = (
+        get_scoped_or_none(TestDataSet, ds_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(TestDataSet, ds_id)
+    )
     if not ds:
         return None, {"error": "TestDataSet not found", "status": 404}
     for field in ("name", "version", "description", "environment", "status",
@@ -794,16 +970,21 @@ def update_test_data_set(ds_id: int, data: dict) -> tuple[dict | None, dict | No
     return ds.to_dict(), None
 
 
-def delete_test_data_set(ds_id: int) -> dict | None:
+def delete_test_data_set(ds_id: int, *, program_id: int | None = None) -> dict | None:
     """Delete a TestDataSet (cascades to items).
 
     Args:
         ds_id: TestDataSet primary key.
+        program_id: Program scope — scopes the lookup when provided.
 
     Returns:
         Error dict if not found, None on success.
     """
-    ds = db.session.get(TestDataSet, ds_id)
+    ds = (
+        get_scoped_or_none(TestDataSet, ds_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(TestDataSet, ds_id)
+    )
     if not ds:
         return {"error": "TestDataSet not found", "status": 404}
     db.session.delete(ds)
@@ -816,33 +997,43 @@ def delete_test_data_set(ds_id: int) -> dict | None:
 # ═════════════════════════════════════════════════════════════════════════
 
 
-def list_data_set_items(ds_id: int) -> tuple[list[dict] | None, dict | None]:
+def list_data_set_items(ds_id: int, *, program_id: int | None = None) -> tuple[list[dict] | None, dict | None]:
     """List items in a data set.
 
     Args:
         ds_id: Parent TestDataSet primary key.
+        program_id: Program scope — scopes the TestDataSet lookup when provided.
 
     Returns:
         Tuple of (items list, None) or (None, error dict).
     """
-    ds = db.session.get(TestDataSet, ds_id)
+    ds = (
+        get_scoped_or_none(TestDataSet, ds_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(TestDataSet, ds_id)
+    )
     if not ds:
         return None, {"error": "TestDataSet not found", "status": 404}
     items = TestDataSetItem.query.filter_by(data_set_id=ds_id).all()
     return [i.to_dict() for i in items], None
 
 
-def add_data_set_item(ds_id: int, data: dict) -> tuple[dict | None, dict | None]:
+def add_data_set_item(ds_id: int, data: dict, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Add a DataObject reference to a data set.
 
     Args:
         ds_id: Parent TestDataSet primary key.
         data: Validated input dict.
+        program_id: Program scope — scopes the TestDataSet lookup when provided.
 
     Returns:
         Tuple of (serialized item, None) or (None, error dict).
     """
-    ds = db.session.get(TestDataSet, ds_id)
+    ds = (
+        get_scoped_or_none(TestDataSet, ds_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(TestDataSet, ds_id)
+    )
     if not ds:
         return None, {"error": "TestDataSet not found", "status": 404}
     item = TestDataSetItem(
@@ -858,17 +1049,27 @@ def add_data_set_item(ds_id: int, data: dict) -> tuple[dict | None, dict | None]
     return item.to_dict(), None
 
 
-def update_data_set_item(item_id: int, data: dict) -> tuple[dict | None, dict | None]:
+def update_data_set_item(item_id: int, data: dict, *, program_id: int | None = None) -> tuple[dict | None, dict | None]:
     """Update a TestDataSetItem.
 
     Args:
         item_id: TestDataSetItem primary key.
         data: Fields to update.
+        program_id: Program scope — scopes via TestDataSet join when provided.
+            TestDataSetItem has no direct program_id; scope chain:
+            TestDataSetItem → TestDataSet.program_id.
 
     Returns:
         Tuple of (serialized dict, None) or (None, error dict).
     """
-    item = db.session.get(TestDataSetItem, item_id)
+    if program_id is not None:
+        item = db.session.execute(
+            select(TestDataSetItem)
+            .join(TestDataSet, TestDataSetItem.data_set_id == TestDataSet.id)
+            .where(TestDataSetItem.id == item_id, TestDataSet.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        item = db.session.get(TestDataSetItem, item_id)
     if not item:
         return None, {"error": "TestDataSetItem not found", "status": 404}
     for field in ("data_object_id", "record_filter",
@@ -880,16 +1081,24 @@ def update_data_set_item(item_id: int, data: dict) -> tuple[dict | None, dict | 
     return item.to_dict(), None
 
 
-def delete_data_set_item(item_id: int) -> dict | None:
+def delete_data_set_item(item_id: int, *, program_id: int | None = None) -> dict | None:
     """Remove an item from a data set.
 
     Args:
         item_id: TestDataSetItem primary key.
+        program_id: Program scope — scopes via TestDataSet join when provided.
 
     Returns:
         Error dict if not found, None on success.
     """
-    item = db.session.get(TestDataSetItem, item_id)
+    if program_id is not None:
+        item = db.session.execute(
+            select(TestDataSetItem)
+            .join(TestDataSet, TestDataSetItem.data_set_id == TestDataSet.id)
+            .where(TestDataSetItem.id == item_id, TestDataSet.program_id == program_id)
+        ).scalar_one_or_none()
+    else:
+        item = db.session.get(TestDataSetItem, item_id)
     if not item:
         return {"error": "TestDataSetItem not found", "status": 404}
     db.session.delete(item)

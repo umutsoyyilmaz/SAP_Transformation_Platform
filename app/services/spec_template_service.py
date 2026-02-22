@@ -13,6 +13,7 @@ from app.models import db
 from app.models.backlog import (
     BacklogItem, ConfigItem, FunctionalSpec, TechnicalSpec, SpecTemplate,
 )
+from app.services.helpers.scoped_queries import get_scoped_or_none
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +188,7 @@ def render_template(template_content: str, context: dict) -> str:
 # GENERATE SPECS (main orchestrator)
 # ═══════════════════════════════════════════════════════════════════
 
-def generate_specs_for_backlog_item(item_id: int):
+def generate_specs_for_backlog_item(item_id: int, *, program_id: int | None = None):
     """
     Generate FS + TS drafts for a BacklogItem using templates matched to its wricef_type.
 
@@ -197,11 +198,20 @@ def generate_specs_for_backlog_item(item_id: int):
       - If no matching template found → return error
       - Created docs get status='draft', template_id + template_version set
 
+    Args:
+        item_id: BacklogItem primary key (user-supplied).
+        program_id: Program scope — scopes the BacklogItem lookup when provided.
+            Callers should always pass this to enforce tenant isolation.
+
     Returns:
         (result_dict, None) on success
         (None, error_dict) on failure
     """
-    item = db.session.get(BacklogItem, item_id)
+    item = (
+        get_scoped_or_none(BacklogItem, item_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(BacklogItem, item_id)
+    )
     if not item:
         return None, {"error": f"BacklogItem {item_id} not found", "status": 404}
 
@@ -269,16 +279,25 @@ def generate_specs_for_backlog_item(item_id: int):
     return result, None
 
 
-def generate_specs_for_config_item(item_id: int):
+def generate_specs_for_config_item(item_id: int, *, program_id: int | None = None):
     """
     Generate FS + TS drafts for a ConfigItem.
     Config items use the enhancement template set as a fallback.
+
+    Args:
+        item_id: ConfigItem primary key (user-supplied).
+        program_id: Program scope — scopes the ConfigItem lookup when provided.
+            Callers should always pass this to enforce tenant isolation.
 
     Returns:
         (result_dict, None) on success
         (None, error_dict) on failure
     """
-    item = db.session.get(ConfigItem, item_id)
+    item = (
+        get_scoped_or_none(ConfigItem, item_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(ConfigItem, item_id)
+    )
     if not item:
         return None, {"error": f"ConfigItem {item_id} not found", "status": 404}
 
