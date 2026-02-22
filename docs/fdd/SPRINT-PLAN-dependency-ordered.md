@@ -292,14 +292,14 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | — |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] `frappe-gantt` (MIT lisans) seçilmeli — `dhtmlx` ticari lisanslı, kullanılamaz
-- [ ] Null `start_date`/`end_date` olan fazlar için fallback görünüm tanımla
-- [ ] Drag-to-reschedule disabled; cursor pointer kaldırılacak
+- [x] `frappe-gantt` (MIT lisans) seçilmeli — `dhtmlx` ticari lisanslı, kullanılamaz
+- [x] Null `start_date`/`end_date` olan fazlar için fallback görünüm tanımla
+- [x] Drag-to-reschedule disabled; cursor pointer kaldırılacak
 
 **Kabul Kriterleri:**
-- [ ] `GET /api/v1/programs/<id>/timeline` phases + gates + sprints döndürüyor
-- [ ] Geciken fazlar kırmızı renkte
-- [ ] Bugün çizgisi (today marker) görünüyor
+- [x] `GET /api/v1/programs/<id>/timeline` phases + gates + sprints döndürüyor
+- [x] Geciken fazlar kırmızı renkte
+- [x] Bugün çizgisi (today marker) görünüyor
 
 ---
 
@@ -599,7 +599,7 @@ S5-01 (ADR-002 auth)
 | S2-03 | F-05 Coverage | P1 | 2 | S | ✅ F-03 | S1-05, S2-01 |
 | S2-04 | F-03 Export | P1 | 2 | M | — | S1-05, S2-03 |
 | S3-01 | B-02 Discover | P1 | 3 | L | ✅ I-08 | S1-04 |
-| S3-02 | F-04 Timeline | P2 | 3 | M | — | — |
+| S3-02 | F-04 Timeline | P2 | 3 | M | ✅ | — |
 | S3-03 | F-06 RACI | P2 | 3 | M | — | S1-01 |
 | S3-04 | F-07+I-05 Placeholder | P2 | 3 | S | ✅ F-07 Faz B | — |
 | S4-01 | B-03 Hypercare | P2 | 4 | L | ✅ I-03, I-04 | S1-02, S3-02 |

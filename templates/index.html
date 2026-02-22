@@ -19,6 +19,9 @@
     <link rel="stylesheet" href="/static/css/pg-breadcrumb.css">
     <link rel="stylesheet" href="/static/css/test-management-f1.css">
     <link rel="stylesheet" href="/static/css/explore-tokens.css">
+    <link rel="stylesheet" href="/static/css/pg-dashboard.css">
+    <link rel="stylesheet" href="/static/css/pg-filter.css">
+    <link rel="stylesheet" href="/static/css/pg-panel.css">
     <link rel="stylesheet" href="/static/css/mobile.css">
 
     <!-- PWA -->
@@ -27,6 +30,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+    <!-- frappe-gantt (MIT) — timeline Gantt chart -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
 </head>
 <body>
 
@@ -132,6 +137,10 @@
             <span class="sidebar__item-icon" data-pg-icon="setup"></span>
             <span>Discover</span>
         </div>
+        <div class="sidebar__item" data-view="timeline">
+            <span class="sidebar__item-icon" data-pg-icon="dashboard"></span>
+            <span>Timeline</span>
+        </div>
 
         <div class="sidebar__section-title">Explore Phase</div>
         <div class="sidebar__item" data-view="explore-dashboard">
@@ -220,6 +229,8 @@
     <script src="/static/js/error-handler.js"></script>
     <script src="/static/js/constants.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <!-- frappe-gantt (MIT) — program timeline view -->
+    <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/api.js"></script>
     <!-- pg-* components load before views so all views can use them -->
@@ -230,6 +241,7 @@
     <script src="/static/js/components/pg_empty_state.js"></script>
     <script src="/static/js/components/pg_skeleton.js"></script>
     <script src="/static/js/components/pg_breadcrumb.js"></script>
+    <script src="/static/js/components/pg_panel.js"></script>
     <script src="/static/js/views/program.js"></script>
     <script src="/static/js/views/backlog.js"></script>
     <script src="/static/js/views/testing_shared.js"></script>
@@ -289,6 +301,7 @@
     <script src="/static/js/views/observability.js"></script>
     <script src="/static/js/views/gate_criteria.js"></script>
     <script src="/static/js/views/discover.js"></script>
+    <script src="/static/js/views/timeline.js"></script>
     <script src="/static/js/views/project_setup.js"></script>
     <script src="/static/js/app.js"></script>
     <script src="/static/js/pwa.js"></script>

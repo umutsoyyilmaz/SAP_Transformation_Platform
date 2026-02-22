@@ -442,3 +442,269 @@ def delete_committee(comm_id):
     if err:
         return err
     return jsonify({"message": f"Committee '{comm.name}' deleted"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TIMELINE  (S3-02 · FDD-F04)
+# ═════════════════════════════════════════════════════════════════════════════
+
+# SAP Activate phase-name → brand color mapping.
+# Status-based overrides (delayed → red, completed → grey) are applied
+# at render time in _phase_color() below.
+_PHASE_COLORS: dict[str, str] = {
+    "discover": "#6366f1",
+    "prepare": "#f59e0b",
+    "explore": "#3b82f6",
+    "realize": "#8b5cf6",
+    "deploy": "#ef4444",
+    "run": "#22c55e",
+}
+
+
+def _phase_color(phase: Phase, today: "date") -> str:
+    """Return the display color for a phase bar.
+
+    Priority order:
+    1. completed / skipped → neutral grey (no longer active)
+    2. planned_end in the past + not done → delayed red
+    3. Phase name contains a known SAP Activate keyword → keyword color
+    4. Fallback: indigo (#6366f1)
+    """
+    if phase.status in {"completed", "skipped"}:
+        return "#9ca3af"
+    if phase.planned_end and phase.planned_end < today and phase.status not in {"completed", "skipped"}:
+        return "#ef4444"
+    name_lower = (phase.name or "").lower()
+    for keyword, color in _PHASE_COLORS.items():
+        if keyword in name_lower:
+            return color
+    return "#6366f1"
+
+
+@program_bp.route("/programs/<int:program_id>/timeline", methods=["GET"])
+def get_timeline(program_id: int):
+    """Return structured Gantt-ready timeline data for a program.
+
+    Aggregates phases (with nested gates), sprints, and gate milestones
+    so the frontend can render a complete timeline view without additional
+    round-trips.
+
+    Phases are colored by SAP Activate phase type; delayed phases render
+    red. Gates are lifted into a flat milestones list for diamond markers.
+
+    Args:
+        program_id: Target program primary key.
+
+    Returns:
+        200 with {program, phases, sprints, milestones, today}
+        404 if program not found.
+    """
+    from datetime import date
+    from collections import defaultdict
+    from sqlalchemy import select
+    from app.models.backlog import Sprint
+
+    prog, err = _get_or_404(Program, program_id)
+    if err:
+        return err
+
+    today = date.today()
+
+    # Load phases ordered by display sequence.
+    stmt = (
+        select(Phase)
+        .where(Phase.program_id == program_id)
+        .order_by(Phase.order, Phase.id)
+    )
+    phases: list[Phase] = db.session.execute(stmt).scalars().all()
+
+    # Bulk-load all gates for these phases in one query (avoids N+1 and
+    # bypasses the lazy="dynamic" restriction on selectinload).
+    phase_ids = [ph.id for ph in phases]
+    gates_by_phase: dict[int, list[Gate]] = defaultdict(list)
+    if phase_ids:
+        gates_stmt = (
+            select(Gate)
+            .where(Gate.phase_id.in_(phase_ids))
+            .order_by(Gate.planned_date, Gate.id)
+        )
+        for g in db.session.execute(gates_stmt).scalars().all():
+            gates_by_phase[g.phase_id].append(g)
+
+    phases_data = []
+    milestones = []
+
+    for ph in phases:
+        color = _phase_color(ph, today)
+        effective_start = ph.actual_start or ph.planned_start
+        effective_end = ph.actual_end or ph.planned_end
+
+        ph_gates = gates_by_phase[ph.id]
+        sorted_gates = sorted(
+            ph_gates,
+            key=lambda g: g.planned_date or date.max,
+        )
+        gates_data = [
+            {
+                "id": g.id,
+                "name": g.name,
+                "gate_type": g.gate_type,
+                "planned_date": g.planned_date.isoformat() if g.planned_date else None,
+                "actual_date": g.actual_date.isoformat() if g.actual_date else None,
+                "status": g.status,
+            }
+            for g in sorted_gates
+        ]
+
+        # Lift gates into the flat milestones list for frontend diamond markers.
+        for g in sorted_gates:
+            if g.planned_date:
+                milestones.append(
+                    {
+                        "id": f"g{g.id}",
+                        "name": g.name,
+                        "date": g.planned_date.isoformat(),
+                        "type": "gate",
+                        "status": g.status,
+                    }
+                )
+
+        # Derive SAP Activate phase keyword from the phase name so the
+        # frontend can apply icons without a dedicated DB column.
+        name_lower = (ph.name or "").lower()
+        sap_phase_keyword = next(
+            (kw for kw in _PHASE_COLORS if kw in name_lower), "unknown"
+        )
+
+        phases_data.append(
+            {
+                "id": ph.id,
+                "name": ph.name,
+                "sap_activate_phase": sap_phase_keyword,
+                "start_date": effective_start.isoformat() if effective_start else None,
+                "end_date": effective_end.isoformat() if effective_end else None,
+                "planned_start": ph.planned_start.isoformat() if ph.planned_start else None,
+                "planned_end": ph.planned_end.isoformat() if ph.planned_end else None,
+                "actual_start": ph.actual_start.isoformat() if ph.actual_start else None,
+                "actual_end": ph.actual_end.isoformat() if ph.actual_end else None,
+                "status": ph.status,
+                "color": color,
+                "completion_pct": ph.completion_pct,
+                "gates": gates_data,
+            }
+        )
+
+    # Sprints for this program — ordered by sequence then start date.
+    sprint_stmt = (
+        select(Sprint)
+        .where(Sprint.program_id == program_id)
+        .order_by(Sprint.order, Sprint.start_date, Sprint.id)
+    )
+    sprints = db.session.execute(sprint_stmt).scalars().all()
+
+    sprints_data = [
+        {
+            "id": s.id,
+            "name": s.name,
+            "program_id": s.program_id,
+            "start_date": s.start_date.isoformat() if s.start_date else None,
+            "end_date": s.end_date.isoformat() if s.end_date else None,
+            "status": s.status,
+            "velocity": s.velocity,
+            "capacity_points": s.capacity_points,
+        }
+        for s in sprints
+    ]
+
+    return jsonify(
+        {
+            "program": {
+                "id": prog.id,
+                "name": prog.name,
+                "start_date": prog.start_date.isoformat() if prog.start_date else None,
+                "end_date": prog.end_date.isoformat() if prog.end_date else None,
+            },
+            "phases": phases_data,
+            "sprints": sprints_data,
+            "milestones": milestones,
+            "today": today.isoformat(),
+        }
+    ), 200
+
+
+@program_bp.route("/programs/<int:program_id>/timeline/critical-path", methods=["GET"])
+def get_critical_path(program_id: int):
+    """Return delayed phases and at-risk gates for a program's critical path.
+
+    A phase is 'delayed' when planned_end < today AND status is not
+    completed/skipped.  A gate is 'at_risk' when it is still pending and
+    planned_date is within the next 7 days (or already past).
+
+    Args:
+        program_id: Target program primary key.
+
+    Returns:
+        200 with {delayed_items, at_risk_gates, total_delayed, total_at_risk}
+        404 if program not found.
+    """
+    from datetime import date
+    from collections import defaultdict
+    from sqlalchemy import select
+
+    prog, err = _get_or_404(Program, program_id)
+    if err:
+        return err
+
+    today = date.today()
+
+    stmt = (
+        select(Phase)
+        .where(Phase.program_id == program_id)
+    )
+    phases: list[Phase] = db.session.execute(stmt).scalars().all()
+
+    # Bulk-load gates by phase_id (same pattern as get_timeline).
+    phase_ids = [ph.id for ph in phases]
+    gates_by_phase: dict[int, list[Gate]] = defaultdict(list)
+    if phase_ids:
+        gates_stmt = select(Gate).where(Gate.phase_id.in_(phase_ids))
+        for g in db.session.execute(gates_stmt).scalars().all():
+            gates_by_phase[g.phase_id].append(g)
+
+    delayed_items = []
+    at_risk_gates = []
+
+    for ph in phases:
+        if ph.planned_end and ph.planned_end < today and ph.status not in {"completed", "skipped"}:
+            delayed_items.append(
+                {
+                    "phase_id": ph.id,
+                    "name": ph.name,
+                    "days_late": (today - ph.planned_end).days,
+                    "planned_end": ph.planned_end.isoformat(),
+                    "status": ph.status,
+                }
+            )
+
+        for gate in gates_by_phase[ph.id]:
+            if gate.planned_date and gate.status == "pending":
+                days_until = (gate.planned_date - today).days
+                if days_until < 7:
+                    at_risk_gates.append(
+                        {
+                            "gate_id": gate.id,
+                            "name": gate.name,
+                            "planned_date": gate.planned_date.isoformat(),
+                            "days_until": days_until,
+                            "risk": "overdue" if days_until < 0 else "imminent",
+                        }
+                    )
+
+    return jsonify(
+        {
+            "delayed_items": delayed_items,
+            "at_risk_gates": at_risk_gates,
+            "total_delayed": len(delayed_items),
+            "total_at_risk": len(at_risk_gates),
+        }
+    ), 200

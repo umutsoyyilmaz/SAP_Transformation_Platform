@@ -17,11 +17,14 @@ const ProgramView = (() => {
         const main = document.getElementById('mainContent');
         const activeProgram = App.getActiveProgram();
         main.innerHTML = `
-            <div class="page-header">
-                <h1>Programs</h1>
-                <button class="btn btn-primary" onclick="ProgramView.showCreateModal()">
-                    + New Program
-                </button>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'Programs' }])}
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:var(--pg-sp-2)">
+                    <h2 class="pg-view-title" style="margin:0">Programs</h2>
+                    <button class="pg-btn pg-btn--primary" onclick="ProgramView.showCreateModal()">
+                        + New Program
+                    </button>
+                </div>
             </div>
             ${activeProgram ? `<div class="program-active-banner">
                 <span>✅ Active: <strong>${escHtml(activeProgram.name)}</strong></span>
@@ -42,7 +45,7 @@ const ProgramView = (() => {
             renderCards();
         } catch (err) {
             document.getElementById('programCardContainer').innerHTML =
-                `<div class="empty-state"><p>⚠️ ${err.message}</p></div>`;
+                PGEmptyState.html({ icon: 'programs', title: 'Yüklenemedi', description: err.message });
         }
     }
 
@@ -51,13 +54,12 @@ const ProgramView = (() => {
         const activeProgram = App.getActiveProgram();
 
         if (programs.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state__icon">📋</div>
-                    <div class="empty-state__title">No programs found</div>
-                    <p>Create your first SAP transformation program.</p><br>
-                    <button class="btn btn-primary" onclick="ProgramView.showCreateModal()">+ New Program</button>
-                </div>`;
+            container.innerHTML = PGEmptyState.html({
+                icon: 'programs',
+                title: 'Henüz program yok',
+                description: 'İlk SAP dönüşüm programını oluşturun.',
+                action: { label: '+ Yeni Program', onclick: 'ProgramView.showCreateModal()' },
+            });
             return;
         }
 
@@ -69,7 +71,7 @@ const ProgramView = (() => {
                     <div class="program-card ${isActive ? 'program-card--active' : ''}" onclick="ProgramView.openDetail(${p.id})" style="cursor:pointer">
                         <div class="program-card__header">
                             <div class="program-card__title">${escHtml(p.name)}</div>
-                            <span class="badge badge-${p.status}">${p.status}</span>
+                            ${PGStatusRegistry.badge(p.status)}
                         </div>
                         <div class="program-card__body">
                             <div class="program-card__meta">
@@ -133,7 +135,10 @@ const ProgramView = (() => {
                     <span style="font-size:22px;font-weight:700">${escHtml(p.name)}</span>
                     <span class="badge badge-${p.status}" style="margin-left:8px">${p.status}</span>
                 </div>
-                <button class="btn btn-primary" onclick="ProgramView.showEditModal(${p.id})">Edit Program</button>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <button class="btn btn-secondary" onclick="App.navigate('timeline')">📅 Timeline</button>
+                    <button class="btn btn-primary" onclick="ProgramView.showEditModal(${p.id})">Edit Program</button>
+                </div>
             </div>
 
             <div class="tabs" id="programTabs">

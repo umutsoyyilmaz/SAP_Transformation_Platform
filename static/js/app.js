@@ -48,6 +48,7 @@ const App = (() => {
         'observability': () => ObservabilityView.init(),
         'gate-criteria': () => GateCriteriaView.render(document.getElementById('main-content')),
         'discover':     () => DiscoverView.render(document.getElementById('mainContent')),
+        'timeline':     () => TimelineView.render(document.getElementById('mainContent')),
         'project-setup': () => ProjectSetupView.render(),
         'ai-insights': () => AIInsightsView.render(),
         'ai-query':   () => AIQueryView.render(),
@@ -68,7 +69,7 @@ const App = (() => {
         'executive-cockpit',
         'backlog', 'test-planning', 'test-execution', 'defect-management', 'approvals', 'integration', 'data-factory', 'cutover', 'raid',
         'test-case-detail',
-        'reports', 'dashboard-f5', 'suite-folders', 'env-matrix', 'bdd-editor', 'data-driven', 'exploratory', 'evidence', 'custom-fields', 'integrations', 'observability', 'gate-criteria', 'project-setup', 'ai-insights', 'ai-query', 'discover',
+        'reports', 'dashboard-f5', 'suite-folders', 'env-matrix', 'bdd-editor', 'data-driven', 'exploratory', 'evidence', 'custom-fields', 'integrations', 'observability', 'gate-criteria', 'project-setup', 'ai-insights', 'ai-query', 'discover', 'timeline',
         'explore-dashboard', 'explore-hierarchy', 'explore-workshops', 'explore-workshop-detail', 'explore-requirements',
     ]);
 
@@ -154,117 +155,129 @@ const App = (() => {
         views[viewName](...args);
     }
 
-    // ── Dashboard (Program-Specific) ─────────────────────────────────────
+    // ── Dashboard ────────────────────────────────────────────────────────
     async function renderDashboard() {
         const main = document.getElementById('mainContent');
-        const prog = getActiveProgram();
-
-        if (!prog) {
-            main.innerHTML = `
-                <div class="page-header"><h1>Dashboard</h1></div>
-                <div class="empty-state">
-                    <div class="empty-state__icon">📋</div>
-                    <div class="empty-state__title">Welcome to SAP Transformation Platform</div>
-                    <p>Select a program to get started.</p>
-                    <br>
-                    <button class="btn btn-primary" onclick="App.navigate('programs')">
-                        Go to Programs
-                    </button>
-                </div>
-            `;
-            return;
-        }
-
         main.innerHTML = `
-            <div class="page-header">
-                <h1>${esc(prog.name)} — Dashboard</h1>
-                <span class="badge badge-${esc(prog.status)}">${esc(prog.status)}</span>
+            <div class="pg-view-header">
+                ${PGBreadcrumb.html([{ label: 'Dashboard' }])}
+                <h2 class="pg-view-title">Dashboard</h2>
             </div>
-            <div class="kpi-row" id="kpiRow">
-                <!-- Explore -->
-                <div class="kpi-card">
-                    <div class="kpi-card__value" id="kpiWorkshops">—</div>
-                    <div class="kpi-card__label">Workshops</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-card__value" id="kpiWsCompletion">—</div>
-                    <div class="kpi-card__label">WS Completion</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-card__value" id="kpiRequirements">—</div>
-                    <div class="kpi-card__label">Requirements</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-card__value" id="kpiOpenItems">—</div>
-                    <div class="kpi-card__label">Open Items</div>
-                </div>
-                <!-- Delivery -->
-                <div class="kpi-card">
-                    <div class="kpi-card__value" id="kpiBacklog">—</div>
-                    <div class="kpi-card__label">Backlog Items</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-card__value" id="kpiDefects">—</div>
-                    <div class="kpi-card__label">Open Defects</div>
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-header">
-                    <h2>Quick Navigation</h2>
-                </div>
-                <div class="dashboard-quick-nav">
-                    <button class="btn btn-secondary" onclick="App.navigate('explore-dashboard')">📊 Explore Dashboard</button>
-                    <button class="btn btn-secondary" onclick="App.navigate('explore-hierarchy')">🏗️ Process Hierarchy</button>
-                    <button class="btn btn-secondary" onclick="App.navigate('explore-workshops')">📋 Workshops</button>
-                    <button class="btn btn-secondary" onclick="App.navigate('explore-requirements')">📝 Requirements</button>
-                    <button class="btn btn-secondary" onclick="App.navigate('backlog')">⚙️ Backlog</button>
-                    <button class="btn btn-secondary" onclick="App.navigate('test-planning')">📋 Test Planning</button>
-                    <button class="btn btn-secondary" onclick="App.navigate('test-execution')">▶️ Test Execution</button>
-                    <button class="btn btn-secondary" onclick="App.navigate('defect-management')">🐛 Defects</button>
-                    <button class="btn btn-secondary" onclick="App.navigate('raid')">⚠️ RAID</button>
-                </div>
+            <div id="dashboard-grid" class="pg-dashboard-grid">
+                ${PGSkeleton.card()}${PGSkeleton.card()}${PGSkeleton.card()}
             </div>
         `;
 
-        // Load program-specific KPIs
         try {
-            const pid = prog.id;
-            const [wsStats, reqStats, oiStats, backlogStats, defectRes] = await Promise.allSettled([
-                API.get(`/explore/workshops/stats?project_id=${pid}`),
-                API.get(`/explore/requirements/stats?project_id=${pid}`),
-                API.get(`/explore/open-items/stats?project_id=${pid}`),
-                API.get(`/programs/${pid}/backlog/stats`),
-                API.get(`/programs/${pid}/testing/defects?per_page=1`),
+            const [summary, actions, recent] = await Promise.all([
+                API.get('/api/v1/dashboard/summary'),
+                API.get('/api/v1/dashboard/actions'),
+                API.get('/api/v1/dashboard/recent-activity'),
             ]);
-
-            if (wsStats.status === 'fulfilled') {
-                const ws = wsStats.value;
-                document.getElementById('kpiWorkshops').textContent = ws.total || 0;
-                document.getElementById('kpiWsCompletion').textContent = (ws.completion_pct || 0) + '%';
-            }
-
-            if (reqStats.status === 'fulfilled') {
-                const rs = reqStats.value;
-                document.getElementById('kpiRequirements').textContent = rs.total || 0;
-            }
-
-            if (oiStats.status === 'fulfilled') {
-                const oi = oiStats.value;
-                document.getElementById('kpiOpenItems').textContent = oi.total || 0;
-            }
-
-            if (backlogStats.status === 'fulfilled') {
-                const bs = backlogStats.value;
-                document.getElementById('kpiBacklog').textContent = bs.total_items ?? bs.total ?? 0;
-            }
-
-            if (defectRes.status === 'fulfilled') {
-                const dr = defectRes.value;
-                document.getElementById('kpiDefects').textContent = dr.total || 0;
-            }
+            _renderDashboardContent(summary, actions, recent);
         } catch (err) {
-            console.warn('Dashboard KPI load error:', err);
+            document.getElementById('dashboard-grid').innerHTML =
+                PGEmptyState.html({ icon: 'dashboard', title: 'Veri yüklenemedi', description: err.message });
         }
+    }
+
+    function _renderDashboardContent(summary, actions, recent) {
+        const score = summary.health_score || 0;
+        const scoreColor = score >= 75 ? '#16a34a' : score >= 50 ? '#ca8a04' : '#dc2626';
+        const circumference = Math.round(2 * Math.PI * 34);
+
+        document.getElementById('dashboard-grid').innerHTML = `
+            <!-- Health Score Card -->
+            <div class="pg-dash-card pg-dash-card--health">
+                <div class="pg-dash-card__header">Program Sağlığı</div>
+                <div class="pg-health-score">
+                    <svg class="pg-health-score__ring" viewBox="0 0 80 80">
+                        <circle cx="40" cy="40" r="34" fill="none" stroke="var(--pg-color-border)" stroke-width="6"/>
+                        <circle cx="40" cy="40" r="34" fill="none" stroke="${scoreColor}" stroke-width="6"
+                            stroke-dasharray="${Math.round(circumference * score / 100)} ${Math.round(circumference * (1 - score / 100))}"
+                            stroke-dashoffset="${Math.round(circumference * 0.25)}"
+                            stroke-linecap="round"/>
+                        <text x="40" y="40" dominant-baseline="middle" text-anchor="middle"
+                            font-size="16" font-weight="700" fill="${scoreColor}">${score}</text>
+                    </svg>
+                    <div class="pg-health-score__meta">
+                        <span style="color:${scoreColor};font-weight:700">${_healthLabel(score)}</span>
+                        <span class="pg-health-score__items">${summary.requirements || 0} gereksinim · ${Math.round(summary.test_coverage || 0)}% test</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="pg-dash-kpis">
+                ${_kpi('Gereksinim', summary.requirements, 'requirements', 'requirements')}
+                ${_kpi('WRICEF', summary.wricef_items, 'backlog', 'build')}
+                ${_kpi('Test Case', summary.test_cases, 'test-management', 'test')}
+                ${_kpi('Defect', summary.open_defects, 'defects', 'defect')}
+                ${_kpi('RAID', summary.open_risks, 'raid', 'raid')}
+            </div>
+
+            <!-- Actions -->
+            <div class="pg-dash-card pg-dash-card--actions">
+                <div class="pg-dash-card__header">Aksiyon Gerektiren</div>
+                ${!actions.length
+                    ? '<p class="pg-dash-empty">Bekleyen aksiyon yok 🎉</p>'
+                    : actions.slice(0, 5).map(a => `
+                        <div class="pg-dash-action" onclick="App.navigate('${a.view}')">
+                            <span class="pg-dash-action__icon">${PGStatusRegistry.badge(a.severity || 'warning')}</span>
+                            <span class="pg-dash-action__text">${esc(a.message)}</span>
+                            <span class="pg-dash-action__arrow">→</span>
+                        </div>
+                    `).join('')
+                }
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="pg-dash-card pg-dash-card--activity">
+                <div class="pg-dash-card__header">Son Aktivite <span class="pg-dash-card__meta">24 saat</span></div>
+                ${!recent.length
+                    ? '<p class="pg-dash-empty">Aktivite bulunamadı</p>'
+                    : recent.slice(0, 8).map(r => `
+                        <div class="pg-dash-activity-row">
+                            <div class="pg-dash-activity-row__avatar">${(r.user_name || 'U')[0].toUpperCase()}</div>
+                            <div class="pg-dash-activity-row__body">
+                                <span class="pg-dash-activity-row__user">${esc(r.user_name || 'Sistem')}</span>
+                                <span class="pg-dash-activity-row__action">${esc(r.action)}</span>
+                                <span class="pg-dash-activity-row__object">${esc(r.object_code || '')}</span>
+                            </div>
+                            <span class="pg-dash-activity-row__time">${_relTime(r.created_at)}</span>
+                        </div>
+                    `).join('')
+                }
+            </div>
+        `;
+    }
+
+    function _kpi(label, value, view, icon) {
+        return `
+            <div class="pg-kpi-card" onclick="App.navigate('${view}')" role="button" tabindex="0">
+                <div class="pg-kpi-card__icon">${typeof PGIcon !== 'undefined' ? PGIcon.html(icon, 20) : ''}</div>
+                <div class="pg-kpi-card__value">${value ?? '–'}</div>
+                <div class="pg-kpi-card__label">${label}</div>
+            </div>
+        `;
+    }
+
+    function _healthLabel(score) {
+        if (score >= 85) return 'Mükemmel';
+        if (score >= 70) return 'İyi';
+        if (score >= 50) return 'Orta';
+        return 'İyileştirme Gerekli';
+    }
+
+    function _relTime(iso) {
+        if (!iso) return '';
+        const diff = Date.now() - new Date(iso).getTime();
+        const mins = Math.floor(diff / 60000);
+        if (mins < 1) return 'Az önce';
+        if (mins < 60) return `${mins}d önce`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs}s önce`;
+        return `${Math.floor(hrs / 24)}g önce`;
     }
 
     // ── Placeholder for future modules ───────────────────────────────────
