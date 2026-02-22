@@ -379,21 +379,31 @@ const IntegrationsView = (function () {
       </div>`;
   }
 
-  /* ── Process Mining placeholder tab (FDD-I05 Faz A) ─────────────────── */
+  /* ── Process Mining live tab (FDD-I05 Faz B — S8-01) ───────────────── */
+  /**
+   * Render the full Process Mining 3-tab panel.
+   * Delegates all interaction logic to the dedicated process_mining.js IIFE view.
+   * The outer shell (connection status badge + tab bar) is rendered here;
+   * each sub-tab is painted by ProcessMiningView.renderTab().
+   */
   function renderProcessMiningTab(c) {
-    c.innerHTML = `
-      <div style="padding:1.5rem">
-        ${_renderComingSoonCard({
-          icon: 'fas fa-project-diagram',
-          title: 'Process Mining',
-          subtitle: 'AS-IS süreç keşfi ve varyant analizi',
-          eta: 'Q3 2026',
-          description: 'Celonis, SAP Signavio Process Intelligence ve UiPath Process Mining entegrasyonu. '
-            + 'ERP log verisinden gerçek süreç akışlarını çıkararak L4 adayları oluşturur '
-            + 've Fit/Gap kararlarını destekler.',
-          badges: ['Celonis', 'SAP Signavio', 'UiPath Process Mining', 'SAP LAMA'],
-        })}
-      </div>`;
+    // ProcessMiningView is loaded via <script> in index.html (S8-01).
+    // If not yet loaded (dev mode / lazy loading), fall back to coming-soon card.
+    if (typeof window.ProcessMiningView === 'undefined') {
+      c.innerHTML = `
+        <div style="padding:1.5rem">
+          ${_renderComingSoonCard({
+            icon: 'fas fa-project-diagram',
+            title: 'Process Mining',
+            subtitle: 'AS-IS süreç keşfi ve varyant analizi',
+            eta: 'Loading…',
+            description: 'Process Mining modülü yükleniyor. Lütfen sayfayı yenileyin.',
+            badges: ['Celonis', 'SAP Signavio', 'UiPath Process Mining', 'SAP LAMA'],
+          })}
+        </div>`;
+      return;
+    }
+    window.ProcessMiningView.init(c);
   }
 
   /**

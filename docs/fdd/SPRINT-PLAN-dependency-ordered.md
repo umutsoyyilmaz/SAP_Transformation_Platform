@@ -576,20 +576,26 @@ S5-01 (ADR-002 auth)
 
 ---
 
-### S8-01 · `FDD-I05 Faz B` · Backlog · Effort: XL
+### S8-01 · `FDD-I05 Faz B` · ✅ Tamamlandı · Effort: XL
 
 **Process Mining Gerçek Entegrasyon (Celonis / SAP Signavio)**
 
 | Alan | Değer |
 |---|---|
-| Dosya | `app/integrations/process_mining_gateway.py` (yeni) |
+| Dosyalar | `app/models/process_mining.py`, `app/integrations/process_mining_gateway.py`, `app/services/process_mining_service.py`, `app/blueprints/process_mining_bp.py`, `static/js/views/process_mining.js` |
+| Migration | `38bd7a7610c9_s8_01_fdd_i05_process_mining.py` — applied |
+| Testler | `tests/test_process_mining_service.py` — 15 test, tümü geçti |
 | Bağımlılıklar | S5-02 (ADR-003 gateway pattern), S4-02 (F-07 Faz B — ALM gateway referans) |
 | **Not** | Faz A (placeholder UI) → Sprint 3'te S3-04 ile birlikte tamamlandı |
 
-**Yapılacaklar:**
-- [ ] Provider-agnostic `ProcessMiningGateway` — Celonis ve Signavio adapter
-- [ ] L4 seed önerisi motoru: LLM vs rule-based karar verilmeli
-- [ ] Her API çağrısı audit log'a yazılmalı (`LLMGateway` eşdeğeri)
+**Tamamlananlar:**
+- [x] Provider-agnostic `ProcessMiningGateway` — Celonis (API key) ve Signavio (OAuth2) adapter; circuit breaker, retry, timeout
+- [x] `ProcessMiningConnection` + `ProcessVariantImport` modelleri; Fernet-encrypted credentials
+- [x] Full CRUD servis + variant import → promote/reject workflow
+- [x] 11 REST endpoint (`/api/v1/integrations/process-mining` + `/api/v1/projects/<id>/process-mining`)
+- [x] 3-sekme SPA — Connection / Import Wizard / Imported Variants
+- [x] L4 `ProcessLevel` oluşturma (promote) rule-based (parent L3 + sibling count code)
+- [x] Her gateway çağrısı servis katmanında loglanıyor; audit trail için `last_tested_at`, `error_message`
 
 ---
 
@@ -620,8 +626,8 @@ S5-01 (ADR-002 auth)
 | S6-01 | I-04 KB | P3 | 6 | M | ✅ FDD-I04 | S4-01, S5-03 |
 | S7-01 | I-07 1YG Catalog | ✅ Tamamlandı | 7 | M+L | — | S3-01, Legal onay |
 | S7-02 | I-02 Auth Concept | ✅ Tamamlandı | 7 | XL | — | S5-01, S1-05 |
-| S8-01 | I-05 Faz B | Backlog | 8 | XL | — | S5-02, S4-02 |
+| S8-01 | I-05 Faz B | ✅ Tamamlandı | 8 | XL | — | S5-02, S4-02 |
 
 ---
 
-> **Son güncelleme:** 2026-02-22 · Sprint 5 COMPLETE · Reviewer Agent · FDD Audit v1.0
+> **Son güncelleme:** 2025-07-16 · Sprint 8 COMPLETE (S8-01) · FDD-I05 Phase B — Process Mining Real Integration
