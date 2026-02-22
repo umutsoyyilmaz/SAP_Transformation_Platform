@@ -530,7 +530,7 @@ S5-01 (ADR-002 auth)
 
 ---
 
-## ✅ SPRINT 7 — Tamamlandı (S7-01) / Backlog (S7-02+)
+## ✅ SPRINT 7 — Tamamlandı (S7-01, S7-02)
 
 ---
 
@@ -559,7 +559,7 @@ S5-01 (ADR-002 auth)
 
 ---
 
-### S7-02 · `FDD-I02` · Backlog · Effort: XL
+### S7-02 · `FDD-I02` · ✅ Tamamlandı · Effort: XL
 
 **SAP Authorization Concept Design Modülü**
 
@@ -570,9 +570,9 @@ S5-01 (ADR-002 auth)
 | **BLOKER** | SAP security danışmanı input'u zorunlu |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] `SapAuthRole` adlandırması kullan — platform `Role` modeli ile karışıklık önlenir
-- [ ] SOD matrix: PostgreSQL partial index → SQLite test mock ekle
-- [ ] Sprint 9 geçilirse API breaking change riski — ADR-002'de extension point rezerv edilmeli
+- [x] `SapAuthRole` adlandırması kullan — platform `Role` modeli ile karışıklık önlenir
+- [x] SOD matrix: PostgreSQL partial index → SQLite test mock ekle
+- [x] Sprint 9 geçilirse API breaking change riski — ADR-002'de extension point rezerv edilmeli
 
 ---
 
@@ -619,7 +619,7 @@ S5-01 (ADR-002 auth)
 | S5-05 | I-08 Stakeholder | P3 | 5 | M | ✅ FDD-I08 | S3-01 |
 | S6-01 | I-04 KB | P3 | 6 | M | ✅ FDD-I04 | S4-01, S5-03 |
 | S7-01 | I-07 1YG Catalog | ✅ Tamamlandı | 7 | M+L | — | S3-01, Legal onay |
-| S7-02 | I-02 Auth Concept | Backlog | 7 | XL | — | S5-01, S1-05 |
+| S7-02 | I-02 Auth Concept | ✅ Tamamlandı | 7 | XL | — | S5-01, S1-05 |
 | S8-01 | I-05 Faz B | Backlog | 8 | XL | — | S5-02, S4-02 |
 
 ---

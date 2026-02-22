@@ -246,6 +246,7 @@ def create_app(config_name=None):
     from app.models import observability as _observability_models  # noqa: F401
     from app.models import gate_criteria as _gate_criteria_models  # noqa: F401
     from app.models import signoff as _signoff_models               # noqa: F401
+    from app.models import sap_auth as _sap_auth_models              # noqa: F401
 
     # ── Auto-create tables (safe for production — CREATE IF NOT EXISTS) ──
     with app.app_context():
@@ -309,6 +310,7 @@ def create_app(config_name=None):
     from app.blueprints.discover_bp import discover_bp
     from app.blueprints.raci_bp import raci_bp
     from app.blueprints.hypercare_bp import hypercare_bp
+    from app.blueprints.sap_auth_bp import sap_auth_bp
 
     app.register_blueprint(program_bp)
     app.register_blueprint(backlog_bp)
@@ -359,6 +361,7 @@ def create_app(config_name=None):
     app.register_blueprint(discover_bp)
     app.register_blueprint(raci_bp)
     app.register_blueprint(hypercare_bp)
+    app.register_blueprint(sap_auth_bp)
 
     # ── Blueprint Permission Guards (Sprint 6) ──────────────────────────
     from app.middleware.blueprint_permissions import apply_all_blueprint_permissions
