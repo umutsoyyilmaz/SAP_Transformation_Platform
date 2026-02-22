@@ -245,6 +245,7 @@ def create_app(config_name=None):
     from app.models import integrations as _integrations_models  # noqa: F401
     from app.models import observability as _observability_models  # noqa: F401
     from app.models import gate_criteria as _gate_criteria_models  # noqa: F401
+    from app.models import signoff as _signoff_models               # noqa: F401
 
     # ── Auto-create tables (safe for production — CREATE IF NOT EXISTS) ──
     with app.app_context():
@@ -299,6 +300,7 @@ def create_app(config_name=None):
     from app.blueprints.integrations_bp import integrations_bp
     from app.blueprints.observability_bp import observability_bp
     from app.blueprints.gate_criteria_bp import gate_criteria_bp
+    from app.blueprints.signoff_bp import signoff_bp
 
     app.register_blueprint(program_bp)
     app.register_blueprint(backlog_bp)
@@ -339,6 +341,7 @@ def create_app(config_name=None):
     app.register_blueprint(integrations_bp)
     app.register_blueprint(observability_bp)
     app.register_blueprint(gate_criteria_bp)
+    app.register_blueprint(signoff_bp)
 
     # ── Blueprint Permission Guards (Sprint 6) ──────────────────────────
     from app.middleware.blueprint_permissions import apply_all_blueprint_permissions

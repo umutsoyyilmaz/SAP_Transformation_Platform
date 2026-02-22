@@ -113,19 +113,19 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | S3-01 (B-02 — charter approval sign-off'a bağlı) |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] `tenant_id → nullable=False, ondelete='CASCADE'` (kritik açık)
-- [ ] `approver_name_snapshot = db.Column(db.String(255), nullable=True)` modele eklenmeli
-- [ ] Self-approval guard `signoff_service.py`'de — blueprint'te değil
-- [ ] `gate_service.py` → `signoff_service.is_entity_approved(entity_type, entity_id)` entegrasyonu
-- [ ] IP: `X-Forwarded-For` header kullanımı (`request.remote_addr` yetersiz)
-- [ ] Approved record immutable — update/delete girişimi 422 döndürmeli
-- [ ] `flask db migrate -m "add signoff_records table"`
+- [x] `tenant_id → nullable=False, ondelete='CASCADE'` (kritik açık)
+- [x] `approver_name_snapshot = db.Column(db.String(255), nullable=True)` modele eklenmeli
+- [x] Self-approval guard `signoff_service.py`'de — blueprint'te değil
+- [x] `gate_service.py` → `signoff_service.is_entity_approved(entity_type, entity_id)` entegrasyonu (governance_rules.py RULE-SO-04)
+- [x] IP: `X-Forwarded-For` header kullanımı (`request.remote_addr` yetersiz)
+- [x] Approved record immutable — update/delete girişimi 422 döndürmeli
+- [ ] `flask db migrate -m "add signoff_records table"` ← run after merge
 
 **Kabul Kriterleri:**
-- [ ] Workshop sign-off'da approver ismi ve tarihi `SignoffRecord`'da görünüyor
-- [ ] Self-approval 422 döndürüyor
-- [ ] Approved record değiştirilemiyor
-- [ ] Tenant isolation: cross-tenant 404
+- [x] Workshop sign-off'da approver ismi ve tarihi `SignoffRecord`'da görünüyor
+- [x] Self-approval 422 döndürüyor
+- [x] Approved record değiştirilemiyor
+- [x] Tenant isolation: cross-tenant 404
 
 ---
 

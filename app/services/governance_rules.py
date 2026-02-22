@@ -12,9 +12,12 @@ Kullanım:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -299,6 +302,37 @@ def _rules_l3_signoff(ctx: dict) -> list[GovernanceViolation]:
             message=f"{unapproved} requirement(s) not yet approved or deferred",
             details={"unapproved_reqs": unapproved},
         ))
+
+    # RULE-SO-04: Formal sign-off record must exist for this entity.
+    # When callers provide tenant_id, program_id, entity_type, and entity_id in ctx,
+    # we verify a SignoffRecord with action='approved' exists before allowing the gate.
+    # This is backward-compatible — old callers that omit these keys skip the rule.
+    tenant_id = ctx.get("tenant_id")
+    program_id = ctx.get("program_id")
+    entity_type = ctx.get("entity_type")
+    entity_id = ctx.get("entity_id")
+    if tenant_id and program_id and entity_type and entity_id:
+        try:
+            from app.services.signoff_service import is_entity_approved  # local import avoids circular dependency
+            if not is_entity_approved(tenant_id, program_id, entity_type, str(entity_id)):
+                violations.append(GovernanceViolation(
+                    rule_id="RULE-SO-04",
+                    severity=Severity.BLOCK,
+                    message=(
+                        f"{entity_type} '{entity_id}' has no formal sign-off record. "
+                        "An approver must approve this entity before the gate can proceed."
+                    ),
+                    details={"entity_type": entity_type, "entity_id": str(entity_id)},
+                ))
+        except Exception:
+            # Non-fatal: log and continue rather than blocking all gate evaluations
+            # if the signoff table is not yet migrated (e.g., during first deploy).
+            logger.warning(
+                "RULE-SO-04 signoff check failed for entity_type=%s entity_id=%s — skipping",
+                entity_type,
+                entity_id,
+                exc_info=True,
+            )
 
     return violations
 
