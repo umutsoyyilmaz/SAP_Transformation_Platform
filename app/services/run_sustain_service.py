@@ -16,6 +16,7 @@ import logging
 from datetime import datetime, timezone
 
 from app.models import db
+from app.models.cutover import CutoverPlan
 from app.models.run_sustain import (
     KnowledgeTransfer,
     HandoverItem,
@@ -23,6 +24,7 @@ from app.models.run_sustain import (
     KT_TOPIC_AREAS,
     HANDOVER_CATEGORIES,
 )
+from app.services.helpers.scoped_queries import get_scoped_or_none
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +34,15 @@ logger = logging.getLogger(__name__)
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-def compute_kt_progress(plan_id: int) -> dict:
-    """Compute knowledge-transfer completion metrics by topic area."""
+def compute_kt_progress(plan_id: int, *, program_id: int) -> dict:
+    """Compute knowledge-transfer completion metrics by topic area.
+
+    Validates that plan_id belongs to program_id before aggregating,
+    preventing cross-program KT metric disclosure.
+    """
+    plan = get_scoped_or_none(CutoverPlan, plan_id, program_id=program_id)
+    if not plan:
+        return {"error": "Plan not found", "completion_pct": 0}
     kts = KnowledgeTransfer.query.filter_by(cutover_plan_id=plan_id).all()
 
     total = len(kts)
@@ -68,8 +77,15 @@ def compute_kt_progress(plan_id: int) -> dict:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-def compute_handover_readiness(plan_id: int) -> dict:
-    """Compute BAU handover checklist progress by category."""
+def compute_handover_readiness(plan_id: int, *, program_id: int) -> dict:
+    """Compute BAU handover checklist progress by category.
+
+    Validates plan ownership via program_id to prevent
+    cross-program handover data disclosure.
+    """
+    plan = get_scoped_or_none(CutoverPlan, plan_id, program_id=program_id)
+    if not plan:
+        return {"error": "Plan not found", "completion_pct": 0}
     items = HandoverItem.query.filter_by(cutover_plan_id=plan_id).all()
 
     total = len(items)
@@ -110,8 +126,15 @@ def compute_handover_readiness(plan_id: int) -> dict:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-def compute_stabilization_dashboard(plan_id: int) -> dict:
-    """Aggregate stabilization metrics into a summary dashboard."""
+def compute_stabilization_dashboard(plan_id: int, *, program_id: int) -> dict:
+    """Aggregate stabilization metrics into a summary dashboard.
+
+    Validates plan ownership via program_id to prevent
+    cross-program metric aggregation.
+    """
+    plan = get_scoped_or_none(CutoverPlan, plan_id, program_id=program_id)
+    if not plan:
+        return {"error": "Plan not found", "health_pct": 0}
     metrics = StabilizationMetric.query.filter_by(cutover_plan_id=plan_id).all()
 
     total = len(metrics)
@@ -142,7 +165,7 @@ def compute_stabilization_dashboard(plan_id: int) -> dict:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-def evaluate_hypercare_exit(plan_id: int) -> dict:
+def evaluate_hypercare_exit(plan_id: int, *, program_id: int) -> dict:
     """
     Automated hypercare exit-gate evaluation.
 
@@ -154,11 +177,14 @@ def evaluate_hypercare_exit(plan_id: int) -> dict:
       5. Stabilization metrics ≥ 80% within target
 
     Returns individual criteria pass/fail plus an overall recommendation.
+
+    Validates plan ownership via program_id before evaluating exit gates,
+    preventing cross-program hypercare status disclosure.
     """
-    from app.models.cutover import CutoverPlan, HypercareIncident, HypercareSLA
+    from app.models.cutover import HypercareIncident, HypercareSLA
     from app.services.cutover_service import compute_hypercare_metrics
 
-    plan = db.session.get(CutoverPlan, plan_id)
+    plan = get_scoped_or_none(CutoverPlan, plan_id, program_id=program_id)
     if not plan:
         return {"error": "Plan not found", "ready": False}
 
@@ -186,7 +212,7 @@ def evaluate_hypercare_exit(plan_id: int) -> dict:
     }
 
     # Criterion 3: Knowledge transfer
-    kt = compute_kt_progress(plan_id)
+    kt = compute_kt_progress(plan_id, program_id=program_id)
     kt_pct = kt["completion_pct"]
     crit_kt = {
         "criterion": "Knowledge transfer ≥ 80% completed",
@@ -195,7 +221,7 @@ def evaluate_hypercare_exit(plan_id: int) -> dict:
     }
 
     # Criterion 4: Handover items
-    ho = compute_handover_readiness(plan_id)
+    ho = compute_handover_readiness(plan_id, program_id=program_id)
     ho_pct = ho["completion_pct"]
     crit_ho = {
         "criterion": "Handover items ≥ 80% completed",
@@ -204,7 +230,7 @@ def evaluate_hypercare_exit(plan_id: int) -> dict:
     }
 
     # Criterion 5: Stabilization metrics
-    stab = compute_stabilization_dashboard(plan_id)
+    stab = compute_stabilization_dashboard(plan_id, program_id=program_id)
     stab_pct = stab["health_pct"]
     crit_stab = {
         "criterion": "Stabilization metrics ≥ 80% within target",
@@ -237,20 +263,23 @@ def evaluate_hypercare_exit(plan_id: int) -> dict:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-def generate_weekly_report(plan_id: int) -> dict:
-    """Generate a weekly hypercare summary report."""
-    from app.models.cutover import CutoverPlan
+def generate_weekly_report(plan_id: int, *, program_id: int) -> dict:
+    """Generate a weekly hypercare summary report.
+
+    Validates plan ownership via program_id before exposing any report data,
+    preventing cross-program weekly summary disclosure.
+    """
     from app.services.cutover_service import compute_hypercare_metrics
 
-    plan = db.session.get(CutoverPlan, plan_id)
+    plan = get_scoped_or_none(CutoverPlan, plan_id, program_id=program_id)
     if not plan:
         return {"error": "Plan not found"}
 
     hc = compute_hypercare_metrics(plan)
-    kt = compute_kt_progress(plan_id)
-    ho = compute_handover_readiness(plan_id)
-    stab = compute_stabilization_dashboard(plan_id)
-    exit_eval = evaluate_hypercare_exit(plan_id)
+    kt = compute_kt_progress(plan_id, program_id=program_id)
+    ho = compute_handover_readiness(plan_id, program_id=program_id)
+    stab = compute_stabilization_dashboard(plan_id, program_id=program_id)
+    exit_eval = evaluate_hypercare_exit(plan_id, program_id=program_id)
 
     # Hypercare period info
     now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -307,8 +336,15 @@ def generate_weekly_report(plan_id: int) -> dict:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-def compute_support_summary(plan_id: int) -> dict:
-    """Compute a support workload summary for the hypercare plan."""
+def compute_support_summary(plan_id: int, *, program_id: int) -> dict:
+    """Compute a support workload summary for the hypercare plan.
+
+    Validates plan ownership via program_id to prevent
+    cross-program support workload and assignee data disclosure.
+    """
+    plan = get_scoped_or_none(CutoverPlan, plan_id, program_id=program_id)
+    if not plan:
+        return {"error": "Plan not found", "total_incidents": 0}
     from app.models.cutover import HypercareIncident
 
     incidents = HypercareIncident.query.filter_by(cutover_plan_id=plan_id).all()
@@ -365,8 +401,15 @@ STANDARD_HANDOVER_ITEMS = [
 ]
 
 
-def seed_handover_items(plan_id: int) -> list[HandoverItem]:
-    """Seed a cutover plan with standard BAU handover checklist items."""
+def seed_handover_items(plan_id: int, *, program_id: int) -> list[HandoverItem] | dict:
+    """Seed a cutover plan with standard BAU handover checklist items.
+
+    Validates plan ownership via program_id before seeding,
+    preventing cross-program handover item injection.
+    """
+    plan = get_scoped_or_none(CutoverPlan, plan_id, program_id=program_id)
+    if not plan:
+        return {"error": "Plan not found"}
     existing = HandoverItem.query.filter_by(cutover_plan_id=plan_id).count()
     if existing > 0:
         return []

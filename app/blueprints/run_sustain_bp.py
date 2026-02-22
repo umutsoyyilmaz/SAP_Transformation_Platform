@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
 
 from app.models import db
+from app.models.cutover import CutoverPlan
 from app.models.run_sustain import (
     KnowledgeTransfer,
     HandoverItem,
@@ -31,6 +32,7 @@ from app.models.run_sustain import (
     METRIC_TYPES,
     METRIC_TRENDS,
 )
+from app.services.helpers.scoped_queries import get_scoped_or_none
 
 run_sustain_bp = Blueprint("run_sustain", __name__, url_prefix="/api/v1/run-sustain")
 
@@ -105,8 +107,15 @@ def create_kt_session(plan_id: int):
 
 @run_sustain_bp.route("/knowledge-transfer/<int:kt_id>", methods=["GET"])
 def get_kt_session(kt_id: int):
-    """Get a single knowledge-transfer session."""
-    kt = db.session.get(KnowledgeTransfer, kt_id)
+    """Get a single knowledge-transfer session.
+
+    Requires plan_id query param to scope the lookup and prevent
+    cross-plan entity access via guessed IDs.
+    """
+    plan_id = request.args.get("plan_id", type=int)
+    if not plan_id:
+        return jsonify({"error": "plan_id is required"}), 400
+    kt = KnowledgeTransfer.query.filter_by(id=kt_id, cutover_plan_id=plan_id).first()
     if not kt:
         return jsonify({"error": "Knowledge transfer session not found"}), 404
     return jsonify(kt.to_dict())
@@ -114,8 +123,15 @@ def get_kt_session(kt_id: int):
 
 @run_sustain_bp.route("/knowledge-transfer/<int:kt_id>", methods=["PUT"])
 def update_kt_session(kt_id: int):
-    """Update a knowledge-transfer session."""
-    kt = db.session.get(KnowledgeTransfer, kt_id)
+    """Update a knowledge-transfer session.
+
+    Requires plan_id query param to scope the lookup and prevent
+    cross-plan entity modification via guessed IDs.
+    """
+    plan_id = request.args.get("plan_id", type=int)
+    if not plan_id:
+        return jsonify({"error": "plan_id is required"}), 400
+    kt = KnowledgeTransfer.query.filter_by(id=kt_id, cutover_plan_id=plan_id).first()
     if not kt:
         return jsonify({"error": "Knowledge transfer session not found"}), 404
 
@@ -160,8 +176,15 @@ def update_kt_session(kt_id: int):
 
 @run_sustain_bp.route("/knowledge-transfer/<int:kt_id>", methods=["DELETE"])
 def delete_kt_session(kt_id: int):
-    """Delete a knowledge-transfer session."""
-    kt = db.session.get(KnowledgeTransfer, kt_id)
+    """Delete a knowledge-transfer session.
+
+    Requires plan_id query param to scope the lookup and prevent
+    cross-plan entity deletion via guessed IDs.
+    """
+    plan_id = request.args.get("plan_id", type=int)
+    if not plan_id:
+        return jsonify({"error": "plan_id is required"}), 400
+    kt = KnowledgeTransfer.query.filter_by(id=kt_id, cutover_plan_id=plan_id).first()
     if not kt:
         return jsonify({"error": "Knowledge transfer session not found"}), 404
     db.session.delete(kt)
@@ -173,7 +196,10 @@ def delete_kt_session(kt_id: int):
 def kt_progress(plan_id: int):
     """Get knowledge-transfer completion metrics."""
     from app.services.run_sustain_service import compute_kt_progress
-    return jsonify(compute_kt_progress(plan_id))
+    program_id = request.args.get("program_id", type=int)
+    if not program_id:
+        return jsonify({"error": "program_id is required"}), 400
+    return jsonify(compute_kt_progress(plan_id, program_id=program_id))
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -236,8 +262,15 @@ def create_handover_item(plan_id: int):
 
 @run_sustain_bp.route("/handover-items/<int:item_id>", methods=["GET"])
 def get_handover_item(item_id: int):
-    """Get a single handover item."""
-    item = db.session.get(HandoverItem, item_id)
+    """Get a single handover item.
+
+    Requires plan_id query param to scope the lookup and prevent
+    cross-plan entity access via guessed IDs.
+    """
+    plan_id = request.args.get("plan_id", type=int)
+    if not plan_id:
+        return jsonify({"error": "plan_id is required"}), 400
+    item = HandoverItem.query.filter_by(id=item_id, cutover_plan_id=plan_id).first()
     if not item:
         return jsonify({"error": "Handover item not found"}), 404
     return jsonify(item.to_dict())
@@ -245,8 +278,15 @@ def get_handover_item(item_id: int):
 
 @run_sustain_bp.route("/handover-items/<int:item_id>", methods=["PUT"])
 def update_handover_item(item_id: int):
-    """Update a handover item."""
-    item = db.session.get(HandoverItem, item_id)
+    """Update a handover item.
+
+    Requires plan_id query param to scope the lookup and prevent
+    cross-plan entity modification via guessed IDs.
+    """
+    plan_id = request.args.get("plan_id", type=int)
+    if not plan_id:
+        return jsonify({"error": "plan_id is required"}), 400
+    item = HandoverItem.query.filter_by(id=item_id, cutover_plan_id=plan_id).first()
     if not item:
         return jsonify({"error": "Handover item not found"}), 404
 
@@ -290,8 +330,15 @@ def update_handover_item(item_id: int):
 
 @run_sustain_bp.route("/handover-items/<int:item_id>", methods=["DELETE"])
 def delete_handover_item(item_id: int):
-    """Delete a handover item."""
-    item = db.session.get(HandoverItem, item_id)
+    """Delete a handover item.
+
+    Requires plan_id query param to scope the lookup and prevent
+    cross-plan entity deletion via guessed IDs.
+    """
+    plan_id = request.args.get("plan_id", type=int)
+    if not plan_id:
+        return jsonify({"error": "plan_id is required"}), 400
+    item = HandoverItem.query.filter_by(id=item_id, cutover_plan_id=plan_id).first()
     if not item:
         return jsonify({"error": "Handover item not found"}), 404
     db.session.delete(item)
@@ -303,17 +350,25 @@ def delete_handover_item(item_id: int):
 def seed_handover(plan_id: int):
     """Seed standard BAU handover checklist items."""
     from app.services.run_sustain_service import seed_handover_items
-    items = seed_handover_items(plan_id)
-    if not items:
+    program_id = request.args.get("program_id", type=int)
+    if not program_id:
+        return jsonify({"error": "program_id is required"}), 400
+    result = seed_handover_items(plan_id, program_id=program_id)
+    if isinstance(result, dict) and "error" in result:
+        return jsonify(result), 404
+    if not result:
         return jsonify({"message": "Handover items already exist", "created": 0})
-    return jsonify({"message": f"Created {len(items)} handover items", "created": len(items)}), 201
+    return jsonify({"message": f"Created {len(result)} handover items", "created": len(result)}), 201
 
 
 @run_sustain_bp.route("/plans/<int:plan_id>/handover-readiness", methods=["GET"])
 def handover_readiness(plan_id: int):
     """Get handover readiness assessment."""
     from app.services.run_sustain_service import compute_handover_readiness
-    return jsonify(compute_handover_readiness(plan_id))
+    program_id = request.args.get("program_id", type=int)
+    if not program_id:
+        return jsonify({"error": "program_id is required"}), 400
+    return jsonify(compute_handover_readiness(plan_id, program_id=program_id))
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -375,8 +430,15 @@ def create_stabilization_metric(plan_id: int):
 
 @run_sustain_bp.route("/stabilization-metrics/<int:metric_id>", methods=["GET"])
 def get_stabilization_metric(metric_id: int):
-    """Get a single stabilization metric."""
-    m = db.session.get(StabilizationMetric, metric_id)
+    """Get a single stabilization metric.
+
+    Requires plan_id query param to scope the lookup and prevent
+    cross-plan entity access via guessed IDs.
+    """
+    plan_id = request.args.get("plan_id", type=int)
+    if not plan_id:
+        return jsonify({"error": "plan_id is required"}), 400
+    m = StabilizationMetric.query.filter_by(id=metric_id, cutover_plan_id=plan_id).first()
     if not m:
         return jsonify({"error": "Stabilization metric not found"}), 404
     return jsonify(m.to_dict())
@@ -384,8 +446,15 @@ def get_stabilization_metric(metric_id: int):
 
 @run_sustain_bp.route("/stabilization-metrics/<int:metric_id>", methods=["PUT"])
 def update_stabilization_metric(metric_id: int):
-    """Update a stabilization metric."""
-    m = db.session.get(StabilizationMetric, metric_id)
+    """Update a stabilization metric.
+
+    Requires plan_id query param to scope the lookup and prevent
+    cross-plan entity modification via guessed IDs.
+    """
+    plan_id = request.args.get("plan_id", type=int)
+    if not plan_id:
+        return jsonify({"error": "plan_id is required"}), 400
+    m = StabilizationMetric.query.filter_by(id=metric_id, cutover_plan_id=plan_id).first()
     if not m:
         return jsonify({"error": "Stabilization metric not found"}), 404
 
@@ -422,8 +491,15 @@ def update_stabilization_metric(metric_id: int):
 
 @run_sustain_bp.route("/stabilization-metrics/<int:metric_id>", methods=["DELETE"])
 def delete_stabilization_metric(metric_id: int):
-    """Delete a stabilization metric."""
-    m = db.session.get(StabilizationMetric, metric_id)
+    """Delete a stabilization metric.
+
+    Requires plan_id query param to scope the lookup and prevent
+    cross-plan entity deletion via guessed IDs.
+    """
+    plan_id = request.args.get("plan_id", type=int)
+    if not plan_id:
+        return jsonify({"error": "plan_id is required"}), 400
+    m = StabilizationMetric.query.filter_by(id=metric_id, cutover_plan_id=plan_id).first()
     if not m:
         return jsonify({"error": "Stabilization metric not found"}), 404
     db.session.delete(m)
@@ -435,7 +511,10 @@ def delete_stabilization_metric(metric_id: int):
 def stabilization_dashboard(plan_id: int):
     """Get stabilization metrics dashboard."""
     from app.services.run_sustain_service import compute_stabilization_dashboard
-    return jsonify(compute_stabilization_dashboard(plan_id))
+    program_id = request.args.get("program_id", type=int)
+    if not program_id:
+        return jsonify({"error": "program_id is required"}), 400
+    return jsonify(compute_stabilization_dashboard(plan_id, program_id=program_id))
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -445,16 +524,23 @@ def stabilization_dashboard(plan_id: int):
 
 @run_sustain_bp.route("/plans/<int:plan_id>/dashboard", methods=["GET"])
 def run_sustain_dashboard(plan_id: int):
-    """Comprehensive Run/Sustain dashboard combining all metrics."""
+    """Comprehensive Run/Sustain dashboard combining all metrics.
+
+    Requires program_id query param to validate CutoverPlan ownership
+    before aggregating any cross-domain metrics.
+    """
     from app.services.run_sustain_service import (
         compute_kt_progress,
         compute_handover_readiness,
         compute_stabilization_dashboard,
     )
-    from app.models.cutover import CutoverPlan
     from app.services.cutover_service import compute_hypercare_metrics
 
-    plan = db.session.get(CutoverPlan, plan_id)
+    program_id = request.args.get("program_id", type=int)
+    if not program_id:
+        return jsonify({"error": "program_id is required"}), 400
+
+    plan = get_scoped_or_none(CutoverPlan, plan_id, program_id=program_id)
     if not plan:
         return jsonify({"error": "Cutover plan not found"}), 404
 
@@ -463,9 +549,9 @@ def run_sustain_dashboard(plan_id: int):
         "plan_name": plan.name,
         "plan_status": plan.status,
         "incidents": compute_hypercare_metrics(plan),
-        "knowledge_transfer": compute_kt_progress(plan_id),
-        "handover": compute_handover_readiness(plan_id),
-        "stabilization": compute_stabilization_dashboard(plan_id),
+        "knowledge_transfer": compute_kt_progress(plan_id, program_id=program_id),
+        "handover": compute_handover_readiness(plan_id, program_id=program_id),
+        "stabilization": compute_stabilization_dashboard(plan_id, program_id=program_id),
     })
 
 
@@ -473,18 +559,27 @@ def run_sustain_dashboard(plan_id: int):
 def exit_readiness(plan_id: int):
     """Evaluate hypercare exit readiness."""
     from app.services.run_sustain_service import evaluate_hypercare_exit
-    return jsonify(evaluate_hypercare_exit(plan_id))
+    program_id = request.args.get("program_id", type=int)
+    if not program_id:
+        return jsonify({"error": "program_id is required"}), 400
+    return jsonify(evaluate_hypercare_exit(plan_id, program_id=program_id))
 
 
 @run_sustain_bp.route("/plans/<int:plan_id>/weekly-report", methods=["GET"])
 def weekly_report(plan_id: int):
     """Generate a weekly hypercare summary report."""
     from app.services.run_sustain_service import generate_weekly_report
-    return jsonify(generate_weekly_report(plan_id))
+    program_id = request.args.get("program_id", type=int)
+    if not program_id:
+        return jsonify({"error": "program_id is required"}), 400
+    return jsonify(generate_weekly_report(plan_id, program_id=program_id))
 
 
 @run_sustain_bp.route("/plans/<int:plan_id>/support-summary", methods=["GET"])
 def support_summary(plan_id: int):
     """Get support workload summary."""
     from app.services.run_sustain_service import compute_support_summary
-    return jsonify(compute_support_summary(plan_id))
+    program_id = request.args.get("program_id", type=int)
+    if not program_id:
+        return jsonify({"error": "program_id is required"}), 400
+    return jsonify(compute_support_summary(plan_id, program_id=program_id))
