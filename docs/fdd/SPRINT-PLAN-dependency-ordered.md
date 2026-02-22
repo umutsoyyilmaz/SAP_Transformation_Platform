@@ -173,14 +173,14 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | S2-02 (F-02), S2-03 (F-05) |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] `ConfigItem.requirement_id` FK hedefi B-01 sonrası `ExploreRequirement` olarak kesinleşti
-- [ ] `trace_config_item()` içinde `tenant_id` scope manuel eklenmeli
-- [ ] `overlaps` SQLAlchemy uyarısı — relationship yeniden tasarla veya justify et
+- [x] `ConfigItem.requirement_id` FK hedefi B-01 sonrası `ExploreRequirement` olarak kesinleşti
+- [x] `trace_config_item()` içinde `tenant_id` scope manuel eklenmeli
+- [x] `overlaps` SQLAlchemy uyarısı — relationship yeniden tasarla veya justify et
 
 **Kabul Kriterleri:**
-- [ ] `trace_config_item(config_item_id)` çalışıyor
-- [ ] `GET /trace/config-items/<id>` 200 döndürüyor
-- [ ] Tenant isolation korunuyor
+- [x] `trace_config_item(config_item_id)` çalışıyor
+- [x] `GET /trace/config-items/<id>` 200 döndürüyor
+- [x] Tenant isolation korunuyor
 
 ---
 
@@ -195,14 +195,14 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | — |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] Kırık zincir senaryosu: partial trace response (500 değil, null dönmeli)
-- [ ] N+1 uyarısı docstring'e ekle: "bulk trace için ayrı endpoint"
-- [ ] B-01 tam stable olana kadar feature flag arkasında tut
+- [x] Kırık zincir senaryosu: partial trace response (500 değil, null dönmeli)
+- [x] N+1 uyarısı docstring'e ekle: "bulk trace için ayrı endpoint"
+- [x] B-01 tam stable olana kadar feature flag arkasında tut
 
 **Kabul Kriterleri:**
-- [ ] `trace_upstream_from_defect(defect_id, project_id, tenant_id)` L1-L4 döndürüyor
-- [ ] Kırık zincirde partial response — 500 değil
-- [ ] `GET /trace/defects/<id>/upstream` çalışıyor
+- [x] `trace_upstream_from_defect(defect_id, project_id, tenant_id)` L1-L4 döndürüyor
+- [x] Kırık zincirde partial response — 500 değil
+- [x] `GET /trace/defects/<id>/upstream` çalışıyor
 
 ---
 
@@ -217,14 +217,14 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | S2-04 (F-03 — Excel'e coverage metriği dahil edilecek) |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] Hangi tablodan sorgu yapıldığı (`ExploreRequirement`) docstring'e yaz
-- [ ] Cache invalidation: `ExploreRequirement` write'larına da bağla
-- [ ] `status='cancelled'` requirement'ları coverage hesabından çıkar
+- [x] Hangi tablodan sorgu yapıldığı (`ExploreRequirement`) docstring'e yaz
+- [x] Cache invalidation: `ExploreRequirement` write'larına da bağla
+- [x] `status='cancelled'` requirement'ları coverage hesabından çıkar
 
 **Kabul Kriterleri:**
-- [ ] `GET /metrics/requirement-coverage` classification + priority breakdown döndürüyor
-- [ ] `uncovered_only=true` yalnızca test'siz requirement'ları döndürüyor
-- [ ] `critical_uncovered` quality gate çalışıyor
+- [x] `GET /metrics/requirement-coverage` classification + priority breakdown döndürüyor
+- [x] `uncovered_only=true` yalnızca test'siz requirement'ları döndürüyor
+- [x] `critical_uncovered` quality gate çalışıyor
 
 ---
 
@@ -239,15 +239,15 @@ S5-01 (ADR-002 auth)
 | Bloke ettiği | — |
 
 **Düzeltmeler (Reviewer Audit notlarından):**
-- [ ] İlk fazda PDF çıkar — sadece Excel + CSV (`weasyprint` production riski var)
-- [ ] Async export eşiği: 200+ requirement → task queue'ya al
-- [ ] Export temp dosyalarında `tenant_id` path izolasyonu
-- [ ] "SAP standart template" ibaresi için **hukuki onay önce alınmalı**
+- [x] İlk fazda PDF çıkar — sadece Excel + CSV (`weasyprint` production riski var)
+- [x] Async export eşiği: 200+ requirement → task queue'ya al
+- [x] Export temp dosyalarında `tenant_id` path izolasyonu
+- [x] "SAP standart template" ibaresi için **hukuki onay önce alınmalı**
 
 **Kabul Kriterleri:**
-- [ ] Excel dosyası 5 tab içeriyor: Executive Summary, L3 Özet, Req Detay, WRICEF, Config
-- [ ] `format=csv` requirements CSV olarak indiriliyor
-- [ ] Tenant isolation korunuyor
+- [x] Excel dosyası 5 tab içeriyor: Executive Summary, L3 Özet, Req Detay, WRICEF, Config
+- [x] `format=csv` requirements CSV olarak indiriliyor
+- [x] Tenant isolation korunuyor
 
 ---
 

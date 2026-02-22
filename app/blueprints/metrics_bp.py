@@ -13,7 +13,7 @@ import logging
 import time
 from collections import Counter, defaultdict
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from app.middleware.timing import get_recent_metrics
 from app.models import db
@@ -186,3 +186,106 @@ def ai_usage():
     except Exception:
         logger.exception("Failed to fetch AI usage metrics")
         return jsonify({"error": "Failed to fetch AI metrics"}), 500
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# S2-03 (F-05) — Application-level Coverage Metrics
+#
+# Separate blueprint with url_prefix="/api/v1" so that routes follow the
+# canonical /api/v1/projects/<id>/metrics/... URL structure (FDD-F05 §4).
+# ══════════════════════════════════════════════════════════════════════════════
+
+from app.services.metrics import (
+    get_requirement_coverage_matrix,
+    get_coverage_trend,
+    get_quality_gate_coverage_status,
+)
+
+app_metrics_bp = Blueprint("app_metrics", __name__, url_prefix="/api/v1")
+
+
+@app_metrics_bp.route("/projects/<int:project_id>/metrics/requirement-coverage", methods=["GET"])
+def requirement_coverage(project_id: int):
+    """Return per-requirement test coverage matrix.
+
+    Query params:
+        classification: fit | partial_fit | gap  (optional filter)
+        priority: P1 | P2 | ...                  (optional filter)
+        uncovered_only: 1 | 0 (default 0)        (return uncovered reqs only)
+    """
+    _raw_tid = getattr(g, "tenant_id", None)
+    tenant_id: int | None = _raw_tid if isinstance(_raw_tid, int) else None
+    classification = request.args.get("classification") or None
+    priority = request.args.get("priority") or None
+    include_uncovered_only = request.args.get("uncovered_only", "0") == "1"
+
+    try:
+        result = get_requirement_coverage_matrix(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            classification=classification,
+            priority=priority,
+            include_uncovered_only=include_uncovered_only,
+        )
+        return jsonify(result), 200
+    except Exception:
+        logger.exception("Failed to compute requirement coverage for project %s", project_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app_metrics_bp.route(
+    "/projects/<int:project_id>/metrics/requirement-coverage/trend", methods=["GET"]
+)
+def requirement_coverage_trend(project_id: int):
+    """Return daily coverage trend for the last N days.
+
+    Query params:
+        days: int (default 30)
+    """
+    _raw_tid = getattr(g, "tenant_id", None)
+    tenant_id: int | None = _raw_tid if isinstance(_raw_tid, int) else None
+    days = request.args.get("days", 30, type=int)
+
+    try:
+        result = get_coverage_trend(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            days=days,
+        )
+        return jsonify({"days": days, "trend": result}), 200
+    except Exception:
+        logger.exception("Failed to compute coverage trend for project %s", project_id)
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app_metrics_bp.route(
+    "/projects/<int:project_id>/metrics/requirement-coverage/quality-gate", methods=["GET"]
+)
+def requirement_coverage_quality_gate(project_id: int):
+    """Evaluate whether the project passes the test coverage quality gate.
+
+    Query params:
+        threshold: float (default 100.0) — required coverage percentage
+        scope: critical | all (default critical)
+    """
+    _raw_tid = getattr(g, "tenant_id", None)
+    tenant_id: int | None = _raw_tid if isinstance(_raw_tid, int) else None
+    threshold = request.args.get("threshold", 100.0, type=float)
+    scope = request.args.get("scope", "critical")
+
+    if scope not in ("critical", "all"):
+        return jsonify({"error": "scope must be 'critical' or 'all'"}), 400
+    if not (0.0 <= threshold <= 100.0):
+        return jsonify({"error": "threshold must be between 0 and 100"}), 400
+
+    try:
+        result = get_quality_gate_coverage_status(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            threshold_pct=threshold,
+            scope=scope,
+        )
+        return jsonify(result), 200
+    except Exception:
+        logger.exception("Failed to evaluate quality gate for project %s", project_id)
+        return jsonify({"error": "Internal server error"}), 500

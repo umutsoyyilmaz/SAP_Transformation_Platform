@@ -18,7 +18,7 @@ from app.models.integration import Interface, Wave, ConnectivityTest, SwitchPlan
 from app.models.requirement import Requirement
 from app.models.scenario import Scenario, Workshop
 from app.models.scope import Process, Analysis
-from app.models.testing import TestCase, Defect
+from app.models.testing import TestCase, Defect, TestExecution
 from app.services.helpers.scoped_queries import get_scoped_or_none
 
 logger = logging.getLogger(__name__)
@@ -962,3 +962,463 @@ def build_lateral_links(entity_type: str, entity_id: int) -> dict:
         ]
 
     return lateral
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# S2-01 (F-01) — ConfigItem → TestCase Traceability
+#
+# Audit A2 compliance: tenant_id is explicitly passed and applied to the
+# initial ConfigItem lookup, preventing cross-tenant data exposure.
+# Audit A3: no SQLAlchemy relationship overlaps warnings — we use direct
+# FK queries via TestCase.config_item_id rather than a viewonly relationship.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def trace_config_item(config_item_id: int, project_id: int, tenant_id: int | None) -> dict:
+    """Build the downstream traceability chain for a single ConfigItem.
+
+    Chain: ConfigItem → TestCase → last TestExecution + open Defects.
+
+    Tenant isolation is enforced at the ConfigItem lookup: if the item
+    does not belong to both project_id AND tenant_id a ValueError is raised,
+    which the blueprint maps to 404 (preventing existence disclosure).
+
+    Args:
+        config_item_id: ConfigItem.id
+        project_id: Owning program / project for scope enforcement.
+        tenant_id: Row-level tenant isolation.
+
+    Returns:
+        {
+          "config_item": {...},
+          "test_cases": [
+            {"id", "title", "status", "last_execution": {...} | null,
+             "open_defects": [...]}
+          ],
+          "coverage_summary": {"total_test_cases", "passed", "failed", "not_run"}
+        }
+
+    Raises:
+        ValueError: If ConfigItem not found in the given project/tenant.
+    """
+    ci = ConfigItem.query.filter_by(
+        id=config_item_id,
+        program_id=project_id,
+        tenant_id=tenant_id,
+    ).first()
+    if not ci:
+        raise ValueError(
+            f"ConfigItem {config_item_id} not found in project {project_id}"
+        )
+
+    test_cases = TestCase.query.filter_by(config_item_id=config_item_id).all()
+
+    tc_results = []
+    for tc in test_cases:
+        last_exec = (
+            TestExecution.query.filter_by(test_case_id=tc.id)
+            .order_by(TestExecution.created_at.desc())
+            .first()
+        )
+        open_defects = Defect.query.filter(
+            Defect.test_case_id == tc.id,
+            Defect.status.notin_(["closed", "resolved", "cancelled"]),
+        ).all()
+        tc_results.append({
+            "id": tc.id,
+            "code": getattr(tc, "code", ""),
+            "title": tc.title,
+            "status": tc.status,
+            "last_execution": {
+                "id": last_exec.id,
+                "result": last_exec.result,
+                "executed_at": (
+                    last_exec.created_at.isoformat() if last_exec.created_at else None
+                ),
+            } if last_exec else None,
+            "open_defects": [
+                {
+                    "id": d.id,
+                    "title": d.title,
+                    "severity": getattr(d, "severity", None),
+                    "status": d.status,
+                }
+                for d in open_defects
+            ],
+        })
+
+    total = len(tc_results)
+    passed = sum(
+        1 for t in tc_results
+        if t["last_execution"] and t["last_execution"]["result"] == "passed"
+    )
+    failed = sum(
+        1 for t in tc_results
+        if t["last_execution"] and t["last_execution"]["result"] == "failed"
+    )
+
+    return {
+        "config_item": ci.to_dict(),
+        "test_cases": tc_results,
+        "coverage_summary": {
+            "total_test_cases": total,
+            "passed": passed,
+            "failed": failed,
+            "not_run": total - passed - failed,
+        },
+    }
+
+
+def get_config_items_without_tests(project_id: int, tenant_id: int | None) -> list[dict]:
+    """Return ConfigItems with no linked TestCase rows — coverage gap list.
+
+    Uses a NOT IN subquery rather than a loop to avoid N+1 queries.
+
+    Args:
+        project_id: Owning project for scope.
+        tenant_id: Row-level isolation.
+
+    Returns:
+        [{"id", "code", "title", "module", "config_status"}]
+    """
+    from sqlalchemy import select
+
+    tested_ids_sub = select(TestCase.config_item_id).where(
+        TestCase.config_item_id.isnot(None)
+    )
+    untested = ConfigItem.query.filter_by(
+        program_id=project_id,
+        tenant_id=tenant_id,
+    ).filter(~ConfigItem.id.in_(tested_ids_sub)).all()
+
+    return [
+        {
+            "id": ci.id,
+            "code": ci.code,
+            "title": ci.title,
+            "module": ci.module,
+            "config_status": ci.status,
+        }
+        for ci in untested
+    ]
+
+
+def get_config_coverage_summary(project_id: int, tenant_id: int | None) -> dict:
+    """Return config-item test coverage summary broken down by SAP module.
+
+    Two queries total: one for all config items (tenant-scoped), one for the
+    set of config_item IDs that have at least one TestCase.
+
+    Args:
+        project_id: Project scope.
+        tenant_id: Tenant isolation.
+
+    Returns:
+        {
+          "total_config_items", "with_tests", "without_tests",
+          "coverage_pct",
+          "by_module": {"FI": {"total", "covered", "pct"}, ...}
+        }
+    """
+    from sqlalchemy import select
+
+    all_ci = ConfigItem.query.filter_by(
+        program_id=project_id, tenant_id=tenant_id
+    ).all()
+    total = len(all_ci)
+
+    tested_ids: set[int] = {
+        row[0]
+        for row in db.session.execute(
+            select(TestCase.config_item_id).where(
+                TestCase.config_item_id.isnot(None)
+            )
+        ).fetchall()
+    }
+
+    with_tests = sum(1 for ci in all_ci if ci.id in tested_ids)
+    without_tests = total - with_tests
+    coverage_pct = round(with_tests / total * 100, 1) if total else 0.0
+
+    by_module: dict[str, dict] = {}
+    for ci in all_ci:
+        mod = (ci.module or "unknown").upper()
+        if mod not in by_module:
+            by_module[mod] = {"total": 0, "covered": 0}
+        by_module[mod]["total"] += 1
+        if ci.id in tested_ids:
+            by_module[mod]["covered"] += 1
+
+    for mod_data in by_module.values():
+        t = mod_data["total"]
+        mod_data["pct"] = round(mod_data["covered"] / t * 100, 1) if t else 0.0
+
+    return {
+        "total_config_items": total,
+        "with_tests": with_tests,
+        "without_tests": without_tests,
+        "coverage_pct": coverage_pct,
+        "by_module": by_module,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# S2-02 (F-02) — Upstream Defect Trace
+#
+# Audit A1: Broken chain handled gracefully — each hop is nullable; missing
+#   links produce null nodes instead of raising 500.
+# Audit A2: N+1 warning documented — designed for single-defect use.
+# Audit A3: B-01 canonical — works with ExploreRequirement only.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def trace_upstream_from_defect(
+    defect_id: int,
+    project_id: int,
+    tenant_id: int | None,
+) -> dict:
+    """Traverse the full upstream traceability chain starting from a Defect.
+
+    Chain (upstream direction):
+        Defect → TestExecution → TestCase
+               → [BacklogItem | ConfigItem | ExploreRequirement]
+               → ExploreRequirement → ProcessLevel (L4 → L3 → L2 → L1)
+
+    Broken-chain contract: if any link is missing (orphaned FK, NULL), the
+    corresponding node is returned as null and traversal continues where
+    possible. Callers receive a partial trace rather than a 500 error.
+
+    N+1 warning: this function executes multiple single-row lookups. It is
+    designed for single-defect detail pages. For bulk analysis, build a
+    dedicated batch query instead of calling this in a loop.
+
+    Args:
+        defect_id: Defect.id
+        project_id: For tenant scope enforcement on the Defect entry point.
+        tenant_id: Row-level isolation — same semantics as other trace functions.
+
+    Returns:
+        Full upstream trace dict (see FDD-F02 §4.1 for shape).
+
+    Raises:
+        ValueError: Defect not found in project/tenant scope.
+    """
+    from app.models.explore import ExploreRequirement, ProcessLevel
+
+    # 1. Defect — entry point, tenant-scoped
+    defect = Defect.query.filter_by(
+        id=defect_id, program_id=project_id, tenant_id=tenant_id
+    ).first()
+    if not defect:
+        raise ValueError(f"Defect {defect_id} not found in project {project_id}")
+
+    result: dict = {
+        "defect": {
+            "id": defect.id,
+            "title": defect.title,
+            "severity": getattr(defect, "severity", None),
+            "status": defect.status,
+        },
+        "test_execution": None,
+        "test_case": None,
+        "linked_artifacts": [],
+        "explore_requirement": None,
+        "process_chain": [],
+        "impact_summary": {
+            "affected_l3_processes": [],
+            "affected_sap_modules": [],
+            "severity": getattr(defect, "severity", None),
+            "is_critical_path": False,
+        },
+    }
+
+    # 2. TestCase (direct FK) — broken chain → null node
+    tc: TestCase | None = (
+        db.session.get(TestCase, defect.test_case_id) if defect.test_case_id else None
+    )
+    if tc:
+        result["test_case"] = {
+            "id": tc.id,
+            "code": getattr(tc, "code", ""),
+            "title": tc.title,
+            "type": getattr(tc, "type", None),
+        }
+        last_exec = (
+            TestExecution.query.filter_by(test_case_id=tc.id)
+            .order_by(TestExecution.created_at.desc())
+            .first()
+        )
+        if last_exec:
+            result["test_execution"] = {
+                "id": last_exec.id,
+                "result": last_exec.result,
+                "executed_at": (
+                    last_exec.created_at.isoformat() if last_exec.created_at else None
+                ),
+            }
+
+    # 3. Linked artifacts + ExploreRequirement resolution
+    explore_req_id: str | None = None
+
+    # Priority order: defect direct link → TC direct link → via BacklogItem → via ConfigItem
+    if defect.explore_requirement_id:
+        explore_req_id = str(defect.explore_requirement_id)
+
+    if tc:
+        if tc.explore_requirement_id and not explore_req_id:
+            explore_req_id = str(tc.explore_requirement_id)
+
+        if tc.backlog_item_id:
+            bi = db.session.get(BacklogItem, tc.backlog_item_id)
+            if bi:
+                result["linked_artifacts"].append({
+                    "type": "backlog_item",
+                    "id": bi.id,
+                    "title": bi.title,
+                    "wricef_type": getattr(bi, "wricef_type", None),
+                })
+                if bi.explore_requirement_id and not explore_req_id:
+                    explore_req_id = str(bi.explore_requirement_id)
+
+        if tc.config_item_id:
+            ci = db.session.get(ConfigItem, tc.config_item_id)
+            if ci:
+                result["linked_artifacts"].append({
+                    "type": "config_item",
+                    "id": ci.id,
+                    "title": ci.title,
+                    "wricef_type": None,
+                })
+                if ci.explore_requirement_id and not explore_req_id:
+                    explore_req_id = str(ci.explore_requirement_id)
+
+    # 4. ExploreRequirement — may be null if chain is broken
+    if explore_req_id:
+        req: ExploreRequirement | None = db.session.get(ExploreRequirement, explore_req_id)
+        if req:
+            result["explore_requirement"] = {
+                "id": req.id,
+                "title": req.title,
+                "classification": getattr(req, "fit_status", None),
+                "status": req.status,
+            }
+            result["linked_artifacts"].append({
+                "type": "explore_requirement",
+                "id": req.id,
+                "title": req.title,
+                "wricef_type": None,
+            })
+
+            # 5. Walk ProcessLevel hierarchy upward (L4 → L3 → L2 → L1)
+            pl_id = req.process_level_id
+            if pl_id:
+                chain: list[dict] = []
+                visited: set[int] = set()
+                current_pl: ProcessLevel | None = db.session.get(ProcessLevel, pl_id)
+                while current_pl and current_pl.id not in visited:
+                    visited.add(current_pl.id)
+                    chain.append({
+                        "level": current_pl.level,
+                        "id": current_pl.id,
+                        "code": current_pl.code,
+                        "name": current_pl.name,
+                        "fit_decision": getattr(current_pl, "fit_status", None),
+                    })
+                    current_pl = (
+                        db.session.get(ProcessLevel, current_pl.parent_id)
+                        if current_pl.parent_id
+                        else None
+                    )
+
+                # Normalise to ascending level (L1 first)
+                result["process_chain"] = sorted(chain, key=lambda x: x["level"])
+
+                l3_nodes = [c for c in result["process_chain"] if c["level"] == 3]
+                l4_nodes = [c for c in result["process_chain"] if c["level"] == 4]
+                result["impact_summary"]["affected_l3_processes"] = [
+                    f"{c['code']} {c['name']}" for c in l3_nodes
+                ]
+                result["impact_summary"]["is_critical_path"] = any(
+                    c.get("fit_decision") == "gap" for c in l4_nodes
+                )
+
+            if req.sap_module:
+                result["impact_summary"]["affected_sap_modules"] = [req.sap_module]
+
+    return result
+
+
+def trace_defects_by_process(
+    project_id: int,
+    tenant_id: int | None,
+    process_level_id: int,
+) -> list[dict]:
+    """Return all defects linked (upstream) to a given ProcessLevel.
+
+    Traversal: ProcessLevel → child L4 ProcessLevels → ExploreRequirements
+               → TestCases → Defects.
+
+    Includes the node itself plus its direct children so that querying an
+    L3 node returns defects from all of its L4 children.
+
+    Args:
+        project_id: Tenant scope for the Defect query.
+        tenant_id: Row-level isolation.
+        process_level_id: ProcessLevel.id to start from.
+
+    Returns:
+        [{"defect_id", "title", "severity", "status", "test_case_title"}]
+    """
+    from sqlalchemy import select
+    from app.models.explore import ExploreRequirement, ProcessLevel
+
+    # Direct children of this level (covers both L3→L4 and querying an L4)
+    child_ids: list[int] = [
+        row[0]
+        for row in db.session.execute(
+            select(ProcessLevel.id).where(ProcessLevel.parent_id == process_level_id)
+        ).fetchall()
+    ]
+    all_level_ids = [process_level_id, *child_ids]
+
+    # ExploreRequirements attached to these levels
+    req_ids: list[str] = [
+        row[0]
+        for row in db.session.execute(
+            select(ExploreRequirement.id).where(
+                ExploreRequirement.process_level_id.in_(all_level_ids)
+            )
+        ).fetchall()
+    ]
+    if not req_ids:
+        return []
+
+    # TestCases linked to those requirements
+    tc_ids: list[int] = [
+        row[0]
+        for row in db.session.execute(
+            select(TestCase.id).where(
+                TestCase.explore_requirement_id.in_(req_ids)
+            )
+        ).fetchall()
+    ]
+    if not tc_ids:
+        return []
+
+    defects = Defect.query.filter(
+        Defect.test_case_id.in_(tc_ids),
+        Defect.program_id == project_id,
+        Defect.tenant_id == tenant_id,
+    ).all()
+
+    results = []
+    for d in defects:
+        tc = db.session.get(TestCase, d.test_case_id)
+        results.append({
+            "defect_id": d.id,
+            "title": d.title,
+            "severity": getattr(d, "severity", None),
+            "status": d.status,
+            "test_case_title": tc.title if tc else None,
+        })
+    return results

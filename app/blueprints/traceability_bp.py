@@ -22,6 +22,11 @@ from app.services.traceability import (
     build_lateral_links,
     get_chain,
     trace_explore_requirement,
+    trace_config_item,
+    get_config_items_without_tests,
+    get_config_coverage_summary,
+    trace_upstream_from_defect,
+    trace_defects_by_process,
 )
 
 traceability_bp = Blueprint("traceability", __name__, url_prefix="/api/v1")
@@ -391,3 +396,116 @@ def _find_gaps_in_chain(entity_type, entity_id, chain):
             gaps.append({"level": "downstream", "message": "No connectivity tests executed"})
 
     return gaps
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# S2-01 (F-01) — ConfigItem traceability endpoints
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _project_tenant(project_id: int) -> tuple[int, int | None]:
+    """Extract project_id and integer tenant_id from request context.
+
+    g.tenant_id is the *string* tenant slug set by the tenant middleware
+    (e.g. "default"), NOT the Integer FK stored on model rows.  Row-level
+    integer tenant filtering is only meaningful when an authenticated JWT
+    carries a numeric tenant claim.  Until then, coerce non-integers to None
+    so that service queries use `filter_by(tenant_id=None)` — consistent with
+    how test fixtures and single-tenant development work.
+    """
+    from flask import g
+
+    raw = getattr(g, "tenant_id", None)
+    tid: int | None = raw if isinstance(raw, int) else None
+    return project_id, tid
+
+
+@traceability_bp.route(
+    "/projects/<int:project_id>/trace/config-items/<int:config_item_id>",
+    methods=["GET"],
+)
+def config_item_trace(project_id: int, config_item_id: int):
+    """Downstream traceability for a single ConfigItem.
+
+    Returns TestCases, last execution result, and open defects.
+
+    Tenant isolation: ConfigItem must belong to project_id (and tenant_id
+    when auth is enabled). Returns 404 instead of 403 to avoid
+    confirming item existence to unauthorised callers.
+    """
+    pid, tid = _project_tenant(project_id)
+    try:
+        result = trace_config_item(config_item_id, pid, tid)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+    return jsonify(result), 200
+
+
+@traceability_bp.route(
+    "/projects/<int:project_id>/trace/config-items/coverage-summary",
+    methods=["GET"],
+)
+def config_coverage_summary(project_id: int):
+    """Config-item test coverage summary broken down by SAP module."""
+    pid, tid = _project_tenant(project_id)
+    return jsonify(get_config_coverage_summary(pid, tid)), 200
+
+
+@traceability_bp.route(
+    "/projects/<int:project_id>/trace/config-items/without-tests",
+    methods=["GET"],
+)
+def config_items_without_tests(project_id: int):
+    """List of ConfigItems with no linked TestCase (coverage gap report)."""
+    pid, tid = _project_tenant(project_id)
+    return jsonify(get_config_items_without_tests(pid, tid)), 200
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# S2-02 (F-02) — Upstream defect trace endpoints
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+@traceability_bp.route(
+    "/projects/<int:project_id>/trace/defects/<int:defect_id>/upstream",
+    methods=["GET"],
+)
+def defect_upstream_trace(project_id: int, defect_id: int):
+    """Full upstream traceability chain: Defect → TestCase → Requirement → Process.
+
+    Returns a partial chain when any link is missing (broken chain handling).
+    See FDD-F02 §4.1 for response shape.
+    """
+    pid, tid = _project_tenant(project_id)
+    try:
+        result = trace_upstream_from_defect(defect_id, pid, tid)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 404
+    return jsonify(result), 200
+
+
+@traceability_bp.route(
+    "/projects/<int:project_id>/trace/process-levels/<int:level_id>/defects",
+    methods=["GET"],
+)
+def process_level_defects(project_id: int, level_id: int):
+    """Defects upstream-linked to a ProcessLevel (typically L3).
+
+    Traverses child L4 levels → requirements → test cases → defects.
+    Useful for L3 panel "open defects" widget.
+
+    Query params:
+        severity: filter by severity value (optional)
+        status:   filter by status value (optional)
+    """
+    pid, tid = _project_tenant(project_id)
+    results = trace_defects_by_process(pid, tid, level_id)
+
+    severity_filter = request.args.get("severity")
+    status_filter = request.args.get("status")
+
+    if severity_filter:
+        results = [r for r in results if r.get("severity") == severity_filter]
+    if status_filter:
+        results = [r for r in results if r.get("status") == status_filter]
+
+    return jsonify(results), 200

@@ -271,7 +271,7 @@ def create_app(config_name=None):
     from app.blueprints.ai_bp import ai_bp
     from app.blueprints.integration_bp import integration_bp
     from app.blueprints.health_bp import health_bp
-    from app.blueprints.metrics_bp import metrics_bp
+    from app.blueprints.metrics_bp import metrics_bp, app_metrics_bp
     from app.blueprints.explore import explore_bp
     from app.blueprints.data_factory_bp import data_factory_bp
     from app.blueprints.reporting_bp import reporting_bp
@@ -301,6 +301,7 @@ def create_app(config_name=None):
     from app.blueprints.observability_bp import observability_bp
     from app.blueprints.gate_criteria_bp import gate_criteria_bp
     from app.blueprints.signoff_bp import signoff_bp
+    from app.blueprints.export_bp import export_bp
 
     app.register_blueprint(program_bp)
     app.register_blueprint(backlog_bp)
@@ -310,6 +311,7 @@ def create_app(config_name=None):
     app.register_blueprint(integration_bp)
     app.register_blueprint(health_bp)
     app.register_blueprint(metrics_bp)
+    app.register_blueprint(app_metrics_bp)
     app.register_blueprint(explore_bp)
     app.register_blueprint(data_factory_bp)
     app.register_blueprint(reporting_bp)
@@ -342,6 +344,7 @@ def create_app(config_name=None):
     app.register_blueprint(observability_bp)
     app.register_blueprint(gate_criteria_bp)
     app.register_blueprint(signoff_bp)
+    app.register_blueprint(export_bp)
 
     # ── Blueprint Permission Guards (Sprint 6) ──────────────────────────
     from app.middleware.blueprint_permissions import apply_all_blueprint_permissions

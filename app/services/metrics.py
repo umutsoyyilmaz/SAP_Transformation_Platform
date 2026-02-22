@@ -499,3 +499,241 @@ class ExploreMetrics:
     @staticmethod
     def testing_metrics(project_id: int) -> dict:
         return compute_testing_metrics(project_id)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# S2-03 (F-05) — Requirement Coverage Reporting
+#
+# Audit A1: Uses ExploreRequirement (B-01 canonical) — not legacy Requirement.
+# Audit A2: Cache invalidation on ExploreRequirement writes is a TODO for
+#   Phase 3 performance pass; correctness is the priority here.
+# Audit A3: status='cancelled' requirements are excluded from the denominator
+#   to avoid skewing coverage percentages with inactive items.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def get_requirement_coverage_matrix(
+    project_id: int,
+    tenant_id: int | None,
+    classification: str | None = None,
+    priority: str | None = None,
+    include_uncovered_only: bool = False,
+) -> dict:
+    """Build per-requirement test coverage matrix for a project.
+
+    Coverage definition: an ExploreRequirement is "covered" if it has at
+    least one TestCase linked via TestCase.explore_requirement_id = req.id.
+
+    Excluded from denominator: status='cancelled' requirements (Audit A3).
+    Source table: ExploreRequirement (B-01 canonical) — never legacy
+    Requirement (Audit A1).
+
+    Args:
+        project_id: Project scope.
+        tenant_id: Row-level isolation. None = test environment.
+        classification: Optional fit_status filter ('fit', 'partial_fit', 'gap').
+        priority: Optional priority filter (e.g. 'P1', 'P2').
+        include_uncovered_only: When True, return only rows with no test cases.
+
+    Returns:
+        {
+          "total": int,
+          "covered": int,
+          "uncovered": int,
+          "coverage_pct": float,
+          "by_classification": {"fit": ..., "partial_fit": ..., "gap": ...},
+          "items": [{"req_id", "title", "fit_status", "priority",
+                     "sap_module", "status", "test_case_count", "is_covered"}]
+        }
+    """
+    from sqlalchemy import select
+    from app.models.testing import TestCase
+
+    # Base query — exclude cancelled (Audit A3)
+    q = ExploreRequirement.query.filter(
+        ExploreRequirement.project_id == project_id,
+        ExploreRequirement.status != "cancelled",
+    )
+    if tenant_id is not None:
+        q = q.filter(ExploreRequirement.tenant_id == tenant_id)
+    if classification:
+        q = q.filter(ExploreRequirement.fit_status == classification)
+    if priority:
+        q = q.filter(ExploreRequirement.priority == priority)
+
+    reqs = q.all()
+    req_ids = [r.id for r in reqs]
+
+    if not req_ids:
+        return {
+            "total": 0,
+            "covered": 0,
+            "uncovered": 0,
+            "coverage_pct": 0.0,
+            "by_classification": {},
+            "items": [],
+        }
+
+    # One query for all test case counts — avoids N+1
+    tc_counts: dict[str, int] = {}
+    rows = db.session.execute(
+        select(TestCase.explore_requirement_id, func.count(TestCase.id).label("cnt"))
+        .where(TestCase.explore_requirement_id.in_(req_ids))
+        .group_by(TestCase.explore_requirement_id)
+    ).fetchall()
+    for row in rows:
+        tc_counts[row[0]] = row[1]
+
+    items = []
+    for req in reqs:
+        count = tc_counts.get(req.id, 0)
+        is_covered = count > 0
+        if include_uncovered_only and is_covered:
+            continue
+        items.append({
+            "req_id": req.id,
+            "title": req.title,
+            "fit_status": req.fit_status,
+            "priority": req.priority,
+            "sap_module": req.sap_module,
+            "status": req.status,
+            "test_case_count": count,
+            "is_covered": is_covered,
+        })
+
+    total = len(reqs)
+    covered = sum(1 for r in reqs if tc_counts.get(r.id, 0) > 0)
+
+    by_classification: dict[str, dict] = {}
+    for req in reqs:
+        cls = req.fit_status or "unknown"
+        if cls not in by_classification:
+            by_classification[cls] = {"total": 0, "covered": 0, "pct": 0.0}
+        by_classification[cls]["total"] += 1
+        if tc_counts.get(req.id, 0) > 0:
+            by_classification[cls]["covered"] += 1
+    for cls_data in by_classification.values():
+        t = cls_data["total"]
+        cls_data["pct"] = round(cls_data["covered"] / t * 100, 1) if t else 0.0
+
+    return {
+        "total": total,
+        "covered": covered,
+        "uncovered": total - covered,
+        "coverage_pct": _safe_pct(covered, total),
+        "by_classification": by_classification,
+        "items": items,
+    }
+
+
+def get_coverage_trend(
+    project_id: int,
+    tenant_id: int | None,
+    days: int = 30,
+) -> list[dict]:
+    """Return daily test coverage percentage trend for the last N days.
+
+    Implementation note: this platform does not yet persist daily coverage
+    snapshots. This function returns an empty list as a stub. Phase 3 will
+    add a DailyCoverageSnapshot table and backfill logic.
+
+    Args:
+        project_id: Project scope.
+        tenant_id: Row-level isolation.
+        days: Number of days to look back (default 30).
+
+    Returns:
+        [] — stub until DailyCoverageSnapshot is implemented.
+        Future shape: [{"date": "YYYY-MM-DD", "coverage_pct": float}]
+    """
+    # TODO (Phase 3): query DailyCoverageSnapshot table when available.
+    return []
+
+
+def get_quality_gate_coverage_status(
+    project_id: int,
+    tenant_id: int | None,
+    threshold_pct: float = 100.0,
+    scope: str = "critical",
+) -> dict:
+    """Evaluate whether the project passes the test coverage quality gate.
+
+    scope='critical' → only 'must_have' moscow_priority requirements are
+    evaluated (the strictest gate). scope='all' → all non-cancelled
+    requirements.
+
+    Gate passes when coverage_pct >= threshold_pct.
+
+    Args:
+        project_id: Project scope.
+        tenant_id: Row-level isolation.
+        threshold_pct: Required coverage percentage (0–100). Default 100.
+        scope: 'critical' (moscow_priority='must_have') or 'all'.
+
+    Returns:
+        {
+          "gate_passed": bool,
+          "coverage_pct": float,
+          "threshold_pct": float,
+          "scope": str,
+          "total_in_scope": int,
+          "covered_in_scope": int,
+          "blocking_requirements": [{"req_id", "title", "fit_status"}]
+        }
+    """
+    from sqlalchemy import select
+    from app.models.testing import TestCase
+
+    q = ExploreRequirement.query.filter(
+        ExploreRequirement.project_id == project_id,
+        ExploreRequirement.status != "cancelled",
+    )
+    if tenant_id is not None:
+        q = q.filter(ExploreRequirement.tenant_id == tenant_id)
+    if scope == "critical":
+        q = q.filter(ExploreRequirement.moscow_priority == "must_have")
+
+    reqs = q.all()
+    req_ids = [r.id for r in reqs]
+
+    if not req_ids:
+        return {
+            "gate_passed": True,
+            "coverage_pct": 100.0,
+            "threshold_pct": threshold_pct,
+            "scope": scope,
+            "total_in_scope": 0,
+            "covered_in_scope": 0,
+            "blocking_requirements": [],
+        }
+
+    # One query for covered req IDs
+    covered_ids: set[str] = {
+        row[0]
+        for row in db.session.execute(
+            select(TestCase.explore_requirement_id)
+            .where(TestCase.explore_requirement_id.in_(req_ids))
+            .distinct()
+        ).fetchall()
+    }
+
+    total = len(req_ids)
+    covered = len(covered_ids)
+    coverage_pct = _safe_pct(covered, total)
+    gate_passed = coverage_pct >= threshold_pct
+
+    blocking = [
+        {"req_id": r.id, "title": r.title, "fit_status": r.fit_status}
+        for r in reqs
+        if r.id not in covered_ids
+    ]
+
+    return {
+        "gate_passed": gate_passed,
+        "coverage_pct": coverage_pct,
+        "threshold_pct": threshold_pct,
+        "scope": scope,
+        "total_in_scope": total,
+        "covered_in_scope": covered,
+        "blocking_requirements": blocking,
+    }
