@@ -732,8 +732,8 @@ const ExploreHierarchyView = (() => {
     async function openCatalogSeedWizard() {
         let modules = [];
         ExpUI.modal({
-            title: '🌱 SAP Katalogdan Hızlı Başlat',
-            contentHtml: `<div style="text-align:center;padding:24px"><div style="font-size:20px">⏳</div><p>Modüller yükleniyor…</p></div>`,
+            title: '🌱 Quick Start from SAP Catalog',
+            contentHtml: `<div style="text-align:center;padding:24px"><div style="font-size:20px">⏳</div><p>Loading modules…</p></div>`,
             footerHtml: '',
             id: 'catalogWizardModal',
         });
@@ -741,12 +741,12 @@ const ExploreHierarchyView = (() => {
             modules = await ExploreAPI.catalog.modules();
         } catch (err) {
             document.querySelector('#catalogWizardModal .modal-body').innerHTML =
-                `<div class="exp-empty"><div class="exp-empty__icon">❌</div><div class="exp-empty__title">Katalog yüklenemedi</div><p>${esc(err.message)}</p></div>`;
+                `<div class="exp-empty"><div class="exp-empty__icon">❌</div><div class="exp-empty__title">Failed to load catalog</div><p>${esc(err.message)}</p></div>`;
             return;
         }
         if (!modules.length) {
             document.querySelector('#catalogWizardModal .modal-body').innerHTML =
-                `<div class="exp-empty"><div class="exp-empty__icon">⚠️</div><div class="exp-empty__title">Katalog boş</div><p>Önce katalog verisi yüklenmelidir.</p></div>`;
+                `<div class="exp-empty"><div class="exp-empty__icon">⚠️</div><div class="exp-empty__title">Catalog is empty</div><p>Catalog data must be loaded first.</p></div>`;
             return;
         }
         let checkboxHtml = '';
@@ -756,31 +756,31 @@ const ExploreHierarchyView = (() => {
                 checkboxHtml += `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer">
                     <input type="checkbox" name="catalogModule" value="${esc(l2.sap_module)}" style="width:15px;height:15px">
                     <span>${esc(l2.name)}</span>
-                    <span style="margin-left:auto;font-size:11px;color:var(--sap-text-secondary);background:var(--sap-surface-2);padding:2px 6px;border-radius:10px">${l2.step_count} adım</span>
+                    <span style="margin-left:auto;font-size:11px;color:var(--sap-text-secondary);background:var(--sap-surface-2);padding:2px 6px;border-radius:10px">${l2.step_count} steps</span>
                 </label>`;
             }
             checkboxHtml += `</div>`;
         }
         document.querySelector('#catalogWizardModal .modal-body').innerHTML = `
-            <p style="color:var(--sap-text-secondary);margin-bottom:16px">İçe aktarmak istediğiniz SAP modüllerini seçin. Seçilen modüllerin tüm L1→L4 süreç hiyerarşisi projeye eklenecektir.</p>
+            <p style="color:var(--sap-text-secondary);margin-bottom:16px">Select the SAP modules you want to import. The full L1→L4 process hierarchy of selected modules will be added to the project.</p>
             <div id="catalogModuleList" style="max-height:360px;overflow-y:auto;border:1px solid var(--sap-border);border-radius:var(--exp-radius-md);padding:12px">
                 ${checkboxHtml}
             </div>
         `;
         document.querySelector('#catalogWizardModal .modal-footer').innerHTML = `
-            <button class="btn btn-secondary" onclick="ExpUI.closeModal('catalogWizardModal')">İptal</button>
-            <button class="btn btn-primary" onclick="ExploreHierarchyView._submitCatalogSeed()">Seçilenleri İçe Aktar</button>
+            <button class="btn btn-secondary" onclick="ExpUI.closeModal('catalogWizardModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="ExploreHierarchyView._submitCatalogSeed()">Import Selected</button>
         `;
     }
 
     async function _submitCatalogSeed() {
         const checked = [...document.querySelectorAll('input[name="catalogModule"]:checked')].map(el => el.value);
         if (!checked.length) {
-            ExpUI.toast({ message: 'En az bir modül seçin.', type: 'warning' });
+            ExpUI.toast({ message: 'Select at least one module.', type: 'warning' });
             return;
         }
         const btn = document.querySelector('#catalogWizardModal .modal-footer .btn-primary');
-        if (btn) { btn.disabled = true; btn.textContent = 'İçe aktarılıyor…'; }
+        if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
         try {
             const tenantId = App.getActiveTenant ? App.getActiveTenant().id : (window._tenantId || 1);
             const result = await ExploreAPI.catalog.seedProject(_pid, {
@@ -790,15 +790,15 @@ const ExploreHierarchyView = (() => {
             ExpUI.closeModal('catalogWizardModal');
             const c = result.created || {};
             ExpUI.toast({
-                message: `✅ İçe aktarma tamamlandı — L1:${c.l1} L2:${c.l2} L3:${c.l3} L4:${c.l4} oluşturuldu (${result.elapsed_ms}ms)`,
+                message: `Import completed — L1:${c.l1} L2:${c.l2} L3:${c.l3} L4:${c.l4} created (${result.elapsed_ms}ms)`,
                 type: 'success', duration: 6000,
             });
             await fetchAll();
             _l1List.forEach(l1 => _expandedNodes.add(l1.id));
             renderPage();
         } catch (err) {
-            ExpUI.toast({ message: `Hata: ${err.message}`, type: 'error' });
-            if (btn) { btn.disabled = false; btn.textContent = 'Seçilenleri İçe Aktar'; }
+            ExpUI.toast({ message: `Error: ${err.message}`, type: 'error' });
+            if (btn) { btn.disabled = false; btn.textContent = 'Import Selected'; }
         }
     }
 
@@ -841,7 +841,7 @@ const ExploreHierarchyView = (() => {
             actionsHtml: `
                 <div style="display:flex;gap:8px;align-items:center">
                     ${renderViewToggle()}
-                    ${_l1List.length === 0 ? ExpUI.actionButton({ label: '🌱 SAP Katalogdan Başlat', variant: 'success', size: 'sm', icon: '', onclick: 'ExploreHierarchyView.openCatalogSeedWizard()' }) : ''}
+                    ${_l1List.length === 0 ? ExpUI.actionButton({ label: '🌱 Start from SAP Catalog', variant: 'success', size: 'sm', icon: '', onclick: 'ExploreHierarchyView.openCatalogSeedWizard()' }) : ''}
                     ${ExpUI.actionButton({ label: '+ Import L4', variant: 'primary', size: 'sm', icon: '📥', onclick: 'ExploreHierarchyView.openSeedingDialog()' })}
                 </div>
             `,

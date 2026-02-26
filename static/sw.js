@@ -6,7 +6,7 @@
  *           Cache-first for static assets.
  */
 
-const CACHE_VERSION = 'sap-transform-v3';
+const CACHE_VERSION = 'sap-transform-v4';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 
@@ -52,9 +52,19 @@ const PRECACHE_URLS = [
 // API paths that should be cached for offline read
 const CACHEABLE_API_PATTERNS = [
     /\/api\/v1\/health/,
-    /\/api\/v1\/programs$/,
+    /\/api\/v1\/programs/,
     /\/api\/v1\/ai\/prompts$/,
     /\/api\/v1\/ai\/usage/,
+    /\/api\/v1\/programs\/\d+\/phases/,
+    /\/api\/v1\/programs\/\d+\/workstreams/,
+    /\/api\/v1\/dashboard/,
+    /\/api\/v1\/explore\//,
+    /\/api\/v1\/backlog/,
+    /\/api\/v1\/testing\//,
+    /\/api\/v1\/cutover\//,
+    /\/api\/v1\/raid\//,
+    /\/api\/v1\/metrics\//,
+    /\/api\/v1\/traceability\//,
 ];
 
 // ── Install ────────────────────────────────────────────────────────────

@@ -1,8 +1,8 @@
 /**
  * pg_shortcut_help.js — UI-S07-T03
  *
- * PGShortcutHelp — Klavye kısayolları yardım diyaloğu.
- * ? tuşu veya PGShortcutHelp.toggle() ile açılır.
+ * PGShortcutHelp — Keyboard shortcuts help dialog.
+ * Opened with the ? key or PGShortcutHelp.toggle().
  */
 const PGShortcutHelp = (() => {
     'use strict';
@@ -10,19 +10,19 @@ const PGShortcutHelp = (() => {
     let _visible = false;
 
     const GROUPS = [
-        { title: 'Navigasyon', items: [
+        { title: 'Navigation', items: [
             { key: 'G D', label: 'Dashboard' },
-            { key: 'G P', label: 'Programlar' },
-            { key: 'G R', label: 'Gereksinimler' },
+            { key: 'G P', label: 'Programs' },
+            { key: 'G R', label: 'Requirements' },
             { key: 'G W', label: 'WRICEF Backlog' },
-            { key: 'G T', label: 'Test Yönetimi' },
-            { key: 'G B', label: 'Defect İzleyici' },
+            { key: 'G T', label: 'Test Management' },
+            { key: 'G B', label: 'Defect Tracker' },
             { key: 'G L', label: 'RAID Log' },
         ]},
-        { title: 'Genel', items: [
-            { key: '⌘K', label: 'Komut Paleti' },
-            { key: '?',   label: 'Bu yardımı göster/gizle' },
-            { key: 'ESC', label: 'Modal / Panel kapat' },
+        { title: 'General', items: [
+            { key: '⌘K', label: 'Command Palette' },
+            { key: '?',   label: 'Show/hide this help' },
+            { key: 'ESC', label: 'Close modal / panel' },
         ]},
     ];
 
@@ -44,7 +44,7 @@ const PGShortcutHelp = (() => {
         `).join('');
 
         TMModal.show({
-            title: 'Klavye Kısayolları',
+            title: 'Keyboard Shortcuts',
             body: `<div class="pg-shortcut-help">${rows}</div>`,
             size: 'md',
         });

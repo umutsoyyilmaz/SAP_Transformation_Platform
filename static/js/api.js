@@ -44,7 +44,12 @@ const API = (() => {
         const prog = (typeof App !== 'undefined' && App.getActiveProgram)
             ? App.getActiveProgram()
             : null;
-        if (prog && prog.id) body.project_id = prog.id;
+        const project = (typeof App !== 'undefined' && App.getActiveProject)
+            ? App.getActiveProject()
+            : null;
+
+        if (prog && prog.id) body.program_id = prog.id;
+        if (project && project.id) body.project_id = project.id;
 
         return body;
     }

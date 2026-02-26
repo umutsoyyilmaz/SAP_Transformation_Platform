@@ -1,11 +1,11 @@
-/* UI-S02-T05 — PGBreadcrumb: Standart breadcrumb navigasyonu */
+/* UI-S02-T05 — PGBreadcrumb: Standard breadcrumb component */
 const PGBreadcrumb = (() => {
     /**
-     * Standart breadcrumb bileşeni.
-     * Her view'ın en üstünde render edilmeli.
+     * Standard breadcrumb component.
+     * Should be rendered at the top of every view.
      *
      * @param {Array<{ label: string, onclick?: string }>} items
-     *   Son item tıklanamaz (current page).
+     *   Last item is not clickable (current page).
      * @returns {string} HTML
      */
     function html(items) {

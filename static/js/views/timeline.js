@@ -1,5 +1,5 @@
 /**
- * Timeline View — S3-02 · FDD-F04: Proje Timeline Görselleştirme
+ * Timeline View — S3-02 · FDD-F04: Project Timeline Visualization
  *
  * Renders a Gantt chart of SAP Activate phases + a sprint table for the
  * currently active program, using the frappe-gantt (MIT) library.
@@ -144,7 +144,7 @@ const TimelineView = (() => {
                 <div style="font-size:22px;font-weight:700">${escHtml(program.name)} — Timeline</div>
                 ${
                     program.start_date
-                        ? `<span style="color:var(--text-secondary);font-size:13px">
+                        ? `<span style="color:var(--sap-text-secondary);font-size:13px">
                             📅 ${escHtml(program.start_date)} → ${escHtml(program.end_date || "TBD")}
                            </span>`
                         : ""
@@ -154,7 +154,7 @@ const TimelineView = (() => {
                         ? `<span class="badge badge-danger">⚠ ${delayedPhases.length} phase${delayedPhases.length > 1 ? "s" : ""} delayed</span>`
                         : ""
                 }
-                <span style="margin-left:auto;color:var(--text-secondary);font-size:13px">Today: ${escHtml(today)}</span>
+                <span style="margin-left:auto;color:var(--sap-text-secondary);font-size:13px">Today: ${escHtml(today)}</span>
                 <button class="btn btn-secondary btn-sm" onclick="App.navigate('programs')">← Back to Programs</button>
             </div>
         `;
@@ -163,7 +163,7 @@ const TimelineView = (() => {
         let ganttHtml;
         if (!hasAnyDate) {
             ganttHtml = `
-                <div class="card" style="padding:24px;text-align:center;color:var(--text-secondary)">
+                <div class="card" style="padding:24px;text-align:center;color:var(--sap-text-secondary)">
                     <div style="font-size:32px;margin-bottom:8px">📅</div>
                     <div style="font-weight:600">No phase dates set yet</div>
                     <div style="font-size:13px;margin-top:4px">
@@ -196,10 +196,10 @@ const TimelineView = (() => {
                             <div style="flex:1;background:var(--bg-secondary,#f1f5f9);border-radius:4px;height:8px;min-width:60px">
                                 <div style="width:${p.completion_pct || 0}%;background:${escHtml(p.color)};height:8px;border-radius:4px"></div>
                             </div>
-                            <span style="font-size:12px;color:var(--text-secondary)">${p.completion_pct || 0}%</span>
+                            <span style="font-size:12px;color:var(--sap-text-secondary)">${p.completion_pct || 0}%</span>
                         </div>
                     </td>
-                    <td style="font-size:12px;color:var(--text-secondary)">${p.gates.length} gate${p.gates.length !== 1 ? "s" : ""}</td>
+                    <td style="font-size:12px;color:var(--sap-text-secondary)">${p.gates.length} gate${p.gates.length !== 1 ? "s" : ""}</td>
                 </tr>
             `
             )
@@ -210,7 +210,7 @@ const TimelineView = (() => {
                 <div style="font-weight:600;margin-bottom:12px">Phases (${phases.length})</div>
                 ${
                     phases.length
-                        ? `<table class="table" style="font-size:13px">
+                        ? `<table class="data-table" aria-label="Program phases" style="font-size:13px">
                             <thead>
                                 <tr>
                                     <th>Phase</th><th>Start</th><th>End</th>
@@ -219,7 +219,7 @@ const TimelineView = (() => {
                             </thead>
                             <tbody>${phaseRowsHtml}</tbody>
                           </table>`
-                        : `<div style="color:var(--text-secondary);text-align:center;padding:24px">No phases defined yet.</div>`
+                        : `<div style="color:var(--sap-text-secondary);text-align:center;padding:24px">No phases defined yet.</div>`
                 }
             </div>
         `;
@@ -241,7 +241,7 @@ const TimelineView = (() => {
             milestones.length
                 ? `<div class="card" style="margin-top:16px">
                     <div style="font-weight:600;margin-bottom:12px">Gate Milestones (${milestones.length})</div>
-                    <table class="table" style="font-size:13px">
+                    <table class="data-table" aria-label="Gate milestones" style="font-size:13px">
                         <thead><tr><th>Gate</th><th>Planned Date</th><th>Status</th></tr></thead>
                         <tbody>${milestoneRowsHtml}</tbody>
                     </table>
@@ -268,7 +268,7 @@ const TimelineView = (() => {
             sprints.length
                 ? `<div class="card" style="margin-top:16px">
                     <div style="font-weight:600;margin-bottom:12px">Sprints (${sprints.length})</div>
-                    <table class="table" style="font-size:13px">
+                    <table class="data-table" aria-label="Program sprints" style="font-size:13px">
                         <thead>
                             <tr>
                                 <th>Sprint</th><th>Start</th><th>End</th>
@@ -298,7 +298,7 @@ const TimelineView = (() => {
             // Library not loaded yet — ignore gracefully
             const ganttWrap = document.getElementById("timelineGantt");
             if (ganttWrap) {
-                ganttWrap.innerHTML = `<div style="padding:16px;color:var(--text-secondary);text-align:center;font-size:13px">
+                ganttWrap.innerHTML = `<div style="padding:16px;color:var(--sap-text-secondary);text-align:center;font-size:13px">
                     Gantt library not available — ensure frappe-gantt CDN is loaded.
                 </div>`;
             }
@@ -343,7 +343,7 @@ const TimelineView = (() => {
         });
 
         if (!phaseTasks.length) {
-            ganttWrap.innerHTML = `<div style="padding:16px;color:var(--text-secondary);text-align:center">
+            ganttWrap.innerHTML = `<div style="padding:16px;color:var(--sap-text-secondary);text-align:center">
                 No phases with date ranges to display.
             </div>`;
             return;
@@ -374,7 +374,7 @@ const TimelineView = (() => {
             ganttWrap._gantt    = gantt;
             ganttWrap._observer = observer;
         } catch (err) {
-            ganttWrap.innerHTML = `<div style="padding:16px;color:var(--text-secondary);text-align:center;font-size:13px">
+            ganttWrap.innerHTML = `<div style="padding:16px;color:var(--sap-text-secondary);text-align:center;font-size:13px">
                 Gantt chart could not be rendered: ${escHtml(String(err.message || err))}
             </div>`;
         }

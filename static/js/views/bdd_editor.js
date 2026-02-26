@@ -14,7 +14,7 @@ const BddEditorView = (function () {
     if (!main) return;
     const programId = window.currentProgramId;
     if (!programId) {
-      main.innerHTML = '<div class="f7-empty">Lütfen önce bir program seçin.</div>';
+      main.innerHTML = '<div class="f7-empty">Please select a program first.</div>';
       return;
     }
     main.innerHTML = `
@@ -32,7 +32,7 @@ const BddEditorView = (function () {
             <button class="f7-tab" data-tab="shared">Shared Steps</button>
           </div>
           <div id="f7-tab-content" class="f7-tab-content">
-            <div class="f7-empty">Sol panelden bir Test Case seçin.</div>
+            <div class="f7-empty">Select a Test Case from the left panel.</div>
           </div>
         </div>
       </div>`;
@@ -110,7 +110,7 @@ const BddEditorView = (function () {
   /* ── Gherkin editor ─────────────────────────────────────────── */
   function _renderGherkin(container) {
     if (!_currentTcId) {
-      container.innerHTML = '<div class="f7-empty">Test Case seçin.</div>';
+      container.innerHTML = '<div class="f7-empty">Select a Test Case.</div>';
       return;
     }
     const feature = _bddSpec ? _bddSpec.feature_file : "";
@@ -121,11 +121,11 @@ const BddEditorView = (function () {
           <select id="f7-bdd-lang" class="f7-select">
             <option value="en" ${lang === 'en' ? 'selected' : ''}>English</option>
             <option value="de" ${lang === 'de' ? 'selected' : ''}>Deutsch</option>
-            <option value="tr" ${lang === 'tr' ? 'selected' : ''}>Türkçe</option>
+            <option value="tr" ${lang === 'tr' ? 'selected' : ''}>Turkish</option>
           </select>
-          <button id="f7-save-bdd" class="f7-btn f7-btn-primary">Kaydet</button>
+          <button id="f7-save-bdd" class="f7-btn f7-btn-primary">Save</button>
           <button id="f7-parse-bdd" class="f7-btn">Parse → Steps</button>
-          ${_bddSpec ? '<button id="f7-delete-bdd" class="f7-btn f7-btn-danger">Sil</button>' : ''}
+          ${_bddSpec ? '<button id="f7-delete-bdd" class="f7-btn f7-btn-danger">Delete</button>' : ''}
         </div>
         <textarea id="f7-feature-text" class="f7-gherkin-textarea"
                   placeholder="Feature: …\n  Scenario: …\n    Given …\n    When …\n    Then …"
@@ -167,17 +167,17 @@ const BddEditorView = (function () {
       const json = await resp.json();
       if (resp.ok) {
         _bddSpec = json.bdd;
-        _showToast("BDD spec kaydedildi");
+        _showToast("BDD spec saved");
       } else {
-        _showToast(json.error || "Hata", true);
+        _showToast(json.error || "Error", true);
       }
     } catch (e) {
-      _showToast("Kaydetme hatası", true);
+      _showToast("Save error", true);
     }
   }
 
   async function _deleteBdd() {
-    if (!confirm("BDD spec silinecek. Devam?")) return;
+    if (!confirm("BDD spec will be deleted. Continue?")) return;
     try {
       await fetch(`/api/v1/testing/test-cases/${_currentTcId}/bdd`, {
         method: "DELETE",
@@ -185,16 +185,16 @@ const BddEditorView = (function () {
       });
       _bddSpec = null;
       _switchTab("gherkin");
-      _showToast("BDD spec silindi");
+      _showToast("BDD spec deleted");
     } catch (e) {
-      _showToast("Silme hatası", true);
+      _showToast("Delete error", true);
     }
   }
 
   /* ── Parsed steps preview ───────────────────────────────────── */
   async function _renderParsedSteps(container) {
     if (!_currentTcId || !_bddSpec) {
-      container.innerHTML = '<div class="f7-empty">Önce BDD spec oluşturun.</div>';
+      container.innerHTML = '<div class="f7-empty">Create a BDD spec first.</div>';
       return;
     }
     try {
@@ -220,7 +220,7 @@ const BddEditorView = (function () {
           </table>
         </div>`;
     } catch (e) {
-      container.innerHTML = '<div class="f7-empty">Parse hatası.</div>';
+      container.innerHTML = '<div class="f7-empty">Parse error.</div>';
     }
   }
 
@@ -231,11 +231,11 @@ const BddEditorView = (function () {
       <div class="f7-shared-steps">
         <div class="f7-shared-header">
           <h4>Shared Step Library</h4>
-          <button id="f7-new-shared" class="f7-btn f7-btn-primary">+ Yeni Shared Step</button>
+          <button id="f7-new-shared" class="f7-btn f7-btn-primary">+ New Shared Step</button>
         </div>
-        <div id="f7-shared-list" class="f7-shared-list">Yükleniyor…</div>
+        <div id="f7-shared-list" class="f7-shared-list">Loading…</div>
         <div id="f7-step-refs" class="f7-step-refs">
-          <h4>Bu TC'ye bağlı Shared Steps</h4>
+          <h4>Shared Steps linked to this TC</h4>
           <div id="f7-ref-list"></div>
         </div>
       </div>`;
@@ -257,12 +257,12 @@ const BddEditorView = (function () {
           <div class="f7-shared-title">${s.title}</div>
           <div class="f7-shared-meta">
             ${(s.tags || []).map(t => `<span class="f7-tag">${t}</span>`).join("")}
-            <span class="f7-usage">Kullanım: ${s.usage_count}</span>
+            <span class="f7-usage">Usage: ${s.usage_count}</span>
           </div>
           <div class="f7-shared-actions">
             <button class="f7-btn-sm f7-insert-shared" data-id="${s.id}">Insert</button>
           </div>
-        </div>`).join("") || "<div class='f7-empty'>Henüz shared step yok.</div>";
+        </div>`).join("") || "<div class='f7-empty'>No shared steps yet.</div>";
 
       listEl.querySelectorAll(".f7-insert-shared").forEach(btn => {
         btn.addEventListener("click", () => _insertSharedStep(parseInt(btn.dataset.id)));
@@ -290,7 +290,7 @@ const BddEditorView = (function () {
         <div class="f7-ref-item">
           <span>Step ${r.step_no}: <strong>${r.shared_step_title || 'Shared #' + r.shared_step_id}</strong></span>
           <button class="f7-btn-sm f7-btn-danger f7-remove-ref" data-id="${r.id}">×</button>
-        </div>`).join("") || "<div class='f7-empty'>Bağlı shared step yok.</div>";
+        </div>`).join("") || "<div class='f7-empty'>No linked shared steps.</div>";
 
       refList.querySelectorAll(".f7-remove-ref").forEach(btn => {
         btn.addEventListener("click", () => _removeStepRef(parseInt(btn.dataset.id)));
@@ -301,7 +301,7 @@ const BddEditorView = (function () {
   }
 
   async function _insertSharedStep(sharedId) {
-    if (!_currentTcId) { _showToast("Önce TC seçin", true); return; }
+    if (!_currentTcId) { _showToast("Select a TC first", true); return; }
     try {
       const resp = await fetch(
         `/api/v1/testing/test-cases/${_currentTcId}/step-references`,
@@ -312,11 +312,11 @@ const BddEditorView = (function () {
         }
       );
       if (resp.ok) {
-        _showToast("Shared step eklendi");
+        _showToast("Shared step added");
         await _loadStepRefs();
       }
     } catch (e) {
-      _showToast("Ekleme hatası", true);
+      _showToast("Add error", true);
     }
   }
 
@@ -326,15 +326,15 @@ const BddEditorView = (function () {
         method: "DELETE",
         headers: { "X-User": "admin" },
       });
-      _showToast("Referans kaldırıldı");
+      _showToast("Reference removed");
       await _loadStepRefs();
     } catch (e) {
-      _showToast("Silme hatası", true);
+      _showToast("Delete error", true);
     }
   }
 
   async function _createSharedStep() {
-    const title = prompt("Shared Step başlığı:");
+    const title = prompt("Shared Step title:");
     if (!title) return;
     const programId = window.currentProgramId;
     try {
@@ -344,11 +344,11 @@ const BddEditorView = (function () {
         body: JSON.stringify({ title, steps: [] }),
       });
       if (resp.ok) {
-        _showToast("Shared step oluşturuldu");
+        _showToast("Shared step created");
         _switchTab("shared"); // reload
       }
     } catch (e) {
-      _showToast("Oluşturma hatası", true);
+      _showToast("Creation error", true);
     }
   }
 

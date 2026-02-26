@@ -188,6 +188,7 @@
             }
 
             // Store tokens and user info
+            localStorage.removeItem('sap_active_program');
             localStorage.setItem('sap_access_token', data.access_token);
             localStorage.setItem('sap_refresh_token', data.refresh_token);
             localStorage.setItem('sap_user', JSON.stringify(data.user));

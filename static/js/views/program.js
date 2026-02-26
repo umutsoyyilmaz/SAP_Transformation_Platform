@@ -8,6 +8,7 @@
 const ProgramView = (() => {
     let programs = [];
     let currentProgram = null;
+    let currentProjects = [];
     let currentTab = 'overview';
 
     // ── Render program list ──────────────────────────────────────────────
@@ -32,6 +33,18 @@ const ProgramView = (() => {
             </div>` : `<div class="program-select-banner">
                 <span>⚠️ No program selected — choose one below to get started</span>
             </div>`}
+            <div class="program-filters" style="display:flex;gap:var(--pg-sp-2);margin-top:var(--pg-sp-3);margin-bottom:var(--pg-sp-2)">
+                <input type="text" id="programSearchInput" class="pg-input" placeholder="Search programs..."
+                       oninput="ProgramView._filterCards()" style="flex:1;max-width:320px">
+                <select id="programStatusFilter" class="pg-select" onchange="ProgramView._filterCards()" style="max-width:180px">
+                    <option value="">All statuses</option>
+                    <option value="planning">Planning</option>
+                    <option value="active">Active</option>
+                    <option value="on_hold">On Hold</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                </select>
+            </div>
             <div id="programCardContainer">
                 <div style="text-align:center;padding:40px"><div class="spinner"></div></div>
             </div>
@@ -45,7 +58,7 @@ const ProgramView = (() => {
             renderCards();
         } catch (err) {
             document.getElementById('programCardContainer').innerHTML =
-                PGEmptyState.html({ icon: 'programs', title: 'Yüklenemedi', description: err.message });
+                PGEmptyState.html({ icon: 'programs', title: 'Failed to load', description: err.message });
         }
     }
 
@@ -56,9 +69,9 @@ const ProgramView = (() => {
         if (programs.length === 0) {
             container.innerHTML = PGEmptyState.html({
                 icon: 'programs',
-                title: 'Henüz program yok',
-                description: 'İlk SAP dönüşüm programını oluşturun.',
-                action: { label: '+ Yeni Program', onclick: 'ProgramView.showCreateModal()' },
+                title: 'No programs yet',
+                description: 'Create your first SAP transformation program.',
+                action: { label: '+ New Program', onclick: 'ProgramView.showCreateModal()' },
             });
             return;
         }
@@ -97,18 +110,33 @@ const ProgramView = (() => {
             </div>`;
     }
 
-    function selectProgram(id) {
+    function _filterCards() {
+        const search = (document.getElementById('programSearchInput')?.value || '').toLowerCase();
+        const statusFilter = document.getElementById('programStatusFilter')?.value || '';
+        const cards = document.querySelectorAll('.program-card');
+        cards.forEach(card => {
+            const title = (card.querySelector('.program-card__title')?.textContent || '').toLowerCase();
+            const desc = (card.querySelector('.program-card__desc')?.textContent || '').toLowerCase();
+            const matchesSearch = !search || title.includes(search) || desc.includes(search);
+            const badge = card.querySelector('.pg-badge');
+            const cardStatus = badge ? badge.textContent.trim().toLowerCase().replace(/\s+/g, '_') : '';
+            const matchesStatus = !statusFilter || cardStatus === statusFilter;
+            card.style.display = (matchesSearch && matchesStatus) ? '' : 'none';
+        });
+    }
+
+    async function selectProgram(id) {
         const p = programs.find(x => x.id === id);
         if (!p) return;
         App.setActiveProgram(p);
         App.toast(`Program "${p.name}" selected`, 'success');
-        renderCards(); // refresh cards to show active state
+        await render();
     }
 
-    function clearActiveProgram() {
+    async function clearActiveProgram() {
         App.setActiveProgram(null);
         App.toast('Program selection cleared', 'info');
-        renderCards();
+        await render();
     }
 
     // ═════════════════════════════════════════════════════════════════════
@@ -121,6 +149,11 @@ const ProgramView = (() => {
         } catch (err) {
             App.toast(err.message, 'error');
             return;
+        }
+        try {
+            currentProjects = await API.get(`/programs/${id}/projects`);
+        } catch {
+            currentProjects = [];
         }
         renderDetail();
     }
@@ -147,6 +180,7 @@ const ProgramView = (() => {
                 <button class="tab-btn ${currentTab === 'workstreams' ? 'active' : ''}" data-tab="workstreams">Workstreams</button>
                 <button class="tab-btn ${currentTab === 'team' ? 'active' : ''}" data-tab="team">Team</button>
                 <button class="tab-btn ${currentTab === 'committees' ? 'active' : ''}" data-tab="committees">Committees</button>
+                <button class="tab-btn ${currentTab === 'projects' ? 'active' : ''}" data-tab="projects">Projects</button>
             </div>
             <div id="tabContent" class="card" style="margin-top:0;border-top-left-radius:0;border-top-right-radius:0"></div>
         `;
@@ -172,6 +206,7 @@ const ProgramView = (() => {
             case 'workstreams': renderWorkstreamsTab(container); break;
             case 'team':        renderTeamTab(container); break;
             case 'committees':  renderCommitteesTab(container); break;
+            case 'projects':    renderProjectsTab(container); break;
         }
     }
 
@@ -248,8 +283,8 @@ const ProgramView = (() => {
                             </div>
                         </div>
                         <div class="phase-body">
-                            <p style="color:var(--text-secondary);font-size:12px">${escHtml(ph.description || '')}</p>
-                            <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
+                            <p style="color:var(--sap-text-secondary);font-size:12px">${escHtml(ph.description || '')}</p>
+                            <div style="font-size:11px;color:var(--sap-text-secondary);margin-top:4px">
                                 Plan: ${ph.planned_start || '?'} → ${ph.planned_end || '?'}
                                 ${ph.actual_start ? ` | Actual: ${ph.actual_start} → ${ph.actual_end || '...'}` : ''}
                             </div>
@@ -260,7 +295,7 @@ const ProgramView = (() => {
                                 <button class="btn btn-secondary btn-sm" onclick="ProgramView.showGateModal(${ph.id})">+ Gate</button>
                             </div>
                             ${(ph.gates || []).length === 0
-                                ? '<div style="color:var(--text-secondary);font-size:11px;padding:8px 0">No gates</div>'
+                                ? '<div style="color:var(--sap-text-secondary);font-size:11px;padding:8px 0">No gates</div>'
                                 : `<table class="data-table" style="margin-top:8px">
                                     <thead><tr><th>Gate</th><th>Type</th><th>Status</th><th>Planned</th><th>Actions</th></tr></thead>
                                     <tbody>
@@ -300,7 +335,7 @@ const ProgramView = (() => {
                     <tbody>
                         ${ws.map(w => `
                             <tr>
-                                <td><strong>${escHtml(w.name)}</strong><br><small style="color:var(--text-secondary)">${escHtml(w.description || '')}</small></td>
+                                <td><strong>${escHtml(w.name)}</strong><br><small style="color:var(--sap-text-secondary)">${escHtml(w.description || '')}</small></td>
                                 <td>${w.ws_type}</td>
                                 <td>${escHtml(w.lead_name || '—')}</td>
                                 <td><span class="badge badge-${w.status}">${w.status}</span></td>
@@ -362,7 +397,7 @@ const ProgramView = (() => {
                     <tbody>
                         ${comms.map(c => `
                             <tr>
-                                <td><strong>${escHtml(c.name)}</strong><br><small style="color:var(--text-secondary)">${escHtml(c.description || '')}</small></td>
+                                <td><strong>${escHtml(c.name)}</strong><br><small style="color:var(--sap-text-secondary)">${escHtml(c.description || '')}</small></td>
                                 <td>${c.committee_type}</td>
                                 <td>${c.meeting_frequency}</td>
                                 <td>${escHtml(c.chair_name || '—')}</td>
@@ -371,6 +406,55 @@ const ProgramView = (() => {
                                     <button class="btn btn-danger btn-sm" onclick="ProgramView.deleteCommittee(${c.id})">Delete</button>
                                 </td>
                             </tr>`).join('')}
+                    </tbody>
+                </table>`
+            }
+        `;
+    }
+
+    function renderProjectsTab(container) {
+        const projects = currentProjects || [];
+        if (projects === null) {
+            container.innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner"></div><p>Loading projects...</p></div>';
+            return;
+        }
+        const activeProject = App.getActiveProject();
+        const hasDefault = projects.some(p => p.is_default);
+        const teamMembers = currentProgram?.team_members || [];
+        container.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h3>Projects</h3>
+                <button class="btn btn-primary btn-sm" onclick="ProgramView.showProjectModal()">+ Add Project</button>
+            </div>
+            ${hasDefault ? '' : '<div class="context-guard-banner"><span>No default project configured for this program.</span></div>'}
+            ${projects.length === 0
+                ? '<div class="empty-state"><div class="empty-state__icon">📦</div><div class="empty-state__title">No projects yet</div></div>'
+                : `<table class="data-table">
+                    <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Status</th><th>Owner</th><th>Flags</th><th>Actions</th></tr></thead>
+                    <tbody>
+                        ${projects.map(p => {
+                            const isActive = activeProject && activeProject.id === p.id;
+                            const flags = [
+                                p.is_default ? '<span class="badge badge-active">DEFAULT</span>' : '',
+                                isActive ? '<span class="badge badge-info">ACTIVE</span>' : '',
+                            ].filter(Boolean).join(' ');
+                            const ownerMember = p.owner_id ? teamMembers.find(m => m.id === p.owner_id) : null;
+                            const ownerDisplay = ownerMember ? escHtml(ownerMember.name) : (p.owner_id ? `User #${p.owner_id}` : '—');
+                            return `
+                                <tr class="${isActive ? 'program-card--active' : ''}">
+                                    <td><code>${escHtml(p.code || '')}</code></td>
+                                    <td><strong>${escHtml(p.name || '')}</strong></td>
+                                    <td>${escHtml(p.type || 'implementation')}</td>
+                                    <td><span class="badge badge-${escHtml((p.status || 'active').toLowerCase())}">${escHtml(p.status || 'active')}</span></td>
+                                    <td>${ownerDisplay}</td>
+                                    <td>${flags || '—'}</td>
+                                    <td>
+                                        <button class="btn btn-secondary btn-sm" onclick="ProgramView.selectProject(${p.id})">${isActive ? 'Selected' : 'Select'}</button>
+                                        <button class="btn btn-secondary btn-sm" onclick="ProgramView.showProjectModal(${p.id})">Edit</button>
+                                        <button class="btn btn-danger btn-sm" onclick="ProgramView.deleteProject(${p.id})">Delete</button>
+                                    </td>
+                                </tr>`;
+                        }).join('')}
                     </tbody>
                 </table>`
             }
@@ -791,6 +875,172 @@ const ProgramView = (() => {
         } catch (err) { App.toast(err.message, 'error'); }
     }
 
+    function showProjectModal(projectId) {
+        const p = projectId ? (currentProjects || []).find(x => x.id === projectId) : {};
+        const isEdit = !!(p && p.id);
+        App.openModal(`
+            <div class="modal-header">
+                <h2>${isEdit ? 'Edit Project' : 'Add Project'}</h2>
+                <button class="modal-close" onclick="App.closeModal()">&times;</button>
+            </div>
+            <form onsubmit="ProgramView.handleProjectSubmit(event, ${p.id || 'null'})">
+                <div class="form-row">
+                    <div class="form-group"><label>Code *</label><input name="code" required maxlength="50" value="${escAttr(p.code || '')}" placeholder="TR-W1"></div>
+                    <div class="form-group"><label>Name *</label><input name="name" required maxlength="200" value="${escAttr(p.name || '')}" placeholder="Turkey Wave 1"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Type</label><select name="type">${selectOpts(['implementation','rollout','pilot','template','support'], p.type)}</select></div>
+                    <div class="form-group"><label>Status</label><select name="status">${selectOpts(['active','on_hold','completed','cancelled'], p.status)}</select></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Owner ID</label><input name="owner_id" type="number" min="1" value="${p.owner_id || ''}" placeholder="optional"></div>
+                    <div class="form-group"><label style="display:block">Default Project</label><label><input type="checkbox" name="is_default" value="true" ${p.is_default ? 'checked' : ''}> Mark as default</label></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Start Date</label><input name="start_date" type="date" value="${p.start_date || ''}"></div>
+                    <div class="form-group"><label>End Date</label><input name="end_date" type="date" value="${p.end_date || ''}"></div>
+                </div>
+                <div class="form-group"><label>Go-Live Date</label><input name="go_live_date" type="date" value="${p.go_live_date || ''}"></div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">${isEdit ? 'Update' : 'Create'}</button>
+                </div>
+            </form>`);
+    }
+
+    async function handleProjectSubmit(event, projectId) {
+        event.preventDefault();
+        const fd = new FormData(event.target);
+        const data = Object.fromEntries(fd.entries());
+        data.is_default = fd.has('is_default');
+        data.owner_id = data.owner_id ? parseInt(data.owner_id, 10) : null;
+        data.code = String(data.code || '').trim().toUpperCase();
+        data.name = String(data.name || '').trim();
+        if (!data.code || !data.name) {
+            App.toast('Code and name are required', 'warning');
+            return;
+        }
+        try {
+            if (projectId) {
+                await API.put(`/projects/${projectId}`, data);
+                App.toast('Project updated', 'success');
+            } else {
+                await API.post(`/programs/${currentProgram.id}/projects`, data);
+                App.toast('Project created', 'success');
+            }
+            App.closeModal();
+            await openDetail(currentProgram.id);
+            if (App.getActiveProgram() && App.getActiveProgram().id === currentProgram.id) {
+                App.setActiveProgram(App.getActiveProgram(), { silent: true });
+            }
+        } catch (err) {
+            App.toast(err.message, 'error');
+        }
+    }
+
+    async function selectProject(projectId) {
+        const selected = (currentProjects || []).find(p => p.id === projectId);
+        if (!selected) return;
+        App.setActiveProject({
+            id: selected.id,
+            name: selected.name,
+            code: selected.code,
+            program_id: selected.program_id || currentProgram.id,
+            tenant_id: selected.tenant_id,
+        });
+        App.toast(`Project "${selected.name}" selected`, 'success');
+        renderTab();
+    }
+
+    async function deleteProject(projectId) {
+        const project = (currentProjects || []).find(p => p.id === projectId);
+        if (!project) return;
+
+        if (project.is_default) {
+            const replacements = (currentProjects || []).filter(p => p.id !== projectId);
+            if (replacements.length === 0) {
+                App.toast('Default project cannot be deleted without a replacement project.', 'warning');
+                return;
+            }
+            const options = replacements.map(p => `<option value="${p.id}">${escHtml((p.code || '') + ' - ' + (p.name || ''))}</option>`).join('');
+            App.openModal(`
+                <div class="modal-header">
+                    <h2>Replace Default Project</h2>
+                    <button class="modal-close" onclick="App.closeModal()">&times;</button>
+                </div>
+                <form onsubmit="ProgramView.confirmDefaultProjectReplacement(event, ${projectId})">
+                    <div class="form-group">
+                        <label>Current default project</label>
+                        <div><strong>${escHtml(project.code)} - ${escHtml(project.name)}</strong></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Replacement default project *</label>
+                        <select name="replacement_project_id" required>
+                            <option value="">Select replacement</option>
+                            ${options}
+                        </select>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+                        <button type="submit" class="btn btn-danger">Replace and Delete</button>
+                    </div>
+                </form>
+            `);
+            return;
+        }
+
+        if (!confirm(`Delete project "${project.name}"?`)) return;
+        try {
+            await API.delete(`/projects/${projectId}`);
+            const activeProject = App.getActiveProject();
+            if (activeProject && activeProject.id === projectId) {
+                App.setActiveProject(null);
+            }
+            App.toast('Project deleted', 'success');
+            await openDetail(currentProgram.id);
+            if (App.getActiveProgram() && App.getActiveProgram().id === currentProgram.id) {
+                App.setActiveProgram(App.getActiveProgram(), { silent: true });
+            }
+        } catch (err) {
+            App.toast(err.message, 'error');
+        }
+    }
+
+    async function confirmDefaultProjectReplacement(event, defaultProjectId) {
+        event.preventDefault();
+        const replacementId = Number(new FormData(event.target).get('replacement_project_id'));
+        if (!replacementId) {
+            App.toast('Replacement project is required', 'warning');
+            return;
+        }
+        try {
+            await API.put(`/projects/${replacementId}`, { is_default: true });
+            await API.delete(`/projects/${defaultProjectId}`);
+            const activeProject = App.getActiveProject();
+            if (activeProject && activeProject.id === defaultProjectId) {
+                const replacement = (currentProjects || []).find(p => p.id === replacementId);
+                if (replacement) {
+                    App.setActiveProject({
+                        id: replacement.id,
+                        name: replacement.name,
+                        code: replacement.code,
+                        program_id: replacement.program_id || currentProgram.id,
+                    });
+                } else {
+                    App.setActiveProject(null);
+                }
+            }
+            App.closeModal();
+            App.toast('Default project replaced and old default deleted', 'success');
+            await openDetail(currentProgram.id);
+            if (App.getActiveProgram() && App.getActiveProgram().id === currentProgram.id) {
+                App.setActiveProgram(App.getActiveProgram(), { silent: true });
+            }
+        } catch (err) {
+            App.toast(err.message, 'error');
+        }
+    }
+
 
     // ═════════════════════════════════════════════════════════════════════
     // UTILITIES
@@ -817,5 +1067,8 @@ const ProgramView = (() => {
         showWorkstreamModal, handleWorkstreamSubmit, deleteWorkstream,
         showTeamModal, handleTeamSubmit, deleteTeamMember,
         showCommitteeModal, handleCommitteeSubmit, deleteCommittee,
+        showProjectModal, handleProjectSubmit, deleteProject,
+        confirmDefaultProjectReplacement, selectProject,
+        _filterCards,
     };
 })();

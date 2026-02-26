@@ -39,9 +39,9 @@ const PGIcon = (() => {
     };
 
     /**
-     * SVG HTML string döndür.
+     * Return SVG HTML string.
      * @param {string} name — ICONS map key
-     * @param {number} [size=16] — px cinsinden width/height
+     * @param {number} [size=16] — width/height in px
      * @returns {string} SVG HTML or ''
      */
     function html(name, size) {

@@ -667,6 +667,50 @@ tr.clickable-row:hover {
     gap: 12px;
 }
 
+/* Cutover modal form helpers (migrated from JS-injected styles) */
+.cutover-modal-body {
+    max-height: 65vh;
+    overflow-y: auto;
+}
+
+.fiori-field { margin-bottom: 14px; }
+.fiori-field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--sap-text-secondary);
+    margin-bottom: 5px;
+    letter-spacing: 0.3px;
+}
+
+.fiori-field input,
+.fiori-field select,
+.fiori-field textarea {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--sap-border);
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: inherit;
+    background: var(--sap-card-bg);
+    color: var(--sap-text-primary);
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.fiori-field input:focus,
+.fiori-field select:focus,
+.fiori-field textarea:focus {
+    outline: none;
+    border-color: var(--sap-blue);
+    box-shadow: 0 0 0 3px rgba(0,112,242,0.12);
+}
+
+.fiori-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
 .form-actions {
     display: flex;
     justify-content: flex-end;
@@ -756,7 +800,7 @@ tr.clickable-row:hover {
 .tabs {
     display: flex;
     gap: 0;
-    border-bottom: 2px solid var(--border);
+    border-bottom: 2px solid var(--sap-border);
     margin-bottom: 0;
 }
 
@@ -768,7 +812,7 @@ tr.clickable-row:hover {
     cursor: pointer;
     font-size: var(--fs-base);
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--sap-text-secondary);
     transition: all 0.2s;
     margin-bottom: -2px;
 }
@@ -795,7 +839,7 @@ tr.clickable-row:hover {
     font-size: var(--fs-md);
     font-weight: 700;
     margin-bottom: 12px;
-    color: var(--text-primary);
+    color: var(--sap-text-primary);
 }
 
 .detail-list {
@@ -807,7 +851,7 @@ tr.clickable-row:hover {
 .detail-list dt {
     font-weight: 600;
     font-size: var(--fs-sm);
-    color: var(--text-secondary);
+    color: var(--sap-text-secondary);
 }
 
 .detail-list dd {
@@ -817,7 +861,7 @@ tr.clickable-row:hover {
 
 /* ── Phase Card ───────────────────────────────────────────────────────── */
 .phase-card {
-    border: 1px solid var(--border);
+    border: 1px solid var(--sap-border);
     border-radius: 8px;
     margin-bottom: 16px;
     overflow: hidden;
@@ -845,8 +889,8 @@ tr.clickable-row:hover {
 
 .gates-section {
     padding: 12px 16px;
-    border-top: 1px solid var(--border);
-    background: var(--bg-secondary);
+    border-top: 1px solid var(--sap-border);
+    background: var(--sap-bg);
 }
 
 /* ── Completion Bar ───────────────────────────────────────────────────── */
@@ -854,7 +898,7 @@ tr.clickable-row:hover {
     display: inline-block;
     width: 80px;
     height: 8px;
-    background: var(--border);
+    background: var(--sap-border);
     border-radius: 4px;
     overflow: hidden;
     vertical-align: middle;
@@ -5081,6 +5125,253 @@ button[disabled].btn--perm-blocked {
     .health-grid { grid-template-columns: 1fr; }
     .metrics-grid { grid-template-columns: repeat(2, 1fr); }
     .obs-tabs .tab-btn { padding: 0.5rem 0.8rem; font-size: 0.85rem; }
+}
+
+/* ══════════════════════════════════════════════════════════════ */
+/*  Hypercare War Room — Professional Dashboard (FDD-B03)        */
+/* ══════════════════════════════════════════════════════════════ */
+
+/* Status bar header */
+.hc-status-bar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 20px; margin-bottom: 16px;
+    background: var(--sap-card-bg, #fff);
+    border-radius: var(--radius, 8px);
+    box-shadow: var(--shadow, 0 1px 3px rgba(0,0,0,.08));
+    border-left: 4px solid var(--hc-health-color, #22c55e);
+}
+.hc-status-bar__health {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--hc-health-color, #22c55e);
+    flex-shrink: 0;
+    box-shadow: 0 0 6px var(--hc-health-color, #22c55e);
+}
+.hc-status-bar__phase { font-weight: 600; font-size: 15px; color: var(--sap-text-primary, #32363a); }
+.hc-status-bar__meta {
+    display: flex; gap: 16px; align-items: center;
+    margin-left: auto; font-size: 13px; color: var(--sap-text-secondary, #6a6d70);
+}
+.hc-status-bar__badge {
+    background: var(--sap-bg, #f5f6f7); padding: 4px 10px;
+    border-radius: 4px; font-weight: 600; font-size: 12px;
+    color: var(--sap-text-primary, #32363a);
+}
+
+/* KPI grid — 4 columns → 2 → 1 */
+.hc-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.hc-kpi {
+    background: var(--sap-card-bg, #fff);
+    border-radius: var(--radius, 8px);
+    padding: 16px 14px;
+    box-shadow: var(--shadow, 0 1px 3px rgba(0,0,0,.08));
+    text-align: center;
+    border-top: 3px solid transparent;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.hc-kpi:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+.hc-kpi--p1 { border-top-color: #dc2626; background: #fef2f2; }
+.hc-kpi--p2 { border-top-color: #e76500; background: #fff7ed; }
+.hc-kpi--p3 { border-top-color: #ca8a04; }
+.hc-kpi--p4 { border-top-color: #0070f2; }
+.hc-kpi--sla-alert { border-top-color: #dc2626; background: #fef2f2; }
+.hc-kpi__value {
+    font-size: 28px; font-weight: 800; line-height: 1;
+    letter-spacing: -1px; color: var(--sap-text-primary, #32363a);
+}
+.hc-kpi__label {
+    font-size: 12px; font-weight: 500; margin-top: 6px;
+    color: var(--sap-text-secondary, #6a6d70);
+    text-transform: uppercase; letter-spacing: 0.5px;
+}
+.hc-kpi__value--red { color: #dc2626; }
+.hc-kpi__value--orange { color: #e76500; }
+.hc-kpi__value--green { color: #16a34a; }
+
+/* Escalation alerts panel */
+.hc-esc-panel { margin-bottom: 16px; }
+.hc-esc-panel__header {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 8px; font-size: 14px; font-weight: 600;
+    color: var(--sap-text-primary, #32363a);
+}
+.hc-esc-alert {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; margin-bottom: 6px;
+    background: var(--sap-card-bg, #fff);
+    border-radius: 6px;
+    border-left: 3px solid #eab308;
+    box-shadow: var(--shadow, 0 1px 3px rgba(0,0,0,.08));
+    font-size: 13px;
+}
+.hc-esc-alert--critical { border-left-color: #dc2626; background: #fef2f2; }
+
+/* Exit readiness widget */
+.hc-exit-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+}
+.hc-exit-header__left { display: flex; align-items: center; gap: 8px; }
+.hc-exit-header__actions { display: flex; gap: 8px; }
+.hc-exit-progress {
+    height: 10px; border-radius: 5px;
+    background: #e2e8f0; overflow: hidden; margin: 10px 0;
+}
+.hc-exit-progress__bar {
+    height: 100%; border-radius: 5px;
+    transition: width 0.5s ease;
+}
+.hc-exit-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 8px;
+}
+.hc-exit-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; border-radius: 6px;
+    background: var(--sap-bg, #f5f6f7); font-size: 13px;
+}
+.hc-exit-icon { font-weight: bold; font-size: 14px; flex-shrink: 0; }
+.hc-exit-icon--met { color: #16a34a; }
+.hc-exit-icon--partial { color: #ca8a04; }
+.hc-exit-icon--not-met { color: #dc2626; }
+
+/* ── War Room Overview Widget ─────────────────────────────────────── */
+.hc-wr-overview {
+    background: var(--sap-card-bg, #fff);
+    border: 1px solid var(--sap-border, #d9d9d9);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+}
+.hc-wr-overview h4 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--sap-text-primary, #32363a);
+}
+.hc-wr-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border-left: 3px solid var(--sap-border, #d9d9d9);
+    margin-bottom: 6px;
+    background: var(--sap-bg, #f5f6f7);
+    font-size: 13px;
+    transition: background .15s ease;
+    cursor: pointer;
+}
+.hc-wr-row:hover { background: #eef1f5; }
+.hc-wr-row:last-child { margin-bottom: 0; }
+.hc-wr-row--p1 { border-left-color: #dc2626; background: #fef2f2; }
+.hc-wr-row--p1:hover { background: #fde8e8; }
+.hc-wr-row--p2 { border-left-color: #e76500; background: #fff7ed; }
+.hc-wr-row--p2:hover { background: #ffeed8; }
+.hc-wr-row__name {
+    font-weight: 600;
+    color: var(--sap-text-primary, #32363a);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.hc-wr-row__stats {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--sap-text-secondary, #6a6d70);
+    flex-shrink: 0;
+    margin-left: 12px;
+}
+
+/* ── War Room Cards Grid ──────────────────────────────────────────── */
+.hc-wr-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+    margin-top: 12px;
+}
+.hc-wr-card {
+    background: var(--sap-card-bg, #fff);
+    border: 1px solid var(--sap-border, #d9d9d9);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: box-shadow .15s ease, transform .15s ease;
+    cursor: pointer;
+}
+.hc-wr-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,.1);
+}
+.hc-wr-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px 8px;
+    border-bottom: 1px solid var(--sap-border, #d9d9d9);
+}
+.hc-wr-card__name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--sap-text-primary, #32363a);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+.hc-wr-card__body {
+    padding: 10px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--sap-text-secondary, #6a6d70);
+}
+.hc-wr-card__body .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 60px;
+}
+.hc-wr-card__body .stat-item .stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--sap-text-primary, #32363a);
+}
+.hc-wr-card__body .stat-item .stat-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.hc-wr-card__footer {
+    padding: 8px 16px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--sap-text-secondary, #6a6d70);
+    border-top: 1px solid #f0f0f0;
+}
+
+@media (max-width: 900px) {
+    .hc-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .hc-status-bar { flex-wrap: wrap; }
+    .hc-status-bar__meta { margin-left: 0; width: 100%; }
+    .hc-wr-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+    .hc-kpi-grid { grid-template-columns: 1fr; }
+    .hc-wr-row { flex-direction: column; align-items: flex-start; gap: 4px; }
+    .hc-wr-row__stats { margin-left: 0; }
 }
 
 /* ══════════════════════════════════════════════════════════════ */

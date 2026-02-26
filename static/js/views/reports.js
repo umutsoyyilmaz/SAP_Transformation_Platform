@@ -40,15 +40,15 @@ const ReportsView = (() => {
         const prog = App.getActiveProgram();
 
         if (!prog) {
-            main.innerHTML = PGEmptyState.html({ icon: 'reports', title: 'Program Seçilmedi', description: 'Raporları görüntülemek için önce bir program seç.', action: { label: 'Programlara Git', onclick: "App.navigate('programs')" } });
+            main.innerHTML = PGEmptyState.html({ icon: 'reports', title: 'No Program Selected', description: 'Select a program first to view reports.', action: { label: 'Go to Programs', onclick: "App.navigate('programs')" } });
             return;
         }
 
         main.innerHTML = `
             <div class="pg-view-header">
-                ${PGBreadcrumb.html([{ label: 'Raporlar' }])}
+                ${PGBreadcrumb.html([{ label: 'Reports' }])}
                 <div style="display:flex;justify-content:space-between;align-items:center">
-                    <h2 class="pg-view-title">Raporlar — ${esc(prog.name)}</h2>
+                    <h2 class="pg-view-title">Reports — ${esc(prog.name)}</h2>
                     <div style="display:flex;gap:var(--pg-sp-2)">
                         <button class="pg-btn pg-btn--ghost pg-btn--sm" onclick="ReportsView.exportXlsx()">Excel</button>
                         <button class="pg-btn pg-btn--ghost pg-btn--sm" onclick="ReportsView.exportPdf()">Print</button>
@@ -315,7 +315,7 @@ const ReportsView = (() => {
             const resp = await API.get(`/reports/definitions?program_id=${prog.id}`);
             const defs = resp.definitions || [];
             if (defs.length === 0) {
-                container.innerHTML = PGEmptyState.html({ icon: 'reports', title: 'Kayıtlı Rapor Yok', description: 'Katalogdan bir preset raporu çalıştır ve kaydet.' });
+                container.innerHTML = PGEmptyState.html({ icon: 'reports', title: 'No Saved Reports', description: 'Run a preset report from the catalog and save it.' });
                 return;
             }
             container.innerHTML = `

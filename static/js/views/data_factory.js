@@ -28,9 +28,9 @@ const DataFactoryView = (() => {
     }
 
     function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
-    function fmtNum(n) { return (n ?? 0).toLocaleString('tr-TR'); }
+    function fmtNum(n) { return (n ?? 0).toLocaleString('en-US'); }
     function fmtPct(n) { return n != null ? n.toFixed(1) + '%' : '—'; }
-    function fmtDate(d) { return d ? new Date(d).toLocaleDateString('tr-TR') : '—'; }
+    function fmtDate(d) { return d ? new Date(d).toLocaleDateString('en-US') : '—'; }
     function fmtStatus(s) { return (s || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); }
     function qualityClass(score) {
         if (score == null) return 'badge-secondary';

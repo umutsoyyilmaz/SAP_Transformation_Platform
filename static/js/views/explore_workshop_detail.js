@@ -1,6 +1,6 @@
 /**
  * Explore Phase — Workshop Detail View
- * Faz 3 — Full rewrite fixing 7 critical bugs:
+ * Phase 3 — Full rewrite fixing 7 critical bugs:
  *   BUG-1: fitDecisions.update → wrong endpoint → now uses POST /fit-decisions
  *   BUG-2: Decision/OI/Req creation lost process_step_id → now uses processSteps.addX
  *   BUG-3: openItems.list(pid) fetched ALL project OIs → now uses getFull() single call

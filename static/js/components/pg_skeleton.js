@@ -1,9 +1,9 @@
-/* UI-S02-T04 — PGSkeleton: Yükleme skeleton animasyonu */
+/* UI-S02-T04 — PGSkeleton: Loading skeleton animation */
 const PGSkeleton = (() => {
     /**
-     * Tek satır skeleton bloğu.
-     * @param {number} [widthPct=100] — Genişlik (%)
-     * @param {number} [heightPx=14] — Yükseklik (px)
+     * Single row skeleton block.
+     * @param {number} [widthPct=100] — Width (%)
+     * @param {number} [heightPx=14] — Height (px)
      * @returns {string} HTML
      */
     function line(widthPct, heightPx) {
@@ -13,9 +13,9 @@ const PGSkeleton = (() => {
     }
 
     /**
-     * Tablo satır skeleton'ı.
-     * @param {number} [rows=5] — Satır sayısı
-     * @param {number} [cols=4] — Kolon sayısı
+     * Table row skeleton.
+     * @param {number} [rows=5] — Row count
+     * @param {number} [cols=4] — Column count
      * @returns {string} HTML
      */
     function table(rows, cols) {
@@ -45,7 +45,7 @@ const PGSkeleton = (() => {
     }
 
     /**
-     * KPI kartları için grid skeleton (N adet card).
+     * Grid skeleton for KPI cards (N cards).
      * @param {number} [count=4]
      * @returns {string} HTML
      */

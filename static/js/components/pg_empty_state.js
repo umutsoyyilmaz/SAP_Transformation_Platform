@@ -1,14 +1,14 @@
-/* UI-S02-T03 — PGEmptyState: Standart boş durum UI */
+/* UI-S02-T03 — PGEmptyState: Standard empty state UI */
 const PGEmptyState = (() => {
     /**
-     * Standart boş durum UI bileşeni.
-     * İkon + başlık + açıklama + opsiyonel CTA butonu.
+     * Standard empty state UI component.
+     * Icon + title + description + optional CTA button.
      *
      * @param {Object} opts
      * @param {string} [opts.icon='programs'] — PGIcon key
-     * @param {string} opts.title — Başlık (zorunlu)
-     * @param {string} [opts.description] — Açıklama metni
-     * @param {{ label: string, onclick: string }} [opts.action] — CTA butonu
+     * @param {string} opts.title — Title (required)
+     * @param {string} [opts.description] — Description text
+     * @param {{ label: string, onclick: string }} [opts.action] — CTA button
      * @returns {string} HTML string
      */
     function html(opts) {

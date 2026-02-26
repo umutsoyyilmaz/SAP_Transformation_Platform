@@ -111,11 +111,11 @@ const TransportsView = (() => {
         (w) => `
       <tr data-wave-id="${w.id}">
         <td>${_escHtml(w.name)}</td>
-        <td><span class="badge bg-primary">${_escHtml(w.target_system)}</span></td>
+        <td><span class="badge" style="background:var(--sap-blue);color:#fff">${_escHtml(w.target_system)}</span></td>
         <td>${w.planned_date || "—"}</td>
-        <td><span class="badge bg-secondary">${_escHtml(w.status)}</span></td>
+        <td><span class="badge" style="background:#6a6d70;color:#fff">${_escHtml(w.status)}</span></td>
         <td>
-          <button class="btn btn-sm btn-outline-info" onclick="TransportsView.loadWaveStatus(${w.id})">
+          <button class="btn btn-sm btn-secondary" onclick="TransportsView.loadWaveStatus(${w.id})">
             View Status
           </button>
         </td>
@@ -123,7 +123,7 @@ const TransportsView = (() => {
       )
       .join("");
     container.innerHTML = `
-      <table class="table table-hover">
+      <table class="data-table">
         <thead><tr>
           <th>Wave Name</th><th>Target System</th>
           <th>Planned Date</th><th>Status</th><th>Actions</th>
@@ -142,8 +142,8 @@ const TransportsView = (() => {
     if (!container) return;
     const { wave, transports, total, status_counts, is_complete } = statusData;
     const statusBadge = is_complete
-      ? '<span class="badge bg-success">Complete</span>'
-      : '<span class="badge bg-warning text-dark">In Progress</span>';
+      ? '<span class="badge" style="background:var(--sap-positive);color:#fff">Complete</span>'
+      : '<span class="badge" style="background:var(--sap-warning);color:#fff">In Progress</span>';
     const rows = transports
       .map(
         (t) => `
@@ -151,20 +151,20 @@ const TransportsView = (() => {
         <td><code>${_escHtml(t.transport_number)}</code></td>
         <td>${_escHtml(t.transport_type)}</td>
         <td>${_escHtml(t.current_system)}</td>
-        <td><span class="badge bg-secondary">${_escHtml(t.status)}</span></td>
+        <td><span class="badge" style="background:#6a6d70;color:#fff">${_escHtml(t.status)}</span></td>
         <td>${t.latest_import ? `${t.latest_import.status} @ ${t.latest_import.system}` : "—"}</td>
       </tr>`
       )
       .join("");
     container.innerHTML = `
-      <div class="card mt-3">
-        <div class="card-header d-flex justify-content-between align-items-center">
+      <div class="card" style="margin-top:12px">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
           <strong>${_escHtml(wave.name)} → ${_escHtml(wave.target_system)}</strong>
           ${statusBadge}
         </div>
-        <div class="card-body">
-          <p class="mb-1">Total transports: <strong>${total}</strong></p>
-          <table class="table table-sm">
+        <div style="padding:12px 0">
+          <p style="margin:0 0 6px;">Total transports: <strong>${total}</strong></p>
+          <table class="data-table" style="font-size:13px">
             <thead><tr>
               <th>Transport #</th><th>Type</th><th>Current System</th>
               <th>Status</th><th>Latest Import</th>
@@ -321,10 +321,10 @@ const TransportsView = (() => {
         <td><code>${_escHtml(t.transport_number)}</code></td>
         <td>${_escHtml(t.transport_type)}</td>
         <td>${_escHtml(t.sap_module || "—")}</td>
-        <td><span class="badge bg-primary">${_escHtml(t.current_system)}</span></td>
-        <td><span class="badge bg-secondary">${_escHtml(t.status)}</span></td>
+        <td><span class="badge" style="background:var(--sap-blue);color:#fff">${_escHtml(t.current_system)}</span></td>
+        <td><span class="badge" style="background:#6a6d70;color:#fff">${_escHtml(t.status)}</span></td>
         <td>
-          <button class="btn btn-sm btn-outline-secondary"
+          <button class="btn btn-sm btn-secondary"
             onclick="TransportsView.openTransportDetail(${t.id})">
             Details
           </button>
@@ -333,7 +333,7 @@ const TransportsView = (() => {
       )
       .join("");
     container.innerHTML = `
-      <table class="table table-hover">
+      <table class="data-table">
         <thead><tr>
           <th>Transport #</th><th>Type</th><th>Module</th>
           <th>Current System</th><th>Status</th><th>Actions</th>
@@ -375,7 +375,7 @@ const TransportsView = (() => {
       <tr>
         <td>${_escHtml(ev.system)}</td>
         <td>${ev.imported_at ? ev.imported_at.replace("T", " ").slice(0, 19) : "—"}</td>
-        <td><span class="badge ${ev.status === "imported" ? "bg-success" : "bg-danger"}">${ev.status}</span></td>
+        <td><span class="badge" style="background:${ev.status === "imported" ? 'var(--sap-positive)' : 'var(--sap-negative)'};color:#fff">${ev.status}</span></td>
         <td>${ev.return_code != null ? ev.return_code : "—"}</td>
       </tr>`
       )
@@ -384,22 +384,22 @@ const TransportsView = (() => {
       .map((id) => `<li>${id}</li>`)
       .join("");
     container.innerHTML = `
-      <div class="card mt-3">
+      <div class="card" style="margin-top:12px">
         <div class="card-header">
           <strong><code>${_escHtml(transport.transport_number)}</code></strong>
           — ${_escHtml(transport.transport_type)}
-          <span class="badge bg-primary ms-2">${_escHtml(transport.current_system)}</span>
+          <span class="badge" style="background:var(--sap-blue);color:#fff;margin-left:8px">${_escHtml(transport.current_system)}</span>
         </div>
-        <div class="card-body">
+        <div style="padding:12px 0">
           <p><strong>Description:</strong> ${_escHtml(transport.description || "—")}</p>
           <p><strong>SAP Module:</strong> ${_escHtml(transport.sap_module || "—")}</p>
           <p><strong>Status:</strong> ${_escHtml(transport.status)}</p>
-          <h6 class="mt-3">Linked Backlog Items</h6>
+          <h6 style="margin-top:12px">Linked Backlog Items</h6>
           ${backlogList ? `<ul>${backlogList}</ul>` : '<p class="text-muted">None linked.</p>'}
-          <h6 class="mt-3">Import Log</h6>
+          <h6 style="margin-top:12px">Import Log</h6>
           ${
             logRows
-              ? `<table class="table table-sm">
+              ? `<table class="data-table" style="font-size:13px">
                   <thead><tr><th>System</th><th>Imported At</th><th>Status</th><th>RC</th></tr></thead>
                   <tbody>${logRows}</tbody>
                 </table>`
@@ -436,18 +436,18 @@ const TransportsView = (() => {
     const container = document.getElementById("coveragePanel");
     if (!container) return;
     const pct = coverage.coverage_pct ?? 0;
-    const barColor = pct >= 80 ? "bg-success" : pct >= 50 ? "bg-warning" : "bg-danger";
+    const barColor = pct >= 80 ? "var(--sap-positive)" : pct >= 50 ? "var(--sap-warning)" : "var(--sap-negative)";
     container.innerHTML = `
       <div class="card">
         <div class="card-header">Transport Coverage</div>
-        <div class="card-body">
-          <div class="progress mb-2" style="height:20px;">
-            <div class="progress-bar ${barColor}" style="width:${pct}%;">${pct}%</div>
+        <div style="padding:12px 0">
+          <div style="height:20px;background:#e5e7eb;border-radius:6px;overflow:hidden;margin-bottom:8px;">
+            <div style="width:${pct}%;height:100%;background:${barColor};color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;">${pct}%</div>
           </div>
-          <p class="mb-1">
+          <p style="margin:0 0 6px;">
             ${coverage.with_transport} / ${coverage.total_backlog_items} backlog items have a transport assigned.
           </p>
-          <p class="text-muted mb-0">
+          <p class="text-muted" style="margin:0;">
             ${coverage.without_transport} items still need a transport.
           </p>
         </div>

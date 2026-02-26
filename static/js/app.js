@@ -21,8 +21,10 @@ const App = (() => {
 
     // ── View registry ────────────────────────────────────────────────────
     const views = {
-        dashboard:    () => renderDashboard(),
+        dashboard:    () => DashboardView.render(),
+        'dashboard-f5': () => DashboardView.render(),  // backward compat alias
         'executive-cockpit': () => ExecutiveCockpitView.render(),
+        'my-projects': () => MyProjectsView.render(),
         programs:     () => ProgramView.render(),
         // Legacy SCOPE views removed — FE-Sprint 1
         backlog:      () => BacklogView.render(),
@@ -36,7 +38,6 @@ const App = (() => {
         cutover:      () => CutoverView.render(),
         raid:         () => RaidView.render(),
         reports:      () => ReportsView.render(),
-        'dashboard-f5': () => DashboardView.render(),
         'suite-folders': () => SuiteFoldersView.render(),
         'env-matrix': () => EnvMatrixView.render(),
         'bdd-editor': () => BddEditorView.render(),
@@ -64,45 +65,224 @@ const App = (() => {
         'knowledge-base':           () => KnowledgeBaseView.init(window.currentTenantId),
     };
 
-    let currentView = 'dashboard';
+    let currentView = 'programs';
+    let _programOptions = [];
+    let _projectOptions = [];
+    let _contextEvents = [];
 
     // ── Program Context ─────────────────────────────────────────────────
     // Views that require a program to be selected
     const programRequiredViews = new Set([
+        'dashboard', 'dashboard-f5',
         'executive-cockpit',
         'backlog', 'test-planning', 'test-execution', 'defect-management', 'approvals', 'integration', 'data-factory', 'cutover', 'raid',
         'test-case-detail',
-        'reports', 'dashboard-f5', 'suite-folders', 'env-matrix', 'bdd-editor', 'data-driven', 'exploratory', 'evidence', 'custom-fields', 'integrations', 'observability', 'gate-criteria', 'project-setup', 'ai-insights', 'ai-query', 'discover', 'timeline', 'raci', 'hypercare',
+        'reports', 'suite-folders', 'env-matrix', 'bdd-editor', 'data-driven', 'exploratory', 'evidence', 'custom-fields', 'integrations', 'observability', 'gate-criteria', 'project-setup', 'ai-insights', 'ai-query', 'discover', 'timeline', 'raci', 'hypercare',
         'explore-dashboard', 'explore-hierarchy', 'explore-workshops', 'explore-workshop-detail', 'explore-requirements',
     ]);
+
+    const projectAwareViews = new Set([
+        'project-setup',
+        'explore-dashboard', 'explore-hierarchy', 'explore-workshops', 'explore-workshop-detail', 'explore-requirements',
+        'test-planning', 'test-execution', 'defect-management',
+        'cutover', 'hypercare', 'integration', 'data-factory',
+    ]);
+
+    function _isProjectRequiredView(viewName) {
+        // Project Setup is the project-selection gateway; it must stay reachable
+        // with program-only context. Programs view is always reachable.
+        if (!viewName || viewName === 'programs' || viewName === 'project-setup') return false;
+        return projectAwareViews.has(viewName);
+    }
+
+    function _currentTenantId() {
+        const user = (typeof Auth !== 'undefined' && Auth.getUser) ? Auth.getUser() : null;
+        return user ? user.tenant_id : null;
+    }
+
+    function _safeInt(value) {
+        if (value === null || value === undefined || value === '') return null;
+        const parsed = Number.parseInt(String(value), 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    }
+
+    function _trackContextEvent(type, details = {}) {
+        const payload = {
+            type,
+            details,
+            ts: new Date().toISOString(),
+        };
+        _contextEvents.push(payload);
+        if (_contextEvents.length > 100) _contextEvents = _contextEvents.slice(-100);
+        if (typeof Analytics !== 'undefined' && typeof Analytics.track === 'function') {
+            try {
+                Analytics.track('invalid_context_event', payload);
+            } catch {
+                // No-op: telemetry failures must never break context resolution.
+            }
+        }
+    }
+
+    function _readContextFromUrl() {
+        const params = new URLSearchParams(window.location.search || '');
+        const hasProgramParam = params.has('program_id');
+        const hasProjectParam = params.has('project_id');
+        const rawProgramId = params.get('program_id');
+        const rawProjectId = params.get('project_id');
+        return {
+            hasProgramParam,
+            hasProjectParam,
+            rawProgramId,
+            rawProjectId,
+            programId: _safeInt(rawProgramId),
+            projectId: _safeInt(rawProjectId),
+        };
+    }
+
+    function _syncUrlContext(options = {}) {
+        const replace = options.replace !== false;
+        const program = getActiveProgram();
+        const project = getActiveProject();
+        const params = new URLSearchParams(window.location.search || '');
+
+        if (program) params.set('program_id', String(program.id));
+        else params.delete('program_id');
+
+        if (project) params.set('project_id', String(project.id));
+        else params.delete('project_id');
+
+        const query = params.toString();
+        const nextUrl = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash || ''}`;
+        if (replace) window.history.replaceState({}, '', nextUrl);
+        else window.history.pushState({}, '', nextUrl);
+    }
 
     function getActiveProgram() {
         const stored = localStorage.getItem('sap_active_program');
         if (!stored) return null;
-        try { return JSON.parse(stored); } catch { return null; }
+        try {
+            const program = JSON.parse(stored);
+            const currentTenantId = _currentTenantId();
+            // Prevent cross-tenant context leakage from stale localStorage.
+            if (program) {
+                // Legacy payloads without tenant_id are unsafe after tenant switches.
+                if (!Object.prototype.hasOwnProperty.call(program, 'tenant_id')) {
+                    localStorage.removeItem('sap_active_program');
+                    return null;
+                }
+                if (program.tenant_id !== currentTenantId) {
+                    localStorage.removeItem('sap_active_program');
+                    return null;
+                }
+            }
+            return program;
+        } catch {
+            return null;
+        }
     }
 
-    function setActiveProgram(program) {
+    function getActiveProject() {
+        const stored = localStorage.getItem('sap_active_project');
+        if (!stored) return null;
+        try {
+            const project = JSON.parse(stored);
+            const currentTenantId = _currentTenantId();
+            if (!project || project.tenant_id !== currentTenantId) {
+                localStorage.removeItem('sap_active_project');
+                return null;
+            }
+            const activeProgram = getActiveProgram();
+            if (!activeProgram || project.program_id !== activeProgram.id) {
+                localStorage.removeItem('sap_active_project');
+                return null;
+            }
+            return project;
+        } catch {
+            localStorage.removeItem('sap_active_project');
+            return null;
+        }
+    }
+
+    function _syncGlobalContext() {
+        const prog = getActiveProgram();
+        const project = getActiveProject();
+        window.currentProgramId = prog ? prog.id : null;
+        window.currentProjectId = project ? project.id : null;
+        App.state = {
+            programId: prog ? prog.id : null,
+            currentProgramId: prog ? prog.id : null,
+            projectId: project ? project.id : null,
+            currentProjectId: project ? project.id : null,
+        };
+    }
+
+    function setActiveProject(project, options = {}) {
+        const activeProgram = getActiveProgram();
+        if (project && activeProgram && project.program_id !== activeProgram.id) {
+            localStorage.removeItem('sap_active_project');
+        } else if (project) {
+            localStorage.setItem('sap_active_project', JSON.stringify({
+                id: project.id,
+                name: project.name,
+                code: project.code,
+                program_id: project.program_id,
+                tenant_id: _currentTenantId(),
+            }));
+        } else {
+            localStorage.removeItem('sap_active_project');
+        }
+        _syncGlobalContext();
+        updateContextIndicators();
+        renderContextBanner();
+        if (options.syncUrl !== false) _syncUrlContext({ replace: true });
+        if (
+            project &&
+            activeProgram &&
+            typeof MyProjectsView !== 'undefined' &&
+            typeof MyProjectsView.recordRecentContext === 'function'
+        ) {
+            MyProjectsView.recordRecentContext(activeProgram.id, project.id);
+        }
+    }
+
+    function setActiveProgram(program, options = {}) {
+        const previousProgram = getActiveProgram();
         if (program) {
             localStorage.setItem('sap_active_program', JSON.stringify({
                 id: program.id,
                 name: program.name,
                 status: program.status,
                 project_type: program.project_type,
+                tenant_id: _currentTenantId(),
             }));
         } else {
             localStorage.removeItem('sap_active_program');
         }
-        updateProgramBadge();
+        const activeProject = getActiveProject();
+        if (!program || !activeProject || activeProject.program_id !== program.id) {
+            localStorage.removeItem('sap_active_project');
+        }
+        _syncGlobalContext();
+        updateContextIndicators();
         updateSidebarState();
+        loadProjectOptions(program ? program.id : null);
+        renderContextBanner();
+        if (options.syncUrl !== false) _syncUrlContext({ replace: true });
         // Refresh team member cache for new program
         TeamMemberPicker.invalidateCache();
+        if (!options.silent && program && (!previousProgram || previousProgram.id !== program.id)) {
+            toast(`Context switched to program "${program.name}"`, 'info');
+        }
     }
 
-    function updateProgramBadge() {
+    function updateContextIndicators() {
         const prog = getActiveProgram();
+        const project = getActiveProject();
         const nameEl = document.getElementById('activeProgramName');
         const badge = document.getElementById('activeProgramBadge');
+        const sidebarProgram = document.getElementById('sidebarActiveProgramName');
+        const sidebarProject = document.getElementById('sidebarActiveProjectName');
+
         if (prog) {
             nameEl.textContent = prog.name;
             badge.classList.add('shell-header__program-badge--active');
@@ -112,14 +292,156 @@ const App = (() => {
             badge.classList.remove('shell-header__program-badge--active');
             badge.title = 'Click to select a program';
         }
+        if (sidebarProgram) sidebarProgram.textContent = prog ? prog.name : '—';
+        if (sidebarProject) sidebarProject.textContent = project ? project.name : '—';
+    }
+
+    function _buildSelectOptions(items, valueKey = 'id', labelBuilder = (x) => x.name) {
+        return ['<option value="">Select</option>'].concat(
+            items.map(item => `<option value="${esc(item[valueKey])}">${esc(labelBuilder(item))}</option>`)
+        ).join('');
+    }
+
+    async function loadProgramOptions() {
+        try {
+            const list = await API.get('/programs');
+            _programOptions = Array.isArray(list) ? list : [];
+        } catch {
+            _programOptions = [];
+        }
+        renderContextSelectors();
+    }
+
+    async function loadProjectOptions(programId) {
+        if (!programId) {
+            _projectOptions = [];
+            renderContextSelectors();
+            return;
+        }
+        try {
+            const list = await API.get(`/programs/${programId}/projects`);
+            _projectOptions = Array.isArray(list) ? list : [];
+        } catch {
+            _projectOptions = [];
+        }
+        const activeProject = getActiveProject();
+        if (activeProject && !_projectOptions.some(p => Number(p.id) === Number(activeProject.id))) {
+            setActiveProject(null);
+            toast('Selected project no longer belongs to this program. Please select again.', 'warning');
+        }
+        renderContextSelectors();
+    }
+
+    async function _resolveContextFromUrlOnBoot() {
+        const parsed = _readContextFromUrl();
+        const hasAnyContextParam = parsed.hasProgramParam || parsed.hasProjectParam;
+        if (!hasAnyContextParam) return;
+
+        if (parsed.hasProgramParam && parsed.rawProgramId && parsed.programId === null) {
+            _trackContextEvent('invalid_program_param', { value: parsed.rawProgramId });
+            toast('Invalid program_id in URL. Stored context was used instead.', 'warning');
+        }
+        if (parsed.hasProjectParam && parsed.rawProjectId && parsed.projectId === null) {
+            _trackContextEvent('invalid_project_param', { value: parsed.rawProjectId });
+            toast('Invalid project_id in URL. Please select a valid project.', 'warning');
+        }
+        if (!parsed.programId && parsed.projectId) {
+            _trackContextEvent('invalid_context_missing_program', { project_id: parsed.projectId });
+            toast('project_id requires a valid program_id. Please select a program.', 'warning');
+            _syncUrlContext({ replace: true });
+            return;
+        }
+
+        if (parsed.programId) {
+            const urlProgram = _programOptions.find((p) => Number(p.id) === Number(parsed.programId)) || null;
+            if (!urlProgram) {
+                _trackContextEvent('program_not_found_or_unauthorized', { program_id: parsed.programId });
+                toast('Program in URL is not available for your tenant. Fallback applied.', 'warning');
+                _syncUrlContext({ replace: true });
+                return;
+            }
+            setActiveProgram(urlProgram, { silent: true, syncUrl: false });
+            await loadProjectOptions(urlProgram.id);
+        }
+
+        if (parsed.projectId) {
+            const urlProject = _projectOptions.find((p) => Number(p.id) === Number(parsed.projectId)) || null;
+            if (!urlProject) {
+                _trackContextEvent('project_not_found_or_mismatch', {
+                    program_id: parsed.programId,
+                    project_id: parsed.projectId,
+                });
+                setActiveProject(null, { syncUrl: false });
+                toast('Project in URL is invalid for selected program. Please choose a valid project.', 'warning');
+                _syncUrlContext({ replace: true });
+                return;
+            }
+            setActiveProject(urlProject, { syncUrl: false });
+        }
+
+        _syncUrlContext({ replace: true });
+    }
+
+    function renderContextSelectors() {
+        const programSelect = document.getElementById('headerProgramSelect');
+        const projectSelect = document.getElementById('headerProjectSelect');
+        if (!programSelect || !projectSelect) return;
+
+        const activeProgram = getActiveProgram();
+        const activeProject = getActiveProject();
+
+        programSelect.innerHTML = _buildSelectOptions(
+            _programOptions,
+            'id',
+            (p) => p.name || `Program ${p.id}`
+        );
+        programSelect.value = activeProgram ? String(activeProgram.id) : '';
+
+        projectSelect.disabled = !activeProgram;
+        projectSelect.innerHTML = _buildSelectOptions(
+            _projectOptions,
+            'id',
+            (p) => `${p.code || 'PRJ'} - ${p.name || `Project ${p.id}`}`
+        );
+        projectSelect.value = activeProject ? String(activeProject.id) : '';
+    }
+
+    function bindContextSelectorEvents() {
+        const programSelect = document.getElementById('headerProgramSelect');
+        const projectSelect = document.getElementById('headerProjectSelect');
+        if (!programSelect || !projectSelect) return;
+
+        programSelect.addEventListener('change', async (event) => {
+            const id = Number(event.target.value) || null;
+            const selected = _programOptions.find((p) => Number(p.id) === id) || null;
+            setActiveProgram(selected);
+            if (!selected) {
+                toast('Program context cleared', 'info');
+                return;
+            }
+            await loadProjectOptions(selected.id);
+        });
+
+        projectSelect.addEventListener('change', (event) => {
+            const id = Number(event.target.value) || null;
+            const selected = _projectOptions.find((p) => Number(p.id) === id) || null;
+            setActiveProject(selected);
+            if (selected) {
+                toast(`Project "${selected.name}" selected`, 'success');
+            } else {
+                toast('Project selection cleared', 'info');
+            }
+        });
     }
 
     function updateSidebarState() {
         const hasProgram = !!getActiveProgram();
+        const hasProject = !!getActiveProject();
         document.querySelectorAll('.sidebar__item').forEach(item => {
             const view = item.dataset.view;
             if (programRequiredViews.has(view)) {
-                item.classList.toggle('sidebar__item--disabled', !hasProgram);
+                const disabled = !hasProgram || (_isProjectRequiredView(view) && !hasProject);
+                item.classList.toggle('sidebar__item--disabled', disabled);
             }
         });
 
@@ -133,6 +455,40 @@ const App = (() => {
         if (suggDropdown && !hasProgram) suggDropdown.style.display = 'none';
     }
 
+    function renderContextBanner() {
+        const main = document.getElementById('mainContent');
+        if (!main) return;
+        const existing = document.getElementById('contextGuardBanner');
+        if (existing) existing.remove();
+
+        if (currentView === 'programs') return;
+        if (!programRequiredViews.has(currentView)) return;
+
+        const program = getActiveProgram();
+        const project = getActiveProject();
+        const banner = document.createElement('div');
+        banner.id = 'contextGuardBanner';
+        banner.className = 'context-guard-banner';
+
+        if (!program) {
+            banner.innerHTML = `
+                <span>Program context is missing. Select a program to continue safely.</span>
+                <button onclick="App.navigate('programs')">Select Program</button>
+            `;
+        } else if (!project && _isProjectRequiredView(currentView)) {
+            banner.innerHTML = `
+                <span>Program: <strong>${esc(program.name)}</strong>. Project is required for this screen.</span>
+                <button onclick="document.getElementById('headerProjectSelect')?.focus()">Select Project</button>
+            `;
+        } else {
+            banner.innerHTML = `
+                <span>Context: <strong>${esc(program.name)}</strong> / <strong>${esc(project ? project.name : 'No project')}</strong></span>
+                <button onclick="App.navigate('programs')">Change</button>
+            `;
+        }
+        main.prepend(banner);
+    }
+
     // ── Navigation ───────────────────────────────────────────────────────
     function navigate(viewName, ...args) {
         if (!views[viewName]) return;
@@ -141,6 +497,11 @@ const App = (() => {
         if (programRequiredViews.has(viewName) && !getActiveProgram()) {
             toast('Please select a program first', 'warning');
             navigate('programs');
+            return;
+        }
+        if (_isProjectRequiredView(viewName) && !getActiveProject()) {
+            toast('Please select a project first', 'warning');
+            navigate('project-setup');
             return;
         }
 
@@ -156,6 +517,7 @@ const App = (() => {
 
         // Render the view
         views[viewName](...args);
+        renderContextBanner();
 
         // Page transition animation (UI-S09-T04)
         const main = document.getElementById('mainContent');
@@ -164,131 +526,6 @@ const App = (() => {
             void main.offsetWidth; // force reflow to restart animation
             main.classList.add('pg-view-enter');
         }
-    }
-
-    // ── Dashboard ────────────────────────────────────────────────────────
-    async function renderDashboard() {
-        const main = document.getElementById('mainContent');
-        main.innerHTML = `
-            <div class="pg-view-header">
-                ${PGBreadcrumb.html([{ label: 'Dashboard' }])}
-                <h2 class="pg-view-title">Dashboard</h2>
-            </div>
-            <div id="dashboard-grid" class="pg-dashboard-grid">
-                ${PGSkeleton.card()}${PGSkeleton.card()}${PGSkeleton.card()}
-            </div>
-        `;
-
-        try {
-            const [summary, actions, recent] = await Promise.all([
-                API.get('/dashboard/summary'),
-                API.get('/dashboard/actions'),
-                API.get('/dashboard/recent-activity'),
-            ]);
-            _renderDashboardContent(summary, actions, recent);
-        } catch (err) {
-            document.getElementById('dashboard-grid').innerHTML =
-                PGEmptyState.html({ icon: 'dashboard', title: 'Veri yüklenemedi', description: err.message });
-        }
-    }
-
-    function _renderDashboardContent(summary, actions, recent) {
-        const score = summary.health_score || 0;
-        const scoreColor = score >= 75 ? '#16a34a' : score >= 50 ? '#ca8a04' : '#dc2626';
-        const circumference = Math.round(2 * Math.PI * 34);
-
-        document.getElementById('dashboard-grid').innerHTML = `
-            <!-- Health Score Card -->
-            <div class="pg-dash-card pg-dash-card--health">
-                <div class="pg-dash-card__header">Program Sağlığı</div>
-                <div class="pg-health-score">
-                    <svg class="pg-health-score__ring" viewBox="0 0 80 80">
-                        <circle cx="40" cy="40" r="34" fill="none" stroke="var(--pg-color-border)" stroke-width="6"/>
-                        <circle cx="40" cy="40" r="34" fill="none" stroke="${scoreColor}" stroke-width="6"
-                            stroke-dasharray="${Math.round(circumference * score / 100)} ${Math.round(circumference * (1 - score / 100))}"
-                            stroke-dashoffset="${Math.round(circumference * 0.25)}"
-                            stroke-linecap="round"/>
-                        <text x="40" y="40" dominant-baseline="middle" text-anchor="middle"
-                            font-size="16" font-weight="700" fill="${scoreColor}">${score}</text>
-                    </svg>
-                    <div class="pg-health-score__meta">
-                        <span style="color:${scoreColor};font-weight:700">${_healthLabel(score)}</span>
-                        <span class="pg-health-score__items">${summary.requirements || 0} gereksinim · ${Math.round(summary.test_coverage || 0)}% test</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- KPI Cards -->
-            <div class="pg-dash-kpis">
-                ${_kpi('Gereksinim', summary.requirements, 'requirements', 'requirements')}
-                ${_kpi('WRICEF', summary.wricef_items, 'backlog', 'build')}
-                ${_kpi('Test Case', summary.test_cases, 'test-management', 'test')}
-                ${_kpi('Defect', summary.open_defects, 'defects', 'defect')}
-                ${_kpi('RAID', summary.open_risks, 'raid', 'raid')}
-            </div>
-
-            <!-- Actions -->
-            <div class="pg-dash-card pg-dash-card--actions">
-                <div class="pg-dash-card__header">Aksiyon Gerektiren</div>
-                ${!actions.length
-                    ? '<p class="pg-dash-empty">Bekleyen aksiyon yok 🎉</p>'
-                    : actions.slice(0, 5).map(a => `
-                        <div class="pg-dash-action" onclick="App.navigate('${a.view}')">
-                            <span class="pg-dash-action__icon">${PGStatusRegistry.badge(a.severity || 'warning')}</span>
-                            <span class="pg-dash-action__text">${esc(a.message)}</span>
-                            <span class="pg-dash-action__arrow">→</span>
-                        </div>
-                    `).join('')
-                }
-            </div>
-
-            <!-- Recent Activity -->
-            <div class="pg-dash-card pg-dash-card--activity">
-                <div class="pg-dash-card__header">Son Aktivite <span class="pg-dash-card__meta">24 saat</span></div>
-                ${!recent.length
-                    ? '<p class="pg-dash-empty">Aktivite bulunamadı</p>'
-                    : recent.slice(0, 8).map(r => `
-                        <div class="pg-dash-activity-row">
-                            <div class="pg-dash-activity-row__avatar">${(r.user_name || 'U')[0].toUpperCase()}</div>
-                            <div class="pg-dash-activity-row__body">
-                                <span class="pg-dash-activity-row__user">${esc(r.user_name || 'Sistem')}</span>
-                                <span class="pg-dash-activity-row__action">${esc(r.action)}</span>
-                                <span class="pg-dash-activity-row__object">${esc(r.object_code || '')}</span>
-                            </div>
-                            <span class="pg-dash-activity-row__time">${_relTime(r.created_at)}</span>
-                        </div>
-                    `).join('')
-                }
-            </div>
-        `;
-    }
-
-    function _kpi(label, value, view, icon) {
-        return `
-            <div class="pg-kpi-card" onclick="App.navigate('${view}')" role="button" tabindex="0">
-                <div class="pg-kpi-card__icon">${typeof PGIcon !== 'undefined' ? PGIcon.html(icon, 20) : ''}</div>
-                <div class="pg-kpi-card__value">${value ?? '–'}</div>
-                <div class="pg-kpi-card__label">${label}</div>
-            </div>
-        `;
-    }
-
-    function _healthLabel(score) {
-        if (score >= 85) return 'Mükemmel';
-        if (score >= 70) return 'İyi';
-        if (score >= 50) return 'Orta';
-        return 'İyileştirme Gerekli';
-    }
-
-    function _relTime(iso) {
-        if (!iso) return '';
-        const diff = Date.now() - new Date(iso).getTime();
-        const mins = Math.floor(diff / 60000);
-        if (mins < 1) return 'Az önce';
-        if (mins < 60) return `${mins}d önce`;
-        const hrs = Math.floor(mins / 60);
-        if (hrs < 24) return `${hrs}s önce`;
-        return `${Math.floor(hrs / 24)}g önce`;
     }
 
     // ── Placeholder for future modules ───────────────────────────────────
@@ -324,7 +561,7 @@ const App = (() => {
     }
 
     // ── Init ─────────────────────────────────────────────────────────────
-    function init() {
+    async function init() {
         // Sidebar click handlers
         document.querySelectorAll('.sidebar__item').forEach(item => {
             item.addEventListener('click', () => {
@@ -376,9 +613,19 @@ const App = (() => {
             RoleNav.preload();
         }
 
-        // Set up program context from localStorage
-        updateProgramBadge();
+        // Set up program/project context from localStorage
+        _syncGlobalContext();
+        updateContextIndicators();
         updateSidebarState();
+        bindContextSelectorEvents();
+        await loadProgramOptions();
+        await _resolveContextFromUrlOnBoot();
+        const activeProgram = getActiveProgram();
+        if (activeProgram) {
+            await loadProjectOptions(activeProgram.id);
+        } else {
+            await loadProjectOptions(null);
+        }
 
         // Initialize sidebar collapse (UI-S03-T03)
         initSidebarCollapse();
@@ -390,7 +637,7 @@ const App = (() => {
         }
 
         // Render default view
-        navigate('dashboard');
+        navigate('programs');
     }
 
     // ── Sidebar Collapse (UI-S03-T03) ─────────────────────────────
@@ -485,6 +732,12 @@ const App = (() => {
     return {
         navigate, toast, openModal, closeModal,
         getActiveProgram, setActiveProgram,
-        updateProgramBadge, updateSidebarState,
+        getActiveProject, setActiveProject,
+        syncUrlContext: _syncUrlContext,
+        getContextEvents: () => _contextEvents.slice(),
+        updateProgramBadge: updateContextIndicators,
+        updateSidebarState,
+        renderContextBanner,
+        state: {},
     };
 })();

@@ -21,7 +21,7 @@ var ExploratoryView = (function () {
   }
   function escHtml(s) { const d = document.createElement("div"); d.textContent = s || ""; return d.innerHTML; }
   function fmtDate(d) { return d ? new Date(d).toLocaleString() : "—"; }
-  function fmtDuration(min) { return min != null ? `${min} dk` : "—"; }
+  function fmtDuration(min) { return min != null ? `${min} min` : "—"; }
 
   /* ── render ── */
   function render() {
@@ -32,17 +32,17 @@ var ExploratoryView = (function () {
         <div class="f8-sidebar" id="f8-session-list"></div>
         <div class="f8-main">
           <div class="f8-toolbar">
-            <button class="btn btn-primary" id="f8-new-session">+ Yeni Oturum</button>
+            <button class="btn btn-primary" id="f8-new-session">+ New Session</button>
             <select id="f8-status-filter" class="form-select f8-filter">
-              <option value="">Tümü</option>
-              <option value="draft">Taslak</option>
-              <option value="active">Aktif</option>
-              <option value="paused">Duraklatıldı</option>
-              <option value="completed">Tamamlandı</option>
+              <option value="">All</option>
+              <option value="draft">Draft</option>
+              <option value="active">Active</option>
+              <option value="paused">Paused</option>
+              <option value="completed">Completed</option>
             </select>
           </div>
           <div id="f8-detail" class="f8-detail">
-            <p class="f8-empty">Oturum seçin veya yeni oluşturun</p>
+            <p class="f8-empty">Select a session or create a new one</p>
           </div>
         </div>
       </div>`;
@@ -63,7 +63,7 @@ var ExploratoryView = (function () {
   function renderSessionList(sessions) {
     const el = $("#f8-session-list");
     if (!sessions.length) {
-      el.innerHTML = '<p class="f8-empty-sidebar">Oturum yok</p>';
+      el.innerHTML = '<p class="f8-empty-sidebar">No sessions</p>';
       return;
     }
     el.innerHTML = sessions.map(s => `
@@ -99,11 +99,11 @@ var ExploratoryView = (function () {
         <h3>${escHtml(s.charter)}</h3>
         <div class="f8-actions">
           ${s.status === "draft" || s.status === "paused" ?
-            `<button class="btn btn-success btn-sm" id="f8-start">▶ Başlat</button>` : ""}
+            `<button class="btn btn-success btn-sm" id="f8-start">▶ Start</button>` : ""}
           ${s.status === "active" ?
-            `<button class="btn btn-warning btn-sm" id="f8-pause">⏸ Duraklat</button>` : ""}
+            `<button class="btn btn-warning btn-sm" id="f8-pause">⏸ Pause</button>` : ""}
           ${s.status === "active" || s.status === "paused" ?
-            `<button class="btn btn-danger btn-sm" id="f8-complete">⏹ Bitir</button>` : ""}
+            `<button class="btn btn-danger btn-sm" id="f8-complete">⏹ Stop</button>` : ""}
           <button class="btn btn-outline btn-sm" id="f8-edit-session">✏️</button>
           <button class="btn btn-outline btn-sm f8-del" id="f8-delete-session">🗑️</button>
         </div>
@@ -111,16 +111,16 @@ var ExploratoryView = (function () {
       <div class="f8-timer-row">
         <div class="f8-timer" id="f8-timer">00:00:00</div>
         <div class="f8-meta-grid">
-          <span>Kapsam: ${escHtml(s.scope)}</span>
-          <span>Süre Kutusu: ${s.time_box || 60} dk</span>
-          <span>Ortam: ${escHtml(s.environment)}</span>
-          <span>Test Eden: ${escHtml(s.tester_name)}</span>
-          ${s.actual_duration != null ? `<span>Gerçek Süre: ${fmtDuration(s.actual_duration)}</span>` : ""}
+          <span>Scope: ${escHtml(s.scope)}</span>
+          <span>Time Box: ${s.time_box || 60} min</span>
+          <span>Environment: ${escHtml(s.environment)}</span>
+          <span>Tester: ${escHtml(s.tester_name)}</span>
+          ${s.actual_duration != null ? `<span>Actual Duration: ${fmtDuration(s.actual_duration)}</span>` : ""}
         </div>
       </div>
       <div class="f8-tabs">
-        <button class="f8-tab active" data-tab="notes">Notlar</button>
-        <button class="f8-tab" data-tab="summary">Özet</button>
+        <button class="f8-tab active" data-tab="notes">Notes</button>
+        <button class="f8-tab" data-tab="summary">Summary</button>
       </div>
       <div class="f8-tab-content" id="f8-tab-content"></div>`;
 
@@ -176,10 +176,10 @@ var ExploratoryView = (function () {
   }
 
   function deleteSession() {
-    if (!confirm("Oturumu silmek istediğinize emin misiniz?")) return;
+    if (!confirm("Are you sure you want to delete this session?")) return;
     api("DELETE", `/exploratory-sessions/${currentSession.id}`).then(() => {
       currentSession = null;
-      $("#f8-detail").innerHTML = '<p class="f8-empty">Oturum seçin veya yeni oluşturun</p>';
+      $("#f8-detail").innerHTML = '<p class="f8-empty">Select a session or create a new one</p>';
       loadSessions();
     });
   }
@@ -197,18 +197,18 @@ var ExploratoryView = (function () {
     el.innerHTML = `
       <div class="f8-note-input">
         <select id="f8-note-type" class="form-select f8-note-type-sel">
-          <option value="observation">🔍 Gözlem</option>
-          <option value="bug">🐛 Hata</option>
-          <option value="question">❓ Soru</option>
-          <option value="idea">💡 Fikir</option>
+          <option value="observation">🔍 Observation</option>
+          <option value="bug">🐛 Bug</option>
+          <option value="question">❓ Question</option>
+          <option value="idea">💡 Idea</option>
         </select>
         <input type="text" id="f8-note-text" class="form-input f8-note-field"
-               placeholder="Not ekle… (Enter ile kaydet)">
-        <button class="btn btn-primary btn-sm" id="f8-add-note">Ekle</button>
+               placeholder="Add note… (press Enter to save)">
+        <button class="btn btn-primary btn-sm" id="f8-add-note">Add</button>
       </div>
       <div class="f8-notes-list" id="f8-notes-list">
         ${notes.length ? notes.map(n => noteCard(n)).join("") :
-          '<p class="f8-empty">Henüz not yok</p>'}
+          '<p class="f8-empty">No notes yet</p>'}
       </div>`;
 
     $("#f8-add-note").onclick = addNote;
@@ -259,23 +259,23 @@ var ExploratoryView = (function () {
     const ideas = notes.filter(n => n.note_type === "idea").length;
     el.innerHTML = `
       <div class="f8-summary">
-        <div class="f8-summary-stat"><span>🐛</span><strong>${bugs}</strong> Hata</div>
-        <div class="f8-summary-stat"><span>🔍</span><strong>${observations}</strong> Gözlem</div>
-        <div class="f8-summary-stat"><span>❓</span><strong>${questions}</strong> Soru</div>
-        <div class="f8-summary-stat"><span>💡</span><strong>${ideas}</strong> Fikir</div>
+        <div class="f8-summary-stat"><span>🐛</span><strong>${bugs}</strong> Bugs</div>
+        <div class="f8-summary-stat"><span>🔍</span><strong>${observations}</strong> Observations</div>
+        <div class="f8-summary-stat"><span>❓</span><strong>${questions}</strong> Questions</div>
+        <div class="f8-summary-stat"><span>💡</span><strong>${ideas}</strong> Ideas</div>
       </div>
       <div class="f8-summary-detail">
-        <p><strong>Başlangıç:</strong> ${fmtDate(s.started_at)}</p>
-        <p><strong>Bitiş:</strong> ${fmtDate(s.ended_at)}</p>
-        <p><strong>Süre:</strong> ${fmtDuration(s.actual_duration)}</p>
-        <p><strong>Durum:</strong> ${s.status}</p>
-        <p><strong>Notlar:</strong> ${escHtml(s.notes)}</p>
+        <p><strong>Start:</strong> ${fmtDate(s.started_at)}</p>
+        <p><strong>End:</strong> ${fmtDate(s.ended_at)}</p>
+        <p><strong>Duration:</strong> ${fmtDuration(s.actual_duration)}</p>
+        <p><strong>Status:</strong> ${s.status}</p>
+        <p><strong>Notes:</strong> ${escHtml(s.notes)}</p>
       </div>`;
   }
 
   /* ── create / edit modals ── */
   function showCreateModal() {
-    showModal("Yeni Keşif Oturumu", {}, data => {
+    showModal("New Exploratory Session", {}, data => {
       api("POST", `/programs/${currentProgramId}/exploratory-sessions`, data).then(d => {
         if (d.session) {
           currentSession = d.session;
@@ -288,7 +288,7 @@ var ExploratoryView = (function () {
   }
 
   function showEditModal() {
-    showModal("Oturumu Düzenle", currentSession, data => {
+    showModal("Edit Session", currentSession, data => {
       api("PUT", `/exploratory-sessions/${currentSession.id}`, data).then(d => {
         if (d.session) {
           currentSession = d.session;
@@ -306,19 +306,19 @@ var ExploratoryView = (function () {
     overlay.innerHTML = `
       <div class="f8-modal">
         <h3>${title}</h3>
-        <label>Charter (Amaç) *</label>
+        <label>Charter (Purpose) *</label>
         <input id="f8m-charter" class="form-input" value="${escHtml(defaults.charter || "")}">
-        <label>Kapsam</label>
+        <label>Scope</label>
         <input id="f8m-scope" class="form-input" value="${escHtml(defaults.scope || "")}">
-        <label>Süre Kutusu (dk)</label>
+        <label>Time Box (min)</label>
         <input id="f8m-timebox" type="number" class="form-input" value="${defaults.time_box || 60}">
-        <label>Test Eden</label>
+        <label>Tester</label>
         <input id="f8m-tester" class="form-input" value="${escHtml(defaults.tester_name || "")}">
-        <label>Ortam</label>
+        <label>Environment</label>
         <input id="f8m-env" class="form-input" value="${escHtml(defaults.environment || "")}">
         <div class="f8-modal-actions">
-          <button class="btn btn-primary" id="f8m-save">Kaydet</button>
-          <button class="btn btn-outline" id="f8m-cancel">İptal</button>
+          <button class="btn btn-primary" id="f8m-save">Save</button>
+          <button class="btn btn-outline" id="f8m-cancel">Cancel</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);

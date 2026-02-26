@@ -2,10 +2,10 @@
  * pg_shortcuts.js — UI-S07-T02
  *
  * PGShortcuts — Global keyboard shortcut registry.
- * View'lar mount edildiğinde shortcut ekler, unmount olduğunda kaldırır.
+ * Adds shortcuts when views are mounted, removes them when unmounted.
  *
- * Kullanım:
- *   PGShortcuts.register('ctrl+s', () => saveForm(), 'Kaydet');
+ * Usage:
+ *   PGShortcuts.register('ctrl+s', () => saveForm(), 'Save');
  *   PGShortcuts.unregister('ctrl+s');
  */
 const PGShortcuts = (() => {
@@ -31,7 +31,7 @@ const PGShortcuts = (() => {
     }
 
     document.addEventListener('keydown', e => {
-        // Input alanlarında ve komut paleti açıkken çalıştırma
+        // Do not run in input fields or when command palette is open
         if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
         if (document.querySelector('.pg-palette')) return;
 
@@ -44,12 +44,12 @@ const PGShortcuts = (() => {
 })();
 
 // ── Default shortcuts ────────────────────────────────────────────────────
-PGShortcuts.register('g',       () => { /* sequence prefix — handled by pg_command_palette */ }, 'G — Navigasyon prefix');
+PGShortcuts.register('g',       () => { /* sequence prefix — handled by pg_command_palette */ }, 'G — Navigation prefix');
 PGShortcuts.register('g d',     () => navigate('dashboard'),       'G D — Dashboard');
-PGShortcuts.register('g p',     () => navigate('programs'),        'G P — Programlar');
-PGShortcuts.register('g r',     () => navigate('requirements'),    'G R — Gereksinimler');
+PGShortcuts.register('g p',     () => navigate('programs'),        'G P — Programs');
+PGShortcuts.register('g r',     () => navigate('requirements'),    'G R — Requirements');
 PGShortcuts.register('g w',     () => navigate('backlog'),         'G W — WRICEF Backlog');
-PGShortcuts.register('g t',     () => navigate('test-management'), 'G T — Test Yönetimi');
-PGShortcuts.register('g b',     () => navigate('defects'),         'G B — Defect İzleyici');
+PGShortcuts.register('g t',     () => navigate('test-management'), 'G T — Test Management');
+PGShortcuts.register('g b',     () => navigate('defects'),         'G B — Defect Tracker');
 PGShortcuts.register('g l',     () => navigate('raid'),            'G L — RAID Log');
-PGShortcuts.register('?',       () => typeof PGShortcutHelp !== 'undefined' && PGShortcutHelp.toggle(), '? — Kısayol yardımı');
+PGShortcuts.register('?',       () => typeof PGShortcutHelp !== 'undefined' && PGShortcutHelp.toggle(), '? — Shortcut help');

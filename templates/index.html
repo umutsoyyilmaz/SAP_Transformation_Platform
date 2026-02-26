@@ -59,6 +59,20 @@
                 <span id="activeProgramName">No program selected</span>
                 <span class="shell-header__program-switch">⟳</span>
             </div>
+            <div class="shell-context-selector" id="shellContextSelector">
+                <label class="shell-context-selector__field" for="headerProgramSelect">
+                    <span class="shell-context-selector__label">Program</span>
+                    <select id="headerProgramSelect" class="shell-context-selector__select">
+                        <option value="">Select program</option>
+                    </select>
+                </label>
+                <label class="shell-context-selector__field" for="headerProjectSelect">
+                    <span class="shell-context-selector__label">Project</span>
+                    <select id="headerProjectSelect" class="shell-context-selector__select">
+                        <option value="">Select project</option>
+                    </select>
+                </label>
+            </div>
         </div>
         <div class="pg-header__center">
             <!-- Global search trigger -->
@@ -109,9 +123,19 @@
         <button class="sidebar__collapse-btn" id="sidebarCollapseBtn" title="Toggle sidebar">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
+        <div class="sidebar__context" id="sidebarContextPanel">
+            <div class="sidebar__context-row">
+                <span class="sidebar__context-key">Program</span>
+                <span class="sidebar__context-value" id="sidebarActiveProgramName">—</span>
+            </div>
+            <div class="sidebar__context-row">
+                <span class="sidebar__context-key">Project</span>
+                <span class="sidebar__context-value" id="sidebarActiveProjectName">—</span>
+            </div>
+        </div>
 
-        <div class="sidebar__section-title">Program Management</div>
-        <div class="sidebar__item active" data-view="dashboard">
+        <div class="sidebar__section-title">Workspace</div>
+        <div class="sidebar__item" data-view="dashboard">
             <span class="sidebar__item-icon" data-pg-icon="dashboard"></span>
             <span class="sidebar__label">Dashboard</span>
         </div>
@@ -119,14 +143,22 @@
             <span class="sidebar__item-icon" data-pg-icon="cockpit"></span>
             <span class="sidebar__label">Executive Cockpit</span>
         </div>
-        <div class="sidebar__item" data-view="programs">
+
+        <div class="sidebar__section-title">Program Management</div>
+        <div class="sidebar__item active" data-view="programs">
             <span class="sidebar__item-icon" data-pg-icon="programs"></span>
             <span class="sidebar__label">Programs</span>
+        </div>
+        <div class="sidebar__item" data-view="my-projects">
+            <span class="sidebar__item-icon" data-pg-icon="projects"></span>
+            <span class="sidebar__label">My Projects</span>
         </div>
         <div class="sidebar__item" data-view="project-setup">
             <span class="sidebar__item-icon" data-pg-icon="setup"></span>
             <span class="sidebar__label">Project Setup</span>
         </div>
+
+        <div class="sidebar__section-title">Governance</div>
         <div class="sidebar__item" data-view="raid">
             <span class="sidebar__item-icon" data-pg-icon="raid"></span>
             <span class="sidebar__label">RAID</span>
@@ -135,11 +167,6 @@
             <span class="sidebar__item-icon" data-pg-icon="reports"></span>
             <span class="sidebar__label">Reports</span>
         </div>
-        <div class="sidebar__item" data-view="dashboard-f5">
-            <span class="sidebar__item-icon" data-pg-icon="dashboard"></span>
-            <span class="sidebar__label">Dashboard</span>
-        </div>
-
         <div class="sidebar__section-title">Discover Phase</div>
         <div class="sidebar__item" data-view="discover">
             <span class="sidebar__item-icon" data-pg-icon="setup"></span>
@@ -151,11 +178,7 @@
         </div>
         <div class="sidebar__item" data-view="raci">
             <span class="sidebar__item-icon" data-pg-icon="teams"></span>
-            <span>RACI Matris</span>
-        </div>
-        <div class="sidebar__item" data-view="hypercare">
-            <span class="sidebar__item-icon" data-pg-icon="radar"></span>
-            <span>Hypercare</span>
+            <span>RACI Matrix</span>
         </div>
 
         <div class="sidebar__section-title">Explore Phase</div>
@@ -211,6 +234,10 @@
             <span class="sidebar__item-icon" data-pg-icon="cutover"></span>
             <span class="sidebar__label">Cutover Hub</span>
         </div>
+        <div class="sidebar__item" data-view="hypercare">
+            <span class="sidebar__item-icon" data-pg-icon="radar"></span>
+            <span class="sidebar__label">Hypercare</span>
+        </div>
 
         <div class="sidebar__section-title">AI Assistant</div>
         <div class="sidebar__item" data-view="ai-insights">
@@ -244,9 +271,9 @@
     <!-- ── JavaScript ──────────────────────────────────────────────────── -->
     <script src="/static/js/error-handler.js"></script>
     <script src="/static/js/constants.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+    <script src="/static/vendor/chart.umd.min.js" defer></script>
     <!-- frappe-gantt (MIT) — program timeline view -->
-    <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js" defer></script>
+    <script src="/static/vendor/frappe-gantt.min.js" defer></script>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/api.js"></script>
     <!-- pg-* components load before views so all views can use them -->
@@ -327,6 +354,7 @@
     <script src="/static/js/views/raci.js"></script>
     <script src="/static/js/views/hypercare.js"></script>
     <script src="/static/js/views/project_setup.js"></script>
+    <script src="/static/js/views/my_projects.js"></script>
     <script src="/static/js/app.js"></script>
     <script src="/static/js/pwa.js"></script>
     <script src="/static/js/mobile.js"></script>

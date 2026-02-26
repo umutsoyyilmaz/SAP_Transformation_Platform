@@ -249,6 +249,9 @@ body.is-offline .main-content {
     .shell-header__program-switch {
         display: none;
     }
+    .shell-context-selector {
+        display: none;
+    }
 
     /* Cards/grids go single-column */
     .scenario-grid,

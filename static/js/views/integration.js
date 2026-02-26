@@ -50,7 +50,7 @@ const IntegrationView = (() => {
         _pid = prog ? prog.id : null;
 
         if (!_pid) {
-            main.innerHTML = PGEmptyState.html({ icon: 'integration', title: 'Integration Factory', description: 'Devam etmek için önce bir program seç.', action: { label: 'Programlara Git', onclick: "App.navigate('programs')" } });
+            main.innerHTML = PGEmptyState.html({ icon: 'integration', title: 'Integration Factory', description: 'Select a program first to continue.', action: { label: 'Go to Programs', onclick: "App.navigate('programs')" } });
             return;
         }
 
@@ -115,7 +115,7 @@ const IntegrationView = (() => {
     // ══════════════════════════════════════════════════════════════════════
     function renderInventory(c) {
         if (_interfaces.length === 0) {
-            c.innerHTML = PGEmptyState.html({ icon: 'integration', title: 'Henüz Interface Yok', description: 'İlk interface\'i oluşturmak için + New Interface butonuna tıkla.', action: { label: '+ New Interface', onclick: 'IntegrationView.showCreateInterface()' } });
+            c.innerHTML = PGEmptyState.html({ icon: 'integration', title: 'No Interfaces Yet', description: 'Click + New Interface button to create your first interface.', action: { label: '+ New Interface', onclick: 'IntegrationView.showCreateInterface()' } });
             return;
         }
 

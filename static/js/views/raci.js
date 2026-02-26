@@ -27,10 +27,10 @@ const RaciView = (() => {
 
     /** Human-readable role labels shown in the legend */
     const ROLE_LABELS = {
-        R: "Responsible (Sorumlu)",
-        A: "Accountable (Yetkili)",
-        C: "Consulted (Danışılan)",
-        I: "Informed (Bilgilendirilen)",
+        R: "Responsible",
+        A: "Accountable",
+        C: "Consulted",
+        I: "Informed",
     };
 
     const SAP_PHASE_ORDER = ["discover", "prepare", "explore", "realize", "deploy", "run"];
@@ -115,12 +115,12 @@ const RaciView = (() => {
         let html = "";
         if (noA && noA.length > 0) {
             html += `<div class="raci-warning raci-warning--yellow" title="${escHtml(noA.join(', '))}">
-                ⚠ ${noA.length} aktivite için Accountable (A) atanmamış.
+                ⚠ ${noA.length} activities without Accountable (A) assignment.
             </div>`;
         }
         if (noR && noR.length > 0) {
             html += `<div class="raci-warning raci-warning--red" title="${escHtml(noR.join(', '))}">
-                ✗ ${noR.length} aktivite için Responsible (R) atanmamış.
+                ✗ ${noR.length} activities without Responsible (R) assignment.
             </div>`;
         }
         const banner = container.querySelector(".raci-validation-banners");
@@ -166,7 +166,7 @@ const RaciView = (() => {
                     const cellStyle = color
                         ? `background:${color.bg};color:${color.text};cursor:pointer;`
                         : "cursor:pointer;";
-                    const cellTitle = role ? `${ROLE_LABELS[role]}` : "Atanmadı — tıkla atamak için";
+                    const cellTitle = role ? `${ROLE_LABELS[role]}` : "Not assigned — click to assign";
                     rowsHtml += `<td class="raci-cell"
                         data-activity-id="${act.id}"
                         data-member-id="${mem.id}"
@@ -181,7 +181,7 @@ const RaciView = (() => {
             });
         });
 
-        tbody.innerHTML = rowsHtml || '<tr><td colspan="99" class="raci-empty">Aktivite yok. "SAP Şablonunu Yükle" butonuna tıklayın.</td></tr>';
+        tbody.innerHTML = rowsHtml || '<tr><td colspan="99" class="raci-empty">No activities. Click "Load SAP Template" button.</td></tr>';
 
         // Attach click handlers to cells
         tbody.querySelectorAll(".raci-cell").forEach((cell) => {
@@ -190,7 +190,7 @@ const RaciView = (() => {
     }
 
     function buildFilterOptions(phases) {
-        let opts = '<option value="">Tüm Fazlar</option>';
+        let opts = '<option value="">All Phases</option>';
         phases.forEach((p) => {
             opts += `<option value="${escHtml(p)}">${escHtml(p.toUpperCase())}</option>`;
         });
@@ -198,7 +198,7 @@ const RaciView = (() => {
     }
 
     function buildHeaderRow(teamMembers) {
-        let th = '<th class="raci-th-activity">Aktivite</th>';
+        let th = '<th class="raci-th-activity">Activity</th>';
         teamMembers.forEach((m) => {
             th += `<th class="raci-th-member" title="${escHtml(m.role || "")}">${escHtml(m.name)}<br><span class="raci-member-role">${escHtml(m.role || "")}</span></th>`;
         });
@@ -270,7 +270,7 @@ const RaciView = (() => {
             cell.style.cssText = revertColor
                 ? `background:${revertColor.bg};color:${revertColor.text};cursor:pointer;`
                 : "cursor:pointer;";
-            alert(`Hata: ${err.message}`);
+            alert(`Error: ${err.message}`);
         });
     }
 
@@ -294,7 +294,7 @@ const RaciView = (() => {
         const programId = _prog && (_prog.id || _prog);
         if (!programId) {
             container.innerHTML = `<div class="raci-no-program">
-                <p>Lütfen önce bir program seçin.</p>
+                <p>Please select a program first.</p>
             </div>`;
             return;
         }
@@ -305,16 +305,16 @@ const RaciView = (() => {
         container.innerHTML = `
 <div class="raci-view">
     <div class="raci-header">
-        <h2 class="raci-title">RACI Matris</h2>
+        <h2 class="raci-title">RACI Matrix</h2>
         <div class="raci-toolbar">
-            <select class="raci-filter-phase" title="Faza göre filtrele">
-                <option value="">Tüm Fazlar</option>
+            <select class="raci-filter-phase" title="Filter by phase">
+                <option value="">All Phases</option>
             </select>
             <button class="btn btn-secondary btn-sm raci-btn-import" type="button">
-                📥 SAP Şablonunu Yükle
+                📥 Load SAP Template
             </button>
             <button class="btn btn-secondary btn-sm raci-btn-refresh" type="button">
-                🔄 Yenile
+                🔄 Refresh
             </button>
         </div>
     </div>
@@ -324,7 +324,7 @@ const RaciView = (() => {
         <span class="raci-legend-item" style="background:#ef4444;color:#fff;">A</span> Accountable &nbsp;
         <span class="raci-legend-item" style="background:#22c55e;color:#fff;">C</span> Consulted &nbsp;
         <span class="raci-legend-item" style="background:#9ca3af;color:#fff;">I</span> Informed &nbsp;
-        <small style="color:#6b7280;">Hücreye tıklayarak rol atayın/değiştirin (R→A→C→I→Boş)</small>
+        <small style="color:#6b7280;">Click a cell to assign/change role (R→A→C→I→Empty)</small>
     </div>
 
     <div class="raci-validation-banners"></div>
@@ -333,7 +333,7 @@ const RaciView = (() => {
         <table class="raci-table">
             <thead class="raci-matrix-thead"><tr></tr></thead>
             <tbody class="raci-matrix-tbody">
-                <tr><td colspan="99" class="raci-loading">Yükleniyor…</td></tr>
+                <tr><td colspan="99" class="raci-loading">Loading…</td></tr>
             </tbody>
         </table>
     </div>
@@ -374,7 +374,7 @@ const RaciView = (() => {
                 .then((data) => fullRender(container, data))
                 .catch((err) => {
                     container.querySelector(".raci-matrix-tbody").innerHTML =
-                        `<tr><td colspan="99" style="color:red;padding:1rem;">Hata: ${escHtml(err.message)}</td></tr>`;
+                        `<tr><td colspan="99" style="color:red;padding:1rem;">Error: ${escHtml(err.message)}</td></tr>`;
                 });
         });
 
@@ -382,21 +382,21 @@ const RaciView = (() => {
         const importBtn = container.querySelector(".raci-btn-import");
         importBtn && importBtn.addEventListener("click", () => {
             importBtn.disabled = true;
-            importBtn.textContent = "Yükleniyor…";
+            importBtn.textContent = "Loading…";
             importTemplate(_state.programId)
                 .then((result) => {
                     if (result.created === 0) {
-                        alert("Tüm SAP şablon aktiviteleri zaten mevcut.");
+                        alert("All SAP template activities already exist.");
                     } else {
-                        alert(`${result.created} aktivite eklendi.`);
+                        alert(`${result.created} activities added.`);
                     }
                     return fetchMatrix(_state.programId, _state.filterPhase, _state.filterWorkstream);
                 })
                 .then((data) => fullRender(container, data))
-                .catch((err) => alert(`Hata: ${err.message}`))
+                .catch((err) => alert(`Error: ${err.message}`))
                 .finally(() => {
                     importBtn.disabled = false;
-                    importBtn.textContent = "📥 SAP Şablonunu Yükle";
+                    importBtn.textContent = "📥 Load SAP Template";
                 });
         });
 
@@ -409,7 +409,7 @@ const RaciView = (() => {
                 .then((data) => fullRender(container, data))
                 .catch((err) => {
                     container.querySelector(".raci-matrix-tbody").innerHTML =
-                        `<tr><td colspan="99" style="color:red;padding:1rem;">Yüklenemedi: ${escHtml(err.message)}</td></tr>`;
+                        `<tr><td colspan="99" style="color:red;padding:1rem;">Failed to load: ${escHtml(err.message)}</td></tr>`;
                 });
         }
 

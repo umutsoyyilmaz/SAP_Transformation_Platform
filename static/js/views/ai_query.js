@@ -22,8 +22,8 @@ const AIQueryView = (() => {
         const main = document.getElementById('mainContent');
         main.innerHTML = `
             <div class="pg-view-header">
-                ${PGBreadcrumb.html([{ label: 'AI Query Asistanı' }])}
-                <h2 class="pg-view-title">AI Query Asistanı</h2>
+                ${PGBreadcrumb.html([{ label: 'AI Query Assistant' }])}
+                <h2 class="pg-view-title">AI Query Assistant</h2>
             </div>
 
             <div class="ai-query-layout">
@@ -64,7 +64,7 @@ const AIQueryView = (() => {
                 <div class="ai-query-history card">
                     <div class="card-header"><h2>History</h2></div>
                     <div id="aiQueryHistory" class="ai-query-history-list">
-                        ${PGEmptyState.html({ icon: 'ai', title: 'Henüz sorgu yok', description: 'Yukarıdan doğal dil sorgusu çalıştır.' })}
+                        ${PGEmptyState.html({ icon: 'ai', title: 'No queries yet', description: 'Run a natural language query above.' })}
                     </div>
                 </div>
             </div>

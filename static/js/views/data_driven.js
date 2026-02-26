@@ -14,7 +14,7 @@ const DataDrivenView = (function () {
     if (!main) return;
     const programId = window.currentProgramId;
     if (!programId) {
-      main.innerHTML = '<div class="f7-empty">Lütfen önce bir program seçin.</div>';
+      main.innerHTML = '<div class="f7-empty">Please select a program first.</div>';
       return;
     }
     main.innerHTML = `
@@ -33,7 +33,7 @@ const DataDrivenView = (function () {
             <button class="f7-tab" data-tab="templates">Suite Templates</button>
           </div>
           <div id="f7dd-tab-content" class="f7-tab-content">
-            <div class="f7-empty">Sol panelden bir Test Case seçin.</div>
+            <div class="f7-empty">Select a Test Case from the left panel.</div>
           </div>
         </div>
       </div>`;
@@ -92,7 +92,7 @@ const DataDrivenView = (function () {
   /* ── Parameters ─────────────────────────────────────────────── */
   async function _renderParameters(container) {
     if (!_currentTcId) {
-      container.innerHTML = '<div class="f7-empty">TC seçin.</div>';
+      container.innerHTML = '<div class="f7-empty">Select a TC.</div>';
       return;
     }
     try {
@@ -106,10 +106,10 @@ const DataDrivenView = (function () {
         <div class="f7-params">
           <div class="f7-params-header">
             <h4>Parameters (${params.length})</h4>
-            <button id="f7dd-add-param" class="f7-btn f7-btn-primary">+ Parametre Ekle</button>
+            <button id="f7dd-add-param" class="f7-btn f7-btn-primary">+ Add Parameter</button>
           </div>
           <table class="f7-param-table">
-            <thead><tr><th>Ad</th><th>Tip</th><th>Kaynak</th><th>Değerler</th><th></th></tr></thead>
+            <thead><tr><th>Name</th><th>Type</th><th>Source</th><th>Values</th><th></th></tr></thead>
             <tbody>
               ${params.map(p => `
                 <tr>
@@ -130,14 +130,14 @@ const DataDrivenView = (function () {
         btn.addEventListener("click", () => _deleteParameter(parseInt(btn.dataset.id)));
       });
     } catch (e) {
-      container.innerHTML = '<div class="f7-empty">Yükleme hatası.</div>';
+      container.innerHTML = '<div class="f7-empty">Loading error.</div>';
     }
   }
 
   async function _addParameter() {
-    const name = prompt("Parametre adı (ör: customer_id):");
+    const name = prompt("Parameter name (e.g.: customer_id):");
     if (!name) return;
-    const valuesStr = prompt("Değerler (virgülle ayır):", "");
+    const valuesStr = prompt("Values (comma separated):", "");
     const values = valuesStr ? valuesStr.split(",").map(v => v.trim()) : [];
     await fetch(`/api/v1/testing/test-cases/${_currentTcId}/parameters`, {
       method: "POST",
@@ -158,7 +158,7 @@ const DataDrivenView = (function () {
   /* ── Data Bindings ──────────────────────────────────────────── */
   async function _renderBindings(container) {
     if (!_currentTcId) {
-      container.innerHTML = '<div class="f7-empty">TC seçin.</div>';
+      container.innerHTML = '<div class="f7-empty">Select a TC.</div>';
       return;
     }
     try {
@@ -172,7 +172,7 @@ const DataDrivenView = (function () {
         <div class="f7-bindings">
           <div class="f7-params-header">
             <h4>Data Bindings (${bindings.length})</h4>
-            <button id="f7dd-add-binding" class="f7-btn f7-btn-primary">+ Binding Ekle</button>
+            <button id="f7dd-add-binding" class="f7-btn f7-btn-primary">+ Add Binding</button>
           </div>
           <div class="f7-binding-list">
             ${bindings.map(b => `
@@ -187,8 +187,8 @@ const DataDrivenView = (function () {
                     `<div class="f7-map-row"><code>${k}</code> → <code>${v}</code></div>`
                   ).join("")}
                 </div>
-                <button class="f7-btn-sm f7-btn-danger f7-del-binding" data-id="${b.id}">Sil</button>
-              </div>`).join("") || '<div class="f7-empty">Binding yok.</div>'}
+                <button class="f7-btn-sm f7-btn-danger f7-del-binding" data-id="${b.id}">Delete</button>
+              </div>`).join("") || '<div class="f7-empty">No bindings.</div>'}
           </div>
         </div>`;
       document.getElementById("f7dd-add-binding")
@@ -197,7 +197,7 @@ const DataDrivenView = (function () {
         btn.addEventListener("click", () => _deleteBinding(parseInt(btn.dataset.id)));
       });
     } catch (e) {
-      container.innerHTML = '<div class="f7-empty">Yükleme hatası.</div>';
+      container.innerHTML = '<div class="f7-empty">Loading error.</div>';
     }
   }
 
@@ -233,7 +233,7 @@ const DataDrivenView = (function () {
           <div>
             <input type="number" id="f7dd-exec-id" class="f7-input"
                    placeholder="Execution ID" style="width:140px" />
-            <button id="f7dd-load-iter" class="f7-btn">Yükle</button>
+            <button id="f7dd-load-iter" class="f7-btn">Load</button>
             <button id="f7dd-gen-iter" class="f7-btn f7-btn-primary">Auto-Generate</button>
           </div>
         </div>
@@ -275,7 +275,7 @@ const DataDrivenView = (function () {
           </tbody>
         </table>
         <div class="f7-iter-summary">
-          Toplam: ${iters.length} |
+          Total: ${iters.length} |
           Pass: ${iters.filter(i => i.result === 'pass').length} |
           Fail: ${iters.filter(i => i.result === 'fail').length} |
           Blocked: ${iters.filter(i => i.result === 'blocked').length}
@@ -285,7 +285,7 @@ const DataDrivenView = (function () {
           parseInt(sel.dataset.id), sel.value));
       });
     } catch (e) {
-      list.innerHTML = '<div class="f7-empty">Yükleme hatası.</div>';
+      list.innerHTML = '<div class="f7-empty">Loading error.</div>';
     }
   }
 
@@ -307,13 +307,13 @@ const DataDrivenView = (function () {
       );
       const json = await resp.json();
       if (resp.ok) {
-        _showToast(`${json.count} iteration oluşturuldu`);
+        _showToast(`${json.count} iterations created`);
         _loadIterations();
       } else {
-        _showToast(json.error || "Hata", true);
+        _showToast(json.error || "Error", true);
       }
     } catch (e) {
-      _showToast("Generate hatası", true);
+      _showToast("Generate error", true);
     }
   }
 
@@ -328,7 +328,7 @@ const DataDrivenView = (function () {
         <div class="f7-templates">
           <div class="f7-params-header">
             <h4>Suite Templates (${templates.length})</h4>
-            <button id="f7dd-add-tmpl" class="f7-btn f7-btn-primary">+ Yeni Template</button>
+            <button id="f7dd-add-tmpl" class="f7-btn f7-btn-primary">+ New Template</button>
           </div>
           <div class="f7-template-list">
             ${templates.map(t => `
@@ -336,14 +336,14 @@ const DataDrivenView = (function () {
                 <div class="f7-template-info">
                   <strong>${t.name}</strong>
                   <span class="f7-badge">${t.category}</span>
-                  <span class="f7-usage">Kullanım: ${t.usage_count}</span>
+                  <span class="f7-usage">Usage: ${t.usage_count}</span>
                 </div>
                 <p>${t.description || ''}</p>
                 <div class="f7-template-actions">
                   <button class="f7-btn-sm f7-apply-tmpl" data-id="${t.id}">Apply to Program</button>
-                  <button class="f7-btn-sm f7-btn-danger f7-del-tmpl" data-id="${t.id}">Sil</button>
+                  <button class="f7-btn-sm f7-btn-danger f7-del-tmpl" data-id="${t.id}">Delete</button>
                 </div>
-              </div>`).join("") || '<div class="f7-empty">Template yok.</div>'}
+              </div>`).join("") || '<div class="f7-empty">No templates.</div>'}
           </div>
         </div>`;
       document.getElementById("f7dd-add-tmpl")
@@ -355,12 +355,12 @@ const DataDrivenView = (function () {
         btn.addEventListener("click", () => _deleteTemplate(parseInt(btn.dataset.id)));
       });
     } catch (e) {
-      container.innerHTML = '<div class="f7-empty">Yükleme hatası.</div>';
+      container.innerHTML = '<div class="f7-empty">Loading error.</div>';
     }
   }
 
   async function _addTemplate() {
-    const name = prompt("Template adı:");
+    const name = prompt("Template name:");
     if (!name) return;
     const category = prompt("Kategori (regression/smoke/integration):", "regression");
     await fetch(`/api/v1/suite-templates`, {
@@ -373,21 +373,21 @@ const DataDrivenView = (function () {
 
   async function _applyTemplate(tid) {
     const programId = window.currentProgramId;
-    if (!programId) { _showToast("Program seçin", true); return; }
+    if (!programId) { _showToast("Select a program", true); return; }
     const resp = await fetch(
       `/api/v1/suite-templates/${tid}/apply/${programId}`,
       { method: "POST", headers: { "X-User": "admin" } }
     );
     const json = await resp.json();
     if (resp.ok) {
-      _showToast(`Suite oluşturuldu: ${json.test_case_count} TC eklendi`);
+      _showToast(`Suite created: ${json.test_case_count} TCs added`);
     } else {
-      _showToast(json.error || "Hata", true);
+      _showToast(json.error || "Error", true);
     }
   }
 
   async function _deleteTemplate(tid) {
-    if (!confirm("Template silinecek?")) return;
+    if (!confirm("Template will be deleted. Continue?")) return;
     await fetch(`/api/v1/suite-templates/${tid}`, {
       method: "DELETE",
       headers: { "X-User": "admin" },

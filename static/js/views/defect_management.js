@@ -47,7 +47,7 @@ const DefectManagementView = (() => {
         const container = document.getElementById('testContent');
 
         if (defects.length === 0) {
-            container.innerHTML = PGEmptyState.html({ icon: 'defect', title: 'Kayıtlı defect yok', description: 'Bu program için henüz defect raporlanmamış.', action: { label: '+ Defect Raporla', onclick: 'DefectManagementView.showDefectModal()' } });
+            container.innerHTML = PGEmptyState.html({ icon: 'defect', title: 'No defects recorded', description: 'No defects have been reported for this program yet.', action: { label: '+ Report Defect', onclick: 'DefectManagementView.showDefectModal()' } });
             return;
         }
 
@@ -638,7 +638,7 @@ const DefectManagementView = (() => {
                 title: `${esc(d.code || 'Defect')} — ${esc(d.title)}`,
                 content: `
                     <div class="pg-panel__section">
-                        <p class="pg-panel__section-title">Sınıflandırma</p>
+                        <p class="pg-panel__section-title">Classification</p>
                         <dl class="pg-panel__dl">
                             <dt class="pg-panel__dt">Severity</dt>
                             <dd class="pg-panel__dd">${_severityBadge(d.severity)}</dd>
@@ -656,12 +656,12 @@ const DefectManagementView = (() => {
                     </div>
                     ${d.description ? `
                     <div class="pg-panel__section">
-                        <p class="pg-panel__section-title">Açıklama</p>
+                        <p class="pg-panel__section-title">Description</p>
                         <p style="font-size:13px;color:var(--pg-color-text);line-height:1.5">${esc(d.description)}</p>
                     </div>` : ''}
                     <div class="pg-panel__actions">
-                        <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="DefectManagementView.editPanelDefect();PGPanel.close()">Düzenle</button>
-                        <button class="pg-btn pg-btn--ghost pg-btn--sm" onclick="PGPanel.close()">Kapat</button>
+                        <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="DefectManagementView.editPanelDefect();PGPanel.close()">Edit</button>
+                        <button class="pg-btn pg-btn--ghost pg-btn--sm" onclick="PGPanel.close()">Close</button>
                     </div>
                 `,
             });

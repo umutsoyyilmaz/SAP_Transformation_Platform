@@ -1,26 +1,26 @@
 /**
  * pg_command_palette.js — UI-S07-T01
  *
- * PGCommandPalette — ⌘K / Ctrl+K ile açılan global komut paleti.
- * Navigation, Action ve Search komutlarını birleştirir.
+ * PGCommandPalette — Global command palette opened with ⌘K / Ctrl+K.
+ * Combines Navigation, Action, and Search commands.
  */
 const PGCommandPalette = (() => {
     'use strict';
 
     const COMMANDS = [
         // Navigation
-        { id: 'nav-dashboard',    label: "Dashboard'a git",       icon: 'dashboard',    action: () => navigate('dashboard'),         category: 'Navigasyon', shortcut: 'G D' },
-        { id: 'nav-programs',     label: 'Programlar',             icon: 'programs',     action: () => navigate('programs'),          category: 'Navigasyon', shortcut: 'G P' },
-        { id: 'nav-requirements', label: 'Gereksinimler',          icon: 'requirements', action: () => navigate('requirements'),      category: 'Navigasyon', shortcut: 'G R' },
-        { id: 'nav-backlog',      label: 'WRICEF Backlog',         icon: 'backlog',      action: () => navigate('backlog'),           category: 'Navigasyon', shortcut: 'G W' },
-        { id: 'nav-test',         label: 'Test Yönetimi',          icon: 'test',         action: () => navigate('test-management'),   category: 'Navigasyon', shortcut: 'G T' },
-        { id: 'nav-defects',      label: 'Defect Listesi',         icon: 'defect',       action: () => navigate('defects'),           category: 'Navigasyon', shortcut: 'G B' },
-        { id: 'nav-raid',         label: 'RAID Log',               icon: 'raid',         action: () => navigate('raid'),              category: 'Navigasyon', shortcut: 'G L' },
+        { id: 'nav-dashboard',    label: 'Go to Dashboard',        icon: 'dashboard',    action: () => navigate('dashboard'),         category: 'Navigation', shortcut: 'G D' },
+        { id: 'nav-programs',     label: 'Programs',               icon: 'programs',     action: () => navigate('programs'),          category: 'Navigation', shortcut: 'G P' },
+        { id: 'nav-requirements', label: 'Requirements',           icon: 'requirements', action: () => navigate('requirements'),      category: 'Navigation', shortcut: 'G R' },
+        { id: 'nav-backlog',      label: 'WRICEF Backlog',         icon: 'backlog',      action: () => navigate('backlog'),           category: 'Navigation', shortcut: 'G W' },
+        { id: 'nav-test',         label: 'Test Management',        icon: 'test',         action: () => navigate('test-management'),   category: 'Navigation', shortcut: 'G T' },
+        { id: 'nav-defects',      label: 'Defect List',            icon: 'defect',       action: () => navigate('defects'),           category: 'Navigation', shortcut: 'G B' },
+        { id: 'nav-raid',         label: 'RAID Log',               icon: 'raid',         action: () => navigate('raid'),              category: 'Navigation', shortcut: 'G L' },
         // Actions
-        { id: 'new-requirement', label: 'Yeni Gereksinim Oluştur', icon: 'plus', action: () => { navigate('requirements'); setTimeout(() => document.getElementById('createRequirementBtn')?.click(), 300); }, category: 'Aksiyon' },
-        { id: 'new-wricef',      label: 'Yeni WRICEF Oluştur',    icon: 'plus', action: () => { navigate('backlog'); setTimeout(() => document.getElementById('createItemBtn')?.click(), 300); },            category: 'Aksiyon' },
-        { id: 'new-defect',      label: 'Yeni Defect Bildir',     icon: 'plus', action: () => { navigate('defects'); setTimeout(() => document.getElementById('createDefectBtn')?.click(), 300); },          category: 'Aksiyon' },
-        { id: 'new-test-case',   label: 'Yeni Test Case',         icon: 'plus', action: () => { navigate('test-management'); setTimeout(() => document.getElementById('createTCBtn')?.click(), 300); },      category: 'Aksiyon' },
+        { id: 'new-requirement', label: 'Create New Requirement',  icon: 'plus', action: () => { navigate('requirements'); setTimeout(() => document.getElementById('createRequirementBtn')?.click(), 300); }, category: 'Action' },
+        { id: 'new-wricef',      label: 'Create New WRICEF',      icon: 'plus', action: () => { navigate('backlog'); setTimeout(() => document.getElementById('createItemBtn')?.click(), 300); },            category: 'Action' },
+        { id: 'new-defect',      label: 'Report New Defect',      icon: 'plus', action: () => { navigate('defects'); setTimeout(() => document.getElementById('createDefectBtn')?.click(), 300); },          category: 'Action' },
+        { id: 'new-test-case',   label: 'New Test Case',          icon: 'plus', action: () => { navigate('test-management'); setTimeout(() => document.getElementById('createTCBtn')?.click(), 300); },      category: 'Action' },
     ];
 
     let _el = null;
@@ -55,14 +55,14 @@ const PGCommandPalette = (() => {
         _el = document.createElement('div');
         _el.className = 'pg-palette-overlay';
         _el.innerHTML = `
-            <div class="pg-palette" role="dialog" aria-modal="true" aria-label="Komut Paleti">
+            <div class="pg-palette" role="dialog" aria-modal="true" aria-label="Command Palette">
                 <div class="pg-palette__search">
                     <svg class="pg-palette__search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     <input
                         class="pg-palette__input"
                         id="paletteInput"
                         type="text"
-                        placeholder="Komut, view veya arama..."
+                        placeholder="Command, view, or search..."
                         autocomplete="off"
                         value=""
                     >
@@ -72,9 +72,9 @@ const PGCommandPalette = (() => {
                     ${_renderResults('')}
                 </div>
                 <div class="pg-palette__footer">
-                    <span><kbd>↑↓</kbd> Seç</span>
-                    <span><kbd>↵</kbd> Çalıştır</span>
-                    <span><kbd>ESC</kbd> Kapat</span>
+                    <span><kbd>↑↓</kbd> Select</span>
+                    <span><kbd>↵</kbd> Run</span>
+                    <span><kbd>ESC</kbd> Close</span>
                 </div>
             </div>
         `;
@@ -104,12 +104,12 @@ const PGCommandPalette = (() => {
 
         if (!filtered.length) {
             return `<div class="pg-palette__empty">
-                <p>"${_escHtml(q)}" için sonuç bulunamadı</p>
-                <p style="font-size:11px;color:var(--pg-color-text-tertiary)">Enter ile global arama yap</p>
+                <p>No results found for "${_escHtml(q)}"</p>
+                <p style="font-size:11px;color:var(--pg-color-text-tertiary)">Press Enter to perform a global search</p>
             </div>`;
         }
 
-        // Kategori başlıklarıyla grupla
+        // Group by category headers
         const grouped = {};
         filtered.forEach(c => {
             (grouped[c.category] = grouped[c.category] || []).push(c);

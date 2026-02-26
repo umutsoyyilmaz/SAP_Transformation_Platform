@@ -1,9 +1,9 @@
 /* UI-S01-T02 — PGStatusRegistry: Central status → color map */
 const PGStatusRegistry = (() => {
     /**
-     * Merkezi statüs renk kaydı.
-     * Her domain'in kendi statüsleri + genel statüsler burada.
-     * Renk çiftleri: { bg, fg } — WCAG 4.5:1 kontrast karşılanmış.
+     * Central status color registry.
+     * Each domain's own statuses + general statuses are here.
+     * Color pairs: { bg, fg } — WCAG 4.5:1 contrast met.
      */
     const MAP = {
         // ── WRICEF / Backlog ──────────────────────────────
@@ -73,13 +73,13 @@ const PGStatusRegistry = (() => {
         variance:    { bg: '#ffedd5', fg: '#9a3412' },
     };
 
-    /** Statüse göre renk döndür. Bilinmeyen statüs → nötr gri. */
+    /** Return colors by status. Unknown status → neutral gray. */
     function colors(status) {
         const key = (status || '').toLowerCase().replace(/[\s\-]/g, '_');
         return MAP[key] || { bg: '#f1f5f9', fg: '#475569' };
     }
 
-    /** HTML badge string döndür. */
+    /** Return HTML badge string. */
     function badge(status, opts) {
         opts = opts || {};
         const { bg, fg } = colors(status);

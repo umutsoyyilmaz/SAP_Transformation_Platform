@@ -50,6 +50,7 @@ const Auth = (() => {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(REFRESH_KEY);
         localStorage.removeItem(USER_KEY);
+        localStorage.removeItem('sap_active_program');
         if (_refreshTimer) {
             clearTimeout(_refreshTimer);
             _refreshTimer = null;

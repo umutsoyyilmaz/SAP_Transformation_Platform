@@ -64,7 +64,7 @@ const AIInsightsView = (() => {
                 <div class="card-body">
                     <div class="ai-insights-search-bar">
                         <input type="text" id="aiSmartSearchInput" class="tm-input"
-                            placeholder="e.g. 'FI modülünde başarısız olan P1 test case'leri'" 
+                            placeholder="e.g. 'P1 test cases that failed in the FI module'" 
                             style="flex:1" />
                         <button class="btn btn-primary" onclick="AIInsightsView.runSmartSearch()">Search</button>
                     </div>
@@ -104,7 +104,7 @@ const AIInsightsView = (() => {
             const items = data.results || [];
             if (items.length) {
                 html += `<h3 style="margin-top:var(--space-4)">Results (${items.length})</h3>`;
-                html += '<table class="table"><thead><tr>';
+                html += '<table class="data-table" aria-label="AI query results"><thead><tr>';
                 const cols = Object.keys(items[0]).slice(0, 8);
                 cols.forEach(c => html += `<th>${c}</th>`);
                 html += '</tr></thead><tbody>';
@@ -160,7 +160,7 @@ const AIInsightsView = (() => {
             `;
 
             if (flaky.length) {
-                html += '<table class="table" style="margin-top:var(--space-4)"><thead><tr><th>Code</th><th>Title</th><th>Flakiness</th><th>Env Correlation</th><th>Recommendation</th></tr></thead><tbody>';
+                html += '<table class="data-table" aria-label="Flaky tests analysis" style="margin-top:var(--space-4)"><thead><tr><th>Code</th><th>Title</th><th>Flakiness</th><th>Env Correlation</th><th>Recommendation</th></tr></thead><tbody>';
                 flaky.forEach(f => {
                     const badge = f.flakiness_score >= 70 ? 'danger' : f.flakiness_score >= 40 ? 'warning' : 'info';
                     html += `<tr>
@@ -288,7 +288,7 @@ const AIInsightsView = (() => {
             const never = data.never_executed || [];
             if (never.length) {
                 html += `<h3 style="margin-top:var(--space-4)">⚠️ Never Executed (${never.length})</h3>`;
-                html += '<table class="table"><thead><tr><th>Code</th><th>Title</th><th>Module</th><th>Recommendation</th></tr></thead><tbody>';
+                html += '<table class="data-table" aria-label="Obsolete tests"><thead><tr><th>Code</th><th>Title</th><th>Module</th><th>Recommendation</th></tr></thead><tbody>';
                 never.forEach(n => {
                     html += `<tr><td><strong>${n.code}</strong></td><td>${n.title}</td><td>${n.module || ''}</td><td>${n.recommendation}</td></tr>`;
                 });
@@ -299,7 +299,7 @@ const AIInsightsView = (() => {
             const stale = data.stale || [];
             if (stale.length) {
                 html += `<h3 style="margin-top:var(--space-4)">📅 Stale Tests (${stale.length})</h3>`;
-                html += '<table class="table"><thead><tr><th>Code</th><th>Title</th><th>Last Executed</th><th>Days Since</th><th>Recommendation</th></tr></thead><tbody>';
+                html += '<table class="data-table" aria-label="Stale tests"><thead><tr><th>Code</th><th>Title</th><th>Last Executed</th><th>Days Since</th><th>Recommendation</th></tr></thead><tbody>';
                 stale.forEach(s => {
                     html += `<tr><td><strong>${s.code}</strong></td><td>${s.title}</td><td>${s.last_executed_at || ''}</td><td>${s.days_since}</td><td>${s.recommendation}</td></tr>`;
                 });

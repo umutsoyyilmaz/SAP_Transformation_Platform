@@ -341,7 +341,7 @@ const IntegrationsView = (function () {
       </div>`;
   }
 
-  /* ── SAP Cloud ALM placeholder tab (FDD-F07 Faz A) ──────────────────── */
+  /* ── SAP Cloud ALM placeholder tab (FDD-F07 Phase A) ──────────────────── */
   function renderCloudAlmTab(c) {
     const isActive = cloudAlmSyncLog && cloudAlmSyncLog.connection_active;
     const logRows = (cloudAlmSyncLog && cloudAlmSyncLog.logs.length)
@@ -352,34 +352,34 @@ const IntegrationsView = (function () {
             <td><span class="badge badge-${l.sync_status === 'success' ? 'success' : 'danger'}">${l.sync_status || '—'}</span></td>
             <td>${l.created_at ? new Date(l.created_at).toLocaleString() : '—'}</td>
           </tr>`).join('')
-      : '<tr><td colspan="4" class="text-center text-muted">Henüz sync kaydı yok.</td></tr>';
+      : '<tr><td colspan="4" class="text-center text-muted">No sync records yet.</td></tr>';
 
     c.innerHTML = `
       <div style="padding:1.5rem">
         ${_renderComingSoonCard({
           icon: 'fas fa-cloud',
           title: 'SAP Cloud ALM',
-          subtitle: 'Requirement ve test senkronizasyonu',
+          subtitle: 'Requirement and test synchronization',
           eta: 'Q2 2026',
-          description: 'SAP Cloud ALM ile çift yönlü requirement ve test result senkronizasyonu. '
-            + 'Mevcut CloudALMSyncLog altyapısı hazır; OAuth2 bağlantısı S4-02\'de devreye alınacak.',
+          description: 'Bidirectional requirement and test result synchronization with SAP Cloud ALM. '
+            + 'Existing CloudALMSyncLog infrastructure is ready; OAuth2 connection will go live in S4-02.',
           badges: ['Requirement Sync', 'Test Result Push', 'OAuth2 Client Credentials'],
         })}
         <div style="margin-top:1.5rem">
-          <h4 style="margin-bottom:.75rem;font-size:.9rem;color:var(--text-secondary)">Sync Log (son 50 kayıt)</h4>
+          <h4 style="margin-bottom:.75rem;font-size:.9rem;color:var(--sap-text-secondary)">Sync Log (last 50 records)</h4>
           <div style="margin-bottom:.75rem;padding:.5rem .75rem;border-radius:6px;background:${isActive ? '#d1fae5' : '#fef3c7'};color:${isActive ? '#065f46' : '#92400e'};font-size:.85rem">
             <i class="fas fa-${isActive ? 'check-circle' : 'exclamation-triangle'}"></i>
-            ${isActive ? 'Bağlantı aktif' : 'Bağlantı aktif değil — yapılandırma gerekiyor'}
+            ${isActive ? 'Connection active' : 'Connection not active — configuration required'}
           </div>
           <table class="data-table" style="font-size:.85rem">
-            <thead><tr><th>ID</th><th>Yön</th><th>Durum</th><th>Tarih</th></tr></thead>
+            <thead><tr><th>ID</th><th>Direction</th><th>Status</th><th>Date</th></tr></thead>
             <tbody>${logRows}</tbody>
           </table>
         </div>
       </div>`;
   }
 
-  /* ── Process Mining live tab (FDD-I05 Faz B — S8-01) ───────────────── */
+  /* ── Process Mining live tab (FDD-I05 Phase B — S8-01) ───────────────── */
   /**
    * Render the full Process Mining 3-tab panel.
    * Delegates all interaction logic to the dedicated process_mining.js IIFE view.
@@ -395,9 +395,9 @@ const IntegrationsView = (function () {
           ${_renderComingSoonCard({
             icon: 'fas fa-project-diagram',
             title: 'Process Mining',
-            subtitle: 'AS-IS süreç keşfi ve varyant analizi',
+            subtitle: 'AS-IS process discovery and variant analysis',
             eta: 'Loading…',
-            description: 'Process Mining modülü yükleniyor. Lütfen sayfayı yenileyin.',
+            description: 'Process Mining module is loading. Please refresh the page.',
             badges: ['Celonis', 'SAP Signavio', 'UiPath Process Mining', 'SAP LAMA'],
           })}
         </div>`;
@@ -409,7 +409,7 @@ const IntegrationsView = (function () {
   /**
    * Render a standardised 'Coming Soon' integration card.
    *
-   * Why a shared helper: FDD-F07 Faz A + FDD-I05 Faz A both need the same
+   * Why a shared helper: FDD-F07 Phase A + FDD-I05 Phase A both need the same
    * visual template. Centralising here ensures UX consistency and makes future
    * placeholder integrations trivial to add (S4-02 onwards just call this).
    *
@@ -434,20 +434,20 @@ const IntegrationsView = (function () {
           </div>
           <div>
             <div style="font-weight:700;font-size:1rem">${title}</div>
-            <div style="font-size:.8rem;color:var(--text-secondary)">${subtitle}</div>
+            <div style="font-size:.8rem;color:var(--sap-text-secondary)">${subtitle}</div>
           </div>
           <span style="margin-left:auto;padding:.25rem .75rem;border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:.8rem;font-weight:600">
             🔵 Coming ${eta}
           </span>
         </div>
-        <p style="font-size:.875rem;color:var(--text-secondary);margin:.5rem 0 1rem">${description}</p>
+        <p style="font-size:.875rem;color:var(--sap-text-secondary);margin:.5rem 0 1rem">${description}</p>
         <div>${pillsHtml}</div>
         <button
           class="btn btn-outline btn-sm"
           style="margin-top:1rem"
-          onclick="alert('Bu özellik ${title} için ${eta} itibarıyla kullanıma alınacaktır. Bildirim almak için lütfen hesap yöneticinizle iletişime geçin.')"
+          onclick="alert('This feature for ${title} will be available as of ${eta}. Please contact your account manager to receive notifications.')"
         >
-          <i class="fas fa-bell"></i> Beni bilgilendir
+          <i class="fas fa-bell"></i> Notify me
         </button>
       </div>`;
   }

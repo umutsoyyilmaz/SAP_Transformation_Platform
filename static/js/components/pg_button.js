@@ -1,8 +1,8 @@
-/* UI-S01-T03 — PGButton: Standart button HTML helper */
+/* UI-S01-T03 — PGButton: Standard button HTML helper */
 const PGButton = (() => {
     /**
-     * Standart buton HTML helper.
-     * Tüm view'larda btn-primary / tm-btn yerine bu kullanılır.
+     * Standard button HTML helper.
+     * Used in all views instead of btn-primary / tm-btn.
      *
      * @param {string} label
      * @param {'primary'|'secondary'|'ghost'|'danger'|'icon'} variant

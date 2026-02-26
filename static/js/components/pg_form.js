@@ -1,12 +1,12 @@
-/* UI-S02-T02 — PGForm: Standart form element HTML helper'ları */
+/* UI-S02-T02 — PGForm: Standard form element HTML helpers */
 const PGForm = (() => {
     /**
-     * Standart form input HTML helper'ları.
-     * Her view'da doğrudan `<input class="pg-input">` veya bu helper'lar ile kullanılır.
-     * Tüm elementler --pg-* tokenlarını kullanır; hardcoded renk/boyut yasak.
+     * Standard form input HTML helpers.
+     * Used in every view either directly with `<input class="pg-input">` or via these helpers.
+     * All elements use --pg-* tokens; hardcoded color/size is forbidden.
      */
 
-    /** Tek satır metin inputu */
+    /** Single-line text input */
     function input({ name, label, value, placeholder, required, disabled, type, helpText, errorText }) {
         value = value || '';
         placeholder = placeholder || '';
@@ -62,7 +62,7 @@ const PGForm = (() => {
         options = options || [];
         required = required || false;
         disabled = disabled || false;
-        placeholder = placeholder !== undefined ? placeholder : 'Seç...';
+        placeholder = placeholder !== undefined ? placeholder : 'Select...';
         const id = `pg-select-${name}`;
         const opts = [
             placeholder ? `<option value="" disabled ${!value ? 'selected' : ''}>${_esc(placeholder)}</option>` : '',

@@ -48,9 +48,13 @@ const AuthorizationView = (() => {
   }
 
   function _toast(msg, type = 'success') {
+    if (typeof App !== 'undefined' && typeof App.toast === 'function') {
+      const mapped = type === 'danger' ? 'error' : type;
+      App.toast(msg, mapped);
+      return;
+    }
     const el = document.createElement('div');
-    el.className = `alert alert-${type} position-fixed top-0 end-0 m-3`;
-    el.style.cssText = 'z-index:9999;min-width:280px;';
+    el.style.cssText = 'position:fixed;top:12px;right:12px;z-index:9999;min-width:280px;padding:10px 12px;border-radius:8px;background:#32363a;color:#fff;';
     el.textContent = msg;
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 3500);
@@ -58,10 +62,12 @@ const AuthorizationView = (() => {
 
   function _statusBadge(status) {
     const colors = {
-      draft: 'secondary', in_review: 'info',
-      approved: 'success', implemented: 'primary',
+      draft: '#6a6d70',
+      in_review: '#0070f2',
+      approved: '#107e3e',
+      implemented: '#0a6ed1',
     };
-    return `<span class="badge bg-${colors[status] || 'secondary'}">${status}</span>`;
+    return `<span class="badge" style="background:${colors[status] || '#6a6d70'};color:#fff">${status}</span>`;
   }
 
   function _riskBadge(level) {
@@ -98,34 +104,28 @@ const AuthorizationView = (() => {
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
     <div>
       <h2 style="margin:0;font-size:1.4rem;">🔐 Authorization Concept</h2>
-      <p style="margin:0.25rem 0 0;color:var(--text-secondary,#666);font-size:0.85rem;">
+      <p style="margin:0.25rem 0 0;color:var(--sap-text-secondary,#666);font-size:0.85rem;">
         SAP role design and Segregation of Duties analysis
       </p>
     </div>
     <div style="display:flex;gap:0.5rem;align-items:center;">
-      <span id="auth-coverage-badge" class="badge bg-light text-dark border" style="font-size:0.85rem;">
+      <span id="auth-coverage-badge" class="badge" style="font-size:0.85rem;background:var(--sap-bg);color:var(--sap-text-primary);border:1px solid var(--sap-border);">
         Coverage: —
       </span>
-      <button class="btn btn-outline-secondary btn-sm" onclick="AuthorizationView.exportExcel()">
+      <button class="btn btn-secondary btn-sm" onclick="AuthorizationView.exportExcel()">
         ⬇ Export Excel
       </button>
     </div>
   </div>
 
   <!-- Tabs -->
-  <ul class="nav nav-tabs mb-3" id="auth-tabs">
-    <li class="nav-item">
-      <a class="nav-link active" href="#" onclick="AuthorizationView.switchTab('roles');return false;">
-        👤 Role Matrix
-      </a>
-    </li>
-    <li class="nav-item">
-      <a class="nav-link" href="#" onclick="AuthorizationView.switchTab('sod');return false;">
-        ⚠️ SOD Matrix
-        <span id="auth-sod-crit-badge" class="badge bg-danger ms-1" style="display:none;"></span>
-      </a>
-    </li>
-  </ul>
+  <div class="tabs" id="auth-tabs" style="margin-bottom:12px">
+    <button class="tab-btn active" onclick="AuthorizationView.switchTab('roles');return false;">👤 Role Matrix</button>
+    <button class="tab-btn" onclick="AuthorizationView.switchTab('sod');return false;">
+      ⚠️ SOD Matrix
+      <span id="auth-sod-crit-badge" class="badge" style="display:none;background:var(--sap-negative);color:#fff;margin-left:4px;"></span>
+    </button>
+  </div>
 
   <!-- Role Matrix tab -->
   <div id="auth-tab-roles">
@@ -136,7 +136,7 @@ const AuthorizationView = (() => {
       </button>
     </div>
     <div id="auth-role-list">
-      <div class="text-center text-muted py-4">Loading…</div>
+      <div style="text-align:center;color:var(--sap-text-secondary);padding:16px 0">Loading…</div>
     </div>
   </div>
 
@@ -144,12 +144,12 @@ const AuthorizationView = (() => {
   <div id="auth-tab-sod" style="display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
       <span style="color:var(--text-secondary,#666);font-size:0.85rem;" id="auth-sod-count"></span>
-      <button class="btn btn-warning btn-sm" onclick="AuthorizationView.refreshSod()">
+      <button class="btn btn-secondary btn-sm" onclick="AuthorizationView.refreshSod()">
         🔄 Run SOD Analysis
       </button>
     </div>
     <div id="auth-sod-list">
-      <div class="text-center text-muted py-4">Run SOD Analysis to detect conflicts.</div>
+      <div style="text-align:center;color:var(--sap-text-secondary);padding:16px 0">Run SOD Analysis to detect conflicts.</div>
     </div>
   </div>
 
@@ -157,103 +157,99 @@ const AuthorizationView = (() => {
 
 <!-- Add/Edit Role Modal (hidden) -->
 <div id="auth-role-modal" class="modal" tabindex="-1" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1050;">
-  <div class="modal-dialog modal-lg" style="margin:5vh auto;max-width:640px;">
-    <div class="modal-content p-4">
-      <h5 id="auth-role-modal-title" class="mb-3">New SAP Auth Role</h5>
-      <form id="auth-role-form" onsubmit="AuthorizationView.submitRoleForm(event)">
-        <div class="row g-2 mb-2">
-          <div class="col-6">
-            <label class="form-label form-label-sm">Role Name *</label>
-            <input id="arf-name" type="text" class="form-control form-control-sm"
-                   placeholder="Z_FI_AR_CLERK" maxlength="30" required />
-            <small class="text-muted">Max 30 chars (SAP PFCG limit)</small>
-          </div>
-          <div class="col-3">
-            <label class="form-label form-label-sm">Type</label>
-            <select id="arf-type" class="form-select form-select-sm">
-              <option value="single">Single</option>
-              <option value="composite">Composite</option>
-            </select>
-          </div>
-          <div class="col-3">
-            <label class="form-label form-label-sm">SAP Module</label>
-            <input id="arf-module" type="text" class="form-control form-control-sm"
-                   placeholder="FI" maxlength="10" />
-          </div>
+  <div style="margin:5vh auto;max-width:640px;background:var(--sap-card-bg);border-radius:8px;padding:16px;">
+    <h5 id="auth-role-modal-title" style="margin-bottom:12px;">New SAP Auth Role</h5>
+    <form id="auth-role-form" onsubmit="AuthorizationView.submitRoleForm(event)">
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--sap-text-secondary);margin-bottom:4px;">Role Name *</label>
+          <input id="arf-name" type="text" class="form-control"
+                 placeholder="Z_FI_AR_CLERK" maxlength="30" required />
+          <small class="text-muted">Max 30 chars (SAP PFCG limit)</small>
         </div>
-        <div class="mb-2">
-          <label class="form-label form-label-sm">Business Role Description</label>
-          <input id="arf-bizrole" type="text" class="form-control form-control-sm"
-                 placeholder="Accounts Receivable Clerk" maxlength="200" />
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--sap-text-secondary);margin-bottom:4px;">Type</label>
+          <select id="arf-type" class="form-control">
+            <option value="single">Single</option>
+            <option value="composite">Composite</option>
+          </select>
         </div>
-        <div class="row g-2 mb-2">
-          <div class="col-4">
-            <label class="form-label form-label-sm">Status</label>
-            <select id="arf-status" class="form-select form-select-sm">
-              ${_STATUSES.map(s => `<option value="${s}">${s}</option>`).join('')}
-            </select>
-          </div>
-          <div class="col-4">
-            <label class="form-label form-label-sm">Est. Users</label>
-            <input id="arf-users" type="number" min="0" class="form-control form-control-sm" />
-          </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--sap-text-secondary);margin-bottom:4px;">SAP Module</label>
+          <input id="arf-module" type="text" class="form-control"
+                 placeholder="FI" maxlength="10" />
         </div>
-        <div class="mb-2">
-          <label class="form-label form-label-sm">Description</label>
-          <textarea id="arf-desc" class="form-control form-control-sm" rows="2" maxlength="500"></textarea>
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--sap-text-secondary);margin-bottom:4px;">Business Role Description</label>
+        <input id="arf-bizrole" type="text" class="form-control"
+               placeholder="Accounts Receivable Clerk" maxlength="200" />
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--sap-text-secondary);margin-bottom:4px;">Status</label>
+          <select id="arf-status" class="form-control">
+            ${_STATUSES.map(s => `<option value="${s}">${s}</option>`).join('')}
+          </select>
         </div>
-        <input type="hidden" id="arf-id" value="" />
-        <div class="d-flex justify-content-end gap-2 mt-3">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="AuthorizationView.closeRoleModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary btn-sm">Save Role</button>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--sap-text-secondary);margin-bottom:4px;">Est. Users</label>
+          <input id="arf-users" type="number" min="0" class="form-control" />
         </div>
-      </form>
-    </div>
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--sap-text-secondary);margin-bottom:4px;">Description</label>
+        <textarea id="arf-desc" class="form-control" rows="2" maxlength="500"></textarea>
+      </div>
+      <input type="hidden" id="arf-id" value="" />
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="AuthorizationView.closeRoleModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">Save Role</button>
+      </div>
+    </form>
   </div>
 </div>
 
 <!-- Add Auth Object Modal (hidden) -->
 <div id="auth-obj-modal" class="modal" tabindex="-1" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1050;">
-  <div class="modal-dialog" style="margin:10vh auto;max-width:520px;">
-    <div class="modal-content p-4">
-      <h5 class="mb-3">Add Authorization Object</h5>
-      <form id="auth-obj-form" onsubmit="AuthorizationView.submitObjForm(event)">
-        <div class="row g-2 mb-2">
-          <div class="col-5">
-            <label class="form-label form-label-sm">Auth Object *</label>
-            <input id="aof-object" type="text" class="form-control form-control-sm"
-                   placeholder="F_BKPF_BUK" maxlength="10" required />
-          </div>
-          <div class="col-7">
-            <label class="form-label form-label-sm">Description</label>
-            <input id="aof-desc" type="text" class="form-control form-control-sm"
-                   placeholder="FI document authorization" maxlength="200" />
-          </div>
+  <div style="margin:10vh auto;max-width:520px;background:var(--sap-card-bg);border-radius:8px;padding:16px;">
+    <h5 style="margin-bottom:12px;">Add Authorization Object</h5>
+    <form id="auth-obj-form" onsubmit="AuthorizationView.submitObjForm(event)">
+      <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:8px;margin-bottom:8px;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--sap-text-secondary);margin-bottom:4px;">Auth Object *</label>
+          <input id="aof-object" type="text" class="form-control"
+                 placeholder="F_BKPF_BUK" maxlength="10" required />
         </div>
-        <div class="mb-2">
-          <label class="form-label form-label-sm">
-            Field Values (JSON)
-            <small class="text-muted ms-1">e.g. {"ACTVT":["01","02"],"BUKRS":["1000"]}</small>
-          </label>
-          <textarea id="aof-fv" class="form-control form-control-sm font-monospace" rows="3"
-                    placeholder='{"ACTVT": ["01", "02", "03"], "BUKRS": ["1000"]}'></textarea>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;color:var(--sap-text-secondary);margin-bottom:4px;">Description</label>
+          <input id="aof-desc" type="text" class="form-control"
+                 placeholder="FI document authorization" maxlength="200" />
         </div>
-        <div class="mb-2">
-          <label class="form-label form-label-sm">Source</label>
-          <select id="aof-source" class="form-select form-select-sm">
-            <option value="">— select —</option>
-            <option value="su24">SU24 Proposal</option>
-            <option value="su25_template">SU25 Template</option>
-            <option value="manual">Manual</option>
-          </select>
-        </div>
-        <input type="hidden" id="aof-role-id" value="" />
-        <div class="d-flex justify-content-end gap-2 mt-3">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="AuthorizationView.closeObjModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary btn-sm">Add Object</button>
-        </div>
-      </form>
-    </div>
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--sap-text-secondary);margin-bottom:4px;">
+          Field Values (JSON)
+          <small class="text-muted" style="margin-left:4px;">e.g. {"ACTVT":["01","02"],"BUKRS":["1000"]}</small>
+        </label>
+        <textarea id="aof-fv" class="form-control font-monospace" rows="3"
+                  placeholder='{"ACTVT": ["01", "02", "03"], "BUKRS": ["1000"]}'></textarea>
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="display:block;font-size:12px;font-weight:600;color:var(--sap-text-secondary);margin-bottom:4px;">Source</label>
+        <select id="aof-source" class="form-control">
+          <option value="">— select —</option>
+          <option value="su24">SU24 Proposal</option>
+          <option value="su25_template">SU25 Template</option>
+          <option value="manual">Manual</option>
+        </select>
+      </div>
+      <input type="hidden" id="aof-role-id" value="" />
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="AuthorizationView.closeObjModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">Add Object</button>
+      </div>
+    </form>
   </div>
 </div>
 `;
@@ -269,7 +265,7 @@ const AuthorizationView = (() => {
     }).catch(err => {
       console.error('AuthorizationView: load roles failed', err);
       document.getElementById('auth-role-list').innerHTML =
-        '<div class="alert alert-danger">Failed to load roles.</div>';
+        '<p style="color:var(--sap-negative);">Failed to load roles.</p>';
     });
   }
 
@@ -281,14 +277,14 @@ const AuthorizationView = (() => {
     if (!el) return;
 
     if (!_roles.length) {
-      el.innerHTML = '<div class="text-center text-muted py-4">No roles yet. Click "New Role" to start.</div>';
+      el.innerHTML = '<div style="text-align:center;color:var(--sap-text-secondary);padding:16px 0">No roles yet. Click "New Role" to start.</div>';
       return;
     }
 
     el.innerHTML = `
-<div class="table-responsive">
-<table class="table table-sm table-hover align-middle">
-  <thead class="table-dark">
+<div style="overflow-x:auto">
+<table class="data-table" style="font-size:13px">
+  <thead>
     <tr>
       <th>Role Name</th><th>Type</th><th>Module</th><th>Status</th>
       <th>Objects</th><th>SOD Risks</th><th>Est. Users</th><th></th>
@@ -299,23 +295,23 @@ const AuthorizationView = (() => {
     <tr>
       <td>
         <strong>${r.role_name}</strong>
-        ${r.business_role_description ? `<br><small class="text-muted">${r.business_role_description}</small>` : ''}
+        ${r.business_role_description ? `<br><small style="color:var(--sap-text-secondary)">${r.business_role_description}</small>` : ''}
       </td>
       <td><span class="badge bg-${r.role_type === 'single' ? 'primary' : 'info'}">${r.role_type}</span></td>
       <td>${r.sap_module || '—'}</td>
       <td>${_statusBadge(r.status)}</td>
       <td>
-        <button class="btn btn-outline-secondary btn-xs" style="font-size:0.75rem;padding:0.1rem 0.4rem;"
+        <button class="btn btn-secondary btn-sm" style="font-size:0.75rem;padding:0.1rem 0.4rem;"
                 onclick="AuthorizationView.openObjModal(${r.id})">
           ${r.auth_object_count || 0} ⚙
         </button>
       </td>
-      <td>${r.sod_risk_count > 0 ? `<span class="text-danger">${r.sod_risk_count} ⚠</span>` : '—'}</td>
+      <td>${r.sod_risk_count > 0 ? `<span style="color:var(--sap-negative)">${r.sod_risk_count} ⚠</span>` : '—'}</td>
       <td>${r.user_count_estimate != null ? r.user_count_estimate : '—'}</td>
       <td>
-        <button class="btn btn-outline-primary btn-xs" style="font-size:0.7rem;padding:0.1rem 0.35rem;"
+        <button class="btn btn-primary btn-sm" style="font-size:0.7rem;padding:0.1rem 0.35rem;"
                 onclick="AuthorizationView.editRole(${r.id})" title="Edit">✏</button>
-        <button class="btn btn-outline-danger btn-xs" style="font-size:0.7rem;padding:0.1rem 0.35rem;"
+        <button class="btn btn-danger btn-sm" style="font-size:0.7rem;padding:0.1rem 0.35rem;"
                 onclick="AuthorizationView.deleteRole(${r.id})" title="Delete">🗑</button>
       </td>
     </tr>`).join('')}
@@ -330,7 +326,9 @@ const AuthorizationView = (() => {
       if (!badge) return;
       const pct = data.coverage_pct ?? 0;
       const color = pct >= 80 ? 'success' : pct >= 50 ? 'warning' : 'danger';
-      badge.className = `badge bg-${color}`;
+      badge.className = 'badge';
+      badge.style.background = color === 'success' ? '#107e3e' : color === 'warning' ? '#e9730c' : '#c4314b';
+      badge.style.color = '#fff';
       badge.textContent = `Coverage: ${pct}% (${data.covered_steps}/${data.total_steps} steps)`;
     }).catch(() => {});
   }
@@ -480,14 +478,14 @@ const AuthorizationView = (() => {
     if (!el) return;
 
     if (!_sodRows.length) {
-      el.innerHTML = '<div class="text-center text-muted py-4">No SOD conflicts detected. Run SOD Analysis to check.</div>';
+      el.innerHTML = '<div style="text-align:center;color:var(--sap-text-secondary);padding:16px 0">No SOD conflicts detected. Run SOD Analysis to check.</div>';
       return;
     }
 
     el.innerHTML = `
-<div class="table-responsive">
-<table class="table table-sm table-hover align-middle">
-  <thead class="table-dark">
+<div style="overflow-x:auto">
+<table class="data-table" style="font-size:13px">
+  <thead>
     <tr>
       <th>Role A</th><th>Role B</th><th>Auth Object</th><th>Risk</th>
       <th>Description</th><th>Control</th><th>Accepted</th><th></th>
@@ -495,17 +493,17 @@ const AuthorizationView = (() => {
   </thead>
   <tbody>
     ${_sodRows.map(r => `
-    <tr class="${r.is_accepted ? 'table-light' : (r.risk_level === 'critical' ? 'table-danger' : '')}">
+    <tr style="${r.is_accepted ? 'opacity:.75' : (r.risk_level === 'critical' ? 'background:#fff5f5' : '')}">
       <td><code>${r.role_a_name || r.role_a_id}</code></td>
       <td><code>${r.role_b_name || r.role_b_id}</code></td>
       <td><code>${r.conflicting_auth_object || '—'}</code></td>
       <td>${_riskBadge(r.risk_level)}</td>
       <td style="max-width:200px;font-size:0.8rem;">${r.risk_description || '—'}</td>
-      <td style="max-width:160px;font-size:0.8rem;">${r.mitigating_control || '<em class="text-muted">None</em>'}</td>
-      <td>${r.is_accepted ? '✅ Yes' : '<span class="text-danger">No</span>'}</td>
+      <td style="max-width:160px;font-size:0.8rem;">${r.mitigating_control || '<em style="color:var(--sap-text-secondary)">None</em>'}</td>
+      <td>${r.is_accepted ? '✅ Yes' : '<span style="color:var(--sap-negative)">No</span>'}</td>
       <td>
         ${!r.is_accepted ? `
-        <button class="btn btn-outline-success btn-xs" style="font-size:0.7rem;padding:0.1rem 0.35rem;"
+        <button class="btn btn-primary btn-sm" style="font-size:0.7rem;padding:0.1rem 0.35rem;"
                 onclick="AuthorizationView.acceptRisk(${r.id})" title="Accept risk">✓ Accept</button>
         ` : ''}
       </td>
@@ -554,7 +552,7 @@ const AuthorizationView = (() => {
     document.getElementById('auth-tab-roles').style.display = tab === 'roles' ? '' : 'none';
     document.getElementById('auth-tab-sod').style.display   = tab === 'sod'   ? '' : 'none';
 
-    document.querySelectorAll('#auth-tabs .nav-link').forEach((a, i) => {
+    document.querySelectorAll('#auth-tabs .tab-btn').forEach((a, i) => {
       a.classList.toggle('active', (i === 0 && tab === 'roles') || (i === 1 && tab === 'sod'));
     });
 

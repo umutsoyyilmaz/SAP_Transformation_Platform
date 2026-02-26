@@ -67,8 +67,12 @@ const DashboardView = (() => {
                 layoutId = dashboards[0].id;
                 gadgets = dashboards[0].layout || [];
             } else {
-                // Default gadgets
+                // Default gadgets — overview gadgets on top, test analytics below
                 gadgets = [
+                    { type: 'health_score', size: '1x1' },
+                    { type: 'kpi_strip', size: '2x1' },
+                    { type: 'action_items', size: '1x1' },
+                    { type: 'audit_activity', size: '2x1' },
                     { type: 'pass_rate_gauge', size: '1x1' },
                     { type: 'execution_trend', size: '2x1' },
                     { type: 'defect_by_severity', size: '1x1' },
@@ -134,11 +138,54 @@ const DashboardView = (() => {
 
         if (type === 'gauge') {
             const val = data.value || 0;
-            const color = val >= 90 ? '#22c55e' : val >= 70 ? '#f59e0b' : '#ef4444';
+            const colors = (gadgetData.chart_config || {}).colors || ['#ef4444', '#f59e0b', '#22c55e'];
+            const thresholds = data.thresholds || [50, 70, 90];
+            const color = val >= thresholds[2] ? colors[2] : val >= thresholds[1] ? colors[1] : colors[0];
+            const extra = data.extra || {};
+            const extraHtml = extra.requirements != null
+                ? `<div style="font-size:12px;color:#888;margin-top:6px">${extra.requirements} requirements · ${Math.round(extra.test_coverage || 0)}% test</div>`
+                : '';
             body.innerHTML = `
                 <div style="text-align:center;padding:16px">
-                    <div style="font-size:48px;font-weight:700;color:${color}">${val}%</div>
+                    <div style="font-size:48px;font-weight:700;color:${color}">${val}${data.max ? '%' : ''}</div>
                     <div style="font-size:13px;color:#666;margin-top:4px">${esc(gadgetData.title || '')}</div>
+                    ${extraHtml}
+                </div>`;
+            return;
+        }
+
+        if (type === 'kpi_strip') {
+            const items = data.items || [];
+            body.innerHTML = `
+                <div style="display:grid;grid-template-columns:repeat(${Math.min(items.length, 5)},1fr);gap:8px;padding:10px">
+                    ${items.map(item => `
+                        <div class="pg-kpi-card" onclick="App.navigate('${item.view}')" role="button" tabindex="0"
+                             style="text-align:center;padding:12px 6px;border:1px solid var(--sap-border,#334155);border-radius:8px;cursor:pointer;transition:all .15s">
+                            <div style="font-size:24px;font-weight:700;color:var(--sap-text,#e2e8f0)">${item.value ?? '–'}</div>
+                            <div style="font-size:11px;color:#94a3b8;margin-top:4px">${esc(item.label)}</div>
+                        </div>
+                    `).join('')}
+                </div>`;
+            return;
+        }
+
+        if (type === 'action_list') {
+            const actions = data.actions || [];
+            if (!actions.length) {
+                body.innerHTML = '<div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px">No pending actions</div>';
+                return;
+            }
+            const severityColors = { critical: '#ef4444', warning: '#f59e0b', info: '#3b82f6' };
+            body.innerHTML = `
+                <div style="padding:6px 0">
+                    ${actions.slice(0, 5).map(a => `
+                        <div onclick="App.navigate('${a.view}')" style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--sap-border,#1e293b);transition:background .15s"
+                             onmouseenter="this.style.background='var(--sap-bg-hover,#1e293b)'" onmouseleave="this.style.background='transparent'">
+                            <span style="width:8px;height:8px;border-radius:50%;background:${severityColors[a.severity] || '#6b7280'};flex-shrink:0"></span>
+                            <span style="font-size:13px;color:var(--sap-text,#e2e8f0);flex:1">${esc(a.message)}</span>
+                            <span style="color:#64748b">→</span>
+                        </div>
+                    `).join('')}
                 </div>`;
             return;
         }

@@ -54,7 +54,7 @@ const BacklogView = (() => {
     }
 
     // ── Filter Chip Bar (UI-S05-T02) ─────────────────────────────────────
-    const _filterKeyLabel = (key) => ({ status: 'Durum', priority: 'Öncelik', wricef_type: 'Tür', sprint: 'Sprint', assignee: 'Atanan', module: 'Modül' })[key] || key;
+    const _filterKeyLabel = (key) => ({ status: 'Status', priority: 'Priority', wricef_type: 'Type', sprint: 'Sprint', assignee: 'Assignee', module: 'Module' })[key] || key;
 
     function _renderFilterBar(filters, clearFn, clearAllFn) {
         const active = Object.entries(filters).filter(([, v]) => v && (Array.isArray(v) ? v.length > 0 : v !== 'all'));
@@ -66,7 +66,7 @@ const BacklogView = (() => {
                 <span class="pg-filter-chip">
                     <span class="pg-filter-chip__key">${_filterKeyLabel(k)}</span>
                     <span class="pg-filter-chip__val">${val}</span>
-                    <button class="pg-filter-chip__clear" onclick="${clearFn}('${k}','${val}')" aria-label="Filtreyi kaldır">×</button>
+                    <button class="pg-filter-chip__clear" onclick="${clearFn}('${k}','${val}')" aria-label="Remove filter">×</button>
                 </span>
             `);
         }).join('');
@@ -75,7 +75,7 @@ const BacklogView = (() => {
             <div class="pg-filter-bar">
                 <div class="pg-filter-bar__chips">${chips}</div>
                 <div class="pg-filter-bar__actions">
-                    <button class="pg-btn pg-btn--ghost pg-btn--sm" onclick="${clearAllFn}()">Tümünü Temizle</button>
+                    <button class="pg-btn pg-btn--ghost pg-btn--sm" onclick="${clearAllFn}()">Clear All</button>
                 </div>
             </div>
         `;
@@ -184,7 +184,7 @@ const BacklogView = (() => {
                         </div>
                         <div class="kanban-column__body" data-status="${status}">
                             ${(boardData.columns[status] || []).length === 0
-                                ? PGEmptyState.html({ icon: 'build', title: 'Bu sütunda item yok' })
+                                ? PGEmptyState.html({ icon: 'build', title: 'No items in this column' })
                                 : (boardData.columns[status] || []).map(item => _renderKanbanCard(item)).join('')
                             }
                         </div>
@@ -769,33 +769,33 @@ const BacklogView = (() => {
             title: `${escHtml(i.code || w.label)} — ${escHtml(i.title)}`,
             content: `
                 <div class="pg-panel__section">
-                    <p class="pg-panel__section-title">Sınıflandırma</p>
+                    <p class="pg-panel__section-title">Classification</p>
                     <dl class="pg-panel__dl">
-                        <dt class="pg-panel__dt">Tür</dt>
+                        <dt class="pg-panel__dt">Type</dt>
                         <dd class="pg-panel__dd"><span class="wricef-badge" style="background:${w.color}">${w.icon} ${w.label}</span></dd>
-                        <dt class="pg-panel__dt">Durum</dt>
+                        <dt class="pg-panel__dt">Status</dt>
                         <dd class="pg-panel__dd">${PGStatusRegistry.badge(i.status, { label: STATUS_LABELS[i.status] || i.status })}</dd>
-                        <dt class="pg-panel__dt">Öncelik</dt>
+                        <dt class="pg-panel__dt">Priority</dt>
                         <dd class="pg-panel__dd">${PGStatusRegistry.badge(i.priority)}</dd>
-                        <dt class="pg-panel__dt">Modül</dt>
+                        <dt class="pg-panel__dt">Module</dt>
                         <dd class="pg-panel__dd">${escHtml(i.module || '—')}</dd>
                         <dt class="pg-panel__dt">Sprint</dt>
-                        <dd class="pg-panel__dd">${sprint ? escHtml(sprint.name) : 'Atanmamış'}</dd>
-                        <dt class="pg-panel__dt">Atanan</dt>
+                        <dd class="pg-panel__dd">${sprint ? escHtml(sprint.name) : 'Unassigned'}</dd>
+                        <dt class="pg-panel__dt">Assignee</dt>
                         <dd class="pg-panel__dd">${escHtml(i.assigned_to || '—')}</dd>
-                        <dt class="pg-panel__dt">Puan (SP)</dt>
+                        <dt class="pg-panel__dt">Points (SP)</dt>
                         <dd class="pg-panel__dd">${i.story_points || '—'}</dd>
                     </dl>
                 </div>
                 ${i.description ? `
                 <div class="pg-panel__section">
-                    <p class="pg-panel__section-title">Açıklama</p>
+                    <p class="pg-panel__section-title">Description</p>
                     <p style="font-size:13px;color:var(--pg-color-text-secondary);margin:0;line-height:1.6">${escHtml(i.description)}</p>
                 </div>` : ''}
                 <div class="pg-panel__actions">
-                    <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="BacklogView.showEditModal();PGPanel.close()">Düzenle</button>
-                    <button class="pg-btn pg-btn--secondary pg-btn--sm" onclick="BacklogView.renderDetail()">Tam Detay</button>
-                    <button class="pg-btn pg-btn--ghost pg-btn--sm" onclick="PGPanel.close()">Kapat</button>
+                    <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="BacklogView.showEditModal();PGPanel.close()">Edit</button>
+                    <button class="pg-btn pg-btn--secondary pg-btn--sm" onclick="BacklogView.renderDetail()">Full Detail</button>
+                    <button class="pg-btn pg-btn--ghost pg-btn--sm" onclick="PGPanel.close()">Close</button>
                 </div>
             `,
         });

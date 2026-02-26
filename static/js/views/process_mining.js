@@ -24,16 +24,16 @@ window.ProcessMiningView = (function () {
   const BASE = "/api/v1";
   const TABS = ["connection", "import", "variants"];
   const TAB_LABELS = {
-    connection: "Bağlantı",
-    import: "İçe Aktar",
-    variants: "Varyantlar",
+    connection: "Connection",
+    import: "Import",
+    variants: "Variants",
   };
   const PROVIDER_OPTIONS = [
     { value: "celonis", label: "Celonis" },
     { value: "signavio", label: "SAP Signavio" },
     { value: "uipath", label: "UiPath Process Mining" },
     { value: "sap_lama", label: "SAP LAMA" },
-    { value: "custom", label: "Custom / Diğer" },
+    { value: "custom", label: "Custom / Other" },
   ];
 
   /* ── Module state (reset on each init() call) ────────────────────────── */
@@ -86,7 +86,7 @@ window.ProcessMiningView = (function () {
     setTimeout(() => el.remove(), 3500);
   }
 
-  function _loading(text = "Yükleniyor…") {
+  function _loading(text = "Loading…") {
     return `<div style="padding:2rem;text-align:center;color:#6b7280">
       <i class="fas fa-spinner fa-spin"></i> ${text}
     </div>`;
@@ -94,11 +94,11 @@ window.ProcessMiningView = (function () {
 
   function _statusBadge(status) {
     const MAP = {
-      active: ["#d1fae5", "#065f46", "check-circle", "Aktif"],
-      testing: ["#dbeafe", "#1e40af", "sync fa-spin", "Test ediliyor…"],
-      configured: ["#fef3c7", "#92400e", "cog", "Yapılandırıldı"],
-      failed: ["#fee2e2", "#991b1b", "exclamation-circle", "Hata"],
-      disabled: ["#f3f4f6", "#6b7280", "ban", "Devre Dışı"],
+      active: ["#d1fae5", "#065f46", "check-circle", "Active"],
+      testing: ["#dbeafe", "#1e40af", "sync fa-spin", "Testing…"],
+      configured: ["#fef3c7", "#92400e", "cog", "Configured"],
+      failed: ["#fee2e2", "#991b1b", "exclamation-circle", "Error"],
+      disabled: ["#f3f4f6", "#6b7280", "ban", "Disabled"],
     };
     const [bg, clr, ico, label] = MAP[status] || MAP["configured"];
     return `<span style="background:${bg};color:${clr};padding:.25rem .6rem;
@@ -114,7 +114,7 @@ window.ProcessMiningView = (function () {
       <div style="padding:1.5rem">
         <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
           <i class="fas fa-project-diagram" style="font-size:1.4rem;color:#8b5cf6"></i>
-          <h3 style="margin:0;font-size:1.1rem;font-weight:600">Process Mining Entegrasyonu</h3>
+          <h3 style="margin:0;font-size:1.1rem;font-weight:600">Process Mining Integration</h3>
         </div>
 
         <div id="pm-tabs" style="display:flex;gap:.5rem;border-bottom:2px solid #e5e7eb;margin-bottom:1.25rem">
@@ -166,7 +166,7 @@ window.ProcessMiningView = (function () {
   async function _renderConnectionTab() {
     const c = _tabContent();
     if (!c) return;
-    c.innerHTML = _loading("Bağlantı bilgileri alınıyor…");
+    c.innerHTML = _loading("Retrieving connection details…");
 
     const { ok, data } = await _api("GET", `${BASE}/integrations/process-mining${_tenantParams()}`);
     _connection = (ok && data) ? data.config : null;
@@ -180,20 +180,20 @@ window.ProcessMiningView = (function () {
       <div style="display:grid;gap:1rem">
         <div style="background:#f9fafb;border-radius:8px;padding:1rem">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
-            <strong style="font-size:.95rem">Bağlantı Durumu</strong>
+            <strong style="font-size:.95rem">Connection Status</strong>
             ${_statusBadge(_connection.status || "configured")}
           </div>
           <table style="font-size:.85rem;width:100%;border-collapse:collapse">
-            <tr><td style="padding:.3rem .5rem;color:#6b7280;width:40%">Sağlayıcı</td>
+            <tr><td style="padding:.3rem .5rem;color:#6b7280;width:40%">Provider</td>
                 <td style="padding:.3rem .5rem;font-weight:500;text-transform:capitalize">${_connection.provider || "—"}</td></tr>
             <tr><td style="padding:.3rem .5rem;color:#6b7280">URL</td>
                 <td style="padding:.3rem .5rem;word-break:break-all">${_connection.connection_url || "—"}</td></tr>
-            <tr><td style="padding:.3rem .5rem;color:#6b7280">Durum</td>
+            <tr><td style="padding:.3rem .5rem;color:#6b7280">Status</td>
                 <td style="padding:.3rem .5rem">${_connection.status || "—"}</td></tr>
-            <tr><td style="padding:.3rem .5rem;color:#6b7280">Son Test</td>
-                <td style="padding:.3rem .5rem">${_connection.last_tested_at ? new Date(_connection.last_tested_at).toLocaleString("tr-TR") : "Henüz test edilmedi"}</td></tr>
+            <tr><td style="padding:.3rem .5rem;color:#6b7280">Last Test</td>
+                <td style="padding:.3rem .5rem">${_connection.last_tested_at ? new Date(_connection.last_tested_at).toLocaleString("en-US") : "Not yet tested"}</td></tr>
             ${_connection.error_message ? `
-            <tr><td style="padding:.3rem .5rem;color:#6b7280">Hata</td>
+            <tr><td style="padding:.3rem .5rem;color:#6b7280">Error</td>
                 <td style="padding:.3rem .5rem;color:#dc2626">${_connection.error_message}</td></tr>` : ""}
           </table>
         </div>
@@ -201,15 +201,15 @@ window.ProcessMiningView = (function () {
         <div style="display:flex;gap:.5rem;flex-wrap:wrap">
           <button onclick="window.ProcessMiningView.testConnection()"
             style="padding:.5rem 1rem;background:#8b5cf6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.85rem">
-            <i class="fas fa-plug"></i> Bağlantıyı Test Et
+            <i class="fas fa-plug"></i> Test Connection
           </button>
           <button onclick="window.ProcessMiningView.openConfigForm()"
             style="padding:.5rem 1rem;background:#e5e7eb;color:#374151;border:none;border-radius:6px;cursor:pointer;font-size:.85rem">
-            <i class="fas fa-cog"></i> Yapılandır
+            <i class="fas fa-cog"></i> Configure
           </button>
           <button onclick="window.ProcessMiningView._deleteConnection()"
             style="padding:.5rem 1rem;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;cursor:pointer;font-size:.85rem">
-            <i class="fas fa-trash"></i> Sil
+            <i class="fas fa-trash"></i> Delete
           </button>
         </div>
       </div>`;
@@ -225,14 +225,14 @@ window.ProcessMiningView = (function () {
       <form id="pm-config-form" onsubmit="window.ProcessMiningView._submitConfig(event)">
         <div style="display:grid;gap:.75rem">
           <div>
-            <label style="display:block;font-size:.85rem;margin-bottom:.25rem;font-weight:500">Sağlayıcı *</label>
+            <label style="display:block;font-size:.85rem;margin-bottom:.25rem;font-weight:500">Provider *</label>
             <select id="pm-provider" name="provider" required
               style="width:100%;padding:.5rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem">
               ${providerOpts}
             </select>
           </div>
           <div>
-            <label style="display:block;font-size:.85rem;margin-bottom:.25rem;font-weight:500">Bağlantı URL *</label>
+            <label style="display:block;font-size:.85rem;margin-bottom:.25rem;font-weight:500">Connection URL *</label>
             <input id="pm-url" type="url" name="connection_url" required maxlength="500"
               value="${v.connection_url || ""}"
               placeholder="https://tenant.celonis.cloud"
@@ -242,7 +242,7 @@ window.ProcessMiningView = (function () {
             <label style="display:block;font-size:.85rem;margin-bottom:.25rem;font-weight:500">API Key
               <span style="color:#6b7280;font-weight:400">(Celonis)</span></label>
             <input id="pm-apikey" type="password" name="api_key" maxlength="500"
-              placeholder="Mevcut anahtarı korumak için boş bırakın"
+              placeholder="Leave blank to keep existing key"
               style="width:100%;padding:.5rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem">
           </div>
           <div>
@@ -256,7 +256,7 @@ window.ProcessMiningView = (function () {
             <label style="display:block;font-size:.85rem;margin-bottom:.25rem;font-weight:500">Client Secret
               <span style="color:#6b7280;font-weight:400">(OAuth2)</span></label>
             <input id="pm-secret" type="password" name="client_secret" maxlength="500"
-              placeholder="Mevcut sırrı korumak için boş bırakın"
+              placeholder="Leave blank to keep existing secret"
               style="width:100%;padding:.5rem;border:1px solid #d1d5db;border-radius:6px;font-size:.9rem">
           </div>
           <div>
@@ -270,16 +270,16 @@ window.ProcessMiningView = (function () {
           <div style="display:flex;align-items:center;gap:.5rem">
             <input id="pm-enabled" type="checkbox" name="is_enabled" ${v.is_enabled ? "checked" : ""}
               style="width:1rem;height:1rem">
-            <label for="pm-enabled" style="font-size:.88rem">Entegrasyonu Etkinleştir</label>
+            <label for="pm-enabled" style="font-size:.88rem">Enable Integration</label>
           </div>
           <div style="display:flex;gap:.5rem;margin-top:.25rem">
             <button type="submit"
               style="padding:.5rem 1.25rem;background:#8b5cf6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.88rem">
-              <i class="fas fa-save"></i> Kaydet
+              <i class="fas fa-save"></i> Save
             </button>
             ${existing ? `<button type="button" onclick="window.ProcessMiningView._renderConnectionTab()"
               style="padding:.5rem 1rem;background:#e5e7eb;color:#374151;border:none;border-radius:6px;cursor:pointer;font-size:.88rem">
-              İptal
+              Cancel
             </button>` : ""}
           </div>
         </div>
@@ -305,22 +305,22 @@ window.ProcessMiningView = (function () {
     const { ok, data } = await _api(method, `${BASE}/integrations/process-mining`, body);
     if (ok) {
       _connection = data;
-      _toast("Bağlantı kaydedildi.");
+      _toast("Connection saved.");
       _renderConnectionTab();
     } else {
-      _toast((data && data.error) || "Kayıt başarısız.", true);
+      _toast((data && data.error) || "Save failed.", true);
     }
   }
 
   async function _deleteConnection() {
-    if (!confirm("Bu bağlantıyı ve tüm içe aktarmaları silmek istiyor musunuz?")) return;
+    if (!confirm("Do you want to delete this connection and all imports?")) return;
     const { ok } = await _api("DELETE", `${BASE}/integrations/process-mining${_tenantParams()}`);
     if (ok) {
       _connection = null;
-      _toast("Bağlantı silindi.");
+      _toast("Connection deleted.");
       _renderConnectionTab();
     } else {
-      _toast("Silme işlemi başarısız.", true);
+      _toast("Delete operation failed.", true);
     }
   }
 
@@ -329,17 +329,17 @@ window.ProcessMiningView = (function () {
   async function _renderImportTab() {
     const c = _tabContent();
     if (!c) return;
-    c.innerHTML = _loading("Süreçler yükleniyor…");
+    c.innerHTML = _loading("Loading processes…");
 
     const { ok, data } = await _api("GET", `${BASE}/integrations/process-mining/processes${_tenantParams()}`);
     if (!ok || !data || !data.ok) {
       c.innerHTML = `<div style="padding:1.5rem;text-align:center;color:#dc2626">
         <i class="fas fa-exclamation-circle"></i>
-        ${(data && data.error) || "Sağlayıcıdan süreçler alınamadı. Bağlantıyı kontrol edin."}
+        ${(data && data.error) || "Could not retrieve processes from the provider. Check the connection."}
         <br><br>
         <button onclick="window.ProcessMiningView._switchTab('connection')"
           style="padding:.5rem 1rem;background:#e5e7eb;color:#374151;border:none;border-radius:6px;cursor:pointer;font-size:.85rem">
-          Bağlantı Sekmesine Git
+          Go to Connection Tab
         </button>
       </div>`;
       return;
@@ -352,7 +352,7 @@ window.ProcessMiningView = (function () {
   function _renderProcessList(c) {
     if (!_processes.length) {
       c.innerHTML = `<div style="padding:1.5rem;text-align:center;color:#6b7280">
-        <i class="fas fa-inbox"></i> Sağlayıcıda hiç süreç bulunamadı.
+        <i class="fas fa-inbox"></i> No processes found in the provider.
       </div>`;
       return;
     }
@@ -361,7 +361,7 @@ window.ProcessMiningView = (function () {
       <div style="display:grid;gap:1rem">
         <div>
           <p style="font-size:.88rem;color:#374151;margin:.5rem 0">
-            Aşağıdan bir süreç seçin ve varyantlarını görüntüleyin.
+            Select a process below and view its variants.
           </p>
           <div style="display:grid;gap:.4rem;max-height:320px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;padding:.5rem">
             ${_processes.map(p => {
@@ -395,7 +395,7 @@ window.ProcessMiningView = (function () {
 
     const section = document.getElementById("pm-variant-section");
     if (!section) return;
-    section.innerHTML = _loading("Varyantlar yükleniyor…");
+    section.innerHTML = _loading("Loading variants…");
 
     const { ok, data } = await _api(
       "GET",
@@ -403,7 +403,7 @@ window.ProcessMiningView = (function () {
     );
     if (!ok || !data || !data.ok) {
       section.innerHTML = `<div style="color:#dc2626;font-size:.85rem;padding:.5rem">
-        ${(data && data.error) || "Varyantlar alınamadı."}
+        ${(data && data.error) || "Could not retrieve variants."}
       </div>`;
       return;
     }
@@ -414,17 +414,17 @@ window.ProcessMiningView = (function () {
 
   function _renderVariantCheckboxes(section) {
     if (!_variants.length) {
-      section.innerHTML = `<p style="color:#6b7280;font-size:.85rem;padding:.5rem">Bu süreç için varyant bulunamadı.</p>`;
+      section.innerHTML = `<p style="color:#6b7280;font-size:.85rem;padding:.5rem">No variants found for this process.</p>`;
       return;
     }
 
     section.innerHTML = `
       <div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
-          <strong style="font-size:.88rem">${_variants.length} varyant bulundu</strong>
+          <strong style="font-size:.88rem">${_variants.length} variants found</strong>
           <label style="font-size:.82rem;color:#6b7280">
             <input type="checkbox" id="pm-select-all" onchange="window.ProcessMiningView._toggleAll(this)">
-            Tümünü seç
+            Select all
           </label>
         </div>
         <div style="display:grid;gap:.3rem;max-height:260px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;padding:.5rem;margin-bottom:.75rem">
@@ -438,13 +438,13 @@ window.ProcessMiningView = (function () {
               <input type="checkbox" value="${vid}" onchange="window.ProcessMiningView._toggleVariant('${vid}', this.checked)"
                 style="flex-shrink:0">
               <span style="flex:1">${name}</span>
-              <span style="color:#6b7280;font-size:.78rem">Uyum: ${conformance} | ${count} örnek</span>
+              <span style="color:#6b7280;font-size:.78rem">Conformance: ${conformance} | ${count} cases</span>
             </label>`;
           }).join("")}
         </div>
         <button onclick="window.ProcessMiningView.importSelected()"
           style="padding:.5rem 1.25rem;background:#8b5cf6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.88rem">
-          <i class="fas fa-download"></i> Seçilenleri İçe Aktar
+          <i class="fas fa-download"></i> Import Selected
         </button>
       </div>`;
   }
@@ -479,18 +479,18 @@ window.ProcessMiningView = (function () {
     if (!_projectId) {
       c.innerHTML = `<div style="padding:1.5rem;color:#6b7280;text-align:center">
         <i class="fas fa-info-circle"></i>
-        Bu sekmeyi kullanmak için bir proje bağlamında olmanız gerekiyor.
+        You need to be in a project context to use this tab.
       </div>`;
       return;
     }
 
-    c.innerHTML = _loading("İçe aktarmalar yükleniyor…");
+    c.innerHTML = _loading("Loading imports…");
     const { ok, data } = await _api(
       "GET",
       `${BASE}/projects/${_projectId}/process-mining/imports${_tenantParams()}`
     );
     if (!ok) {
-      c.innerHTML = `<div style="padding:1rem;color:#dc2626">İçe aktarmalar alınamadı.</div>`;
+      c.innerHTML = `<div style="padding:1rem;color:#dc2626">Could not retrieve imports.</div>`;
       return;
     }
 
@@ -501,11 +501,11 @@ window.ProcessMiningView = (function () {
   function _renderImportsTable(c) {
     if (!_imports.length) {
       c.innerHTML = `<div style="padding:1.5rem;text-align:center;color:#6b7280">
-        <i class="fas fa-inbox"></i> Henüz içe aktarma yok.
+        <i class="fas fa-inbox"></i> No imports yet.
         <br><br>
         <button onclick="window.ProcessMiningView._switchTab('import')"
           style="padding:.5rem 1rem;background:#8b5cf6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.85rem">
-          İçe Aktarma Sihirbazına Git
+          Go to Import Wizard
         </button>
       </div>`;
       return;
@@ -553,11 +553,11 @@ window.ProcessMiningView = (function () {
           <thead>
             <tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb">
               <th style="padding:.4rem .6rem;text-align:left">ID</th>
-              <th style="padding:.4rem .6rem;text-align:left">Süreç Adı</th>
-              <th style="padding:.4rem .6rem;text-align:center">Örnek</th>
-              <th style="padding:.4rem .6rem;text-align:center">Uyum</th>
-              <th style="padding:.4rem .6rem;text-align:center">Durum</th>
-              <th style="padding:.4rem .6rem">İşlemler</th>
+              <th style="padding:.4rem .6rem;text-align:left">Process Name</th>
+              <th style="padding:.4rem .6rem;text-align:center">Cases</th>
+              <th style="padding:.4rem .6rem;text-align:center">Conformance</th>
+              <th style="padding:.4rem .6rem;text-align:center">Status</th>
+              <th style="padding:.4rem .6rem">Actions</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -579,13 +579,13 @@ window.ProcessMiningView = (function () {
       display:flex;align-items:center;justify-content:center;`;
     modal.innerHTML = `
       <div style="background:#fff;border-radius:12px;padding:1.5rem;width:min(90vw,480px);box-shadow:0 20px 60px rgba(0,0,0,.2)">
-        <h4 style="margin:0 0 1rem 0;font-size:1rem">Varyantı L4 Süreç Adımına Promote Et</h4>
+        <h4 style="margin:0 0 1rem 0;font-size:1rem">Promote Variant to L4 Process Step</h4>
         <p style="font-size:.85rem;color:#374151;margin-bottom:.75rem">
-          Varyant: <strong>${imp.process_name || imp.id}</strong>
+          Variant: <strong>${imp.process_name || imp.id}</strong>
         </p>
         <div style="margin-bottom:.75rem">
           <label style="display:block;font-size:.85rem;margin-bottom:.25rem;font-weight:500">
-            L3 Üst Seviye UUID *
+            L3 Parent Level UUID *
           </label>
           <input id="pm-parent-level-id" type="text" maxlength="36"
             placeholder="00000000-0000-0000-0000-000000000000"
@@ -593,7 +593,7 @@ window.ProcessMiningView = (function () {
         </div>
         <div style="margin-bottom:1rem">
           <label style="display:block;font-size:.85rem;margin-bottom:.25rem;font-weight:500">
-            Başlık <span style="font-weight:400;color:#6b7280">(isteğe bağlı)</span>
+            Title <span style="font-weight:400;color:#6b7280">(optional)</span>
           </label>
           <input id="pm-promote-title" type="text" maxlength="255"
             value="${imp.process_name || ""}"
@@ -602,11 +602,11 @@ window.ProcessMiningView = (function () {
         <div style="display:flex;gap:.5rem">
           <button onclick="window.ProcessMiningView.promoteVariant(${importId})"
             style="padding:.5rem 1.25rem;background:#8b5cf6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.88rem">
-            <i class="fas fa-level-up-alt"></i> Promote Et
+            <i class="fas fa-level-up-alt"></i> Promote
           </button>
           <button onclick="document.getElementById('pm-promote-modal').remove()"
             style="padding:.5rem 1rem;background:#e5e7eb;color:#374151;border:none;border-radius:6px;cursor:pointer;font-size:.88rem">
-            İptal
+            Cancel
           </button>
         </div>
       </div>`;
@@ -616,12 +616,12 @@ window.ProcessMiningView = (function () {
   /* ── Public API ─────────────────────────────────────────────────────────── */
 
   async function testConnection() {
-    _toast("Test başlatılıyor…");
+    _toast("Starting test…");
     const { ok, data } = await _api("POST", `${BASE}/integrations/process-mining/test`, _tenantBody());
     if (data && data.ok) {
-      _toast(`✓ ${data.message || "Bağlantı başarılı."}`);
+      _toast(`✓ ${data.message || "Connection successful."}`);
     } else {
-      _toast((data && data.message) || "Bağlantı testi başarısız.", true);
+      _toast((data && data.message) || "Connection test failed.", true);
     }
     _renderConnectionTab();
   }
@@ -633,11 +633,11 @@ window.ProcessMiningView = (function () {
 
   async function importSelected() {
     if (!_selectedProcessId) {
-      _toast("Lütfen önce bir süreç seçin.", true);
+      _toast("Please select a process first.", true);
       return;
     }
     if (!_projectId) {
-      _toast("Import işlemi için proje bağlamı gerekiyor.", true);
+      _toast("Project context is required for import.", true);
       return;
     }
     const selected = Array.from(_selectedVariantIds);
@@ -651,11 +651,11 @@ window.ProcessMiningView = (function () {
       })
     );
     if (ok && data) {
-      _toast(`${data.imported} varyant içe aktarıldı, ${data.skipped} atlandı.`);
+      _toast(`${data.imported} variants imported, ${data.skipped} skipped.`);
       _selectedVariantIds.clear();
       _switchTab("variants");
     } else {
-      _toast((data && data.error) || "İçe aktarma başarısız.", true);
+      _toast((data && data.error) || "Import failed.", true);
     }
   }
 
@@ -663,10 +663,10 @@ window.ProcessMiningView = (function () {
     const parentId = (document.getElementById("pm-parent-level-id") || {}).value || "";
     const title = (document.getElementById("pm-promote-title") || {}).value || "";
     if (!parentId.trim()) {
-      _toast("Üst seviye UUID gerekli.", true);
+      _toast("Parent level UUID is required.", true);
       return;
     }
-    if (!_projectId) { _toast("Proje bağlamı gerekli.", true); return; }
+    if (!_projectId) { _toast("Project context is required.", true); return; }
 
     const { ok, data } = await _api(
       "POST",
@@ -675,16 +675,16 @@ window.ProcessMiningView = (function () {
     );
     document.getElementById("pm-promote-modal")?.remove();
     if (ok) {
-      _toast("Varyant L4 süreç adımına promote edildi.");
+      _toast("Variant promoted to L4 process step.");
       _renderVariantsTab();
     } else {
-      _toast((data && data.error) || "Promote işlemi başarısız.", true);
+      _toast((data && data.error) || "Promote operation failed.", true);
     }
   }
 
   async function rejectVariant(importId) {
-    if (!confirm("Bu varyantı reddetmek istiyor musunuz?")) return;
-    if (!_projectId) { _toast("Proje bağlamı gerekli.", true); return; }
+    if (!confirm("Do you want to reject this variant?")) return;
+    if (!_projectId) { _toast("Project context is required.", true); return; }
 
     const { ok, data } = await _api(
       "POST",
@@ -692,10 +692,10 @@ window.ProcessMiningView = (function () {
       _tenantBody()
     );
     if (ok) {
-      _toast("Varyant reddedildi.");
+      _toast("Variant rejected.");
       _renderVariantsTab();
     } else {
-      _toast((data && data.error) || "Red işlemi başarısız.", true);
+      _toast((data && data.error) || "Reject operation failed.", true);
     }
   }
 

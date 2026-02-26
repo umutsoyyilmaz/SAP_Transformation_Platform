@@ -21,13 +21,13 @@ var CustomFieldsView = (function () {
   function escHtml(s) { const d = document.createElement("div"); d.textContent = s || ""; return d.innerHTML; }
 
   const FIELD_TYPES = [
-    { value: "text", label: "Metin" },
-    { value: "textarea", label: "Uzun Metin" },
-    { value: "number", label: "Sayı" },
-    { value: "date", label: "Tarih" },
-    { value: "select", label: "Seçim" },
-    { value: "multiselect", label: "Çoklu Seçim" },
-    { value: "checkbox", label: "Onay Kutusu" },
+    { value: "text", label: "Text" },
+    { value: "textarea", label: "Long Text" },
+    { value: "number", label: "Number" },
+    { value: "date", label: "Date" },
+    { value: "select", label: "Select" },
+    { value: "multiselect", label: "Multi Select" },
+    { value: "checkbox", label: "Checkbox" },
     { value: "url", label: "URL" },
   ];
 
@@ -44,14 +44,14 @@ var CustomFieldsView = (function () {
     root.innerHTML = `
       <div class="f9-layout">
         <div class="f9-toolbar">
-          <h3>Özel Alanlar & Layout Engine</h3>
+          <h3>Custom Fields & Layout Engine</h3>
           <select id="f9-entity-type" class="form-select f9-entity-sel">
             ${ENTITY_TYPES.map(t => `<option value="${t.value}" ${t.value === currentEntityType ? 'selected' : ''}>${t.label}</option>`).join("")}
           </select>
-          <button class="btn btn-primary btn-sm" id="f9-add-field">+ Alan Ekle</button>
+          <button class="btn btn-primary btn-sm" id="f9-add-field">+ Add Field</button>
         </div>
         <div class="f9-tabs">
-          <button class="f9-tab active" data-tab="fields">Alanlar</button>
+          <button class="f9-tab active" data-tab="fields">Fields</button>
           <button class="f9-tab" data-tab="layouts">Layout'lar</button>
         </div>
         <div id="f9-content" class="f9-content"></div>
@@ -93,14 +93,14 @@ var CustomFieldsView = (function () {
   /* ── Fields tab ── */
   function renderFieldsTab(el) {
     if (!fields.length) {
-      el.innerHTML = '<p class="f9-empty">Bu varlık türü için alan tanımlanmamış</p>';
+      el.innerHTML = '<p class="f9-empty">No fields defined for this entity type</p>';
       return;
     }
     el.innerHTML = `
       <table class="f9-field-table">
         <thead><tr>
-          <th>Sıra</th><th>Alan Adı</th><th>Etiket</th><th>Tür</th>
-          <th>Zorunlu</th><th>Filtrelenebilir</th><th>İşlemler</th>
+          <th>Order</th><th>Field Name</th><th>Label</th><th>Type</th>
+          <th>Required</th><th>Filterable</th><th>Actions</th>
         </tr></thead>
         <tbody>
           ${fields.map(f => `
@@ -131,7 +131,7 @@ var CustomFieldsView = (function () {
   }
 
   function deleteField(id) {
-    if (!confirm("Alan silinsin mi?")) return;
+    if (!confirm("Delete this field?")) return;
     api("DELETE", `/custom-fields/${id}`).then(() => loadFields());
   }
 
@@ -141,26 +141,26 @@ var CustomFieldsView = (function () {
     overlay.className = "f9-modal-overlay";
     overlay.innerHTML = `
       <div class="f9-modal">
-        <h3>${isEdit ? 'Alan Düzenle' : 'Yeni Alan'}</h3>
-        <label>Alan Adı *</label>
+        <h3>${isEdit ? 'Edit Field' : 'New Field'}</h3>
+        <label>Field Name *</label>
         <input id="f9m-name" class="form-input" value="${escHtml(existing?.field_name || "")}">
-        <label>Etiket</label>
+        <label>Label</label>
         <input id="f9m-label" class="form-input" value="${escHtml(existing?.field_label || "")}">
-        <label>Tür</label>
+        <label>Type</label>
         <select id="f9m-type" class="form-select">
           ${FIELD_TYPES.map(t => `<option value="${t.value}" ${(existing?.field_type || 'text') === t.value ? 'selected' : ''}>${t.label}</option>`).join("")}
         </select>
-        <label>Sıra</label>
+        <label>Order</label>
         <input id="f9m-order" type="number" class="form-input" value="${existing?.sort_order || 0}">
-        <label>Varsayılan Değer</label>
+        <label>Default Value</label>
         <input id="f9m-default" class="form-input" value="${escHtml(existing?.default_value || "")}">
-        <label>Açıklama</label>
+        <label>Description</label>
         <input id="f9m-desc" class="form-input" value="${escHtml(existing?.description || "")}">
-        <label><input type="checkbox" id="f9m-required" ${existing?.is_required ? 'checked' : ''}> Zorunlu</label>
-        <label><input type="checkbox" id="f9m-filterable" ${existing?.is_filterable !== false ? 'checked' : ''}> Filtrelenebilir</label>
+        <label><input type="checkbox" id="f9m-required" ${existing?.is_required ? 'checked' : ''}> Required</label>
+        <label><input type="checkbox" id="f9m-filterable" ${existing?.is_filterable !== false ? 'checked' : ''}> Filterable</label>
         <div class="f9-modal-actions">
-          <button class="btn btn-primary" id="f9m-save">Kaydet</button>
-          <button class="btn btn-outline" id="f9m-cancel">İptal</button>
+          <button class="btn btn-primary" id="f9m-save">Save</button>
+          <button class="btn btn-outline" id="f9m-cancel">Cancel</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
@@ -193,24 +193,24 @@ var CustomFieldsView = (function () {
   function renderLayoutsTab(el) {
     el.innerHTML = `
       <div class="f9-layout-toolbar">
-        <button class="btn btn-primary btn-sm" id="f9-add-layout">+ Layout Ekle</button>
+        <button class="btn btn-primary btn-sm" id="f9-add-layout">+ Add Layout</button>
       </div>
       <div class="f9-layout-list">
         ${layouts.length ? layouts.map(l => `
           <div class="f9-layout-card ${l.is_default ? 'f9-default' : ''}">
             <div class="f9-layout-header">
               <span class="f9-layout-name">${escHtml(l.name)}</span>
-              ${l.is_default ? '<span class="f9-default-badge">Varsayılan</span>' : ''}
+              ${l.is_default ? '<span class="f9-default-badge">Default</span>' : ''}
             </div>
             <div class="f9-layout-meta">
-              ${l.entity_type} · ${(l.sections || []).length} bölüm · ${escHtml(l.created_by)}
+              ${l.entity_type} · ${(l.sections || []).length} sections · ${escHtml(l.created_by)}
             </div>
             <div class="f9-layout-actions">
-              ${!l.is_default ? `<button class="btn btn-outline btn-xs f9-set-default" data-id="${l.id}">★ Varsayılan Yap</button>` : ''}
+              ${!l.is_default ? `<button class="btn btn-outline btn-xs f9-set-default" data-id="${l.id}">★ Set as Default</button>` : ''}
               <button class="btn btn-outline btn-xs f9-edit-layout" data-id="${l.id}">✏️</button>
               <button class="btn btn-outline btn-xs f9-del-layout" data-id="${l.id}">🗑️</button>
             </div>
-          </div>`).join("") : '<p class="f9-empty">Layout tanımlanmamış</p>'}
+          </div>`).join("") : '<p class="f9-empty">No layouts defined</p>'}
       </div>`;
 
     $("#f9-add-layout").onclick = () => showLayoutModal();
@@ -225,7 +225,7 @@ var CustomFieldsView = (function () {
     });
     $$(".f9-del-layout", el).forEach(b => {
       b.onclick = () => {
-        if (!confirm("Layout silinsin mi?")) return;
+        if (!confirm("Delete this layout?")) return;
         api("DELETE", `/layouts/${b.dataset.id}`).then(() => { loadLayouts(); setTimeout(() => renderTab("layouts"), 200); });
       };
     });
@@ -237,15 +237,15 @@ var CustomFieldsView = (function () {
     overlay.className = "f9-modal-overlay";
     overlay.innerHTML = `
       <div class="f9-modal">
-        <h3>${isEdit ? 'Layout Düzenle' : 'Yeni Layout'}</h3>
-        <label>Ad *</label>
+        <h3>${isEdit ? 'Edit Layout' : 'New Layout'}</h3>
+        <label>Name *</label>
         <input id="f9l-name" class="form-input" value="${escHtml(existing?.name || "")}">
-        <label>Bölümler (JSON)</label>
+        <label>Sections (JSON)</label>
         <textarea id="f9l-sections" class="form-input f9-json-area" rows="8">${escHtml(JSON.stringify(existing?.sections || [], null, 2))}</textarea>
-        <label><input type="checkbox" id="f9l-default" ${existing?.is_default ? 'checked' : ''}> Varsayılan Layout</label>
+        <label><input type="checkbox" id="f9l-default" ${existing?.is_default ? 'checked' : ''}> Default Layout</label>
         <div class="f9-modal-actions">
-          <button class="btn btn-primary" id="f9l-save">Kaydet</button>
-          <button class="btn btn-outline" id="f9l-cancel">İptal</button>
+          <button class="btn btn-primary" id="f9l-save">Save</button>
+          <button class="btn btn-outline" id="f9l-cancel">Cancel</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);

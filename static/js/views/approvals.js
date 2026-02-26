@@ -39,12 +39,12 @@ const ApprovalsView = (function () {
 
         main.innerHTML = `
             <div class="pg-view-header">
-                ${PGBreadcrumb.html([{ label: 'Onay Gelen Kutusu' }])}
-                <h2 class="pg-view-title">Onay Gelen Kutusu</h2>
+                ${PGBreadcrumb.html([{ label: 'Approval Inbox' }])}
+                <h2 class="pg-view-title">Approval Inbox</h2>
             </div>
             <div style="max-width:960px;margin:0 auto;padding:var(--pg-sp-4)">
                 <div style="display:flex;justify-content:flex-end;align-items:center;margin-bottom:var(--pg-sp-4)">
-                    ${PGStatusRegistry.badge('pending', { label: _pendingRecords.length + ' bekliyor' })}
+                    ${PGStatusRegistry.badge('pending', { label: _pendingRecords.length + ' pending' })}
                 </div>
 
                 <div id="approvalTabBar" style="margin-bottom:var(--pg-sp-4)"></div>
@@ -77,7 +77,7 @@ const ApprovalsView = (function () {
 
     function _renderPending(el) {
         if (_pendingRecords.length === 0) {
-            el.innerHTML = PGEmptyState.html({ icon: 'approvals', title: 'Bekleyen onay yok', description: 'Tüm onaylar işlendi.' });
+            el.innerHTML = PGEmptyState.html({ icon: 'approvals', title: 'No pending approvals', description: 'All approvals have been processed.' });
             return;
         }
 
@@ -91,8 +91,8 @@ const ApprovalsView = (function () {
                 { key: 'stage_role', label: 'Role', width: '120px' },
                 { key: 'created_at', label: 'Submitted', width: '140px', render: (r) => _esc((r.created_at || '').slice(0, 16)) },
                 { key: '_actions', label: 'Actions', width: '180px', render: (r) => `
-                    <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="ApprovalsView.decide(${r.id}, 'approved')">Onayla</button>
-                    <button class="pg-btn pg-btn--danger pg-btn--sm" onclick="ApprovalsView.decide(${r.id}, 'rejected')">Reddet</button>
+                    <button class="pg-btn pg-btn--primary pg-btn--sm" onclick="ApprovalsView.decide(${r.id}, 'approved')">Approve</button>
+                    <button class="pg-btn pg-btn--danger pg-btn--sm" onclick="ApprovalsView.decide(${r.id}, 'rejected')">Reject</button>
                 ` },
             ],
             rows: _pendingRecords,
@@ -108,8 +108,8 @@ const ApprovalsView = (function () {
         el.innerHTML = `
             <div class="pg-card" style="padding:var(--pg-sp-5)">
                 <p style="color:var(--pg-color-text-secondary);font-size:13px">
-                    Onay geçmişi her entity'nin detay sayfasında → Geçmiş sekmesinde gösterilir.<br>
-                    Yeni onay başlatmak için Test Planlama veya Test Case Detayından "Onaya Gönder"i kullan.
+                    Approval history is shown on each entity's detail page under the History tab.<br>
+                    To start a new approval, use "Submit for Approval" from Test Planning or Test Case Detail.
                 </p>
             </div>`;
     }
@@ -150,10 +150,10 @@ const ApprovalsView = (function () {
             if (data.status === 'not_submitted') {
                 containerEl.innerHTML = `
                     <div class="tm-approval-banner tm-approval-banner--draft">
-                        <span class="tm-approval-banner__text" style="color:var(--pg-color-text-secondary)">Onaya gönderilmedi</span>
+                        <span class="tm-approval-banner__text" style="color:var(--pg-color-text-secondary)">Not submitted for approval</span>
                         <button class="pg-btn pg-btn--primary pg-btn--sm"
                             onclick="ApprovalsView.submitEntity('${_esc(entityType)}', ${entityId})">
-                            Onaya Gönder
+                            Submit for Approval
                         </button>
                     </div>`;
                 return;

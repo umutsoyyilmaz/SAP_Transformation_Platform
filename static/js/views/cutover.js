@@ -14,8 +14,8 @@ const CutoverView = (() => {
 
     // ── Helpers ───────────────────────────────────────────────────────
     function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
-    function fmtDate(d) { return d ? new Date(d).toLocaleDateString('tr-TR') : '—'; }
-    function fmtDateTime(d) { return d ? new Date(d).toLocaleString('tr-TR') : '—'; }
+    function fmtDate(d) { return d ? new Date(d).toLocaleDateString('en-US') : '—'; }
+    function fmtDateTime(d) { return d ? new Date(d).toLocaleString('en-US') : '—'; }
     function fmtStatus(s) { return (s||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()); }
 
     const STATUS_COLORS = {
@@ -41,7 +41,7 @@ const CutoverView = (() => {
         _pid = prog ? prog.id : null;
 
         if (!_pid) {
-            main.innerHTML = PGEmptyState.html({ icon: 'cutover', title: 'Cutover Hub', description: 'Devam etmek için önce bir program seç.', action: { label: 'Programlara Git', onclick: "App.navigate('programs')" } });
+            main.innerHTML = PGEmptyState.html({ icon: 'cutover', title: 'Cutover Hub', description: 'Select a program first to continue.', action: { label: 'Go to Programs', onclick: "App.navigate('programs')" } });
             return;
         }
 
@@ -610,76 +610,29 @@ const CutoverView = (() => {
     //  MODAL HELPERS
     // ═══════════════════════════════════════════════════════════════════
     function _modal(title, body, submitFn) {
-        const existing = document.getElementById('cutoverModal');
-        if (existing) existing.remove();
-        const div = document.createElement('div');
-        div.id = 'cutoverModal';
-        div.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(2px);
-            display:flex;align-items:center;justify-content:center;z-index:1000;
-            animation:cutModalFadeIn .2s ease`;
-        // Inject keyframes once
-        if (!document.getElementById('cutModalStyles')) {
-            const st = document.createElement('style');
-            st.id = 'cutModalStyles';
-            st.textContent = `
-                @keyframes cutModalFadeIn { from{opacity:0} to{opacity:1} }
-                @keyframes cutModalSlideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
-                .fiori-modal-card { animation: cutModalSlideUp .25s ease; }
-                .fiori-field input, .fiori-field select, .fiori-field textarea {
-                    width:100%; padding:9px 12px; border:1.5px solid var(--sap-border,#d9d9d9);
-                    border-radius:8px; font-size:13px; font-family:var(--font-family,inherit);
-                    background:var(--sap-card-bg,#fff); color:var(--sap-text-primary,#32363a);
-                    transition:border-color .15s,box-shadow .15s; outline:none;
-                }
-                .fiori-field input:focus, .fiori-field select:focus, .fiori-field textarea:focus {
-                    border-color:var(--sap-blue,#0070f2);
-                    box-shadow:0 0 0 3px rgba(0,112,242,.12);
-                }
-                .fiori-field select { appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236a6d70' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-                    background-repeat:no-repeat; background-position:right 10px center; padding-right:32px; }
-                .fiori-field label { display:block; font-size:12px; font-weight:600; color:var(--sap-text-secondary,#6a6d70);
-                    margin-bottom:5px; letter-spacing:.3px; }
-                .fiori-field { margin-bottom:14px; }
-                .fiori-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-            `;
-            document.head.appendChild(st);
-        }
-        div.innerHTML = `
-            <div class="fiori-modal-card" style="background:var(--sap-card-bg,#fff);border-radius:12px;
-                min-width:480px;max-width:640px;max-height:85vh;overflow:hidden;
-                box-shadow:0 12px 48px rgba(0,0,0,.18),0 2px 8px rgba(0,0,0,.08);display:flex;flex-direction:column">
-                <div style="padding:20px 24px 16px;border-bottom:1px solid var(--sap-border,#e5e5e5);
-                    display:flex;align-items:center;justify-content:space-between">
-                    <div style="display:flex;align-items:center;gap:10px">
-                        <div style="width:36px;height:36px;border-radius:10px;background:var(--sap-blue-light,#ebf5ff);
-                            display:flex;align-items:center;justify-content:center;font-size:18px">🚀</div>
-                        <div>
-                            <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--sap-text-primary,#32363a)">${title}</h3>
-                            <div style="font-size:11px;color:var(--sap-text-secondary,#6a6d70);margin-top:1px">Fill in the required fields below</div>
-                        </div>
-                    </div>
-                    <button class="modal-close" onclick="document.getElementById('cutoverModal').remove()" title="Close">&times;</button>
+        App.openModal(`
+            <div class="modal modal--lg">
+                <div class="modal-header">
+                    <h2>${title}</h2>
+                    <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button>
                 </div>
-                <form id="cutoverModalForm" onsubmit="event.preventDefault();${submitFn}"
-                    style="padding:20px 24px;overflow-y:auto;flex:1">
-                    ${body}
-                    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;
-                        border-top:1px solid var(--sap-border,#e5e5e5)">
-                        <button type="button" class="btn btn-secondary"
-                            onclick="document.getElementById('cutoverModal').remove()">Cancel</button>
+                <form id="cutoverModalForm" onsubmit="event.preventDefault();${submitFn}">
+                    <div class="modal-body cutover-modal-body">
+                        ${body}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
                         <button type="submit" class="btn btn-primary">Save</button>
                     </div>
                 </form>
             </div>
-        `;
-        // Close on backdrop click
-        div.addEventListener('click', e => { if (e.target === div) div.remove(); });
-        // Close on ESC key
-        const escHandler = e => { if (e.key === 'Escape') { div.remove(); document.removeEventListener('keydown', escHandler); } };
-        document.addEventListener('keydown', escHandler);
-        document.body.appendChild(div);
-        // Auto-focus first input
-        setTimeout(() => { const fi = div.querySelector('input,select,textarea'); if(fi) fi.focus(); }, 80);
+        `);
+
+        // Keep usability parity with old modal: focus first form field.
+        setTimeout(() => {
+            const fi = document.querySelector('#cutoverModalForm input, #cutoverModalForm select, #cutoverModalForm textarea');
+            if (fi) fi.focus();
+        }, 80);
     }
 
     function _field(label, name, type='text', value='', extra='') {
@@ -754,7 +707,7 @@ const CutoverView = (() => {
         d.cutover_manager_id = parseInt(d.cutover_manager_id) || null;
         try {
             await API.post('/cutover/plans', d);
-            document.getElementById('cutoverModal').remove();
+            App.closeModal();
             App.toast('Plan created','success');
             await loadPlans();
             _activePlan = _plans[_plans.length - 1];
@@ -788,7 +741,7 @@ const CutoverView = (() => {
         d.cutover_manager_id = parseInt(d.cutover_manager_id) || null;
         try {
             await API.put(`/cutover/plans/${id}`, d);
-            document.getElementById('cutoverModal').remove();
+            App.closeModal();
             App.toast('Plan updated','success');
             await loadPlans();
             _activePlan = _plans.find(p => p.id === id) || _activePlan;
@@ -842,7 +795,7 @@ const CutoverView = (() => {
         d.owner_id = parseInt(d.owner_id) || null;
         try {
             await API.post(`/cutover/plans/${_activePlan.id}/scope-items`, d);
-            document.getElementById('cutoverModal').remove();
+            App.closeModal();
             App.toast('Scope item created','success');
             renderTab();
         } catch(e) { App.toast(e.message,'error'); }
@@ -888,7 +841,7 @@ const CutoverView = (() => {
         d.responsible_id = parseInt(d.responsible_id) || null;
         try {
             await API.post(`/cutover/scope-items/${siId}/tasks`, d);
-            document.getElementById('cutoverModal').remove();
+            App.closeModal();
             App.toast('Task created','success');
             renderTab();
         } catch(e) { App.toast(e.message,'error'); }
@@ -929,7 +882,7 @@ const CutoverView = (() => {
         d.planned_duration_min = parseInt(d.planned_duration_min) || null;
         try {
             await API.post(`/cutover/plans/${_activePlan.id}/rehearsals`, d);
-            document.getElementById('cutoverModal').remove();
+            App.closeModal();
             App.toast('Rehearsal created','success');
             renderTab();
         } catch(e) { App.toast(e.message,'error'); }
@@ -983,7 +936,7 @@ const CutoverView = (() => {
         const d = _formData();
         try {
             await API.post(`/cutover/plans/${_activePlan.id}/go-no-go`, d);
-            document.getElementById('cutoverModal').remove();
+            App.closeModal();
             App.toast('Go/No-Go item created','success');
             renderTab();
         } catch(e) { App.toast(e.message,'error'); }
@@ -1039,7 +992,7 @@ const CutoverView = (() => {
         const d = _formData();
         try {
             await API.post(`/cutover/plans/${_activePlan.id}/incidents`, d);
-            document.getElementById('cutoverModal').remove();
+            App.closeModal();
             App.toast('Incident created','success');
             renderTab();
         } catch(e) { App.toast(e.message,'error'); }
@@ -1104,6 +1057,20 @@ const CutoverView = (() => {
         }
     }
 
+    /** Resolve and validate war-room scope from active plan + app tenant context. */
+    function _resolveWarRoomScope() {
+        if (!_activePlan) return null;
+        const planId = _activePlan.id;
+        const programId = Number(_activePlan.program_id) || null;
+        const tenantRaw = App.currentTenantId?.() ?? _activePlan.tenant_id;
+        const tenantId = Number(tenantRaw) || null;
+        if (!programId || !tenantId) {
+            App.toast('War-room scope missing: program_id/tenant_id is required', 'error');
+            return null;
+        }
+        return { planId, programId, tenantId };
+    }
+
     /** Fetch live-status snapshot and re-render the war-room panel. */
     async function _refreshWarRoom(planId, programId, tenantId) {
         try {
@@ -1128,8 +1095,8 @@ const CutoverView = (() => {
 
         const elapsed   = clock.elapsed_minutes != null ? `${clock.elapsed_minutes} min` : '--';
         const delay     = clock.total_delay_minutes > 0
-            ? `<span class="badge bg-danger ms-2">+${clock.total_delay_minutes} min behind</span>`
-            : `<span class="badge bg-success ms-2">On schedule</span>`;
+            ? `<span class="badge" style="background:var(--sap-negative);color:#fff;margin-left:8px">+${clock.total_delay_minutes} min behind</span>`
+            : `<span class="badge" style="background:var(--sap-positive);color:#fff;margin-left:8px">On schedule</span>`;
 
         // Workstream rows
         let wsRows = '';
@@ -1137,13 +1104,13 @@ const CutoverView = (() => {
             const pct = counts.total > 0 ? Math.round((counts.completed / counts.total) * 100) : 0;
             wsRows += `
             <tr>
-                <td class="text-capitalize">${name}</td>
+                <td style="text-transform:capitalize">${name}</td>
                 <td>${counts.total}</td>
                 <td>${counts.completed}</td>
                 <td>${counts.in_progress}</td>
                 <td>
-                  <div class="progress" style="height:8px">
-                    <div class="progress-bar" style="width:${pct}%"></div>
+                  <div style="height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;">
+                    <div style="width:${pct}%;height:100%;background:var(--sap-blue)"></div>
                   </div>
                   <small>${pct}%</small>
                 </td>
@@ -1153,61 +1120,61 @@ const CutoverView = (() => {
         // Critical path tasks
         let cpRows = '';
         for (const t of (snap.critical_path_tasks || [])) {
-            const statusBadge = t.status === 'completed'
-                ? 'bg-success'
+            const statusColor = t.status === 'completed'
+                ? 'var(--sap-positive)'
                 : t.status === 'in_progress'
-                    ? 'bg-primary'
-                    : 'bg-secondary';
+                    ? 'var(--sap-blue)'
+                    : '#6a6d70';
             const delayBadge = t.delay_minutes > 0
-                ? `<span class="badge bg-danger ms-1">+${t.delay_minutes}m</span>`
+                ? `<span class="badge" style="background:var(--sap-negative);color:#fff;margin-left:4px">+${t.delay_minutes}m</span>`
                 : '';
             const issueBadge = t.issue_note
-                ? `<span class="badge bg-warning text-dark ms-1" title="${t.issue_note}">⚠️ Issue</span>`
+                ? `<span class="badge" style="background:var(--sap-warning);color:#fff;margin-left:4px" title="${t.issue_note}">⚠️ Issue</span>`
                 : '';
             cpRows += `
             <tr>
                 <td><code>${t.code || '#'}</code></td>
                 <td>${t.title}</td>
-                <td><span class="badge ${statusBadge}">${t.status}</span>${delayBadge}${issueBadge}</td>
+                <td><span class="badge" style="background:${statusColor};color:#fff">${t.status}</span>${delayBadge}${issueBadge}</td>
             </tr>`;
         }
 
         container.innerHTML = `
-        <div class="card mb-3 border-${clock.is_behind_schedule ? 'danger' : 'success'}">
-          <div class="card-header d-flex align-items-center gap-2">
+        <div class="card" style="margin-bottom:12px;border:1px solid ${clock.is_behind_schedule ? 'var(--sap-negative)' : 'var(--sap-positive)'};">
+          <div class="card-header" style="display:flex;align-items:center;gap:8px;">
             <strong>⏱ Cutover Clock</strong>
             ${delay}
-            <span class="ms-auto text-muted small">Auto-refresh: 30s</span>
+            <span style="margin-left:auto;color:var(--sap-text-secondary);font-size:12px">Auto-refresh: 30s</span>
           </div>
-          <div class="card-body row text-center">
-            <div class="col-3">
-              <div class="fs-4 fw-bold">${elapsed}</div>
+          <div style="padding:12px 0;display:grid;grid-template-columns:repeat(4,minmax(100px,1fr));gap:8px;text-align:center;">
+            <div>
+              <div style="font-size:1.5rem;font-weight:700">${elapsed}</div>
               <small class="text-muted">Elapsed</small>
             </div>
-            <div class="col-3">
-              <div class="fs-4 fw-bold">${tasks.completed || 0}/${tasks.total || 0}</div>
+            <div>
+              <div style="font-size:1.5rem;font-weight:700">${tasks.completed || 0}/${tasks.total || 0}</div>
               <small class="text-muted">Tasks Done</small>
             </div>
-            <div class="col-3">
-              <div class="fs-4 fw-bold text-warning">${tasks.in_progress || 0}</div>
+            <div>
+              <div style="font-size:1.5rem;font-weight:700;color:var(--sap-warning)">${tasks.in_progress || 0}</div>
               <small class="text-muted">In Progress</small>
             </div>
-            <div class="col-3">
-              <div class="fs-4 fw-bold text-danger">${tasks.blocked || 0}</div>
+            <div>
+              <div style="font-size:1.5rem;font-weight:700;color:var(--sap-negative)">${tasks.blocked || 0}</div>
               <small class="text-muted">Blocked</small>
             </div>
           </div>
         </div>
 
-        <div class="row mb-3">
-          <div class="col-md-6">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+          <div>
             <h6>Go / No-Go</h6>
-            <span class="badge bg-success me-1">✅ ${gng.passed || 0} Passed</span>
-            <span class="badge bg-warning text-dark me-1">⏳ ${gng.pending || 0} Pending</span>
-            <span class="badge bg-danger me-1">❌ ${gng.failed || 0} Failed</span>
+            <span class="badge" style="background:var(--sap-positive);color:#fff;margin-right:4px">✅ ${gng.passed || 0} Passed</span>
+            <span class="badge" style="background:var(--sap-warning);color:#fff;margin-right:4px">⏳ ${gng.pending || 0} Pending</span>
+            <span class="badge" style="background:var(--sap-negative);color:#fff;margin-right:4px">❌ ${gng.failed || 0} Failed</span>
           </div>
-          <div class="col-md-6 text-end">
-            <button class="btn btn-sm btn-outline-secondary"
+          <div style="margin-left:auto">
+            <button class="btn btn-sm btn-secondary"
               onclick="CutoverView.refreshCriticalPath()">
               Recalculate Critical Path
             </button>
@@ -1215,13 +1182,13 @@ const CutoverView = (() => {
         </div>
 
         <h6>Workstreams</h6>
-        <table class="table table-sm table-bordered">
+        <table class="data-table" style="font-size:13px">
           <thead><tr><th>Workstream</th><th>Total</th><th>Done</th><th>Active</th><th>Progress</th></tr></thead>
           <tbody>${wsRows || '<tr><td colspan="5" class="text-muted text-center">No workstreams assigned</td></tr>'}</tbody>
         </table>
 
         <h6>Critical Path Tasks</h6>
-        <table class="table table-sm table-bordered">
+        <table class="data-table" style="font-size:13px">
           <thead><tr><th>Code</th><th>Title</th><th>Status</th></tr></thead>
           <tbody>${cpRows || '<tr><td colspan="3" class="text-muted text-center">No critical path calculated yet</td></tr>'}</tbody>
         </table>`;
@@ -1231,15 +1198,15 @@ const CutoverView = (() => {
     async function startCutoverClock() {
         if (!_activePlan) { App.toast('No plan selected', 'warning'); return; }
         if (!confirm('Start the cutover clock? This transitions the plan to EXECUTING status.')) return;
-        const programId = _activePlan.program_id;
-        const tenantId  = App.currentTenantId?.() || _activePlan.tenant_id;
+        const scope = _resolveWarRoomScope();
+        if (!scope) return;
         try {
-            await API.post(`/cutover/plans/${_activePlan.id}/start-clock`, {
-                program_id: programId,
-                tenant_id: tenantId,
+            await API.post(`/cutover/plans/${scope.planId}/start-clock`, {
+                program_id: scope.programId,
+                tenant_id: scope.tenantId,
             });
             App.toast('Cutover clock started!', 'success');
-            startWarRoomPolling(_activePlan.id, programId, tenantId);
+            startWarRoomPolling(scope.planId, scope.programId, scope.tenantId);
             renderTab();
         } catch (e) { App.toast(e.message, 'error'); }
     }
@@ -1247,26 +1214,26 @@ const CutoverView = (() => {
     /** Recalculate critical path for the active plan. */
     async function refreshCriticalPath() {
         if (!_activePlan) return;
-        const programId = _activePlan.program_id;
-        const tenantId  = App.currentTenantId?.() || _activePlan.tenant_id;
+        const scope = _resolveWarRoomScope();
+        if (!scope) return;
         try {
             const res = await API.get(
-                `/cutover/plans/${_activePlan.id}/critical-path?program_id=${programId}&tenant_id=${tenantId}`
+                `/cutover/plans/${scope.planId}/critical-path?program_id=${scope.programId}&tenant_id=${scope.tenantId}`
             );
             App.toast(`Critical path: ${res.count} tasks identified`, 'success');
-            _refreshWarRoom(_activePlan.id, programId, tenantId);
+            _refreshWarRoom(scope.planId, scope.programId, scope.tenantId);
         } catch (e) { App.toast(e.message, 'error'); }
     }
 
     /** Start a runbook task from the war-room table. */
     async function startRunbookTask(taskId) {
         if (!_activePlan) return;
-        const programId = _activePlan.program_id;
-        const tenantId  = App.currentTenantId?.() || _activePlan.tenant_id;
+        const scope = _resolveWarRoomScope();
+        if (!scope) return;
         try {
             await API.post(`/cutover/tasks/${taskId}/start-task`, {
-                program_id: programId,
-                tenant_id: tenantId,
+                program_id: scope.programId,
+                tenant_id: scope.tenantId,
             });
             App.toast('Task started', 'success');
             renderTab();
@@ -1276,13 +1243,13 @@ const CutoverView = (() => {
     /** Complete a runbook task from the war-room table. */
     async function completeRunbookTask(taskId) {
         if (!_activePlan) return;
-        const programId = _activePlan.program_id;
-        const tenantId  = App.currentTenantId?.() || _activePlan.tenant_id;
+        const scope = _resolveWarRoomScope();
+        if (!scope) return;
         const notes = prompt('Optional completion notes:') || '';
         try {
             await API.post(`/cutover/tasks/${taskId}/complete-task`, {
-                program_id: programId,
-                tenant_id: tenantId,
+                program_id: scope.programId,
+                tenant_id: scope.tenantId,
                 notes: notes || undefined,
             });
             App.toast('Task completed', 'success');
@@ -1295,12 +1262,12 @@ const CutoverView = (() => {
         if (!_activePlan) return;
         const note = prompt('Describe the issue:');
         if (!note || !note.trim()) return;
-        const programId = _activePlan.program_id;
-        const tenantId  = App.currentTenantId?.() || _activePlan.tenant_id;
+        const scope = _resolveWarRoomScope();
+        if (!scope) return;
         try {
             await API.post(`/cutover/tasks/${taskId}/flag-issue`, {
-                program_id: programId,
-                tenant_id: tenantId,
+                program_id: scope.programId,
+                tenant_id: scope.tenantId,
                 note: note.trim(),
             });
             App.toast('Issue flagged', 'warning');

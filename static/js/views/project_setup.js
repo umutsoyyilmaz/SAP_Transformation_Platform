@@ -9,7 +9,11 @@ const ProjectSetupView = (() => {
     const esc = ExpUI.esc;
 
     let _pid = null;
-    let _currentTab = 'hierarchy';
+    let _currentTab = 'project-info';
+    let _activeProgram = null;
+    let _activeProject = null;
+    let _programProjects = [];
+    let _programDetail = null;
     let _viewMode = 'tree';
     let _tree = [];
     let _flatList = [];
@@ -36,46 +40,274 @@ const ProjectSetupView = (() => {
     ];
 
     function render() {
-        const prog = App.getActiveProgram();
-        _pid = prog ? prog.id : null;
+        _activeProgram = App.getActiveProgram();
+        _activeProject = App.getActiveProject();
+        _pid = _activeProgram ? _activeProgram.id : null;
         const main = document.getElementById('mainContent');
 
         if (!_pid) {
-            main.innerHTML = PGEmptyState.html({ icon: 'settings', title: 'Proje Kurulumu', description: 'Devam etmek için önce bir program seç.', action: { label: 'Programlara Git', onclick: "App.navigate('programs')" } });
+            main.innerHTML = PGEmptyState.html({
+                icon: 'settings',
+                title: 'Project Setup',
+                description: 'Select a program first to continue.',
+                action: { label: 'Go to Programs', onclick: "App.navigate('programs')" },
+            });
             return;
         }
 
         main.innerHTML = `
             <div class="pg-view-header">
-                ${PGBreadcrumb.html([{ label: 'Proje Kurulumu' }])}
-                <h2 class="pg-view-title">Proje Kurulumu</h2>
-                <p style="font-size:13px;color:var(--pg-color-text-secondary)">Proje yapısını ve süreç hiyerarşisini yapılandır</p>
+                ${PGBreadcrumb.html([{ label: 'Program Management' }, { label: 'Project Setup' }])}
+                <h2 class="pg-view-title">Project Setup</h2>
+                <p style="font-size:13px;color:var(--pg-color-text-secondary)">Program selected, project-specific setup tabs below</p>
+            </div>
+            <div id="projectSetupContextCard" class="card" style="margin-bottom:16px;padding:12px 16px">
+                <div style="display:flex;gap:16px;align-items:end;flex-wrap:wrap">
+                    <div style="min-width:220px">
+                        <div style="font-size:11px;color:var(--pg-color-text-secondary);text-transform:uppercase">Program</div>
+                        <div style="font-weight:600">${esc(_activeProgram?.name || '—')}</div>
+                    </div>
+                    <div style="min-width:280px;flex:1">
+                        <label for="projectSetupProjectSelect" style="display:block;font-size:11px;color:var(--pg-color-text-secondary);text-transform:uppercase;margin-bottom:4px">Project</label>
+                        <select id="projectSetupProjectSelect" class="pg-input" onchange="ProjectSetupView.selectProject(this.value)">
+                            <option value="">Select project...</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="projectSetupContextMeta" style="margin-top:8px;font-size:12px;color:var(--pg-color-text-secondary)"></div>
             </div>
             <div class="exp-tabs" style="margin-bottom:16px">
-                <button class="exp-tab ${_currentTab === 'hierarchy' ? 'exp-tab--active' : ''}" onclick="ProjectSetupView.switchTab('hierarchy')">🏗️ Process Hierarchy</button>
+                <button class="exp-tab ${_currentTab === 'project-info' ? 'exp-tab--active' : ''}" onclick="ProjectSetupView.switchTab('project-info')">📌 Project Info</button>
+                <button class="exp-tab ${_currentTab === 'methodology' ? 'exp-tab--active' : ''}" onclick="ProjectSetupView.switchTab('methodology')">🧭 Methodology</button>
                 <button class="exp-tab ${_currentTab === 'team' ? 'exp-tab--active' : ''}" onclick="ProjectSetupView.switchTab('team')">👥 Team</button>
-                <button class="exp-tab ${_currentTab === 'phases' ? 'exp-tab--active' : ''}" onclick="ProjectSetupView.switchTab('phases')">📅 Phases</button>
-                <button class="exp-tab ${_currentTab === 'settings' ? 'exp-tab--active' : ''}" onclick="ProjectSetupView.switchTab('settings')">⚙️ Settings</button>
+                <button class="exp-tab ${_currentTab === 'scope-hierarchy' ? 'exp-tab--active' : ''}" onclick="ProjectSetupView.switchTab('scope-hierarchy')">🏗️ Scope & Hierarchy</button>
+                <button class="exp-tab ${_currentTab === 'governance' ? 'exp-tab--active' : ''}" onclick="ProjectSetupView.switchTab('governance')">🛡 Governance</button>
             </div>
             <div id="setupContent">
                 <div style="text-align:center;padding:40px"><div class="spinner"></div></div>
             </div>`;
 
-        loadCurrentTab();
+        _loadProgramContext().then(() => {
+            _renderContextCard();
+            loadCurrentTab();
+        });
     }
 
     function switchTab(tab) {
         _currentTab = tab;
         document.querySelectorAll('.exp-tab').forEach((t, idx) => {
-            const tabs = ['hierarchy', 'team', 'phases', 'settings'];
+            const tabs = ['project-info', 'methodology', 'team', 'scope-hierarchy', 'governance'];
             t.classList.toggle('exp-tab--active', tabs[idx] === tab);
         });
         loadCurrentTab();
     }
 
+    async function _loadProgramContext() {
+        try {
+            const [projects, programDetail] = await Promise.all([
+                API.get(`/programs/${_pid}/projects`),
+                API.get(`/programs/${_pid}`),
+            ]);
+            _programProjects = Array.isArray(projects) ? projects : [];
+            _programDetail = programDetail || null;
+        } catch {
+            _programProjects = [];
+            _programDetail = null;
+        }
+        _activeProject = App.getActiveProject();
+        if (_activeProject && _activeProject.program_id !== _pid) {
+            App.setActiveProject(null);
+            _activeProject = null;
+        }
+    }
+
+    function _renderContextCard() {
+        const select = document.getElementById('projectSetupProjectSelect');
+        const meta = document.getElementById('projectSetupContextMeta');
+        if (!select || !meta) return;
+
+        select.innerHTML = [
+            '<option value="">Select project...</option>',
+            ..._programProjects.map((p) =>
+                `<option value="${p.id}" ${_activeProject && Number(_activeProject.id) === Number(p.id) ? 'selected' : ''}>${esc(p.name)} (${esc(p.code || 'PRJ')})</option>`
+            ),
+        ].join('');
+
+        if (_activeProject) {
+            const full = _programProjects.find((p) => Number(p.id) === Number(_activeProject.id));
+            meta.innerHTML = full
+                ? `Selected project: <strong>${esc(full.name)}</strong> · Status: ${esc(full.status || 'active')} · Type: ${esc(full.type || 'n/a')}`
+                : `Selected project id: ${esc(String(_activeProject.id))}`;
+        } else {
+            meta.innerHTML = 'No project selected yet. Choose one to access project setup tabs.';
+        }
+    }
+
+    function selectProject(projectId) {
+        const pid = Number.parseInt(String(projectId || ''), 10);
+        if (!Number.isFinite(pid) || pid <= 0) {
+            App.setActiveProject(null);
+            _activeProject = null;
+            _renderContextCard();
+            renderProjectRequiredGuard();
+            return;
+        }
+
+        const project = _programProjects.find((p) => Number(p.id) === pid);
+        if (!project) {
+            App.toast('Selected project was not found in this program.', 'error');
+            return;
+        }
+
+        App.setActiveProject({
+            id: project.id,
+            name: project.name,
+            code: project.code,
+            program_id: project.program_id,
+            tenant_id: project.tenant_id,
+        });
+        _activeProject = App.getActiveProject();
+        _renderContextCard();
+        loadCurrentTab();
+    }
+
     function loadCurrentTab() {
-        if (_currentTab === 'hierarchy') loadHierarchyTab();
-        else renderPlaceholder();
+        if (!_activeProject) {
+            renderProjectRequiredGuard();
+            return;
+        }
+        if (_currentTab === 'scope-hierarchy') {
+            loadHierarchyTab();
+            return;
+        }
+        if (_currentTab === 'project-info') {
+            renderProjectInfoTab();
+            return;
+        }
+        if (_currentTab === 'methodology') {
+            renderMethodologyTab();
+            return;
+        }
+        if (_currentTab === 'team') {
+            renderTeamTab();
+            return;
+        }
+        if (_currentTab === 'governance') {
+            renderGovernanceTab();
+            return;
+        }
+        renderPlaceholder();
+    }
+
+    function renderProjectRequiredGuard() {
+        const c = document.getElementById('setupContent');
+        if (!c) return;
+        c.innerHTML = PGEmptyState.html({
+            icon: 'settings',
+            title: 'Project selection required',
+            description: 'Program is selected. Choose a project from the selector above to continue.',
+            action: { label: 'Go to Programs', onclick: "App.navigate('programs')" },
+        });
+    }
+
+    function renderProjectInfoTab() {
+        const c = document.getElementById('setupContent');
+        const project = _programProjects.find((p) => Number(p.id) === Number(_activeProject?.id));
+        if (!c || !project) {
+            renderProjectRequiredGuard();
+            return;
+        }
+        c.innerHTML = `
+            <div class="card" style="padding:16px">
+                <h3 style="margin-bottom:12px">Project Information</h3>
+                <div class="detail-grid">
+                    <div class="detail-section">
+                        <dl class="detail-list">
+                            <dt>Program</dt><dd>${esc(_activeProgram?.name || '—')}</dd>
+                            <dt>Project Name</dt><dd>${esc(project.name || '—')}</dd>
+                            <dt>Project Code</dt><dd>${esc(project.code || '—')}</dd>
+                            <dt>Status</dt><dd>${esc(project.status || 'active')}</dd>
+                            <dt>Type</dt><dd>${esc(project.type || 'n/a')}</dd>
+                        </dl>
+                    </div>
+                    <div class="detail-section">
+                        <dl class="detail-list">
+                            <dt>Default Project</dt><dd>${project.is_default ? 'Yes' : 'No'}</dd>
+                            <dt>Owner ID</dt><dd>${esc(String(project.owner_id || '—'))}</dd>
+                            <dt>Start Date</dt><dd>${esc(project.start_date || '—')}</dd>
+                            <dt>End Date</dt><dd>${esc(project.end_date || '—')}</dd>
+                            <dt>Go-live Date</dt><dd>${esc(project.go_live_date || '—')}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderMethodologyTab() {
+        const c = document.getElementById('setupContent');
+        const phases = Array.isArray(_programDetail?.phases) ? _programDetail.phases : [];
+        c.innerHTML = `
+            <div class="card" style="padding:16px">
+                <h3 style="margin-bottom:12px">Project Methodology</h3>
+                <div class="detail-grid">
+                    <div class="detail-section">
+                        <dl class="detail-list">
+                            <dt>Methodology</dt><dd>${esc(_programDetail?.methodology || _activeProgram?.methodology || '—')}</dd>
+                            <dt>Project Type</dt><dd>${esc(_programDetail?.project_type || _activeProgram?.project_type || '—')}</dd>
+                            <dt>Program Status</dt><dd>${esc(_programDetail?.status || _activeProgram?.status || '—')}</dd>
+                        </dl>
+                    </div>
+                    <div class="detail-section">
+                        <h4 style="margin-bottom:8px">Lifecycle Phases</h4>
+                        ${phases.length
+                            ? `<ul style="margin:0;padding-left:18px">${phases.map((p) => `<li>${esc(p.name)} (${esc(p.status || 'n/a')})</li>`).join('')}</ul>`
+                            : '<div style="color:var(--pg-color-text-secondary)">No phases defined for this program.</div>'
+                        }
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderTeamTab() {
+        const c = document.getElementById('setupContent');
+        const team = Array.isArray(_programDetail?.team_members) ? _programDetail.team_members : [];
+        c.innerHTML = `
+            <div class="card" style="padding:16px">
+                <h3 style="margin-bottom:12px">Project Team</h3>
+                ${team.length
+                    ? `<div class="table-wrap"><table class="table"><thead><tr><th>Name</th><th>Role</th><th>RACI</th><th>Email</th></tr></thead><tbody>
+                        ${team.map((m) => `<tr><td>${esc(m.name || '')}</td><td>${esc(m.role || '')}</td><td>${esc(m.raci || '')}</td><td>${esc(m.email || '')}</td></tr>`).join('')}
+                    </tbody></table></div>`
+                    : '<div style="color:var(--pg-color-text-secondary)">No team members mapped yet.</div>'
+                }
+            </div>
+        `;
+    }
+
+    function renderGovernanceTab() {
+        const c = document.getElementById('setupContent');
+        const committees = Array.isArray(_programDetail?.committees) ? _programDetail.committees : [];
+        const workstreams = Array.isArray(_programDetail?.workstreams) ? _programDetail.workstreams : [];
+        c.innerHTML = `
+            <div class="detail-grid">
+                <div class="card detail-section" style="padding:16px">
+                    <h3 style="margin-bottom:12px">Governance Committees</h3>
+                    ${committees.length
+                        ? `<ul style="margin:0;padding-left:18px">${committees.map((x) => `<li>${esc(x.name)} · ${esc(x.committee_type || 'n/a')}</li>`).join('')}</ul>`
+                        : '<div style="color:var(--pg-color-text-secondary)">No committees defined.</div>'
+                    }
+                </div>
+                <div class="card detail-section" style="padding:16px">
+                    <h3 style="margin-bottom:12px">Workstreams</h3>
+                    ${workstreams.length
+                        ? `<ul style="margin:0;padding-left:18px">${workstreams.map((x) => `<li>${esc(x.name)} · ${esc(x.ws_type || 'n/a')}</li>`).join('')}</ul>`
+                        : '<div style="color:var(--pg-color-text-secondary)">No workstreams defined.</div>'
+                    }
+                </div>
+            </div>
+        `;
     }
 
     async function loadHierarchyTab() {
@@ -1088,9 +1320,9 @@ const ProjectSetupView = (() => {
     }
 
     /**
-     * Adım göstergesi — wizard akışları için.
-     * @param {Array<{label: string}>} steps - Adım tanımları
-     * @param {number} activeIdx - Aktif adım index'i (0-tabanlı)
+     * Step indicator — for wizard flows.
+     * @param {Array<{label: string}>} steps - Step definitions
+     * @param {number} activeIdx - Active step index (0-based)
      */
     function _stepIndicator(steps, activeIdx) {
         return `<div class="pg-steps">` + steps.map((s, i) => `
@@ -1119,6 +1351,7 @@ const ProjectSetupView = (() => {
     return {
         render,
         switchTab,
+        selectProject,
         toggleNode,
         setSearch,
         setFilter,

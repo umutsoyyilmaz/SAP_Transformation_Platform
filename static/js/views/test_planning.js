@@ -112,7 +112,7 @@ const TestPlanningView = (() => {
         const container = document.getElementById('testContent');
 
         if (plans.length === 0) {
-            container.innerHTML = PGEmptyState.html({ icon: 'test', title: 'Henüz test planı yok', description: 'İlk test planını oluştur, ardından kapsam (L3 süreç, senaryo, gereksinim) ekle.', action: { label: '+ Yeni Test Planı', onclick: 'TestPlanningView.showPlanModal()' } });
+            container.innerHTML = PGEmptyState.html({ icon: 'test', title: 'No test plans yet', description: 'Create your first test plan, then add scope (L3 process, scenario, requirement).', action: { label: '+ New Test Plan', onclick: 'TestPlanningView.showPlanModal()' } });
             return;
         }
 
@@ -339,7 +339,7 @@ const TestPlanningView = (() => {
         const container = document.getElementById('testContent');
 
         if (testCases.length === 0) {
-            container.innerHTML = PGEmptyState.html({ icon: 'test', title: 'Test case bulunamadı', description: 'Test kataloğunu oluşturmak için ilk test caseni ekle.', action: { label: '+ Yeni Test Case', onclick: 'TestPlanningView.showCaseModal()' } });
+            container.innerHTML = PGEmptyState.html({ icon: 'test', title: 'No test cases found', description: 'Add your first test case to build the test catalog.', action: { label: '+ New Test Case', onclick: 'TestPlanningView.showCaseModal()' } });
             return;
         }
 

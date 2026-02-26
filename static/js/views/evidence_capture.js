@@ -33,24 +33,24 @@ var EvidenceCaptureView = (function () {
     root.innerHTML = `
       <div class="f8e-layout">
         <div class="f8e-toolbar">
-          <h3>Kanıt Galerisi</h3>
+          <h3>Evidence Gallery</h3>
           <div class="f8e-controls">
             <label>Execution ID:</label>
             <input type="number" id="f8e-exec-id" class="form-input f8e-id-input"
                    placeholder="Execution ID" value="${currentExecutionId || ""}">
-            <button class="btn btn-primary btn-sm" id="f8e-load">Yükle</button>
-            <button class="btn btn-success btn-sm" id="f8e-add">+ Kanıt Ekle</button>
+            <button class="btn btn-primary btn-sm" id="f8e-load">Load</button>
+            <button class="btn btn-success btn-sm" id="f8e-add">+ Add Evidence</button>
           </div>
         </div>
         <div class="f8e-type-filter" id="f8e-type-filter">
-          <button class="f8e-filter-btn active" data-type="">Tümü</button>
-          <button class="f8e-filter-btn" data-type="screenshot">📷 Ekran Görüntüsü</button>
+          <button class="f8e-filter-btn active" data-type="">All</button>
+          <button class="f8e-filter-btn" data-type="screenshot">📷 Screenshot</button>
           <button class="f8e-filter-btn" data-type="video">🎥 Video</button>
           <button class="f8e-filter-btn" data-type="log">📄 Log</button>
-          <button class="f8e-filter-btn" data-type="document">📑 Doküman</button>
+          <button class="f8e-filter-btn" data-type="document">📑 Document</button>
         </div>
         <div class="f8e-gallery" id="f8e-gallery">
-          <p class="f8e-empty">Execution ID seçip "Yükle" butonuna basın</p>
+          <p class="f8e-empty">Select an Execution ID and click "Load"</p>
         </div>
       </div>`;
 
@@ -84,7 +84,7 @@ var EvidenceCaptureView = (function () {
     if (filterType) items = items.filter(e => e.evidence_type === filterType);
 
     if (!items.length) {
-      el.innerHTML = '<p class="f8e-empty">Kanıt bulunamadı</p>';
+      el.innerHTML = '<p class="f8e-empty">No evidence found</p>';
       return;
     }
     el.innerHTML = items.map(ev => evidenceCard(ev)).join("");
@@ -113,15 +113,15 @@ var EvidenceCaptureView = (function () {
           ${ev.is_primary ? '<span class="f8e-star">★</span>' : ''}
         </div>
         <div class="f8e-card-info">
-          <span class="f8e-card-name">${escHtml(ev.file_name || "Kanıt")}</span>
+          <span class="f8e-card-name">${escHtml(ev.file_name || "Evidence")}</span>
           <span class="f8e-card-meta">
             <span class="f8e-type-badge f8e-type-${ev.evidence_type}">${ev.evidence_type}</span>
             ${fmtSize(ev.file_size)}
           </span>
         </div>
         <div class="f8e-card-actions">
-          <button class="f8e-card-primary" data-id="${ev.id}" title="Ana kanıt yap">★</button>
-          <button class="f8e-card-delete" data-id="${ev.id}" title="Sil">×</button>
+          <button class="f8e-card-primary" data-id="${ev.id}" title="Set as primary evidence">★</button>
+          <button class="f8e-card-delete" data-id="${ev.id}" title="Delete">×</button>
         </div>
       </div>`;
   }
@@ -143,18 +143,18 @@ var EvidenceCaptureView = (function () {
             </div>`}
         </div>
         <div class="f8e-lightbox-details">
-          <h4>${escHtml(ev.file_name || "Kanıt")}</h4>
-          <p><strong>Tür:</strong> ${ev.evidence_type}</p>
-          <p><strong>Boyut:</strong> ${fmtSize(ev.file_size)}</p>
+          <h4>${escHtml(ev.file_name || "Evidence")}</h4>
+          <p><strong>Type:</strong> ${ev.evidence_type}</p>
+          <p><strong>Size:</strong> ${fmtSize(ev.file_size)}</p>
           <p><strong>MIME:</strong> ${escHtml(ev.mime_type)}</p>
-          <p><strong>Yakalayan:</strong> ${escHtml(ev.captured_by)}</p>
-          <p><strong>Tarih:</strong> ${fmtDate(ev.captured_at)}</p>
-          ${ev.description ? `<p><strong>Açıklama:</strong> ${escHtml(ev.description)}</p>` : ""}
-          <p><strong>Ana Kanıt:</strong> ${ev.is_primary ? "Evet ★" : "Hayır"}</p>
+          <p><strong>Captured by:</strong> ${escHtml(ev.captured_by)}</p>
+          <p><strong>Date:</strong> ${fmtDate(ev.captured_at)}</p>
+          ${ev.description ? `<p><strong>Description:</strong> ${escHtml(ev.description)}</p>` : ""}
+          <p><strong>Primary Evidence:</strong> ${ev.is_primary ? "Yes ★" : "No"}</p>
         </div>
         <div class="f8e-lightbox-nav">
-          <button class="btn btn-outline btn-sm" id="f8e-lb-prev">◀ Önceki</button>
-          <button class="btn btn-outline btn-sm" id="f8e-lb-next">Sonraki ▶</button>
+          <button class="btn btn-outline btn-sm" id="f8e-lb-prev">◀ Previous</button>
+          <button class="btn btn-outline btn-sm" id="f8e-lb-next">Next ▶</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
@@ -180,43 +180,43 @@ var EvidenceCaptureView = (function () {
   }
 
   function deleteEvidence(id) {
-    if (!confirm("Kanıtı silmek istediğinize emin misiniz?")) return;
+    if (!confirm("Are you sure you want to delete this evidence?")) return;
     api("DELETE", `/evidence/${id}`).then(() => loadEvidence());
   }
 
   /* ── add modal ── */
   function showAddModal() {
     if (!currentExecutionId) {
-      alert("Önce Execution ID yükleyin");
+      alert("Load an Execution ID first");
       return;
     }
     const overlay = document.createElement("div");
     overlay.className = "f8e-modal-overlay";
     overlay.innerHTML = `
       <div class="f8e-modal">
-        <h3>Kanıt Ekle</h3>
-        <label>Kanıt Türü</label>
+        <h3>Add Evidence</h3>
+        <label>Evidence Type</label>
         <select id="f8em-type" class="form-select">
-          <option value="screenshot">📷 Ekran Görüntüsü</option>
+          <option value="screenshot">📷 Screenshot</option>
           <option value="video">🎥 Video</option>
           <option value="log">📄 Log</option>
-          <option value="document">📑 Doküman</option>
-          <option value="other">📎 Diğer</option>
+          <option value="document">📑 Document</option>
+          <option value="other">📎 Other</option>
         </select>
-        <label>Dosya Adı</label>
+        <label>File Name</label>
         <input id="f8em-name" class="form-input" placeholder="screenshot_01.png">
-        <label>Dosya Yolu / URL</label>
+        <label>File Path / URL</label>
         <input id="f8em-path" class="form-input" placeholder="/storage/evidence/...">
-        <label>Boyut (bytes)</label>
+        <label>Size (bytes)</label>
         <input id="f8em-size" type="number" class="form-input" value="0">
         <label>MIME Type</label>
         <input id="f8em-mime" class="form-input" placeholder="image/png">
-        <label>Açıklama</label>
-        <input id="f8em-desc" class="form-input" placeholder="Adım 3 sonrası ekran görüntüsü">
-        <label><input type="checkbox" id="f8em-primary"> Ana Kanıt</label>
+        <label>Description</label>
+        <input id="f8em-desc" class="form-input" placeholder="Screenshot after step 3">
+        <label><input type="checkbox" id="f8em-primary"> Primary Evidence</label>
         <div class="f8e-modal-actions">
-          <button class="btn btn-primary" id="f8em-save">Kaydet</button>
-          <button class="btn btn-outline" id="f8em-cancel">İptal</button>
+          <button class="btn btn-primary" id="f8em-save">Save</button>
+          <button class="btn btn-outline" id="f8em-cancel">Cancel</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);

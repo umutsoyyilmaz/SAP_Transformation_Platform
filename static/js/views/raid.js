@@ -19,7 +19,7 @@ const RaidView = (() => {
         _programId = prog ? prog.id : null;
 
         if (!_programId) {
-            main.innerHTML = PGEmptyState.html({ icon: 'raid', title: 'RAID Log', description: 'Devam etmek için önce bir program seç.', action: { label: 'Programlara Git', onclick: "App.navigate('programs')" } });
+            main.innerHTML = PGEmptyState.html({ icon: 'raid', title: 'RAID Log', description: 'Select a program first to continue.', action: { label: 'Go to Programs', onclick: "App.navigate('programs')" } });
             return;
         }
 
@@ -165,7 +165,7 @@ const RaidView = (() => {
                 <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button>
             </div>
             <div class="modal__body">
-                <table class="table"><thead><tr><th>Code</th><th>Title</th><th>RAG</th></tr></thead>
+                <table class="data-table" aria-label="Risks in selected heatmap cell"><thead><tr><th>Code</th><th>Title</th><th>RAG</th></tr></thead>
                 <tbody>${risks.map(r => `<tr><td>${r.code}</td><td>${r.title}</td>
                     <td>${PGStatusRegistry.badge(r.rag_status)}</td></tr>`).join('')}
                 </tbody></table>
@@ -198,7 +198,7 @@ const RaidView = (() => {
             renderFilterBar(tab);
 
             if (!_allItems.length) {
-                container.innerHTML = PGEmptyState.html({ icon: 'raid', title: `${tab.charAt(0).toUpperCase() + tab.slice(1)} bulunamadı` });
+                container.innerHTML = PGEmptyState.html({ icon: 'raid', title: `No ${tab.charAt(0).toUpperCase() + tab.slice(1)} found` });
                 return;
             }
             container.innerHTML = renderTable(tab, _allItems);
@@ -365,7 +365,7 @@ const RaidView = (() => {
         if (countEl) countEl.textContent = `${items.length} of ${_allItems.length}`;
 
         if (!items.length) {
-            container.innerHTML = PGEmptyState.html({ icon: 'raid', title: `Filtreyle eşleşen ${_currentTab} yok` });
+            container.innerHTML = PGEmptyState.html({ icon: 'raid', title: `No ${_currentTab} matching the filter` });
             return;
         }
         container.innerHTML = renderTable(_currentTab, items);
@@ -477,7 +477,7 @@ const RaidView = (() => {
                         <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button>
                     </div>
                     <div class="modal__body">
-                        <table class="table">${fields}</table>
+                        <table class="data-table" aria-label="RAID item details">${fields}</table>
                     </div>
                     <div class="modal__footer">
                         <button class="btn btn-primary" onclick="RaidView.openEdit('${tab}', ${id})">Edit</button>

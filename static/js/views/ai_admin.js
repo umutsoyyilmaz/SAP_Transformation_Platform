@@ -9,7 +9,7 @@ const AIAdminView = (() => {
     async function render() {
         const main = document.getElementById('mainContent');
         main.innerHTML = `
-            <div class="view-header">
+            <div class="pg-view-header">
                 <h1>🤖 AI Admin Dashboard</h1>
                 <p class="text-muted">AI infrastructure monitoring — usage, cost, suggestions & embeddings</p>
             </div>

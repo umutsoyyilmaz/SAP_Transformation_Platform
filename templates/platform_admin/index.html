@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -326,7 +326,7 @@
             const list = document.getElementById('activity-list');
             if (d.recent_activity && d.recent_activity.length > 0) {
                 list.innerHTML = d.recent_activity.map(a => {
-                    const time = a.created_at ? new Date(a.created_at).toLocaleString('tr-TR') : '';
+                    const time = a.created_at ? new Date(a.created_at).toLocaleString('en-US') : '';
                     return `<li>
                         <span><strong>${a.action}</strong> ${a.entity_type} #${a.entity_id} <span style="color:var(--text-muted)">by ${a.actor}</span></span>
                         <span class="activity-time">${time}</span>

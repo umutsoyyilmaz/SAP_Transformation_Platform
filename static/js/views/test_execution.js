@@ -70,17 +70,17 @@ const TestExecutionView = (() => {
         const pctNotRun  = total ? Math.round(not_run / total * 100) : 0;
 
         return `
-            <div class="pg-progress-bar" title="${pass} geçti · ${fail} başarısız · ${blocked} bloke · ${not_run} koşulmadı">
+            <div class="pg-progress-bar" title="${pass} passed · ${fail} failed · ${blocked} blocked · ${not_run} not run">
                 <div class="pg-progress-bar__seg pg-progress-bar__seg--pass"    style="width:${pctPass}%"   ></div>
                 <div class="pg-progress-bar__seg pg-progress-bar__seg--fail"    style="width:${pctFail}%"   ></div>
                 <div class="pg-progress-bar__seg pg-progress-bar__seg--blocked" style="width:${pctBlocked}%"></div>
                 <div class="pg-progress-bar__seg pg-progress-bar__seg--not-run" style="width:${pctNotRun}%" ></div>
             </div>
             <div class="pg-progress-legend">
-                <span class="pg-progress-legend__item pg-progress-legend__item--pass">${pass} Geçti</span>
-                <span class="pg-progress-legend__item pg-progress-legend__item--fail">${fail} Başarısız</span>
-                <span class="pg-progress-legend__item pg-progress-legend__item--blocked">${blocked} Bloke</span>
-                <span class="pg-progress-legend__item pg-progress-legend__item--not-run">${not_run} Bekliyor</span>
+                <span class="pg-progress-legend__item pg-progress-legend__item--pass">${pass} Passed</span>
+                <span class="pg-progress-legend__item pg-progress-legend__item--fail">${fail} Failed</span>
+                <span class="pg-progress-legend__item pg-progress-legend__item--blocked">${blocked} Blocked</span>
+                <span class="pg-progress-legend__item pg-progress-legend__item--not-run">${not_run} Pending</span>
             </div>
         `;
     }
@@ -95,7 +95,7 @@ const TestExecutionView = (() => {
         const container = document.getElementById('testContent');
 
         if (testPlans.length === 0) {
-            container.innerHTML = PGEmptyState.html({ icon: 'test', title: 'Henüz test planı yok', description: 'Test döngüleri düzenlemek için test planı oluştur.', action: { label: '+ Yeni Test Planı', onclick: 'TestExecutionView.showPlanModal()' } });
+            container.innerHTML = PGEmptyState.html({ icon: 'test', title: 'No test plans yet', description: 'Create a test plan to manage test cycles.', action: { label: '+ New Test Plan', onclick: 'TestExecutionView.showPlanModal()' } });
             return;
         }
         if (!_selectedPlanId || !testPlans.some(p => Number(p.id) === Number(_selectedPlanId))) {
