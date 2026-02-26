@@ -27,7 +27,7 @@ def cmd_list(args):
     from app.tenant import list_tenants, get_tenant_db_uri
 
     tenants = list_tenants()
-    print(f"\n  Kayıtlı Tenant'lar ({len(tenants)})")
+    print(f"\n  Registered Tenants ({len(tenants)})")
     print("  " + "═" * 60)
     for tid, cfg in tenants.items():
         uri = get_tenant_db_uri(tid)
@@ -46,22 +46,22 @@ def cmd_create(args):
 
     tid = args.tenant_id.strip().lower()
     if not tid.isidentifier():
-        print(f"  ❌ Geçersiz tenant ID: '{tid}' (sadece harf, rakam, alt çizgi)")
+        print(f"  ❌ Invalid tenant ID: '{tid}' (only letters, digits, underscores)")
         sys.exit(1)
 
     existing = get_tenant_config(tid)
     if existing:
-        print(f"  ⚠️  Tenant '{tid}' zaten kayıtlı: {existing['display_name']}")
+        print(f"  ⚠️  Tenant '{tid}' is already registered: {existing['display_name']}")
         sys.exit(1)
 
     db_name = f"sap_tenant_{tid}"
     display = args.name or tid.replace("_", " ").title()
 
     register_tenant(tid, db_name, display)
-    print(f"  ✅ Tenant oluşturuldu: {tid}")
+    print(f"  ✅ Tenant created: {tid}")
     print(f"     DB: {db_name}")
-    print(f"     Ad: {display}")
-    print(f"\n  Sonraki adım: python scripts/manage_tenants.py init {tid}")
+    print(f"     Name: {display}")
+    print(f"\n  Next step: python scripts/manage_tenants.py init {tid}")
 
 
 def cmd_remove(args):
@@ -70,15 +70,15 @@ def cmd_remove(args):
 
     tid = args.tenant_id.strip().lower()
     if tid == "default":
-        print("  ❌ 'default' tenant silinemez")
+        print("  ❌ 'default' tenant cannot be deleted")
         sys.exit(1)
 
     ok = remove_tenant(tid)
     if ok:
-        print(f"  ✅ Tenant '{tid}' registry'den silindi")
-        print(f"  ⚠️  Veritabanı dosyası silinmedi — elle temizleyin")
+        print(f"  ✅ Tenant '{tid}' removed from registry")
+        print(f"  ⚠️  Database file was not deleted — clean up manually")
     else:
-        print(f"  ❌ Tenant '{tid}' bulunamadı")
+        print(f"  ❌ Tenant '{tid}' not found")
 
 
 def cmd_init(args):
@@ -88,11 +88,11 @@ def cmd_init(args):
     tid = args.tenant_id.strip().lower()
     cfg = get_tenant_config(tid)
     if not cfg:
-        print(f"  ❌ Tenant '{tid}' bulunamadı. Önce 'create' ile oluşturun.")
+        print(f"  ❌ Tenant '{tid}' not found. Create it first with 'create'.")
         sys.exit(1)
 
     db_uri = get_tenant_db_uri(tid)
-    print(f"  🗄️  Tenant '{tid}' DB başlatılıyor...")
+    print(f"  🗄️  Initializing tenant '{tid}' DB...")
     print(f"     URI: {db_uri}")
 
     # Set env for Flask to pick up
@@ -105,13 +105,13 @@ def cmd_init(args):
     app = create_app("development")
     with app.app_context():
         _db.create_all()
-        print(f"  ✅ Tablolar oluşturuldu ({tid})")
+        print(f"  ✅ Tables created ({tid})")
 
     # For PostgreSQL, also run Alembic migrations
     if db_uri.startswith("postgresql"):
-        print(f"  ⬆️  Alembic migration'ları uygulanıyor...")
+        print(f"  ⬆️  Applying Alembic migrations...")
         os.system(f'FLASK_APP=wsgi.py DATABASE_URL="{db_uri}" flask db upgrade')
-        print(f"  ✅ Migration'lar tamamlandı ({tid})")
+        print(f"  ✅ Migrations completed ({tid})")
 
 
 def cmd_init_all(args):
@@ -119,11 +119,11 @@ def cmd_init_all(args):
     from app.tenant import list_tenants
 
     tenants = list_tenants()
-    print(f"\n  {len(tenants)} tenant DB başlatılıyor...")
+    print(f"\n  Initializing {len(tenants)} tenant DBs...")
     for tid in tenants:
         args.tenant_id = tid
         cmd_init(args)
-    print(f"\n  ✅ Tüm tenant DB'leri hazır!")
+    print(f"\n  ✅ All tenant DBs are ready!")
 
 
 def cmd_seed(args):
@@ -133,14 +133,14 @@ def cmd_seed(args):
     tid = args.tenant_id.strip().lower()
     cfg = get_tenant_config(tid)
     if not cfg:
-        print(f"  ❌ Tenant '{tid}' bulunamadı")
+        print(f"  ❌ Tenant '{tid}' not found")
         sys.exit(1)
 
     db_uri = get_tenant_db_uri(tid)
     os.environ["DATABASE_URL"] = db_uri
     os.environ["TENANT_ID"] = tid
 
-    print(f"  🌱 Tenant '{tid}' için demo veri yükleniyor...")
+    print(f"  🌱 Loading demo data for tenant '{tid}'...")
 
     # Import and run the seed script
     import subprocess
@@ -150,9 +150,9 @@ def cmd_seed(args):
         cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     )
     if result.returncode == 0:
-        print(f"  ✅ Demo veri yüklendi ({tid})")
+        print(f"  ✅ Demo data loaded ({tid})")
     else:
-        print(f"  ❌ Seed başarısız ({tid})")
+        print(f"  ❌ Seed failed ({tid})")
         sys.exit(1)
 
 
@@ -162,7 +162,7 @@ def cmd_status(args):
     from pathlib import Path
 
     tenants = list_tenants()
-    print(f"\n  Tenant Veritabanı Durumu")
+    print(f"\n  Tenant Database Status")
     print("  " + "═" * 60)
 
     for tid, cfg in tenants.items():
@@ -176,9 +176,9 @@ def cmd_status(args):
                 size_mb = p.stat().st_size / (1024 * 1024)
                 status = f"✅ {size_mb:.1f} MB"
             else:
-                status = "❌ DB mevcut değil"
+                status = "❌ DB does not exist"
         elif uri.startswith("postgresql"):
-            status = "🐘 PostgreSQL (bağlantı kontrolü yapılmadı)"
+            status = "🐘 PostgreSQL (connection check not performed)"
 
         print(f"  {tid:<20} {cfg.get('display_name', ''):<25} {status}")
 
@@ -187,36 +187,36 @@ def cmd_status(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="SAP Platform — Tenant Yönetim Aracı",
+        description="SAP Platform — Tenant Management Tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    sub = parser.add_subparsers(dest="command", help="Komut")
+    sub = parser.add_subparsers(dest="command", help="Command")
 
     # list
-    sub.add_parser("list", help="Tüm tenant'ları listele")
+    sub.add_parser("list", help="List all tenants")
 
     # create
-    p_create = sub.add_parser("create", help="Yeni tenant oluştur")
-    p_create.add_argument("tenant_id", help="Tenant slug (ör: acme)")
-    p_create.add_argument("--name", help="Görünen ad (ör: 'Acme Corp')")
+    p_create = sub.add_parser("create", help="Create a new tenant")
+    p_create.add_argument("tenant_id", help="Tenant slug (e.g.: acme)")
+    p_create.add_argument("--name", help="Display name (e.g.: 'Acme Corp')")
 
     # remove
-    p_remove = sub.add_parser("remove", help="Tenant'ı sil")
-    p_remove.add_argument("tenant_id", help="Silinecek tenant ID")
+    p_remove = sub.add_parser("remove", help="Remove a tenant")
+    p_remove.add_argument("tenant_id", help="Tenant ID to remove")
 
     # init
-    p_init = sub.add_parser("init", help="Tenant DB oluştur (tablo + migration)")
-    p_init.add_argument("tenant_id", help="Başlatılacak tenant ID")
+    p_init = sub.add_parser("init", help="Create tenant DB (tables + migrations)")
+    p_init.add_argument("tenant_id", help="Tenant ID to initialize")
 
     # init-all
-    sub.add_parser("init-all", help="Tüm tenant DB'lerini oluştur")
+    sub.add_parser("init-all", help="Create all tenant DBs")
 
     # seed
-    p_seed = sub.add_parser("seed", help="Tenant'a demo veri yükle")
-    p_seed.add_argument("tenant_id", help="Seed yapılacak tenant ID")
+    p_seed = sub.add_parser("seed", help="Load demo data for a tenant")
+    p_seed.add_argument("tenant_id", help="Tenant ID to seed")
 
     # status
-    sub.add_parser("status", help="Tenant DB durumlarını göster")
+    sub.add_parser("status", help="Show tenant DB statuses")
 
     args = parser.parse_args()
 

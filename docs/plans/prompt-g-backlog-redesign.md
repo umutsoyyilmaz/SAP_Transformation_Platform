@@ -1,47 +1,47 @@
 # PROMPT G — Backlog (WRICEF) UI Redesign
 
-## Dosya: static/js/views/backlog.js (REWRITE — 1058 LOC, ~1100 LOC sonrası)
+## File: static/js/views/backlog.js (REWRITE — 1058 LOC, ~1100 LOC after)
 
-### Context dosyaları (mutlaka oku):
+### Context files (must read):
 - `static/js/components/explore-shared.js` → ExpUI.filterBar, ExpUI.kpiBlock, ExpUI.metricBar, ExpUI.actionButton, ExpUI.pill
 - `static/css/explore-tokens.css` → CSS variables, design tokens
 - `static/css/main.css` → .backlog-*, .kanban-*, .wricef-badge, .data-table, .badge-*, .tabs, .tab-btn
 
 ---
 
-## Tespit Edilen Sorunlar (4 screenshot'tan)
+## Identified Issues (from 4 screenshots)
 
-### 1. Tab Stili Tutarsızlığı
-- **Backlog:** `.backlog-tab` (kendi custom CSS) + emoji ikonlar (🗂️📋⚙️🏃)
-- **Diğer sayfalar:** `.tab-btn` class kullanıyor (RAID, Hierarchy, Workshops)
-- **Fix:** `.tab-btn` kullan, emoji yerine CSS dot veya temiz text
+### 1. Tab Style Inconsistency
+- **Backlog:** `.backlog-tab` (custom CSS) + emoji icons (🗂️📋⚙️🏃)
+- **Other pages:** Using `.tab-btn` class (RAID, Hierarchy, Workshops)
+- **Fix:** Use `.tab-btn`, replace emojis with CSS dot or clean text
 
-### 2. KPI / Summary Stili Tutarsızlığı
+### 2. KPI / Summary Style Inconsistency
 - **Kanban Board:** `.backlog-summary` + `.backlog-kpi` → inline text "28 Items 185 Points 23 Done 12% Complete"
-- **Diğer sayfalar:** `ExpUI.kpiBlock` veya `.exp-kpi-strip` kullanıyor
-- **Fix:** `ExpUI.kpiBlock` veya `ExpUI.metricBar` kullan
+- **Other pages:** Using `ExpUI.kpiBlock` or `.exp-kpi-strip`
+- **Fix:** Use `ExpUI.kpiBlock` or `ExpUI.metricBar`
 
-### 3. Liste Filtre Stili Tutarsızlığı
+### 3. List Filter Style Inconsistency
 - **WRICEF List:** 3x HTML `<select>` (backlog-filters class)
-- **Diğer sayfalar:** `ExpUI.filterBar` (dropdown + active chips)
-- **Fix:** `ExpUI.filterBar` kullan
+- **Other pages:** `ExpUI.filterBar` (dropdown + active chips)
+- **Fix:** Use `ExpUI.filterBar`
 
 ### 4. Actions Column
-- **WRICEF List:** Sadece "Delete" (kırmızı büyük buton) — Edit yok
-- **Config Items:** "Edit" + "Delete" (2 büyük buton yan yana = çok yer kaplıyor)
-- **Fix:** SVG icon butonlar (`.btn-icon`) — RAID'deki gibi
+- **WRICEF List:** Only "Delete" (large red button) — no Edit
+- **Config Items:** "Edit" + "Delete" (2 large buttons side by side = takes too much space)
+- **Fix:** SVG icon buttons (`.btn-icon`) — like in RAID
 
-### 5. Sprint View Butonları
-- **Sprint kartları:** "Edit" + "Delete" (kırmızı büton) — ham görünüm
+### 5. Sprint View Buttons
+- **Sprint cards:** "Edit" + "Delete" (red button) — raw appearance
 - **Fix:** `.btn-icon` SVG + compact styling
 
 ### 6. Kanban Board KPI
-- **Mevcut:** `.backlog-summary` → 4 inline metin
-- **Fix:** `exp-kpi-strip` ile 4 blok (tutarlı)
+- **Current:** `.backlog-summary` → 4 inline text items
+- **Fix:** `exp-kpi-strip` with 4 blocks (consistent)
 
 ---
 
-## Değişiklik 1: render() — Tab + Page Header
+## Change 1: render() — Tab + Page Header
 
 ```javascript
 async function render() {
@@ -87,14 +87,14 @@ async function render() {
 }
 ```
 
-**Değişiklikler:**
-- `<h1>` → `<h2>` (diğer sayfalarla tutarlı)
-- Subtitle eklendi
-- `ExpUI.actionButton` kullanıldı (ham `<button>` yerine)
-- `.backlog-tab` → `.tab-btn` (platform standart tab class)
-- Emoji ikonlar tab'lardan kaldırıldı
+**Changes:**
+- `<h1>` → `<h2>` (consistent with other pages)
+- Subtitle added
+- `ExpUI.actionButton` used (instead of raw `<button>`)
+- `.backlog-tab` → `.tab-btn` (platform standard tab class)
+- Emoji icons removed from tabs
 
-## Değişiklik 2: switchTab() — tab-btn class toggle
+## Change 2: switchTab() — tab-btn class toggle
 
 ```javascript
 function switchTab(tab) {
@@ -106,9 +106,9 @@ function switchTab(tab) {
 }
 ```
 
-## Değişiklik 3: Kanban Board — KPI Strip
+## Change 3: Kanban Board — KPI Strip
 
-renderBoard() içinde `.backlog-summary` yerine ExpUI.kpiBlock:
+In renderBoard(), replace `.backlog-summary` with ExpUI.kpiBlock:
 
 ```javascript
 function renderBoard() {
@@ -139,12 +139,12 @@ function renderBoard() {
 }
 ```
 
-**Değişiklikler:**
+**Changes:**
 - `.backlog-summary` → `exp-kpi-strip` + `ExpUI.kpiBlock`
-- visibleColumns'dan 'closed', 'blocked', 'cancelled' kaldırıldı (Kanban'da sadece aktif flow)
-- Accent colors tutarlı (diğer sayfalarla aynı palette)
+- Removed 'closed', 'blocked', 'cancelled' from visibleColumns (only active flow in Kanban)
+- Accent colors consistent (same palette as other pages)
 
-## Değişiklik 4: WRICEF List — FilterBar + Table Styling
+## Change 4: WRICEF List — FilterBar + Table Styling
 
 ```javascript
 function renderList() {
@@ -163,7 +163,7 @@ function renderList() {
     c.innerHTML = `
         <div id="blFilterBar" style="margin-bottom:8px"></div>
         <div id="blListTable"></div>`;
-    
+
     renderListFilterBar();
     applyListFilter();
 }
@@ -202,13 +202,13 @@ function renderListFilterBar() {
 }
 ```
 
-**Yeni state variables (IIFE üst kısmına ekle):**
+**New state variables (add to top of IIFE):**
 ```javascript
 let _listSearch = '';
 let _listFilters = {};
 ```
 
-**Yeni handlers:**
+**New handlers:**
 ```javascript
 function setListSearch(val) {
     _listSearch = val;
@@ -233,11 +233,11 @@ function onListFilterChange(update) {
 }
 ```
 
-**Güncellenmiş applyListFilter:**
+**Updated applyListFilter:**
 ```javascript
 function applyListFilter() {
     let filtered = [...items];
-    
+
     // Search
     if (_listSearch) {
         const q = _listSearch.toLowerCase();
@@ -248,7 +248,7 @@ function applyListFilter() {
             (i.module || '').toLowerCase().includes(q)
         );
     }
-    
+
     // Filters
     Object.entries(_listFilters).forEach(([key, val]) => {
         if (!val) return;
@@ -256,13 +256,13 @@ function applyListFilter() {
         if (values.length === 0) return;
         filtered = filtered.filter(i => values.includes(String(i[key])));
     });
-    
+
     const countEl = document.getElementById('blItemCount');
     if (countEl) countEl.textContent = `${filtered.length} of ${items.length}`;
-    
+
     const tableEl = document.getElementById('blListTable');
     if (!tableEl) return;
-    
+
     if (filtered.length === 0) {
         tableEl.innerHTML = `<div class="empty-state" style="padding:40px"><p>No items match your filters.</p></div>`;
         return;
@@ -271,7 +271,7 @@ function applyListFilter() {
 }
 ```
 
-## Değişiklik 5: _renderTableRows → _renderListTable (Professional Styling)
+## Change 5: _renderTableRows → _renderListTable (Professional Styling)
 
 ```javascript
 function _renderListTable(list) {
@@ -283,7 +283,7 @@ function _renderListTable(list) {
             <span style="width:6px;height:6px;border-radius:50%;background:${colors[p]||'#94a3b8'}"></span>${label}
         </span>`;
     };
-    
+
     const statusBadge = (s) => {
         const map = {
             new:'#dbeafe', design:'#e0e7ff', build:'#fef3c7', test:'#fce7f3',
@@ -296,7 +296,7 @@ function _renderListTable(list) {
         const label = STATUS_LABELS[s] || s || '—';
         return `<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:${map[s]||'#f1f5f9'};color:${textMap[s]||'#475569'};white-space:nowrap">${label}</span>`;
     };
-    
+
     let html = `<table class="data-table" style="font-size:13px">
         <thead><tr>
             <th style="width:90px">Type</th>
@@ -309,11 +309,11 @@ function _renderListTable(list) {
             <th style="width:110px">Assigned</th>
             <th style="width:60px;text-align:right"></th>
         </tr></thead><tbody>`;
-    
+
     list.forEach(i => {
         const w = WRICEF[i.wricef_type] || WRICEF.enhancement;
         const linkCount = (i.requirement_id ? 1 : 0) + (i.functional_spec ? 1 : 0) + (i.technical_spec ? 1 : 0);
-        
+
         html += `<tr style="cursor:pointer" onclick="BacklogView.openDetail(${i.id})">
             <td><span class="wricef-badge" style="background:${w.color}">${w.icon} ${w.label[0]}</span></td>
             <td><code style="font-size:12px;color:#475569">${escHtml(i.code || '—')}</code></td>
@@ -336,24 +336,24 @@ function _renderListTable(list) {
             </td>
         </tr>`;
     });
-    
+
     html += '</tbody></table>';
     return html;
 }
 ```
 
-**Değişiklikler:**
-- Ham `<button class="btn btn-danger">Delete</button>` → `.btn-icon` SVG (RAID'deki gibi)
-- Priority badge: color dot + label (RAID'deki gibi)
-- Status badge: semantic renk sistemi (RAID'deki gibi)
-- WRICEF badge: kısa form (sadece ilk harf) — tabloda daha compact
-- Code: `<code>` tag ile monospace
+**Changes:**
+- Raw `<button class="btn btn-danger">Delete</button>` → `.btn-icon` SVG (like in RAID)
+- Priority badge: color dot + label (like in RAID)
+- Status badge: semantic color system (like in RAID)
+- WRICEF badge: short form (first letter only) — more compact in table
+- Code: `<code>` tag for monospace
 
-## Değişiklik 6: Config Items — Action Butonları
+## Change 6: Config Items — Action Buttons
 
-renderConfigItems() table'ında Actions column:
+In renderConfigItems() table Actions column:
 
-**FIND (mevcut):**
+**FIND (current):**
 ```html
 <td>
     <button class="btn btn-secondary btn-sm" onclick="...">Edit</button>
@@ -373,9 +373,9 @@ renderConfigItems() table'ında Actions column:
 </td>
 ```
 
-## Değişiklik 7: Sprint Cards — Compact Styling
+## Change 7: Sprint Cards — Compact Styling
 
-renderSprints() içinde sprint card header:
+In renderSprints() sprint card header:
 
 **FIND:**
 ```html
@@ -409,16 +409,16 @@ Sprint metrics → ExpUI.kpiBlock style inline:
 </div>
 ```
 
-Bu kısmı olduğu gibi bırak — sprint kartlarında inline metric uygun. Sadece butonları küçült.
+Keep this as is — inline metrics are appropriate for sprint cards. Only shrink the buttons.
 
-Ancak Sprint Unassigned Backlog header'ındaki emoji'yi kaldır:
+However, remove the emoji from Sprint Unassigned Backlog header:
 
 **FIND:** `<h3>📦 Unassigned Backlog</h3>`
 **REPLACE:** `<h3>Unassigned Backlog</h3>`
 
-## Değişiklik 8: "+ New Sprint" / "+ New Config Item" butonları
+## Change 8: "+ New Sprint" / "+ New Config Item" buttons
 
-Sprints ve Config tabs'daki butonları ExpUI.actionButton ile değiştir:
+Replace buttons in Sprints and Config tabs with ExpUI.actionButton:
 
 **Sprints:**
 ```javascript
@@ -434,12 +434,12 @@ Sprints ve Config tabs'daki butonları ExpUI.actionButton ile değiştir:
 </div>
 ```
 
-## Değişiklik 9: Updated Public API
+## Change 9: Updated Public API
 
 ```javascript
 return {
     render, switchTab, applyListFilter,
-    setListSearch, onListFilterChange,         // YENİ
+    setListSearch, onListFilterChange,         // NEW
     showCreateModal, showEditModal, saveItem,
     openDetail, deleteItem, switchDetailTab,
     showMoveModal, doMove,
@@ -450,28 +450,28 @@ return {
 };
 ```
 
-## CSS Temizliği (main.css)
+## CSS Cleanup (main.css)
 
-Aşağıdaki class'lar artık kullanılmayacak ama backward compat için kaldırma:
-- `.backlog-tabs`, `.backlog-tab` → artık `.tabs`, `.tab-btn` kullanılıyor
-- `.backlog-summary`, `.backlog-kpi` → artık `exp-kpi-strip` kullanılıyor
-- `.backlog-filters` → artık `ExpUI.filterBar` kullanılıyor
+The following classes will no longer be used but do not remove them for backward compatibility:
+- `.backlog-tabs`, `.backlog-tab` → now using `.tabs`, `.tab-btn`
+- `.backlog-summary`, `.backlog-kpi` → now using `exp-kpi-strip`
+- `.backlog-filters` → now using `ExpUI.filterBar`
 
-Bu class'ları silmeye gerek yok, sadece yeni kod bunları kullanmayacak.
+No need to delete these classes, the new code simply won't use them.
 
 ---
 
 ## Verification Checklist
 
-- [ ] Tabs: `.tab-btn` class (emoji yok), aktif tab underline
+- [ ] Tabs: `.tab-btn` class (no emojis), active tab underline
 - [ ] Kanban KPI: `exp-kpi-strip` + 4x `ExpUI.kpiBlock`
 - [ ] WRICEF List: `ExpUI.filterBar` (search + type/status/priority/module dropdowns)
 - [ ] WRICEF List: active filter chips + "Clear All"
-- [ ] WRICEF List: `_renderListTable` ile professional badges
+- [ ] WRICEF List: `_renderListTable` with professional badges
 - [ ] WRICEF List: `.btn-icon` SVG actions (edit pencil + delete trash)
 - [ ] Config Items: `.btn-icon` SVG actions
 - [ ] Sprint Cards: `.btn-icon` SVG actions
-- [ ] Sprint Cards: emoji kaldırılmış
+- [ ] Sprint Cards: emojis removed
 - [ ] "+ New Sprint" / "+ New Config Item" → `ExpUI.actionButton`
 - [ ] "📈 Stats" / "+ New Item" → `ExpUI.actionButton`
 - [ ] Filter state persistent per tab switch (reset on tab change)

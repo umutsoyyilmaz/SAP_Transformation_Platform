@@ -1,6 +1,6 @@
 """
 SEED-002 — Explore Phase Demo Data
-Company: Anadolu Gıda ve İçecek A.Ş.  |  Project: "S/4HANA Greenfield 2026"
+Company: Anadolu Food & Beverage Inc.  |  Project: "S/4HANA Greenfield 2026"
 
 Hierarchy:  5 L1  →  10 L2  →  50 L3  →  200 L4
 Workshops:  20 (mixed statuses)
@@ -243,7 +243,7 @@ for idx, (code, name, wtype, wstatus, area, wave, fac, sess, tsess, l3s) in enum
     WORKSHOP_ATTENDEES.append({
         "id": _id(f"att-{code}-bpo"),
         "workshop_id": ws_id, "user_id": "usr-010",
-        "name": "Emre Aydın", "role": "Business Process Owner",
+        "name": "Emre Aydin", "role": "Business Process Owner",
         "organization": "customer",
         "attendance_status": "confirmed" if wstatus != "draft" else "invited",
         "is_required": True,
@@ -251,7 +251,7 @@ for idx, (code, name, wtype, wstatus, area, wave, fac, sess, tsess, l3s) in enum
     WORKSHOP_ATTENDEES.append({
         "id": _id(f"att-{code}-tech"),
         "workshop_id": ws_id, "user_id": "usr-008",
-        "name": "Can Özdemir", "role": "Technical Advisor",
+        "name": "Can Ozdemir", "role": "Technical Advisor",
         "organization": "consultant",
         "attendance_status": "tentative",
         "is_required": False,
@@ -370,8 +370,8 @@ for i, step in enumerate(_gap_steps):
         "priority": _OI_PRIORITIES[_oi_seq % 6],
         "category": _OI_CATEGORIES[_oi_seq % 6],
         "assignee_id": f"usr-{((_oi_seq % 5) + 2):03d}",
-        "assignee_name": ["Burak Şahin", "Elif Demir", "Ahmet Yıldız",
-                          "Zeynep Arslan", "Hakan Çelik"][_oi_seq % 5],
+        "assignee_name": ["Burak Sahin", "Elif Demir", "Ahmet Yildiz",
+                          "Zeynep Arslan", "Hakan Celik"][_oi_seq % 5],
         "created_by_id": ws["facilitator_id"],
         "due_date": (_BASE + timedelta(days=14 + _oi_seq * 2)).date().isoformat(),
         "resolved_date": (_BASE + timedelta(days=10 + _oi_seq)).date().isoformat() if oi_status == "closed" else None,

@@ -4,21 +4,21 @@
 #  ─────────────────────────────────────────────────────────────────────────────
 #  SAP Activate Lifecycle: Discover → Prepare → Explore → Realize → Deploy → Run
 #
-#  Bu test canlı sisteme sıfırdan bağlanır, yeni program oluşturur ve tüm
-#  SAP Activate fazlarını uçtan uca test eder.
+#  This test connects to the live system from scratch, creates a new program,
+#  and tests all SAP Activate phases end-to-end.
 #
-#  Kullanım:
+#  Usage:
 #    chmod +x smoke_test_production.sh
-#    ./smoke_test_production.sh                       # varsayılan URL
-#    ./smoke_test_production.sh https://custom.url    # farklı URL
+#    ./smoke_test_production.sh                       # default URL
+#    ./smoke_test_production.sh https://custom.url    # custom URL
 #    SMOKE_USER=admin SMOKE_PASS=xxx ./smoke_test_production.sh
 #
-#  Tarih: 2026-02-14
+#  Date: 2026-02-14
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set -o pipefail
 
-# ── Konfigürasyon ──────────────────────────────────────────────────────────────
+# ── Configuration ─────────────────────────────────────────────────────────────
 BASE_URL="${1:-https://app.univer.com.tr}"
 API="$BASE_URL/api/v1"
 AUTH_USER="${SMOKE_USER:-admin}"
@@ -26,17 +26,17 @@ AUTH_PASS="${SMOKE_PASS:-Perga2026!}"
 AUTH="-u ${AUTH_USER}:${AUTH_PASS}"
 TIMEOUT=30
 BODY="/tmp/smoke_body_$$"
-TS=$(date +%s)                    # benzersiz isim üretmek için
+TS=$(date +%s)                    # for generating unique names
 PROG_NAME="SmokeTest-$TS"
 
-# Renkler
+# Colors
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; NC='\033[0m'; BOLD='\033[1m'; DIM='\033[2m'
 
 PASS=0; FAIL=0; WARN=0; SKIP=0; TOTAL=0
 ERRORS=""
 
-# ── Yardımcı Fonksiyonlar ─────────────────────────────────────────────────────
+# ── Helper Functions ──────────────────────────────────────────────────────────
 
 _curl_get() {
     curl -s --max-time "$TIMEOUT" $AUTH -o "$BODY" -w "%{http_code}|%{time_total}" "$1" 2>/dev/null
@@ -87,7 +87,7 @@ except: print('')
 " 2>/dev/null
 }
 
-# ── Test Fonksiyonları ─────────────────────────────────────────────────────────
+# ── Test Functions ────────────────────────────────────────────────────────────
 
 test_get() {
     local name="$1"; local url="$2"; local expected="${3:-200}"
@@ -122,7 +122,7 @@ test_post() {
     else
         printf "  ${RED}❌${NC} %-50s ${RED}%s${NC} (expected %s)\n" "$name" "$code" "$expected"
         FAIL=$((FAIL+1)); ERRORS="$ERRORS\n  ❌ $name → $code"
-        # Hata detayını göster
+        # Show error details
         local detail=$(python3 -c "import json; d=json.load(open('$BODY')); print(d.get('error','')[:120])" 2>/dev/null)
         [ -n "$detail" ] && printf "       ${DIM}↳ %s${NC}\n" "$detail"
     fi
@@ -177,7 +177,7 @@ subsection() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  BAŞLANGIÇ
+#  START
 # ═══════════════════════════════════════════════════════════════════════════════
 echo ""
 printf "${BOLD}╔═══════════════════════════════════════════════════════════════╗${NC}\n"
@@ -193,13 +193,13 @@ section "PHASE 0 — INFRASTRUCTURE & CONNECTIVITY"
 
 subsection "0.1 Server Health"
 
-# Bağlantı kontrolü
+# Connection check
 HTTP_CODE=$(curl -s --max-time 15 $AUTH -o /dev/null -w "%{http_code}" "$BASE_URL" 2>/dev/null)
 if [ "$HTTP_CODE" = "000" ]; then
-    printf "  ${RED}❌ Sunucuya bağlanılamadı: $BASE_URL${NC}\n"; exit 1
+    printf "  ${RED}❌ Could not connect to server: $BASE_URL${NC}\n"; exit 1
 fi
 if [ "$HTTP_CODE" = "401" ]; then
-    printf "  ${RED}❌ Basic Auth hatası (401)${NC}\n"; exit 1
+    printf "  ${RED}❌ Basic Auth error (401)${NC}\n"; exit 1
 fi
 
 test_get  "GET  /health"                "$API/health"
@@ -222,13 +222,13 @@ test_get  "GET  /audit"                 "$API/audit"
 section "PHASE 1 — DISCOVER & PREPARE (Program Setup)"
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-subsection "1.1 Create Program (SAP Activate = otomatik 6 faz)"
-test_post "POST /programs (yeni program)" \
+subsection "1.1 Create Program (SAP Activate = automatic 6 phases)"
+test_post "POST /programs (new program)" \
     "$API/programs" \
     "{\"name\":\"$PROG_NAME\",\"description\":\"E2E smoke test $(date +%Y%m%d)\",\"project_type\":\"greenfield\",\"methodology\":\"sap_activate\"}"
 PID=$(_json_val "id")
 if [ -z "$PID" ] || [ "$PID" = "" ]; then
-    printf "  ${RED}⛔ Program oluşturulamadı — kalan testler iptal${NC}\n"
+    printf "  ${RED}⛔ Could not create program — remaining tests cancelled${NC}\n"
     PID=""
 fi
 
@@ -244,7 +244,7 @@ if [ -n "$PID" ]; then
     subsection "1.3 Governance Structure"
     test_post "POST /programs/$PID/workstreams" \
         "$API/programs/$PID/workstreams" \
-        "{\"name\":\"FI/CO Workstream\",\"ws_type\":\"functional\",\"lead_name\":\"Ahmet Yılmaz\"}"
+        "{\"name\":\"FI/CO Workstream\",\"ws_type\":\"functional\",\"lead_name\":\"Ahmet Yilmaz\"}"
     WS_ID=$(_json_val "id")
 
     test_post "POST /programs/$PID/committees" \
@@ -266,7 +266,7 @@ if [ -n "$PID" ]; then
 
     test_post "POST /programs/$PID/team (Func.)" \
         "$API/programs/$PID/team" \
-        "{\"name\":\"Ayşe Çelik\",\"email\":\"ayse@perga.com.tr\",\"role\":\"functional_consultant\"}"
+        "{\"name\":\"Ayse Celik\",\"email\":\"ayse@perga.com.tr\",\"role\":\"functional_consultant\"}"
 
     test_get  "GET  /programs/$PID/team"       "$API/programs/$PID/team"
     test_get  "GET  /programs/$PID/workstreams" "$API/programs/$PID/workstreams"
@@ -275,10 +275,10 @@ if [ -n "$PID" ]; then
     subsection "1.5 Sprint Planning"
     test_post "POST /programs/$PID/sprints" \
         "$API/programs/$PID/sprints" \
-        "{\"name\":\"Sprint 1 — Core Config\",\"goal\":\"Temel FI/CO/MM konfigürasyonları\",\"status\":\"planning\"}"
+        "{\"name\":\"Sprint 1 — Core Config\",\"goal\":\"Core FI/CO/MM configurations\",\"status\":\"planning\"}"
     test_post "POST /programs/$PID/sprints" \
         "$API/programs/$PID/sprints" \
-        "{\"name\":\"Sprint 2 — Integration\",\"goal\":\"Entegrasyon geliştirmeleri\",\"status\":\"planning\"}"
+        "{\"name\":\"Sprint 2 — Integration\",\"goal\":\"Integration development\",\"status\":\"planning\"}"
     test_get  "GET  /programs/$PID/sprints" "$API/programs/$PID/sprints"
 
 fi  # PID check
@@ -335,7 +335,7 @@ if [ -n "$PID" ]; then
     test_get  "GET  /explore/workshops/stats"  "$API/explore/workshops/stats?project_id=$PID"
 
     subsection "2.3 Requirements (Gap Analysis)"
-    # scope_item_id olan requirement
+    # requirement with scope_item_id
     REQ_SCOPE=""
     if [ -n "$L3_ID" ] && [ "$L3_ID" != "" ]; then
         REQ_SCOPE=",\"scope_item_id\":\"$L3_ID\""
@@ -370,7 +370,7 @@ if [ -n "$PID" ]; then
     test_get  "GET  /explore/open-items/stats"  "$API/explore/open-items/stats?project_id=$PID"
 
 else
-    skip_test "EXPLORE phase" "Program ID yok"
+    skip_test "EXPLORE phase" "No Program ID"
 fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -412,11 +412,11 @@ if [ -n "$PID" ]; then
                 "$API/functional-specs/$FS_ID/technical-spec" \
                 "{\"title\":\"TS — Vendor Master BAPI\",\"author\":\"Ahmet Kaya\",\"objects_list\":\"ZCL_VENDOR_SYNC, ZIF_VENDOR\"}"
         else
-            skip_test "POST technical-spec" "FS_ID yok"
+            skip_test "POST technical-spec" "No FS_ID"
         fi
     else
-        skip_test "POST functional-spec" "BL_ID yok"
-        skip_test "POST technical-spec" "BL_ID yok"
+        skip_test "POST functional-spec" "No BL_ID"
+        skip_test "POST technical-spec" "No BL_ID"
     fi
 
     subsection "3.3 Configuration Items"
@@ -498,7 +498,7 @@ if [ -n "$PID" ]; then
         "{\"program_id\":$PID,\"wave_number\":1,\"name\":\"Wave 1 — Master Data\",\"status\":\"planned\"}"
     WAVE_ID=$(_json_val "id")
 
-    # Cleansing + Load Cycle
+    # Cleansing + load cycle
     if [ -n "$DO_ID" ] && [ "$DO_ID" != "" ]; then
         test_post "POST cleansing-task" \
             "$API/data-factory/objects/$DO_ID/tasks" \
@@ -509,18 +509,18 @@ if [ -n "$PID" ]; then
                 "$API/data-factory/objects/$DO_ID/loads" \
                 "{\"wave_id\":$WAVE_ID,\"environment\":\"DEV\",\"load_type\":\"initial\"}"
         else
-            skip_test "POST load-cycle" "WAVE_ID yok"
+            skip_test "POST load-cycle" "No WAVE_ID"
         fi
     else
-        skip_test "POST cleansing-task" "DO_ID yok"
-        skip_test "POST load-cycle" "DO_ID yok"
+        skip_test "POST cleansing-task" "No DO_ID"
+        skip_test "POST load-cycle" "No DO_ID"
     fi
 
     test_get  "GET  /data-factory/objects" "$API/data-factory/objects?program_id=$PID"
     test_get  "GET  /data-factory/waves"   "$API/data-factory/waves?program_id=$PID"
 
 else
-    skip_test "REALIZE phase" "Program ID yok"
+    skip_test "REALIZE phase" "No Program ID"
 fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -541,7 +541,7 @@ if [ -n "$PID" ]; then
             "{\"name\":\"SIT Cycle 1\",\"test_layer\":\"sit\",\"status\":\"planning\"}"
         TC_ID=$(_json_val "id")
     else
-        skip_test "POST test-cycle" "TP_ID yok"
+        skip_test "POST test-cycle" "No TP_ID"
         TC_ID=""
     fi
 
@@ -570,7 +570,7 @@ if [ -n "$PID" ]; then
             "$API/testing/cycles/$TC_ID/executions" \
             "{\"test_case_id\":$TCASE_ID,\"result\":\"pass\",\"executed_by\":\"Tester1\"}"
     else
-        skip_test "POST test-execution" "TC_ID veya TCASE_ID yok"
+        skip_test "POST test-execution" "No TC_ID or TCASE_ID"
     fi
 
     test_post "POST defect (S2)" \
@@ -586,7 +586,7 @@ if [ -n "$PID" ]; then
     test_get  "GET  /programs/$PID/testing/dashboard"  "$API/programs/$PID/testing/dashboard"
 
 else
-    skip_test "TESTING phase" "Program ID yok"
+    skip_test "TESTING phase" "No Program ID"
 fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -629,7 +629,7 @@ if [ -n "$PID" ]; then
                 "$API/cutover/scope-items/$SI_DATA/tasks" \
                 "{\"title\":\"Load GL opening balances\",\"responsible\":\"FI Team\",\"environment\":\"PRD\",\"planned_duration_min\":240}"
         else
-            skip_test "POST runbook-tasks (data)" "SI_DATA yok"
+            skip_test "POST runbook-tasks (data)" "No SI_DATA"
         fi
 
         if [ -n "$SI_TECH" ] && [ "$SI_TECH" != "" ]; then
@@ -641,7 +641,7 @@ if [ -n "$PID" ]; then
                 "$API/cutover/scope-items/$SI_TECH/tasks" \
                 "{\"title\":\"Configure batch job scheduling\",\"responsible\":\"Basis Team\",\"environment\":\"PRD\",\"planned_duration_min\":90}"
         else
-            skip_test "POST runbook-tasks (tech)" "SI_TECH yok"
+            skip_test "POST runbook-tasks (tech)" "No SI_TECH"
         fi
 
         subsection "5.4 Rehearsal"
@@ -652,11 +652,11 @@ if [ -n "$PID" ]; then
         test_get  "GET  /cutover/plans (list)"   "$API/cutover/plans?program_id=$PID"
 
     else
-        skip_test "Cutover details" "CO_ID yok"
+        skip_test "Cutover details" "No CO_ID"
     fi
 
 else
-    skip_test "DEPLOY phase" "Program ID yok"
+    skip_test "DEPLOY phase" "No Program ID"
 fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -701,7 +701,7 @@ if [ -n "$CO_ID" ] && [ "$CO_ID" != "" ]; then
     test_get  "GET  /run-sustain/.../handover-items" "$API/run-sustain/plans/$CO_ID/handover-items"
 
 else
-    skip_test "RUN/SUSTAIN phase" "CO_ID yok (cutover plan gerekli)"
+    skip_test "RUN/SUSTAIN phase" "No CO_ID (cutover plan required)"
 fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -762,15 +762,15 @@ done
 
 if [ "$COUNT" -gt 0 ] && command -v bc &> /dev/null; then
     AVG=$(echo "scale=3; $TOTAL_TIME / $COUNT" | bc 2>/dev/null)
-    printf "\n  ${BOLD}📊 Ortalama yanıt süresi: ${CYAN}${AVG}s${NC}\n"
+    printf "\n  ${BOLD}📊 Average response time: ${CYAN}${AVG}s${NC}\n"
 fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  SONUÇLAR
+#  RESULTS
 # ═══════════════════════════════════════════════════════════════════════════════
 echo ""
 printf "${BOLD}╔═══════════════════════════════════════════════════════════════╗${NC}\n"
-printf "${BOLD}║  📊 SONUÇLAR                                                ║${NC}\n"
+printf "${BOLD}║  📊 RESULTS                                                 ║${NC}\n"
 printf "${BOLD}╠═══════════════════════════════════════════════════════════════╣${NC}\n"
 printf "${BOLD}║  ${GREEN}✅ Passed:   %-5s${NC}${BOLD}                                        ║${NC}\n" "$PASS"
 printf "${BOLD}║  ${RED}❌ Failed:   %-5s${NC}${BOLD}                                        ║${NC}\n" "$FAIL"
@@ -780,7 +780,7 @@ printf "${BOLD}╚════════════════════�
 echo ""
 
 if [ $FAIL -gt 0 ]; then
-    printf "${BOLD}${RED}━━ HATALAR ━━${NC}\n"
+    printf "${BOLD}${RED}━━ ERRORS ━━${NC}\n"
     printf "$ERRORS\n"
     echo ""
 fi
@@ -791,11 +791,11 @@ if [ "$TOTAL" -gt 0 ] && command -v bc &>/dev/null; then
 fi
 
 if [ $FAIL -eq 0 ]; then
-    printf "  ${GREEN}${BOLD}🎉 %s/%s testler geçti (%s%%). Platform tam operasyonel!${NC}\n" "$PASS" "$TOTAL" "$RATE"
+    printf "  ${GREEN}${BOLD}🎉 %s/%s tests passed (%s%%). Platform fully operational!${NC}\n" "$PASS" "$TOTAL" "$RATE"
 elif [ $FAIL -le 3 ]; then
-    printf "  ${YELLOW}${BOLD}⚠️  %s/%s başarılı (%s%%). Küçük sorunlar var.${NC}\n" "$PASS" "$TOTAL" "$RATE"
+    printf "  ${YELLOW}${BOLD}⚠️  %s/%s passed (%s%%). Minor issues found.${NC}\n" "$PASS" "$TOTAL" "$RATE"
 else
-    printf "  ${RED}${BOLD}🚨 %s/%s başarılı (%s%%). Ciddi sorunlar Tespit Edildi!${NC}\n" "$PASS" "$TOTAL" "$RATE"
+    printf "  ${RED}${BOLD}🚨 %s/%s passed (%s%%). Critical issues detected!${NC}\n" "$PASS" "$TOTAL" "$RATE"
 fi
 
 echo ""
@@ -807,7 +807,7 @@ fi
 printf "  📅 $(date '+%Y-%m-%d %H:%M:%S')\n"
 echo ""
 
-# Temizlik
+# Cleanup
 rm -f "$BODY" 2>/dev/null
 
 [ $FAIL -eq 0 ] && exit 0 || exit 1

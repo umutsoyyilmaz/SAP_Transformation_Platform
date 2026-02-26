@@ -29,7 +29,7 @@ def migrate_tenant(tenant_id: str, check_only: bool = False, use_create_all: boo
 
     cfg = get_tenant_config(tenant_id)
     if not cfg:
-        print(f"  ❌ Tenant '{tenant_id}' bulunamadı")
+        print(f"  ❌ Tenant '{tenant_id}' not found")
         return False
 
     db_uri = get_tenant_db_uri(tenant_id)
@@ -53,16 +53,16 @@ def migrate_tenant(tenant_id: str, check_only: bool = False, use_create_all: boo
         app = create_app("development")
         with app.app_context():
             _db.create_all()
-        print(f"     ✅ create_all() tamamlandı ({tenant_id})")
+        print(f"     ✅ create_all() completed ({tenant_id})")
     else:
         # PostgreSQL: use Alembic migrations
         result = os.system(
             f'FLASK_APP=wsgi.py DATABASE_URL="{db_uri}" flask db upgrade 2>&1'
         )
         if result == 0:
-            print(f"     ✅ Alembic upgrade tamamlandı ({tenant_id})")
+            print(f"     ✅ Alembic upgrade completed ({tenant_id})")
         else:
-            print(f"     ❌ Migration başarısız ({tenant_id})")
+            print(f"     ❌ Migration failed ({tenant_id})")
             return False
 
     return True
@@ -120,7 +120,7 @@ def main():
 
     if args.tenant:
         if args.tenant not in tenants:
-            print(f"  ❌ Tenant '{args.tenant}' kayıtlı değil")
+            print(f"  ❌ Tenant '{args.tenant}' is not registered")
             sys.exit(1)
         targets = {args.tenant: tenants[args.tenant]}
     else:
@@ -136,14 +136,14 @@ def main():
             all_ok = False
 
     if args.verify and not args.check:
-        print(f"\n  Schema Doğrulama")
+        print(f"\n  Schema Verification")
         print("  " + "─" * 50)
         for tid in targets:
             result = verify_tenant_schema(tid)
             if result["ok"]:
-                print(f"  ✅ {tid}: {result['tables']} tablo — OK")
+                print(f"  ✅ {tid}: {result['tables']} tables — OK")
             else:
-                print(f"  ❌ {tid}: {result['tables']} tablo — Eksik: {result['missing']}")
+                print(f"  ❌ {tid}: {result['tables']} tables — Missing: {result['missing']}")
                 all_ok = False
 
     print()

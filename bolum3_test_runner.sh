@@ -1,10 +1,10 @@
 #!/bin/bash
-# Bölüm 3 Test Runner — macOS compatible
+# Section 3 Test Runner — macOS compatible
 # chmod +x bolum3_test_runner.sh && ./bolum3_test_runner.sh
 
 REPORT="bolum3_test_report.txt"
 echo "═══════════════════════════════════════════════════" > $REPORT
-echo "  P0 Tenant Isolation — Bölüm 3 Test Report" >> $REPORT
+echo "  P0 Tenant Isolation — Section 3 Test Report" >> $REPORT
 echo "  $(date)" >> $REPORT
 echo "═══════════════════════════════════════════════════" >> $REPORT
 
@@ -33,13 +33,13 @@ echo ""
 echo "🧪 Running 5 test suites..."
 echo ""
 
-run_suite "Bölüm 3 — Docs Isolation" \
+run_suite "Section 3 — Docs Isolation" \
     "python3 -m pytest tests/test_workshop_docs_isolation.py -v --tb=short"
 
-run_suite "Bölüm 2 — Session Isolation" \
+run_suite "Section 2 — Session Isolation" \
     "python3 -m pytest tests/test_workshop_session_isolation.py -v --tb=short"
 
-run_suite "Bölüm 1 — Scoped Queries" \
+run_suite "Section 1 — Scoped Queries" \
     "python3 -m pytest tests/ -k 'scoped_quer' -v --tb=short"
 
 run_suite "Workshop/Explore Regression" \
@@ -49,4 +49,4 @@ run_suite "Full Suite Smoke" \
     "python3 -m pytest tests/ -x --tb=short"
 
 echo ""
-echo "📄 Detaylı rapor: cat $REPORT"
+echo "📄 Detailed report: cat $REPORT"

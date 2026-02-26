@@ -1,145 +1,145 @@
 """
-Aşama 4 — Requirements, Traces, Process Mappings, Open Items
-Şirket: Anadolu Gıda ve İçecek A.Ş.
+Phase 4 — Requirements, Traces, Process Mappings, Open Items
+Company: Anadolu Food & Beverage Inc.
 
 25 Requirement (business, functional, technical, integration, non_functional)
-14 Traces (requirement → phase / workstream / scenario)
-8  Requirement–Process Mappings (requirement → L3 process)
+14 Traces (requirement -> phase / workstream / scenario)
+8  Requirement-Process Mappings (requirement -> L3 process)
 6  Open Items (question, decision, dependency)
 """
 
 REQUIREMENTS = [
-    # ── Business Requirements ────────────────────────────────────────────
-    {"code": "REQ-BIZ-001", "title": "TFRS/VUK paralel muhasebe raporlaması",
+    # -- Business Requirements --------------------------------------------------
+    {"code": "REQ-BIZ-001", "title": "TFRS/VUK parallel accounting reporting",
      "req_type": "business", "priority": "must_have", "status": "approved", "module": "FI",
-     "description": "TFRS ve VUK'a uygun paralel mali tablo üretimi. Konsolide bilanço, gelir tablosu.",
+     "description": "TFRS and VUK compliant parallel financial statement generation. Consolidated balance sheet, income statement.",
      "source": "CFO"},
-    {"code": "REQ-BIZ-002", "title": "8 tesiste gerçek zamanlı stok görünürlüğü",
+    {"code": "REQ-BIZ-002", "title": "Real-time inventory visibility across 8 plants",
      "req_type": "business", "priority": "must_have", "status": "approved", "module": "MM",
-     "description": "Tüm depo ve tesislerde anlık stok seviyesi. Minimum stok ve raf ömrü uyarıları.",
-     "source": "Lojistik Direktörü"},
-    {"code": "REQ-BIZ-003", "title": "Sipariş-nakit sürecinin uçtan uca otomasyonu",
+     "description": "Instant stock levels across all warehouses and plants. Minimum stock and shelf life alerts.",
+     "source": "Logistics Director"},
+    {"code": "REQ-BIZ-003", "title": "End-to-end order-to-cash process automation",
      "req_type": "business", "priority": "must_have", "status": "approved", "module": "SD",
-     "description": "Müşteri siparişinden tahsilata kadar kesintisiz süreç. Ortalama O2C süresi < 5 gün.",
-     "source": "Ticari Direktör"},
-    {"code": "REQ-BIZ-004", "title": "Üretim planlama ve MRP optimizasyonu (gıda sektörü)",
+     "description": "Seamless process from customer order to collection. Average O2C cycle time < 5 days.",
+     "source": "Commercial Director"},
+    {"code": "REQ-BIZ-004", "title": "Production planning and MRP optimization (food industry)",
      "req_type": "business", "priority": "must_have", "status": "in_progress", "module": "PP",
-     "description": "Raf ömrü bazlı MRP, HACCP kontrol entegrasyonu. MRP çalıştırma < 1 saat.",
-     "source": "Üretim Direktörü"},
-    {"code": "REQ-BIZ-005", "title": "HACCP ve gıda güvenliği kalite yönetimi",
+     "description": "Shelf life based MRP, HACCP control integration. MRP run < 1 hour.",
+     "source": "Production Director"},
+    {"code": "REQ-BIZ-005", "title": "HACCP and food safety quality management",
      "req_type": "business", "priority": "must_have", "status": "approved", "module": "QM",
-     "description": "Kritik kontrol noktalarının SAP QM'de izlenmesi. Sertifika yönetimi.",
-     "source": "Kalite Direktörü"},
+     "description": "Tracking critical control points in SAP QM. Certificate management.",
+     "source": "Quality Director"},
 
-    # ── Functional Requirements ──────────────────────────────────────────
-    {"code": "REQ-FI-001", "title": "KDV vergi kodu yapılandırması (%1, %10, %20)",
+    # -- Functional Requirements ------------------------------------------------
+    {"code": "REQ-FI-001", "title": "VAT tax code configuration (1%, 10%, 20%)",
      "req_type": "functional", "priority": "must_have", "status": "approved", "module": "FI",
-     "description": "Türkiye KDV oranları, ÖTV, ÖİV tanımları. Gıda sektörü muafiyetleri."},
-    {"code": "REQ-FI-002", "title": "Banka entegrasyonu (XML ISO 20022 + EFT)",
+     "description": "Turkey VAT rates, SCT, PCST definitions. Food industry exemptions."},
+    {"code": "REQ-FI-002", "title": "Bank integration (XML ISO 20022 + EFT)",
      "req_type": "functional", "priority": "should_have", "status": "approved", "module": "FI",
-     "description": "8 bankayla otomatik ödeme, hesap özeti (MT940/camt.053 ), mutabakat."},
-    {"code": "REQ-MM-001", "title": "Satınalma onay iş akışı (4 kademe)",
+     "description": "Automatic payment with 8 banks, bank statement (MT940/camt.053), reconciliation."},
+    {"code": "REQ-MM-001", "title": "Procurement approval workflow (4-tier)",
      "req_type": "functional", "priority": "must_have", "status": "approved", "module": "MM",
-     "description": "Tutar bazlı 4 kademeli onay: <₺25K, <₺100K, <₺500K, ≥₺500K."},
-    {"code": "REQ-MM-002", "title": "MRP → otomatik satınalma siparişi",
+     "description": "Amount-based 4-tier approval: <TRY 25K, <TRY 100K, <TRY 500K, >=TRY 500K."},
+    {"code": "REQ-MM-002", "title": "MRP -> automatic purchase order",
      "req_type": "functional", "priority": "should_have", "status": "in_progress", "module": "MM",
-     "description": "MRP önerilerinden tedarikçi bazlı otomatik PO oluşturma."},
-    {"code": "REQ-SD-001", "title": "Fiyatlandırma şeması (15+ koşul tipi)",
+     "description": "Automatic PO creation from MRP proposals by vendor."},
+    {"code": "REQ-SD-001", "title": "Pricing schema (15+ condition types)",
      "req_type": "functional", "priority": "must_have", "status": "approved", "module": "SD",
-     "description": "Bayi, market, ihracat kanallarına göre farklı iskonto/prim şemaları."},
-    {"code": "REQ-SD-002", "title": "Kredi limit yönetimi ve otomatik blokaj",
+     "description": "Different discount/bonus schemas per dealer, retail, and export channels."},
+    {"code": "REQ-SD-002", "title": "Credit limit management and automatic block",
      "req_type": "functional", "priority": "should_have", "status": "draft", "module": "SD",
-     "description": "Müşteri bazlı kredi limiti, vadesi geçmiş bakiye kontrolü, otomatik blokaj."},
-    {"code": "REQ-PP-001", "title": "Reçete (BOM) ve rota yönetimi — gıda üretimi",
+     "description": "Customer-based credit limit, overdue balance check, automatic block."},
+    {"code": "REQ-PP-001", "title": "BOM and routing management — food production",
      "req_type": "functional", "priority": "must_have", "status": "in_progress", "module": "PP",
-     "description": "Formülasyon bazlı BOM, co-product/by-product, lot izlenebilirlik."},
+     "description": "Formulation-based BOM, co-product/by-product, lot traceability."},
 
-    # ── Technical Requirements ───────────────────────────────────────────
-    {"code": "REQ-TEC-001", "title": "SAP BTP CPI — 18 arayüz geliştirme",
+    # -- Technical Requirements -------------------------------------------------
+    {"code": "REQ-TEC-001", "title": "SAP BTP CPI — 18 interface development",
      "req_type": "technical", "priority": "must_have", "status": "approved", "module": "BTP",
-     "description": "ERP ↔ MES, WMS, TMS, banka, e-Belge, EDI 18 arayüz. BTP CPI iFlow."},
-    {"code": "REQ-TEC-002", "title": "Veri göçü — 10 ana nesne (~15M kayıt)",
+     "description": "ERP <-> MES, WMS, TMS, bank, e-Document, EDI 18 interfaces. BTP CPI iFlow."},
+    {"code": "REQ-TEC-002", "title": "Data migration — 10 master objects (~15M records)",
      "req_type": "technical", "priority": "must_have", "status": "in_progress", "module": "Migration",
-     "description": "Müşteri, tedarikçi, malzeme, BOM, açık kalem, stok bakiye, sabit kıymet göçü."},
-    {"code": "REQ-TEC-003", "title": "Yetkilendirme matrisi (80 rol, SOD kontrol)",
+     "description": "Customer, vendor, material, BOM, open item, inventory balance, fixed asset migration."},
+    {"code": "REQ-TEC-003", "title": "Authorization matrix (80 roles, SOD control)",
      "req_type": "technical", "priority": "must_have", "status": "draft", "module": "Basis",
-     "description": "80 SAP rolü, görev ayrımı (SOD) kontrolleri. Fiori app bazlı yetkilendirme."},
+     "description": "80 SAP roles, segregation of duties (SOD) controls. Fiori app-based authorization."},
 
-    # ── Integration Requirements ─────────────────────────────────────────
-    {"code": "REQ-INT-001", "title": "e-Fatura / e-İrsaliye / e-Arşiv GİB entegrasyonu",
+    # -- Integration Requirements -----------------------------------------------
+    {"code": "REQ-INT-001", "title": "e-Invoice / e-Waybill / e-Archive GIB integration",
      "req_type": "integration", "priority": "must_have", "status": "approved", "module": "SD",
-     "description": "GİB e-Belge entegrasyonu. UBL-TR 1.2 formatı. Giden ve gelen."},
-    {"code": "REQ-INT-002", "title": "MES ↔ SAP PP üretim entegrasyonu",
+     "description": "GIB e-Document integration. UBL-TR 1.2 format. Outbound and inbound."},
+    {"code": "REQ-INT-002", "title": "MES <-> SAP PP production integration",
      "req_type": "integration", "priority": "should_have", "status": "in_progress", "module": "PP",
-     "description": "MES sisteminden üretim onayları, hurda/fire, OEE verileri. OData + CPI."},
-    {"code": "REQ-INT-003", "title": "WMS ↔ EWM stok senkronizasyonu",
+     "description": "Production confirmations from MES, scrap/waste, OEE data. OData + CPI."},
+    {"code": "REQ-INT-003", "title": "WMS <-> EWM inventory synchronization",
      "req_type": "integration", "priority": "should_have", "status": "draft", "module": "EWM",
-     "description": "Harici WMS ile depo transferi, mal giriş/çıkış senkronizasyonu."},
-    {"code": "REQ-INT-004", "title": "EDI — Perakende zincir sipariş entegrasyonu",
+     "description": "Warehouse transfer, goods receipt/issue synchronization with external WMS."},
+    {"code": "REQ-INT-004", "title": "EDI — Retail chain order integration",
      "req_type": "integration", "priority": "should_have", "status": "draft", "module": "SD",
-     "description": "Büyük market zincirleriyle EDIFACT sipariş/sevkiyat/fatura alışverişi."},
+     "description": "EDIFACT order/shipment/invoice exchange with major retail chains."},
 
-    # ── Non-Functional Requirements ──────────────────────────────────────
-    {"code": "REQ-NFR-001", "title": "Sistem yanıt süresi < 2 saniye (P95)",
+    # -- Non-Functional Requirements --------------------------------------------
+    {"code": "REQ-NFR-001", "title": "System response time < 2 seconds (P95)",
      "req_type": "non_functional", "priority": "must_have", "status": "approved", "module": "Basis",
-     "description": "Online işlemler P95 < 2sn. Toplu işlemler performans hedefleri tanımlı."},
-    {"code": "REQ-NFR-002", "title": "Sistem kullanılabilirliği >= %99.5 (uptime SLA)",
+     "description": "Online transactions P95 < 2s. Batch process performance targets defined."},
+    {"code": "REQ-NFR-002", "title": "System availability >= 99.5% (uptime SLA)",
      "req_type": "non_functional", "priority": "must_have", "status": "approved", "module": "Basis",
-     "description": "Yıllık planlı bakım hariç %99.5 sürekli çalışma garantisi."},
+     "description": "99.5% continuous operation guarantee excluding annual planned maintenance."},
 ]
 
-# ── Traces: Requirement → Phase / Workstream / Scenario ──────────────────
+# -- Traces: Requirement -> Phase / Workstream / Scenario ----------------------
 TRACES = [
-    # Business → Explore phase
+    # Business -> Explore phase
     {"req_code": "REQ-BIZ-001", "target_type": "phase", "target_name": "Explore", "trace_type": "derived_from"},
     {"req_code": "REQ-BIZ-002", "target_type": "phase", "target_name": "Explore", "trace_type": "derived_from"},
     {"req_code": "REQ-BIZ-003", "target_type": "phase", "target_name": "Explore", "trace_type": "derived_from"},
     {"req_code": "REQ-BIZ-004", "target_type": "phase", "target_name": "Realize", "trace_type": "implements"},
-    # Functional → Workstreams
+    # Functional -> Workstreams
     {"req_code": "REQ-FI-001", "target_type": "workstream", "target_name": "Finance (FI/CO)", "trace_type": "implements"},
     {"req_code": "REQ-FI-002", "target_type": "workstream", "target_name": "Finance (FI/CO)", "trace_type": "implements"},
     {"req_code": "REQ-MM-001", "target_type": "workstream", "target_name": "Materials Management (MM)", "trace_type": "implements"},
     {"req_code": "REQ-SD-001", "target_type": "workstream", "target_name": "Sales & Distribution (SD)", "trace_type": "implements"},
     {"req_code": "REQ-PP-001", "target_type": "workstream", "target_name": "Production Planning (PP/QM)", "trace_type": "implements"},
-    # Technical → Scenarios
-    {"req_code": "REQ-TEC-001", "target_type": "scenario", "target_name": "Bilgi Teknolojileri ve Altyapı", "trace_type": "related_to"},
-    {"req_code": "REQ-TEC-002", "target_type": "scenario", "target_name": "Bilgi Teknolojileri ve Altyapı", "trace_type": "related_to"},
-    # Integration → BTP workstream
+    # Technical -> Scenarios
+    {"req_code": "REQ-TEC-001", "target_type": "scenario", "target_name": "Information Technology and Infrastructure", "trace_type": "related_to"},
+    {"req_code": "REQ-TEC-002", "target_type": "scenario", "target_name": "Information Technology and Infrastructure", "trace_type": "related_to"},
+    # Integration -> BTP workstream
     {"req_code": "REQ-INT-001", "target_type": "workstream", "target_name": "Integration (BTP)", "trace_type": "implements"},
     {"req_code": "REQ-INT-002", "target_type": "workstream", "target_name": "Integration (BTP)", "trace_type": "implements"},
     {"req_code": "REQ-INT-003", "target_type": "workstream", "target_name": "Integration (BTP)", "trace_type": "implements"},
 ]
 
-# ── Requirement ↔ L3 Process Code Mappings ───────────────────────────────
+# -- Requirement <-> L3 Process Code Mappings -----------------------------------
 RPM_DATA = [
-    {"req_code": "REQ-SD-001", "l3_code": "1OC", "coverage_type": "full", "notes": "Fiyatlandırma VA01 içinde"},
-    {"req_code": "REQ-SD-001", "l3_code": "4OC", "coverage_type": "partial", "notes": "Fatura fiyatlandırma"},
-    {"req_code": "REQ-FI-001", "l3_code": "1RR", "coverage_type": "full", "notes": "Vergi kodları GL kayıtta"},
-    {"req_code": "REQ-FI-002", "l3_code": "1RR", "coverage_type": "partial", "notes": "Banka mutabakatı"},
-    {"req_code": "REQ-MM-001", "l3_code": "1PP", "coverage_type": "full", "notes": "PO onay iş akışı"},
-    {"req_code": "REQ-MM-002", "l3_code": "1PP", "coverage_type": "full", "notes": "MRP → otomatik PO"},
-    {"req_code": "REQ-PP-001", "l3_code": "1PM", "coverage_type": "partial", "notes": "MRP BOM entegrasyonu"},
-    {"req_code": "REQ-BIZ-005", "l3_code": "3PM", "coverage_type": "full", "notes": "QM HACCP süreci"},
+    {"req_code": "REQ-SD-001", "l3_code": "1OC", "coverage_type": "full", "notes": "Pricing within VA01"},
+    {"req_code": "REQ-SD-001", "l3_code": "4OC", "coverage_type": "partial", "notes": "Invoice pricing"},
+    {"req_code": "REQ-FI-001", "l3_code": "1RR", "coverage_type": "full", "notes": "Tax codes in GL posting"},
+    {"req_code": "REQ-FI-002", "l3_code": "1RR", "coverage_type": "partial", "notes": "Bank reconciliation"},
+    {"req_code": "REQ-MM-001", "l3_code": "1PP", "coverage_type": "full", "notes": "PO approval workflow"},
+    {"req_code": "REQ-MM-002", "l3_code": "1PP", "coverage_type": "full", "notes": "MRP -> automatic PO"},
+    {"req_code": "REQ-PP-001", "l3_code": "1PM", "coverage_type": "partial", "notes": "MRP BOM integration"},
+    {"req_code": "REQ-BIZ-005", "l3_code": "3PM", "coverage_type": "full", "notes": "QM HACCP process"},
 ]
 
-# ── Open Items ───────────────────────────────────────────────────────────
+# -- Open Items -----------------------------------------------------------------
 OI_DATA = [
-    {"req_code": "REQ-FI-002", "title": "Banka formatı henüz belirlenmedi",
-     "item_type": "question", "owner": "Finans Ekibi", "priority": "high", "blocker": True, "status": "open",
-     "description": "8 bankadan hangileri MT940, hangileri camt.053 kullanacak? Format teyidi bekleniyor."},
-    {"req_code": "REQ-SD-002", "title": "Kredi limiti onay seviyesi kararı",
-     "item_type": "decision", "owner": "Ticari Direktör", "priority": "high", "blocker": True, "status": "open",
-     "description": "Kredi limiti aşıldığında hangi yönetici seviyesi onaylayacak?"},
-    {"req_code": "REQ-TEC-002", "title": "Legacy veri temizlik kuralları",
-     "item_type": "dependency", "owner": "Hakan Güneş", "priority": "critical", "blocker": True, "status": "open",
-     "description": "ECC'den gelecek master data cleansing kuralları hâlâ bekleniyor."},
-    {"req_code": "REQ-INT-001", "title": "GİB e-Fatura test ortamı sertifikası",
-     "item_type": "dependency", "owner": "Murat Çelik", "priority": "high", "blocker": False, "status": "in_progress",
-     "description": "GİB test portalı için dijital sertifika başvurusu yapıldı, onay bekleniyor."},
-    {"req_code": "REQ-BIZ-004", "title": "MRP raf ömrü parametreleri",
-     "item_type": "question", "owner": "Deniz Aydın", "priority": "medium", "blocker": False, "status": "in_progress",
-     "description": "Gıda ürünleri için minimum kalan raf ömrü eşik değerleri ne olmalı?"},
-    {"req_code": "REQ-BIZ-001", "title": "TFRS 16 kiralama muhasebesi kapsam kararı",
+    {"req_code": "REQ-FI-002", "title": "Bank format not yet determined",
+     "item_type": "question", "owner": "Finance Team", "priority": "high", "blocker": True, "status": "open",
+     "description": "Which of the 8 banks will use MT940 and which will use camt.053? Format confirmation pending."},
+    {"req_code": "REQ-SD-002", "title": "Credit limit approval level decision",
+     "item_type": "decision", "owner": "Commercial Director", "priority": "high", "blocker": True, "status": "open",
+     "description": "Which management level will approve when credit limit is exceeded?"},
+    {"req_code": "REQ-TEC-002", "title": "Legacy data cleansing rules",
+     "item_type": "dependency", "owner": "Hakan Gunes", "priority": "critical", "blocker": True, "status": "open",
+     "description": "Master data cleansing rules from ECC are still pending."},
+    {"req_code": "REQ-INT-001", "title": "GIB e-Invoice test environment certificate",
+     "item_type": "dependency", "owner": "Murat Celik", "priority": "high", "blocker": False, "status": "in_progress",
+     "description": "Digital certificate application for GIB test portal submitted, awaiting approval."},
+    {"req_code": "REQ-BIZ-004", "title": "MRP shelf life parameters",
+     "item_type": "question", "owner": "Deniz Aydin", "priority": "medium", "blocker": False, "status": "in_progress",
+     "description": "What should the minimum remaining shelf life threshold values be for food products?"},
+    {"req_code": "REQ-BIZ-001", "title": "TFRS 16 lease accounting scope decision",
      "item_type": "decision", "owner": "CFO", "priority": "medium", "blocker": False, "status": "resolved",
-     "resolution": "Phase 2'ye ertelendi. Mevcut kapsam dışında."},
+     "resolution": "Deferred to Phase 2. Out of current scope."},
 ]

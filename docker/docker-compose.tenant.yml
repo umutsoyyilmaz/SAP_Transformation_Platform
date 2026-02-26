@@ -10,8 +10,8 @@
 #   docker compose exec app python scripts/manage_tenants.py init acme
 #   docker compose exec app python scripts/manage_tenants.py seed acme
 #
-# Tenant DB'leri aynı PostgreSQL instance üzerinde farklı database olarak oluşturulur.
-# Her tenant için ayrı PostgreSQL instance GEREKMEZ — tek pg, çoklu database.
+# Tenant DBs are created as separate databases on the same PostgreSQL instance.
+# A separate PostgreSQL instance per tenant is NOT required — single pg, multiple databases.
 
 services:
   app:

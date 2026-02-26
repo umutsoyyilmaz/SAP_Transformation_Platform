@@ -101,13 +101,13 @@ def seed_program():
 
     # Team members (demo users matching role-nav)
     demo_team = [
-        ("Ahmet Yılmaz", "pm", "ahmet.yilmaz@globaltech.com"),
+        ("Ahmet Yilmaz", "pm", "ahmet.yilmaz@globaltech.com"),
         ("Elif Demir", "module_lead", "elif.demir@globaltech.com"),
-        ("Canan Öztürk", "facilitator", "canan.ozturk@globaltech.com"),
-        ("Burak Aydın", "bpo", "burak.aydin@globaltech.com"),
+        ("Canan Ozturk", "facilitator", "canan.ozturk@globaltech.com"),
+        ("Burak Aydin", "bpo", "burak.aydin@globaltech.com"),
         ("Deniz Kaya", "tech_lead", "deniz.kaya@globaltech.com"),
         ("Selin Arslan", "tester", "selin.arslan@globaltech.com"),
-        ("Murat Çelik", "module_lead", "murat.celik@globaltech.com"),
+        ("Murat Celik", "module_lead", "murat.celik@globaltech.com"),
     ]
     for name, role, email in demo_team:
         db.session.add(TeamMember(program_id=p.id, name=name, role=role, email=email))
@@ -245,9 +245,9 @@ def seed_workshops(pid, levels, all_l4, scenario="all"):
             "l3_codes": ["OTC-10", "OTC-20", "OTC-30", "OTC-40"],
             "attendees": [
                 ("elif.demir", "Elif Demir", "Module Lead"),
-                ("burak.aydin", "Burak Aydın", "BPO"),
-                ("canan.ozturk", "Canan Öztürk", "Facilitator"),
-                ("ahmet.yilmaz", "Ahmet Yılmaz", "PM"),
+                ("burak.aydin", "Burak Aydin", "BPO"),
+                ("canan.ozturk", "Canan Ozturk", "Facilitator"),
+                ("ahmet.yilmaz", "Ahmet Yilmaz", "PM"),
             ],
         },
         {
@@ -257,9 +257,9 @@ def seed_workshops(pid, levels, all_l4, scenario="all"):
             "status": "completed",
             "l3_codes": ["PTP-10", "PTP-20", "PTP-30", "PTP-40"],
             "attendees": [
-                ("murat.celik", "Murat Çelik", "Module Lead"),
-                ("burak.aydin", "Burak Aydın", "BPO"),
-                ("canan.ozturk", "Canan Öztürk", "Facilitator"),
+                ("murat.celik", "Murat Celik", "Module Lead"),
+                ("burak.aydin", "Burak Aydin", "BPO"),
+                ("canan.ozturk", "Canan Ozturk", "Facilitator"),
                 ("deniz.kaya", "Deniz Kaya", "Tech Lead"),
             ],
         },
@@ -332,7 +332,7 @@ def seed_requirements(pid, workshops, process_steps):
         ("Credit Management Integration", "functional", "P1", "in_backlog", "SD",
          "Real-time credit check integrated with FI credit management."),
         ("Output Determination — E-Invoice", "enhancement", "P2", "approved", "SD",
-         "Turkey e-invoice (e-Fatura) integration via output determination."),
+         "Turkey e-invoice (e-Invoice) integration via output determination."),
         ("Available-to-Promise Enhancement", "functional", "P2", "under_review", "SD",
          "ATP check with warehouse-level stock visibility."),
         ("Batch Delivery Processing", "enhancement", "P3", "draft", "SD",
@@ -367,7 +367,7 @@ def seed_requirements(pid, workshops, process_steps):
                 process_area=proc_area,
                 workshop_id=ws.id if ws else None,
                 created_by_id="canan.ozturk",
-                created_by_name="Canan Öztürk",
+                created_by_name="Canan Ozturk",
             )
             db.session.add(r)
             reqs.append(r)
@@ -396,7 +396,7 @@ def seed_requirements(pid, workshops, process_steps):
     # Decisions
     dec_data = [
         ("Use SAP standard pricing engine with custom condition tables", "approved"),
-        ("E-invoice via output determination + TÜRK.NET integration", "approved"),
+        ("E-invoice via output determination + TURK.NET integration", "approved"),
         ("Adopt SAP standard 3-way match with custom tolerance groups", "approved"),
         ("PR approval workflow via SAP BTP Workflow Management", "pending"),
     ]

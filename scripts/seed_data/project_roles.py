@@ -1,21 +1,21 @@
 """
 SEED-003 — Project Role Assignments for Explore Phase RBAC
-Company: Anadolu Gıda ve İçecek A.Ş.
+Company: Anadolu Food & Beverage Inc.
 
 Maps users to project-level roles with optional process area scoping.
 Consumed by the ProjectRole model (app/models/explore.py).
 
 Team Members:
   usr-001  Mehmet Kaya       PM
-  usr-002  Burak Şahin       SD Module Lead / Facilitator
+  usr-002  Burak Sahin       SD Module Lead / Facilitator
   usr-003  Elif Demir        MM Module Lead
-  usr-004  Ahmet Yıldız      FI/CO Module Lead
+  usr-004  Ahmet Yildiz      FI/CO Module Lead
   usr-005  Zeynep Arslan     PP/QM Module Lead
-  usr-006  Hakan Çelik       WM Module Lead
-  usr-007  Ayşe Yılmaz       HR Module Lead
-  usr-008  Can Özdemir       Tech Lead
-  usr-009  Fatma Koç         Test Lead
-  usr-010  Emre Aydın        BPO (Sales & Procurement)
+  usr-006  Hakan Celik       WM Module Lead
+  usr-007  Ayse Yilmaz       HR Module Lead
+  usr-008  Can Ozdemir       Tech Lead
+  usr-009  Fatma Koc         Test Lead
+  usr-010  Emre Aydin        BPO (Sales & Procurement)
 """
 
 PROJECT_ROLES = [

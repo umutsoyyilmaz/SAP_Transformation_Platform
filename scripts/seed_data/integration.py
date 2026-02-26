@@ -20,7 +20,7 @@ WAVES = [
 INTERFACES = [
     {
         "code": "IF-001",
-        "name": "SAP → Bank Payment (SEPA XML)",
+        "name": "SAP -> Bank Payment (SEPA XML)",
         "source_system": "S/4HANA",
         "target_system": "Garanti BBVA",
         "protocol": "file",
@@ -46,9 +46,9 @@ INTERFACES = [
     },
     {
         "code": "IF-003",
-        "name": "e-Fatura GİB Entegrasyonu",
+        "name": "e-Invoice GIB Integration",
         "source_system": "S/4HANA",
-        "target_system": "GİB Portal",
+        "target_system": "GIB Portal",
         "protocol": "soap",
         "frequency": "real-time",
         "direction": "bidirectional",
@@ -59,7 +59,7 @@ INTERFACES = [
     },
     {
         "code": "IF-004",
-        "name": "MES Üretim Emirleri",
+        "name": "MES Production Orders",
         "source_system": "S/4HANA",
         "target_system": "MES",
         "protocol": "bapi",
@@ -72,7 +72,7 @@ INTERFACES = [
     },
     {
         "code": "IF-005",
-        "name": "WMS Depo Hareketleri",
+        "name": "WMS Warehouse Movements",
         "source_system": "EWM",
         "target_system": "3PL WMS",
         "protocol": "idoc",
@@ -98,7 +98,7 @@ INTERFACES = [
     },
     {
         "code": "IF-007",
-        "name": "CRM Müşteri Senkronizasyonu",
+        "name": "CRM Customer Synchronization",
         "source_system": "Salesforce",
         "target_system": "S/4HANA",
         "protocol": "rest",
@@ -111,7 +111,7 @@ INTERFACES = [
     },
     {
         "code": "IF-008",
-        "name": "BI/BW Raporlama Extraction",
+        "name": "BI/BW Reporting Extraction",
         "source_system": "S/4HANA",
         "target_system": "BW/4HANA",
         "protocol": "odata",

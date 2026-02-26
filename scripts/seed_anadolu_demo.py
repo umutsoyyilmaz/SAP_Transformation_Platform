@@ -2,14 +2,14 @@
 """
 SAP Transformation Platform — Anadolu Holding Demo Seed.
 
-Gerçekçi Türk SAP dönüşüm projesi: Anadolu Holding S/4HANA.
-Brownfield yaklaşım, SD/MM/FI/CO modülleri, ~97 kayıt.
+Realistic Turkish SAP transformation project: Anadolu Holding S/4HANA.
+Brownfield approach, SD/MM/FI/CO modules, ~97 records.
 
-Kaynak: SEED_DATA_MANUAL_ENTRY.md
+Source: SEED_DATA_MANUAL_ENTRY.md
 
 Usage:
-    python scripts/seed_anadolu_demo.py              # Mevcut DB'ye ekle
-    python scripts/seed_anadolu_demo.py --reset      # DB sıfırlayıp yükle
+    python scripts/seed_anadolu_demo.py              # Add to existing DB
+    python scripts/seed_anadolu_demo.py --reset      # Reset DB and load
 """
 
 import argparse
@@ -50,9 +50,9 @@ def seed_program():
     p = Program(
         name="Anadolu Holding S/4HANA Transformation",
         description=(
-            "Anadolu Holding'in mevcut ECC 6.0 sisteminden S/4HANA'ya dönüşüm projesi. "
-            "4 ana modül kapsam dahilinde, 12 ay süre planlanmıştır. "
-            "Brownfield yaklaşımla mevcut özelleştirmeler korunarak modern platforma geçiş hedeflenmektedir."
+            "Anadolu Holding transformation project from existing ECC 6.0 system to S/4HANA. "
+            "4 main modules in scope, planned for 12 months duration. "
+            "Brownfield approach targeting migration to modern platform while preserving existing customizations."
         ),
         project_type="brownfield",
         methodology="sap_activate",
@@ -102,11 +102,11 @@ def seed_program():
 
     # Team Members
     members = [
-        ("Ayşe Demir", "project_lead", "ayse.demir@consulting.com"),
+        ("Ayse Demir", "project_lead", "ayse.demir@consulting.com"),
         ("Burak Kaya", "consultant", "burak.kaya@consulting.com"),
-        ("Canan Öztürk", "stream_lead", "canan.ozturk@consulting.com"),
+        ("Canan Ozturk", "stream_lead", "canan.ozturk@consulting.com"),
         ("Deniz Aksoy", "developer", "deniz.aksoy@consulting.com"),
-        ("Mehmet Yılmaz", "team_member", "mehmet.yilmaz@anadoluholding.com.tr"),
+        ("Mehmet Yilmaz", "team_member", "mehmet.yilmaz@anadoluholding.com.tr"),
     ]
     for mname, mrole, memail in members:
         tm = TeamMember(program_id=p.id, name=mname, role=mrole, email=memail)
@@ -126,15 +126,15 @@ def seed_scenarios(program):
     scenarios = {}
     data = [
         ("S-001", "Order to Cash", "SD", "order_to_cash", "in_analysis",
-         "Müşteri siparişinden tahsilata kadar tüm satış sürecini kapsar. Standart sipariş, iade, kredi/borç dekontu, ATP kontrolü ve faturalama dahil. SAP Best Practice scope item 1YG, BD9 referanslı."),
+         "Covers the entire sales process from customer order to collection. Includes standard order, returns, credit/debit memo, ATP check, and billing. Referenced SAP Best Practice scope items 1YG, BD9."),
         ("S-002", "Procure to Pay", "MM", "procure_to_pay", "in_analysis",
-         "Satın alma talebinden tedarikçi ödemesine kadar tüm tedarik sürecini kapsar. Satın alma talebi, sipariş, mal girişi, fatura doğrulama ve ödeme. Scope item J58, 2NM referanslı."),
+         "Covers the entire procurement process from purchase requisition to supplier payment. Purchase requisition, purchase order, goods receipt, invoice verification, and payment. Referenced scope items J58, 2NM."),
         ("S-003", "Record to Report", "FI", "record_to_report", "draft",
-         "Muhasebe kayıtlarından finansal raporlamaya kadar süreç. Genel muhasebe, alacak/borç yönetimi, varlık muhasebesi, dönem sonu kapanış ve raporlama. Scope item J77, BEV referanslı."),
+         "Process from accounting entries to financial reporting. General ledger, accounts receivable/payable management, asset accounting, period-end closing, and reporting. Referenced scope items J77, BEV."),
         ("S-004", "Plan to Produce", "CO", "plan_to_produce", "draft",
-         "Üretim planlama ve maliyet kontrolü senaryosu. Maliyet merkezi muhasebesi, dahili siparişler, ürün maliyetlendirme ve kar/maliyet analizi. CO modülü odaklı."),
+         "Production planning and cost control scenario. Cost center accounting, internal orders, product costing, and profit/cost analysis. CO module focused."),
         ("S-005", "O2C + R2R Integration Test", "SD", "order_to_cash", "draft",
-         "Satış faturasının FI'a otomatik muhasebe kaydı oluşturması, alacak hesabına yansıması ve raporlamaya düşmesi. Cross-module entegrasyon testi."),
+         "Sales invoice automatically creating FI accounting entry, reflecting in accounts receivable, and flowing to reporting. Cross-module integration test."),
     ]
     for code, name, mod, pa, status, desc in data:
         s = Scenario(
@@ -198,16 +198,16 @@ def seed_processes_and_analyses(program, scenarios):
     analyses = {}
     anl_data = [
         ("ANL-001", "O2C Fit-to-Standard Workshop", "O2C-001", "workshop", "completed",
-         "Order to Cash sürecinin SAP Best Practice ile karşılaştırma atölyesi. SD modülü ana süreçleri incelendi. Katılımcılar: SD danışmanları, satış müdürü, depo sorumlusu.",
+         "Comparison workshop of Order to Cash process against SAP Best Practice. SD module core processes reviewed. Attendees: SD consultants, sales manager, warehouse supervisor.",
          date(2026, 3, 15)),
         ("ANL-002", "O2C Gap Detail Analysis", "O2C-001", "fit_gap", "in_progress",
-         "Workshop'ta tespit edilen Gap'lerin detaylı analizi. Her gap için çözüm alternatifi ve effort tahmini yapılıyor.",
+         "Detailed analysis of gaps identified in the workshop. Solution alternatives and effort estimates being prepared for each gap.",
          date(2026, 3, 22)),
         ("ANL-003", "P2P Fit-to-Standard Workshop", "P2P-001", "workshop", "completed",
-         "Procure to Pay sürecinin SAP Best Practice ile karşılaştırma atölyesi. MM modülü tedarik süreçleri incelendi.",
+         "Comparison workshop of Procure to Pay process against SAP Best Practice. MM module procurement processes reviewed.",
          date(2026, 3, 18)),
         ("ANL-004", "R2R Fit-to-Standard Workshop", "R2R-001", "workshop", "planned",
-         "Record to Report sürecinin SAP Best Practice ile karşılaştırma atölyesi. FI modülü muhasebe süreçleri planlanıyor.",
+         "Comparison workshop of Record to Report process against SAP Best Practice. FI module accounting processes being planned.",
          date(2026, 4, 5)),
     ]
     for code, name, proc_code, atype, status, desc, adate in anl_data:
@@ -274,10 +274,10 @@ def seed_workshops(program):
     ws_data = [
         ("SES-001", "O2C Workshop Day 1: Sales Order & Delivery", "SD",
          "fit_to_standard", "completed", date(2026, 3, 15), time(9, 0), time(13, 0),
-         "Canan Öztürk"),
+         "Canan Ozturk"),
         ("SES-002", "O2C Workshop Day 2: Billing & Credit Management", "SD",
          "fit_to_standard", "completed", date(2026, 3, 16), time(9, 0), time(13, 0),
-         "Canan Öztürk"),
+         "Canan Ozturk"),
         ("SES-003", "P2P Workshop Day 1: Procurement & Goods Receipt", "MM",
          "fit_to_standard", "completed", date(2026, 3, 18), time(9, 0), time(13, 0),
          "Fatih Korkmaz"),
@@ -307,17 +307,17 @@ def seed_workshops(program):
 def seed_attendees(workshops):
     att_data = {
         "SES-001": [
-            ("Canan Öztürk", "Facilitator / SD Consultant", "consultant"),
-            ("Mehmet Yılmaz", "Business Owner", "customer"),
+            ("Canan Ozturk", "Facilitator / SD Consultant", "consultant"),
+            ("Mehmet Yilmaz", "Business Owner", "customer"),
             ("Elif Kara", "Key User - Sales", "customer"),
             ("Hasan Demir", "Key User - Logistics", "customer"),
             ("Burak Kaya", "Solution Architect", "consultant"),
         ],
         "SES-003": [
             ("Fatih Korkmaz", "Facilitator / MM Consultant", "consultant"),
-            ("Aylin Şahin", "Key User - Purchasing", "customer"),
-            ("Serkan Yıldız", "Key User - Warehouse", "customer"),
-            ("Zehra Aydın", "Finance Representative", "customer"),
+            ("Aylin Sahin", "Key User - Purchasing", "customer"),
+            ("Serkan Yildiz", "Key User - Warehouse", "customer"),
+            ("Zehra Aydin", "Finance Representative", "customer"),
         ],
     }
     count = 0
@@ -341,21 +341,21 @@ def seed_attendees(workshops):
 def seed_agenda(workshops):
     agenda_data = {
         "SES-001": [
-            (time(9, 0), "Proje kapsamı ve workshop amacı", 15, "session"),
+            (time(9, 0), "Project scope and workshop objective", 15, "session"),
             (time(9, 15), "SAP Best Practice: Standard Sales Order (1YG)", 45, "demo"),
-            (time(10, 0), "Mevcut süreç vs. SAP Standard karşılaştırma", 60, "discussion"),
-            (time(11, 0), "ATP Check ve Availability süreçleri", 30, "session"),
-            (time(11, 30), "Delivery & Shipping Point yapılandırması", 30, "session"),
-            (time(12, 0), "Gap'lerin tespiti ve önceliklendirme", 30, "discussion"),
-            (time(12, 30), "Sonraki adımlar ve aksiyonlar", 10, "wrap_up"),
+            (time(10, 0), "Current process vs. SAP Standard comparison", 60, "discussion"),
+            (time(11, 0), "ATP Check and Availability processes", 30, "session"),
+            (time(11, 30), "Delivery & Shipping Point configuration", 30, "session"),
+            (time(12, 0), "Gap identification and prioritization", 30, "discussion"),
+            (time(12, 30), "Next steps and actions", 10, "wrap_up"),
         ],
         "SES-003": [
-            (time(9, 0), "P2P süreç genel bakış", 15, "session"),
+            (time(9, 0), "P2P process overview", 15, "session"),
             (time(9, 15), "SAP Best Practice: Basic Procurement (J58)", 45, "demo"),
-            (time(10, 0), "Satın alma talep ve onay süreci inceleme", 45, "discussion"),
-            (time(10, 45), "Mal girişi ve depo süreçleri", 30, "session"),
-            (time(11, 15), "Gap tespiti ve tartışma", 30, "discussion"),
-            (time(11, 45), "Aksiyonlar", 15, "wrap_up"),
+            (time(10, 0), "Purchase requisition and approval process review", 45, "discussion"),
+            (time(10, 45), "Goods receipt and warehouse processes", 30, "session"),
+            (time(11, 15), "Gap identification and discussion", 30, "discussion"),
+            (time(11, 45), "Actions", 15, "wrap_up"),
         ],
     }
     count = 0
@@ -383,26 +383,26 @@ def seed_fitgap(workshops, levels):
     gap_data = [
         # SES-001 FitGap — each must have unique (workshop_id, process_level_id)
         ("GAP-001", "SES-001", "SD-001.03", "fit",
-         "SAP standard sipariş süreci (VA01-VA02-VA03) mevcut süreci karşılıyor. Pricing procedure karşılanıyor."),
+         "SAP standard order process (VA01-VA02-VA03) meets the current process. Pricing procedure is covered."),
         ("GAP-003", "SES-001", "SD-001.01", "partial_fit",
-         "Plant seviyesi ATP standard'da mevcut. Storage location bazlı ATP için enhancement gerekiyor."),
+         "Plant-level ATP is available in standard. Enhancement needed for storage location-based ATP."),
         ("GAP-004", "SES-001", "SD-002.01", "gap",
-         "Mevcut intercompany faturalama tamamen manuel. SAP standard BD9 var ama transfer pricing kuralları custom development gerektiriyor."),
+         "Current intercompany billing is entirely manual. SAP standard BD9 exists but transfer pricing rules require custom development."),
         ("GAP-005", "SES-001", "SD-001.02", "partial_fit",
-         "Standart delivery split mevcut. Müşterinin özel split kuralları enhancement gerektirir."),
+         "Standard delivery split is available. Customer-specific split rules require enhancement."),
         ("GAP-006", "SES-001", "SD-002.02", "fit",
-         "SAP Credit Management (1E1) online kredi kontrolü sağlıyor. Configuration ile taşınabilir."),
+         "SAP Credit Management (1E1) provides online credit control. Can be migrated with configuration."),
         # SES-003 FitGap
         ("GAP-007", "SES-003", "MM-001.01", "fit",
-         "SAP standard PR süreci mevcut süreci tam olarak karşılıyor. Onay süreci Release Strategy ile çözülecek."),
+         "SAP standard PR process fully meets the current process. Approval process will be handled with Release Strategy."),
         ("GAP-008", "SES-003", "MM-001.02", "fit",
-         "MRP çalışması sonrası otomatik PO oluşturma SAP standard'da mevcut (ME59N)."),
+         "Automatic PO creation after MRP run is available in SAP standard (ME59N)."),
         ("GAP-009", "SES-003", "MM-002.02", "gap",
-         "Mevcut Excel-tabanlı tedarikçi puanlama sistemi 15 özel kriter içeriyor. SAP standard evaluation sadece 5 kriter. Custom report gerekli."),
+         "Current Excel-based vendor scoring system contains 15 custom criteria. SAP standard evaluation only has 5 criteria. Custom report required."),
         ("GAP-010", "SES-003", "MM-002.03", "partial_fit",
-         "Konsinyasyon stok takibi standard'da mevcut. 3 özel rapor gerekli: aging, turnover, value."),
+         "Consignment stock tracking is available in standard. 3 custom reports required: aging, turnover, value."),
         ("GAP-011", "SES-003", "MM-002.01", "fit",
-         "Goods receipt tolerance kontrolü SAP standard'da mevcut. OMBR/OMBW config transaction'ları ile ayarlanabilir."),
+         "Goods receipt tolerance check is available in SAP standard. Can be configured with OMBR/OMBW config transactions."),
     ]
     for code, ws_code, level_code, decision, notes in gap_data:
         ps = ProcessStep(
@@ -429,28 +429,28 @@ def seed_fitgap(workshops, levels):
 
 def seed_questions(program, workshops):
     q_data = [
-        ("Q-001", "SES-001", "Mevcut sistemde kaç farklı sipariş tipi kullanılıyor?",
-         "12 farklı sipariş tipi mevcut. SAP standard'da 7'si karşılanıyor, 5'i özel geliştirme olarak devam edecek.",
+        ("Q-001", "SES-001", "How many different order types are used in the current system?",
+         "12 different order types exist. 7 are covered in SAP standard, 5 will continue as custom developments.",
          "closed", "Elif Kara", "clarification"),
-        ("Q-002", "SES-001", "ATP kontrolü hangi seviyede yapılıyor? Plant mı, storage location mı?",
-         "Şu an plant seviyesinde. SAP standard ATP storage location seviyesini de destekliyor, configuration ile çözülebilir.",
+        ("Q-002", "SES-001", "At what level is the ATP check performed? Plant or storage location?",
+         "Currently at plant level. SAP standard ATP also supports storage location level, can be solved with configuration.",
          "closed", "Hasan Demir", "technical"),
-        ("Q-003", "SES-001", "Intercompany satışlarda faturalama nasıl çalışıyor?",
-         "Mevcut sistemde manuel. S/4HANA'da scope item BD9 ile otomatik intercompany billing mümkün.",
-         "closed", "Mehmet Yılmaz", "process"),
-        ("Q-004", "SES-001", "Kredi limit kontrolü online mı batch mı yapılıyor?",
+        ("Q-003", "SES-001", "How does billing work in intercompany sales?",
+         "Manual in current system. Automatic intercompany billing is possible in S/4HANA with scope item BD9.",
+         "closed", "Mehmet Yilmaz", "process"),
+        ("Q-004", "SES-001", "Is credit limit check performed online or in batch?",
          "", "open", "Elif Kara", "technical"),
-        ("Q-005", "SES-001", "Third-party satışlarda süreç nasıl işleyecek?",
-         "", "open", "Mehmet Yılmaz", "scope"),
-        ("Q-006", "SES-003", "Tedarikçi değerlendirme sistemi SAP'de mevcut mu?",
-         "SAP standard'da Supplier Evaluation (ME61-ME65) mevcut. Özel kriterlerin taşınması için custom development gerekebilir.",
-         "closed", "Aylin Şahin", "technical"),
-        ("Q-007", "SES-003", "Satın alma onay limitleri nasıl tanımlanacak?",
-         "SAP'de Release Strategy ile tanımlanacak. Mevcut 4 kademeli onay süreci birebir karşılanabiliyor.",
-         "closed", "Aylin Şahin", "process"),
-        ("Q-008", "SES-003", "Konsinyasyon alım süreci mevcut mu?",
-         "Evet, scope item 2NM kapsamında mevcut. Ancak özel konsinyasyon raporları SAP standard'da yok.",
-         "closed", "Serkan Yıldız", "process"),
+        ("Q-005", "SES-001", "How will the process work for third-party sales?",
+         "", "open", "Mehmet Yilmaz", "scope"),
+        ("Q-006", "SES-003", "Is the supplier evaluation system available in SAP?",
+         "Supplier Evaluation (ME61-ME65) is available in SAP standard. Custom development may be needed to migrate custom criteria.",
+         "closed", "Aylin Sahin", "technical"),
+        ("Q-007", "SES-003", "How will purchase approval limits be defined?",
+         "Will be defined with Release Strategy in SAP. The current 4-tier approval process can be fully replicated.",
+         "closed", "Aylin Sahin", "process"),
+        ("Q-008", "SES-003", "Is the consignment procurement process available?",
+         "Yes, available within scope item 2NM. However, custom consignment reports are not available in SAP standard.",
+         "closed", "Serkan Yildiz", "process"),
     ]
     count = 0
     creator_id = _uid()  # dummy user ID
@@ -459,7 +459,7 @@ def seed_questions(program, workshops):
             id=_uid(), project_id=program.id,
             workshop_id=workshops[ws_code].id,
             code=code, title=title,
-            description=f"Soru: {title}",
+            description=f"Question: {title}",
             status=status,
             priority="P2" if status == "open" else "P3",
             category=category,
@@ -480,21 +480,21 @@ def seed_questions(program, workshops):
 
 def seed_decisions(program, steps):
     dec_data = [
-        ("DEC-001", "GAP-001", "Sipariş tipi konsolidasyonu",
-         "12 mevcut sipariş tipinden 7'si SAP standard tiplere map edilecek. 5 özel tip devam edecek.",
-         "Mehmet Yılmaz, Canan Öztürk", "process", "active"),
-        ("DEC-002", "GAP-003", "ATP seviyesi karar",
-         "ATP kontrolü plant seviyesinde kalacak, storage location seviyesi Phase 2'ye bırakılacak.",
+        ("DEC-001", "GAP-001", "Order type consolidation",
+         "7 of the 12 existing order types will be mapped to SAP standard types. 5 custom types will continue.",
+         "Mehmet Yilmaz, Canan Ozturk", "process", "active"),
+        ("DEC-002", "GAP-003", "ATP level decision",
+         "ATP check will remain at plant level, storage location level will be deferred to Phase 2.",
          "Hasan Demir, Burak Kaya", "technical", "active"),
-        ("DEC-003", "GAP-004", "Intercompany yaklaşım",
-         "SAP standard BD9 scope item kullanılacak. Transfer pricing kuralları için ABAP enhancement geliştirilecek.",
-         "Mehmet Yılmaz", "scope", "active"),
-        ("DEC-004", "GAP-007", "Release Strategy yapısı",
-         "4 kademeli onay süreci SAP Release Strategy ile birebir uygulanacak.",
-         "Aylin Şahin", "process", "active"),
-        ("DEC-005", "GAP-009", "Vendor Evaluation yaklaşımı",
-         "SAP standard evaluation + custom Z-report kombinasyonu.",
-         "Aylin Şahin, Fatih Korkmaz", "technical", "active"),
+        ("DEC-003", "GAP-004", "Intercompany approach",
+         "SAP standard BD9 scope item will be used. ABAP enhancement will be developed for transfer pricing rules.",
+         "Mehmet Yilmaz", "scope", "active"),
+        ("DEC-004", "GAP-007", "Release Strategy structure",
+         "4-tier approval process will be implemented exactly with SAP Release Strategy.",
+         "Aylin Sahin", "process", "active"),
+        ("DEC-005", "GAP-009", "Vendor Evaluation approach",
+         "SAP standard evaluation + custom Z-report combination.",
+         "Aylin Sahin, Fatih Korkmaz", "technical", "active"),
     ]
     count = 0
     for code, step_code, text, rationale, decided_by, category, status in dec_data:
@@ -516,26 +516,26 @@ def seed_decisions(program, steps):
 
 def seed_risks(program):
     risk_data = [
-        ("RSK-001", "Data Migration karmaşıklığı",
-         "12 sipariş tipinin 7'ye konsolidasyonu sırasında açık sipariş ve tarihsel veri dönüşümü karmaşık olabilir. 50K+ açık sipariş mevcut.",
+        ("RSK-001", "Data Migration complexity",
+         "Open order and historical data conversion during consolidation of 12 order types to 7 may be complex. 50K+ open orders exist.",
          "high", 4, 5, "Deniz Aksoy",
-         "Migration pilot çalışması yapılacak. İlk 1000 kayıt ile test, sonra tam migration. Fallback planı hazırlanacak."),
-        ("RSK-002", "Intercompany geliştirme süresi",
-         "Transfer pricing ABAP geliştirmesi Go-live tarihini tehdit edebilir. Complexity yüksek.",
+         "Migration pilot study will be conducted. Test with first 1000 records, then full migration. Fallback plan will be prepared."),
+        ("RSK-002", "Intercompany development timeline",
+         "Transfer pricing ABAP development may threaten the Go-live date. Complexity is high.",
          "high", 3, 4, "Burak Kaya",
-         "Erken prototip (Sprint 2'de başlangıç). Gerekirse Go-live scope'undan çıkarılıp Phase 2'ye alınır."),
-        ("RSK-003", "Key User müsaitliği",
-         "Elif Kara (SD Key User) Nisan ayında 2 hafta izinli olacak. Workshop planlamasını etkiler.",
-         "medium", 3, 3, "Ayşe Demir",
-         "Backup key user (Gamze Yıldız) atanacak. Nisan öncesi kritik workshoplar tamamlanacak."),
-        ("RSK-004", "Custom report performansı",
-         "Vendor scoring custom report'u büyük veri setlerinde (100K+ tedarikçi kaydı) yavaş çalışabilir.",
+         "Early prototype (starting in Sprint 2). If necessary, will be removed from Go-live scope and moved to Phase 2."),
+        ("RSK-003", "Key User availability",
+         "Elif Kara (SD Key User) will be on leave for 2 weeks in April. Affects workshop planning.",
+         "medium", 3, 3, "Ayse Demir",
+         "Backup key user (Gamze Yildiz) will be assigned. Critical workshops will be completed before April."),
+        ("RSK-004", "Custom report performance",
+         "Vendor scoring custom report may run slowly on large data sets (100K+ supplier records).",
          "low", 2, 3, "Deniz Aksoy",
-         "HANA optimizasyonu + CDS view kullanımı ile performans sağlanacak."),
-        ("RSK-005", "Kullanıcı eğitimi yetersizliği",
-         "200+ son kullanıcı eğitimi yeterli sürede tamamlanamayabilir.",
-         "medium", 3, 3, "Ayşe Demir",
-         "Train-the-trainer yaklaşımı. 15 süper kullanıcı yetiştirilecek."),
+         "Performance will be ensured with HANA optimization + CDS view usage."),
+        ("RSK-005", "Insufficient user training",
+         "Training for 200+ end users may not be completed within adequate timeframe.",
+         "medium", 3, 3, "Ayse Demir",
+         "Train-the-trainer approach. 15 super users will be trained."),
     ]
     count = 0
     for code, title, desc, priority, prob, impact, owner, mitigation in risk_data:
@@ -559,21 +559,21 @@ def seed_risks(program):
 
 def seed_actions(program):
     act_data = [
-        ("ACT-001", "Sipariş tipi mapping dokümanı hazırla", "Canan Öztürk",
+        ("ACT-001", "Prepare order type mapping document", "Canan Ozturk",
          date(2026, 3, 25), "high", "in_progress", "follow_up"),
-        ("ACT-002", "ATP enhancement scope dokümanı yaz", "Canan Öztürk",
+        ("ACT-002", "Write ATP enhancement scope document", "Canan Ozturk",
          date(2026, 3, 28), "high", "open", "follow_up"),
-        ("ACT-003", "Intercompany transfer pricing kurallarını dokümante et", "Mehmet Yılmaz",
+        ("ACT-003", "Document intercompany transfer pricing rules", "Mehmet Yilmaz",
          date(2026, 4, 1), "critical", "open", "preventive"),
-        ("ACT-004", "Backup key user (Gamze Yıldız) onayını al", "Ayşe Demir",
+        ("ACT-004", "Get backup key user (Gamze Yildiz) approval", "Ayse Demir",
          date(2026, 3, 20), "medium", "completed", "corrective"),
-        ("ACT-005", "Data migration pilot planı hazırla", "Deniz Aksoy",
+        ("ACT-005", "Prepare data migration pilot plan", "Deniz Aksoy",
          date(2026, 4, 5), "high", "open", "preventive"),
-        ("ACT-006", "Release Strategy detay tasarımı", "Fatih Korkmaz",
+        ("ACT-006", "Release Strategy detailed design", "Fatih Korkmaz",
          date(2026, 3, 28), "medium", "in_progress", "follow_up"),
-        ("ACT-007", "Vendor scoring kriterleri listesi (15 kriter detaylı)", "Aylin Şahin",
+        ("ACT-007", "Vendor scoring criteria list (15 criteria detailed)", "Aylin Sahin",
          date(2026, 3, 30), "high", "open", "follow_up"),
-        ("ACT-008", "Konsinyasyon rapor gereksinimleri yaz", "Serkan Yıldız",
+        ("ACT-008", "Write consignment report requirements", "Serkan Yildiz",
          date(2026, 4, 2), "medium", "open", "follow_up"),
     ]
     count = 0
@@ -603,42 +603,42 @@ def seed_requirements(program, workshops, steps, levels):
         # Fit requirements
         ("REQ-001", "Standard Sales Order Configuration", "Fit", "SD", "P1", "approved",
          "configuration", "SES-001", "GAP-001",
-         "Standart sipariş tipi (OR) konfigürasyonu. Order type, item category determination, schedule line category, copy control ayarları. Scope item 1YG kapsamında.", 0),
+         "Standard order type (OR) configuration. Order type, item category determination, schedule line category, copy control settings. Within scope item 1YG.", 0),
         ("REQ-002", "SD Pricing Procedure Setup", "Fit", "SD", "P1", "approved",
          "configuration", "SES-001", "GAP-001",
-         "Fiyatlandırma prosedürü konfigürasyonu. 8 condition type ve access sequence tanımları.", 0),
+         "Pricing procedure configuration. 8 condition type and access sequence definitions.", 0),
         ("REQ-003", "Credit Management Configuration", "Fit", "SD", "P2", "approved",
          "configuration", "SES-001", "GAP-006",
-         "SAP Credit Management (FIN-FSCM-CR) konfigürasyonu. Kredi segmenti, risk kategorisi, otomatik kredi karar kuralları.", 0),
+         "SAP Credit Management (FIN-FSCM-CR) configuration. Credit segment, risk category, automatic credit decision rules.", 0),
         ("REQ-004", "Purchase Requisition Approval (Release Strategy)", "Fit", "MM", "P1", "approved",
          "configuration", "SES-003", "GAP-007",
-         "Satın alma talebi onay stratejisi konfigürasyonu. 4 kademe onay.", 0),
+         "Purchase requisition approval strategy configuration. 4-tier approval.", 0),
         ("REQ-005", "GR Tolerance Configuration", "Fit", "MM", "P3", "approved",
          "configuration", "SES-003", "GAP-011",
-         "Mal girişi tolerans kontrolü ayarları. Quantity tolerance %5, price tolerance %3.", 0),
+         "Goods receipt tolerance check settings. Quantity tolerance 5%, price tolerance 3%.", 0),
         # Partial Fit requirements
         ("REQ-006", "ATP Check Enhancement", "Partial Fit", "SD", "P1", "under_review",
          "enhancement", "SES-001", "GAP-003",
-         "Storage location bazlı ATP logic ve alternatif plant check için BADI implementation gerekiyor.", 12),
+         "BADI implementation needed for storage location-based ATP logic and alternative plant check.", 12),
         ("REQ-007", "Delivery Split Custom Logic", "Partial Fit", "SD", "P2", "under_review",
          "enhancement", "SES-001", "GAP-005",
-         "Same-day delivery priority logic ve müşteriye özel partial shipment restriction kuralları. User exit USEREXIT_MOVE_FIELD_TO_VBLK.", 8),
+         "Same-day delivery priority logic and customer-specific partial shipment restriction rules. User exit USEREXIT_MOVE_FIELD_TO_VBLK.", 8),
         ("REQ-008", "Consignment Stock Reporting", "Partial Fit", "MM", "P2", "draft",
          "enhancement", "SES-003", "GAP-010",
-         "3 özel rapor gerekli: aging report, turnover analysis, value report. CDS view + Fiori app yaklaşımı.", 15),
+         "3 custom reports required: aging report, turnover analysis, value report. CDS view + Fiori app approach.", 15),
         # Gap requirements
         ("REQ-009", "Intercompany Billing Automation", "Gap", "SD", "P1", "approved",
          "development", "SES-001", "GAP-004",
-         "SAP standard BD9 üzerine transfer pricing custom logic. ABAP enhancement + custom pricing procedure. Tahmini: 40 adam/gün.", 40),
+         "Transfer pricing custom logic on top of SAP standard BD9. ABAP enhancement + custom pricing procedure. Estimate: 40 person-days.", 40),
         ("REQ-010", "Vendor Scoring Custom Report", "Gap", "MM", "P1", "approved",
          "development", "SES-003", "GAP-009",
-         "15 kriterli tedarikçi puanlama raporu. Z-report + ALV + Fiori dashboard. Tahmini: 20 adam/gün.", 20),
+         "15-criteria vendor scoring report. Z-report + ALV + Fiori dashboard. Estimate: 20 person-days.", 20),
         ("REQ-011", "Custom IDoc for Intercompany Orders", "Gap", "SD", "P1", "draft",
          "integration", "SES-001", "GAP-004",
-         "Intercompany sipariş oluşturma için özel IDoc message type. ORDERS05 base IDoc üzerine Z-segment. Tahmini: 15 adam/gün.", 15),
+         "Custom IDoc message type for intercompany order creation. Z-segment on top of ORDERS05 base IDoc. Estimate: 15 person-days.", 15),
         ("REQ-012", "Automated Dunning Workflow", "Gap", "FI", "P2", "draft",
          "development", None, None,
-         "Otomatik tahsilat hatırlatma workflow'u. SAP standard dunning (F150) üzerine custom workflow. BRFplus karar tablosu. Tahmini: 25 adam/gün.", 25),
+         "Automated collection reminder workflow. Custom workflow on top of SAP standard dunning (F150). BRFplus decision table. Estimate: 25 person-days.", 25),
     ]
 
     fit_map = {"Fit": "fit", "Partial Fit": "partial_fit", "Gap": "gap"}
@@ -676,22 +676,22 @@ def seed_wricef(program, reqs):
     w_data = [
         ("W-001", "ATP Check Enhancement (BADI)", "enhancement", "SD",
          "High", "new", "REQ-006",
-         "BADI implementation: BAPI_MATERIAL_AVAILABILITY. Storage location bazlı ATP logic. Tahmini: 12 adam/gün.", 12),
+         "BADI implementation: BAPI_MATERIAL_AVAILABILITY. Storage location-based ATP logic. Estimate: 12 person-days.", 12),
         ("W-002", "Delivery Split Custom Logic", "enhancement", "SD",
          "Medium", "new", "REQ-007",
-         "User exit USEREXIT_MOVE_FIELD_TO_VBLK enhancement. Same-day delivery priority. Tahmini: 8 adam/gün.", 8),
+         "User exit USEREXIT_MOVE_FIELD_TO_VBLK enhancement. Same-day delivery priority. Estimate: 8 person-days.", 8),
         ("W-003", "Intercompany Billing Enhancement", "enhancement", "SD",
          "Critical", "design", "REQ-009",
-         "ABAP enhancement: transfer pricing logic, custom pricing procedure ZINTER. Tahmini: 40 adam/gün.", 40),
+         "ABAP enhancement: transfer pricing logic, custom pricing procedure ZINTER. Estimate: 40 person-days.", 40),
         ("R-001", "Vendor Scoring Dashboard", "report", "MM",
          "High", "new", "REQ-010",
-         "ALV interactive report + Fiori app. 15 kriter, weighted scoring. CDS view: ZI_VENDOR_SCORE. Tahmini: 20 adam/gün.", 20),
+         "ALV interactive report + Fiori app. 15 criteria, weighted scoring. CDS view: ZI_VENDOR_SCORE. Estimate: 20 person-days.", 20),
         ("I-001", "Intercompany Order IDoc", "interface", "SD",
          "High", "new", "REQ-011",
-         "Custom IDoc message type ZORDERS_IC. Base: ORDERS05. Z-segment: Z1ICDATA. Tahmini: 15 adam/gün.", 15),
+         "Custom IDoc message type ZORDERS_IC. Base: ORDERS05. Z-segment: Z1ICDATA. Estimate: 15 person-days.", 15),
         ("W-004", "Dunning Workflow Automation", "workflow", "FI",
          "Medium", "new", "REQ-012",
-         "SAP Workflow + BRFplus. Dunning trigger → mail → eskalasyon → portal notification. Tahmini: 25 adam/gün.", 25),
+         "SAP Workflow + BRFplus. Dunning trigger → mail → escalation → portal notification. Estimate: 25 person-days.", 25),
     ]
     priority_map = {"Critical": "critical", "High": "high", "Medium": "medium", "Low": "low"}
 
@@ -724,19 +724,19 @@ def seed_config_items(program, reqs):
     cfg_data = [
         ("CFG-001", "Sales Order Type Configuration", "SD", "in_progress", "REQ-001",
          "VOV8, VOV7, OVLP",
-         "Order type OR konfigürasyonu: item category determination (TAN, TAX), schedule line (CP, CN), copy control, partner determination."),
+         "Order type OR configuration: item category determination (TAN, TAX), schedule line (CP, CN), copy control, partner determination."),
         ("CFG-002", "SD Pricing Procedure Config", "SD", "in_progress", "REQ-002",
          "V/08, VK11-VK13",
-         "Pricing procedure RVAA01 üzerinden condition type tanımları. Access sequence, condition tables, condition records."),
+         "Condition type definitions via pricing procedure RVAA01. Access sequence, condition tables, condition records."),
         ("CFG-003", "Credit Management Setup", "SD", "planned", "REQ-003",
          "UKM_ADMIN, FDK43",
-         "Credit segment ZSTD tanımlama, risk category A/B/C, credit control area 1000, automatic credit decision kuralları."),
+         "Credit segment ZSTD definition, risk category A/B/C, credit control area 1000, automatic credit decision rules."),
         ("CFG-004", "MM Release Strategy", "MM", "in_progress", "REQ-004",
          "SPRO, CL02, ME28",
-         "Release group Z1, release code (Z1-Z4), release strategy tanımları. Classification: purchasing group + net value range."),
+         "Release group Z1, release code (Z1-Z4), release strategy definitions. Classification: purchasing group + net value range."),
         ("CFG-005", "GR Tolerance Setup", "MM", "planned", "REQ-005",
          "OMBR, OMBW",
-         "Tolerance key PE: qty tolerance 5%, price tolerance 3%. Plant bazlı tanımlama. Movement type 101 ve 102 için aktif."),
+         "Tolerance key PE: qty tolerance 5%, price tolerance 3%. Plant-based definition. Active for movement types 101 and 102."),
     ]
     for code, title, mod, status, req_code, tcode, desc in cfg_data:
         ci = ConfigItem(
@@ -765,38 +765,38 @@ def seed_test_cases(program, wricef, configs):
         # Unit tests
         ("UT-001", "Unit Test: SD Pricing Procedure", "unit", "SD", "ready",
          "CFG-002", None,
-         "VA01 ile sipariş yarat → 8 condition type doğru geldiğini kontrol et → Net value hesaplamasını doğrula",
-         "VA01 → sipariş oluştur", "Condition type PR00, K004, K005, K007, MWST, HA00, HB00, ZK01 mevcut. Net value doğru."),
+         "Create order with VA01 → verify 8 condition types are correct → validate net value calculation",
+         "VA01 → create order", "Condition types PR00, K004, K005, K007, MWST, HA00, HB00, ZK01 present. Net value correct."),
         ("UT-002", "Unit Test: ATP Check Enhancement", "unit", "SD", "draft",
          None, "W-001",
-         "VA01 → storage location bazlı ATP → sonuç doğrula → alternatif plant check → sıralama doğrula",
-         "VA01 → ATP check tetikle", "Storage location bazlı ATP sonucu doğru. Alternatif plant sıralaması beklenen."),
+         "VA01 → storage location-based ATP → verify result → alternative plant check → verify ordering",
+         "VA01 → trigger ATP check", "Storage location-based ATP result correct. Alternative plant ordering as expected."),
         ("UT-003", "Unit Test: Release Strategy", "unit", "MM", "ready",
          "CFG-004", None,
-         "ME51N ile PR oluştur → her seviye test: <5K otomatik, 5K-25K dept müdürü, 25K-100K direktör, >100K CEO",
-         "ME51N → PR oluştur", "Her kademe doğru release code tetikleniyor."),
+         "Create PR with ME51N → test each level: <5K automatic, 5K-25K dept manager, 25K-100K director, >100K CEO",
+         "ME51N → create PR", "Correct release code triggered at each tier."),
         ("UT-004", "Unit Test: Vendor Scoring Report", "unit", "MM", "draft",
          None, "R-001",
-         "Z-report çalıştır → 15 kriter doğru hesaplanıyor mu → weighted score kontrol → drill-down çalışıyor mu",
-         "Z-report execute", "15 kriter weighted score ile gösterildi. Drill-down OK."),
+         "Execute Z-report → are 15 criteria calculated correctly → check weighted score → is drill-down working",
+         "Z-report execute", "15 criteria displayed with weighted score. Drill-down OK."),
         # SIT tests
         ("SIT-001", "SIT: O2C End-to-End Flow", "sit", "SD", "draft",
          None, None,
-         "VA01 sipariş → VL01N teslimat → VL02N PGI → VF01 fatura → FI muhasebe kaydı → alacak hesabı doğrulaması",
-         "VA01 → VL01N → VF01 → FI posting", "Tüm zincir sorunsuz. FI kaydı oluştu."),
+         "VA01 order → VL01N delivery → VL02N PGI → VF01 invoice → FI accounting entry → accounts receivable verification",
+         "VA01 → VL01N → VF01 → FI posting", "Entire chain completed without issues. FI entry created."),
         ("SIT-002", "SIT: P2P End-to-End Flow", "sit", "MM", "draft",
          None, None,
-         "ME51N talep → ME21N sipariş → MIGO mal girişi → MIRO fatura doğrulama → FI muhasebe kaydı → ödeme planı",
-         "ME51N → ME21N → MIGO → MIRO", "P2P zinciri tamamlandı. FI kaydı OK."),
+         "ME51N requisition → ME21N order → MIGO goods receipt → MIRO invoice verification → FI accounting entry → payment plan",
+         "ME51N → ME21N → MIGO → MIRO", "P2P chain completed. FI entry OK."),
         # UAT tests
         ("UAT-001", "UAT: Sales Order Processing", "uat", "SD", "draft",
          None, None,
-         "Son kullanıcı senaryosu: müşteriden sipariş al → stok kontrol → teslimat planla → fatura kes → tahsilat takibi",
-         "Sipariş al → teslimat → fatura", "Son kullanıcı senaryosu başarılı."),
+         "End user scenario: receive order from customer → check stock → plan delivery → issue invoice → collection tracking",
+         "Receive order → delivery → invoice", "End user scenario successful."),
         ("UAT-002", "UAT: Procurement Cycle", "uat", "MM", "draft",
          None, None,
-         "Son kullanıcı senaryosu: malzeme ihtiyacı tespit → PR oluştur → onay al → PO gönder → mal kabul → fatura eşleştir",
-         "PR → PO → GR → IR", "Procurement döngüsü OK."),
+         "End user scenario: identify material need → create PR → get approval → send PO → goods receipt → invoice matching",
+         "PR → PO → GR → IR", "Procurement cycle OK."),
     ]
     for code, title, layer, mod, status, cfg_code, wricef_code, desc, steps, expected in tc_data:
         cfg_id = configs[cfg_code].id if cfg_code else None
@@ -827,7 +827,7 @@ def seed_test_cycles(program, cases):
     tp = TestPlan(
         program_id=program.id,
         name="Anadolu Holding — Master Test Plan",
-        description="SD/MM/FI/CO modülleri için unit, SIT ve UAT test planı.",
+        description="Unit, SIT, and UAT test plan for SD/MM/FI/CO modules.",
         status="active",
     )
     db.session.add(tp)
@@ -837,13 +837,13 @@ def seed_test_cycles(program, cases):
     cycle_data = [
         ("TC-001", "Sprint 1 Unit Test Cycle", "unit", "planning",
          date(2026, 5, 1), date(2026, 5, 15),
-         "İlk sprint unit testleri. SD pricing, ATP enhancement, MM release strategy testleri."),
+         "First sprint unit tests. SD pricing, ATP enhancement, MM release strategy tests."),
         ("TC-002", "SIT Cycle 1 — Core Processes", "sit", "planning",
          date(2026, 6, 1), date(2026, 6, 30),
-         "O2C ve P2P end-to-end entegrasyon testleri. Cross-module bağlantılar doğrulanacak."),
+         "O2C and P2P end-to-end integration tests. Cross-module connections will be verified."),
         ("TC-003", "UAT Cycle 1 — Business Validation", "uat", "planning",
          date(2026, 8, 1), date(2026, 8, 31),
-         "Son kullanıcı kabul testleri. Key user'lar tarafından gerçek iş senaryoları test edilecek."),
+         "End user acceptance tests. Real business scenarios will be tested by key users."),
     ]
     for idx, (code, name, layer, status, sd, ed, desc) in enumerate(cycle_data):
         tc = TestCycle(
@@ -866,10 +866,10 @@ def seed_test_cycles(program, cases):
 
 def seed_test_executions(cycles, cases):
     exec_data = [
-        ("TC-001", "UT-001", "pass", "Canan Öztürk", 45,
-         "8/8 condition type doğru geldi. Net value hesaplaması OK."),
+        ("TC-001", "UT-001", "pass", "Canan Ozturk", 45,
+         "8/8 condition types returned correctly. Net value calculation OK."),
         ("TC-001", "UT-003", "fail", "Fatih Korkmaz", 60,
-         ">100K seviyesinde release code Z4 tetiklenmiyor. Config eksik — classification object güncellenecek."),
+         "Release code Z4 not triggering at >100K level. Config missing — classification object to be updated."),
     ]
     count = 0
     for cycle_code, case_code, result, executor, dur, notes in exec_data:
@@ -898,13 +898,13 @@ def main():
     app = create_app()
     with app.app_context():
         if args.reset:
-            print("\n⚠️  DB sıfırlanıyor (drop_all + create_all)...")
+            print("\n⚠️  DB being reset (drop_all + create_all)...")
             db.drop_all()
             db.create_all()
-            print("   ✅ DB yeniden oluşturuldu\n")
+            print("   ✅ DB recreated\n")
 
         print("=" * 60)
-        print("🏢 Anadolu Holding S/4HANA Demo Verileri Yükleniyor...")
+        print("🏢 Loading Anadolu Holding S/4HANA Demo Data...")
         print("=" * 60)
         print()
 
@@ -963,10 +963,10 @@ def main():
 
         print()
         print("=" * 60)
-        print("🎉 ANADOLU HOLDİNG DEMO VERİ YÜKLEME TAMAMLANDI")
+        print("🎉 ANADOLU HOLDING DEMO DATA LOADING COMPLETED")
         print("=" * 60)
         print()
-        print("   📊 Özet:")
+        print("   📊 Summary:")
         print("   ├── 1 Program (Anadolu Holding S/4HANA)")
         print("   ├── 5 Scenarios (O2C, P2P, R2R, P2Pr, Composite)")
         print("   ├── 4 Analyses")

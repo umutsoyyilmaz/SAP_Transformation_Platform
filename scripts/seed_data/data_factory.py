@@ -1,6 +1,6 @@
 """
 SEED-003 — Data Factory Demo Data
-Company: Anadolu Gıda ve İçecek A.Ş.
+Company: Anadolu Food & Beverage Inc.
 
 Provides seed data for the Data Factory module:
   - 15 DataObjects across 3 source systems
@@ -16,30 +16,30 @@ DATA_OBJECTS = [
      "record_count": 125000, "quality_score": 87.5,  "status": "cleansed", "owner": "Mehmet Kaya",
      "description": "KNA1/KNB1 customer master records"},
     {"name": "Vendor Master",       "source_system": "SAP ECC", "target_table": "BP_VENDOR",
-     "record_count":  45000, "quality_score": 92.3,  "status": "ready",    "owner": "Ayşe Demir",
+     "record_count":  45000, "quality_score": 92.3,  "status": "ready",    "owner": "Ayse Demir",
      "description": "LFA1/LFB1 vendor master records"},
     {"name": "Material Master",     "source_system": "SAP ECC", "target_table": "MARA_PRODUCT",
-     "record_count": 340000, "quality_score": 78.1,  "status": "profiled", "owner": "Hasan Yılmaz",
+     "record_count": 340000, "quality_score": 78.1,  "status": "profiled", "owner": "Hasan Yilmaz",
      "description": "MARA/MARC/MVKE material records"},
     {"name": "GL Account Master",   "source_system": "SAP ECC", "target_table": "SKA1_GLACCOUNT",
-     "record_count":   8200, "quality_score": 95.0,  "status": "migrated", "owner": "Fatma Çelik",
+     "record_count":   8200, "quality_score": 95.0,  "status": "migrated", "owner": "Fatma Celik",
      "description": "SKA1/SKB1 chart of accounts"},
     {"name": "Cost Center Master",  "source_system": "SAP ECC", "target_table": "CSKS_COSTCTR",
-     "record_count":   3500, "quality_score": 91.2,  "status": "ready",    "owner": "Fatma Çelik",
+     "record_count":   3500, "quality_score": 91.2,  "status": "ready",    "owner": "Fatma Celik",
      "description": "CSKS/CSKT cost center master"},
     {"name": "Profit Center Master","source_system": "SAP ECC", "target_table": "CEPC_PROFITCTR",
-     "record_count":   1200, "quality_score": 94.8,  "status": "ready",    "owner": "Fatma Çelik",
+     "record_count":   1200, "quality_score": 94.8,  "status": "ready",    "owner": "Fatma Celik",
      "description": "CEPC profit center master"},
 
     # ── SAP ECC transactional data ───────────────────────────────────────
     {"name": "Sales Orders",        "source_system": "SAP ECC", "target_table": "VBAK_SALESORDER",
-     "record_count": 2500000, "quality_score": 82.4, "status": "profiled", "owner": "Ali Öztürk",
+     "record_count": 2500000, "quality_score": 82.4, "status": "profiled", "owner": "Ali Ozturk",
      "description": "VBAK/VBAP historical sales orders (3 years)"},
     {"name": "Purchase Orders",     "source_system": "SAP ECC", "target_table": "EKKO_PURCHORDER",
-     "record_count": 1800000, "quality_score": 85.1, "status": "profiled", "owner": "Ayşe Demir",
+     "record_count": 1800000, "quality_score": 85.1, "status": "profiled", "owner": "Ayse Demir",
      "description": "EKKO/EKPO historical purchase orders"},
     {"name": "FI Documents",        "source_system": "SAP ECC", "target_table": "BKPF_JOURNAL",
-     "record_count": 8700000, "quality_score": 76.3, "status": "draft",    "owner": "Fatma Çelik",
+     "record_count": 8700000, "quality_score": 76.3, "status": "draft",    "owner": "Fatma Celik",
      "description": "BKPF/BSEG financial journal entries (5 years)"},
 
     # ── Legacy HR system ────────────────────────────────────────────────
@@ -55,13 +55,13 @@ DATA_OBJECTS = [
 
     # ── External/Warehouse system ───────────────────────────────────────
     {"name": "Warehouse Stocks",    "source_system": "WMS IntraLog", "target_table": "MARD_STOCK",
-     "record_count":  89000, "quality_score": 88.7,  "status": "cleansed", "owner": "Hasan Yılmaz",
+     "record_count":  89000, "quality_score": 88.7,  "status": "cleansed", "owner": "Hasan Yilmaz",
      "description": "Current stock levels from WMS"},
     {"name": "Bin Locations",       "source_system": "WMS IntraLog", "target_table": "LAGP_STORAGE",
-     "record_count":  12400, "quality_score": 93.1,  "status": "ready",    "owner": "Hasan Yılmaz",
+     "record_count":  12400, "quality_score": 93.1,  "status": "ready",    "owner": "Hasan Yilmaz",
      "description": "Storage bin master from WMS"},
     {"name": "BOM Headers",         "source_system": "SAP ECC", "target_table": "STKO_BOM",
-     "record_count":  67000, "quality_score": 81.3,  "status": "profiled", "owner": "Hasan Yılmaz",
+     "record_count":  67000, "quality_score": 81.3,  "status": "profiled", "owner": "Hasan Yilmaz",
      "description": "STKO/STPO bill of material headers and items"},
 ]
 

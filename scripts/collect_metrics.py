@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Otomatik metrik toplama scripti.
-Her sprint / commit sonunda çalıştırılarak PROGRESS_REPORT.md'deki
-Özet tablosuyla karşılaştırma yapılır.
+Automated metrics collection script.
+Run after each sprint / commit to compare against the
+summary table in PROGRESS_REPORT.md.
 
-Kullanım:
-    python scripts/collect_metrics.py          # JSON çıktı
-    python scripts/collect_metrics.py --check  # Özet tablosuyla karşılaştır
+Usage:
+    python scripts/collect_metrics.py          # JSON output
+    python scripts/collect_metrics.py --check  # Compare with summary table
 """
 
 import json
@@ -17,12 +17,12 @@ import sys
 from datetime import date
 from pathlib import Path
 
-# Proje kök dizini
+# Project root directory
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def _run(cmd: str) -> str:
-    """Shell komutu çalıştır, stdout dön."""
+    """Run a shell command and return stdout."""
     result = subprocess.run(
         cmd, shell=True, capture_output=True, text=True, cwd=ROOT
     )
@@ -30,7 +30,7 @@ def _run(cmd: str) -> str:
 
 
 def _count_lines(glob_pattern: str, base_dir: str = ".") -> int:
-    """Belirtilen glob pattern ile dosya satırlarını say."""
+    """Count file lines matching the given glob pattern."""
     target = ROOT / base_dir
     total = 0
     for f in target.rglob(glob_pattern):
@@ -44,12 +44,12 @@ def _count_lines(glob_pattern: str, base_dir: str = ".") -> int:
 
 
 def collect_metrics() -> dict:
-    """Tüm proje metriklerini topla."""
+    """Collect all project metrics."""
     metrics = {
         "date": str(date.today()),
     }
 
-    # --- Veritabanı tablo sayısı ---
+    # --- Database table count ---
     try:
         tbl_out = _run(
             f'{sys.executable} -c "'
@@ -64,7 +64,7 @@ def collect_metrics() -> dict:
     except Exception:
         metrics["tables"] = "N/A"
 
-    # --- API endpoint sayısı ---
+    # --- API endpoint count ---
     try:
         ep_out = _run(
             f'{sys.executable} -c "'
@@ -75,7 +75,7 @@ def collect_metrics() -> dict:
     except Exception:
         metrics["api_endpoints"] = "N/A"
 
-    # --- Test sayısı ---
+    # --- Test count ---
     try:
         test_out = _run(f"{sys.executable} -m pytest tests/ --co -q 2>&1 | tail -1")
         match = re.search(r"(\d+)\s+test", test_out)
@@ -95,21 +95,21 @@ def collect_metrics() -> dict:
     metrics["js_loc"] = _count_lines("*.js", "static/js")
     metrics["css_loc"] = _count_lines("*.css", "static/css")
 
-    # --- Dosya sayısı ---
+    # --- File count ---
     file_count = 0
     for f in ROOT.rglob("*"):
         if f.is_file() and ".git" not in f.parts and ".venv" not in f.parts and "__pycache__" not in f.parts:
             file_count += 1
     metrics["total_files"] = file_count
 
-    # --- Commit sayısı ---
+    # --- Commit count ---
     try:
         commit_out = _run("git rev-list --count HEAD")
         metrics["commits"] = int(commit_out.strip())
     except Exception:
         metrics["commits"] = "N/A"
 
-    # --- Alembic migration sayısı ---
+    # --- Alembic migration count ---
     migrations_dir = ROOT / "migrations" / "versions"
     if migrations_dir.exists():
         metrics["migrations"] = len(list(migrations_dir.glob("*.py")))
@@ -120,10 +120,10 @@ def collect_metrics() -> dict:
 
 
 def check_against_report(metrics: dict) -> list[str]:
-    """PROGRESS_REPORT.md Özet tablosuyla karşılaştır, uyumsuzlukları döndür."""
+    """Compare with PROGRESS_REPORT.md summary table, return discrepancies."""
     report_path = ROOT / "PROGRESS_REPORT.md"
     if not report_path.exists():
-        return ["PROGRESS_REPORT.md bulunamadı"]
+        return ["PROGRESS_REPORT.md not found"]
 
     content = report_path.read_text(encoding="utf-8")
     issues = []
@@ -136,16 +136,16 @@ def check_against_report(metrics: dict) -> list[str]:
                 reported_int = int(reported)
                 if isinstance(real_value, int) and reported_int != real_value:
                     issues.append(
-                        f"⚠️  {label}: raporda {reported_int}, gerçek {real_value}"
+                        f"⚠️  {label}: reported {reported_int}, actual {real_value}"
                     )
             except ValueError:
                 pass
 
-    _check("Commit", metrics.get("commits"), r"Toplam Commit\s*\|\s*(\d+)")
-    _check("Dosya", metrics.get("total_files"), r"Toplam Dosya\s*\|\s*(\d+)")
+    _check("Commit", metrics.get("commits"), r"Total Commits\s*\|\s*(\d+)")
+    _check("File", metrics.get("total_files"), r"Total Files\s*\|\s*(\d+)")
     _check("API Endpoint", metrics.get("api_endpoints"), r"API Endpoint\s*\|\s*~?(\d+)")
     _check("Test", metrics.get("tests"), r"Pytest Test\s*\|\s*(\d+)")
-    _check("Tablo", metrics.get("tables"), r"Veritabanı Modeli\s*\|\s*(\d+)")
+    _check("Table", metrics.get("tables"), r"DB Models\s*\|\s*(\d+)")
     _check("Migration", metrics.get("migrations"), r"Alembic Migration\s*\|\s*(\d+)")
 
     return issues
@@ -157,17 +157,17 @@ def main():
     if "--check" in sys.argv:
         issues = check_against_report(metrics)
         print("=" * 60)
-        print("PROGRESS_REPORT.md Doğrulama Raporu")
+        print("PROGRESS_REPORT.md Verification Report")
         print("=" * 60)
         print(json.dumps(metrics, indent=2, ensure_ascii=False))
         print()
         if issues:
-            print(f"❌ {len(issues)} tutarsızlık bulundu:")
+            print(f"❌ {len(issues)} discrepancies found:")
             for issue in issues:
                 print(f"   {issue}")
             sys.exit(1)
         else:
-            print("✅ Tüm metrikler rapor ile uyumlu.")
+            print("✅ All metrics are consistent with the report.")
             sys.exit(0)
     else:
         print(json.dumps(metrics, indent=2, ensure_ascii=False))

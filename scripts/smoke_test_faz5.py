@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Faz 5 — Comprehensive Smoke Test for Explore Module
+Phase 5 — Comprehensive Smoke Test for Explore Module
 Tests all critical paths: Workshop CRUD, lifecycle, OI, REQ, Delta, Reopen
 """
 import sys

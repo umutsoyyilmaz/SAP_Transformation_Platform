@@ -2,7 +2,7 @@
 """
 SAP Transformation Platform — Demo Data Seed Script (Modular).
 
-Company: Anadolu Gıda ve İçecek A.Ş.
+Company: Anadolu Food & Beverage Inc.
 Architecture: Signavio L1→L2→L3→L4
 
 Usage:
@@ -54,6 +54,7 @@ from app.models.explore import (
 from app.models.cutover import (
     CutoverPlan, CutoverScopeItem, RunbookTask, TaskDependency,
     Rehearsal, GoNoGoItem, HypercareIncident, HypercareSLA,
+    HypercareWarRoom, PostGoliveChangeRequest,
 )
 
 # ── Modular data imports ─────────────────────────────────────────────────
@@ -85,10 +86,12 @@ from scripts.seed_data.cutover import (
     RUNBOOK_TASKS, TASK_DEPENDENCIES,
     REHEARSALS, GO_NO_GO_ITEMS,
     HYPERCARE_INCIDENTS, SLA_TARGETS,
+    WAR_ROOMS, CHANGE_REQUESTS,
 )
 
 # Auth models for admin seeding
-from app.models.auth import Tenant, User, Role, Permission, RolePermission, UserRole
+from app.models.auth import Tenant, User, Role, Permission, RolePermission, UserRole, ProjectMember
+from app.models.project import Project
 from app.utils.crypto import hash_password
 
 
@@ -107,9 +110,9 @@ def _seed_admin_data():
     # ── Tenants (customer tenants only — no Perga) ──────────────
     print("\n🏢 Seeding demo tenants...")
     DEMO_TENANTS = [
-        {"name": "Anadolu Gıda A.Ş.", "slug": "anadolu-gida", "plan": "premium",
+        {"name": "Anadolu Food Inc.", "slug": "anadolu-gida", "plan": "premium",
          "max_users": 50, "max_projects": 20, "is_active": True},
-        {"name": "Demo Şirket", "slug": "demo", "plan": "trial",
+        {"name": "Demo Company", "slug": "demo", "plan": "trial",
          "max_users": 10, "max_projects": 3, "is_active": True},
     ]
 
@@ -155,11 +158,11 @@ def _seed_admin_data():
          "role": "tenant_admin"},
         # Anadolu project manager
         {"tenant_slug": "anadolu-gida", "email": "pm@anadolu.com",
-         "full_name": "Mehmet Yılmaz", "password": "Test1234!",
+         "full_name": "Mehmet Yilmaz", "password": "Test1234!",
          "role": "project_manager"},
         # Anadolu functional consultant
         {"tenant_slug": "anadolu-gida", "email": "consultant@anadolu.com",
-         "full_name": "Ayşe Kaya", "password": "Test1234!",
+         "full_name": "Ayse Kaya", "password": "Test1234!",
          "role": "functional_consultant"},
         # Demo admin
         {"tenant_slug": "demo", "email": "admin@demo.com",
@@ -204,16 +207,87 @@ def _seed_admin_data():
     print(f"\n   📊 Totals → Tenants: {Tenant.query.count()}, Users: {User.query.count()}")
 
 
+def _ensure_demo_project_access():
+    """
+    Ensure demo admin has visible project scope after each seed.
+
+    Guarantees for tenant slug='demo':
+    - at least one Program
+    - at least one default Project
+    - admin@demo.com membership on all demo projects
+    """
+    demo_tenant = Tenant.query.filter_by(slug="demo").first()
+    demo_admin = User.query.filter_by(email="admin@demo.com").first()
+    if not demo_tenant or not demo_admin:
+        return
+
+    program = Program.query.filter_by(tenant_id=demo_tenant.id).order_by(Program.id.asc()).first()
+    if not program:
+        program = Program(
+            tenant_id=demo_tenant.id,
+            name="Demo Program",
+            description="Auto-created demo program for project-scope access",
+            project_type="template_rollout",
+            methodology="agile",
+            status="active",
+            priority="high",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        db.session.add(program)
+        db.session.flush()
+        print(f"   ✅ Demo program created (id={program.id})")
+
+    default_project = Project.query.filter_by(
+        tenant_id=demo_tenant.id,
+        program_id=program.id,
+        is_default=True,
+    ).first()
+    if not default_project:
+        default_project = Project(
+            tenant_id=demo_tenant.id,
+            program_id=program.id,
+            code="DEMO-DEFAULT",
+            name="Demo Default Project",
+            type="implementation",
+            status="active",
+            is_default=True,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        db.session.add(default_project)
+        db.session.flush()
+        print(f"   ✅ Demo default project created (id={default_project.id})")
+
+    created_memberships = 0
+    for project in Project.query.filter_by(tenant_id=demo_tenant.id).all():
+        pm = ProjectMember.query.filter_by(project_id=project.id, user_id=demo_admin.id).first()
+        if pm:
+            continue
+        db.session.add(
+            ProjectMember(
+                project_id=project.id,
+                user_id=demo_admin.id,
+                role_in_project="owner",
+            )
+        )
+        created_memberships += 1
+
+    db.session.commit()
+    if created_memberships:
+        print(f"   ✅ Demo admin project memberships ensured (+{created_memberships})")
+
+
 # ═════════════════════════════════════════════════════════════════════════════
-# CORE DATA — Anadolu Gıda ve İçecek A.Ş.
+# CORE DATA — Anadolu Food & Beverage Inc.
 # ═════════════════════════════════════════════════════════════════════════════
 
 PROGRAM_DATA = {
-    "name": "Anadolu Gıda — S/4HANA Cloud Dönüşüm",
+    "name": "Anadolu Food — S/4HANA Cloud Transformation",
     "description": (
-        "Anadolu Gıda ve İçecek A.Ş. — SAP ECC 6.0 → S/4HANA Cloud greenfield "
-        "dönüşüm. 5.000+ çalışan, 8 üretim tesisi, yıllık ₺8.5 milyar ciro. "
-        "FI/CO, MM, SD, PP, QM, WM, HCM modülleri. SAP Activate & Signavio."
+        "Anadolu Food & Beverage Inc. — SAP ECC 6.0 to S/4HANA Cloud greenfield "
+        "transformation. 5,000+ employees, 8 production facilities, annual revenue of 8.5 billion TRY. "
+        "FI/CO, MM, SD, PP, QM, WM, HCM modules. SAP Activate & Signavio."
     ),
     "project_type": "greenfield",
     "methodology": "sap_activate",
@@ -226,121 +300,121 @@ PROGRAM_DATA = {
 }
 
 PHASES = [
-    {"name": "Discover", "description": "Keşif: İş gereksinimleri, mevcut süreç analizi, Signavio haritalama",
+    {"name": "Discover", "description": "Discovery: Business requirements, current process analysis, Signavio mapping",
      "order": 1, "status": "completed",
      "planned_start": date(2025, 4, 1), "planned_end": date(2025, 5, 31),
      "actual_start": date(2025, 4, 1), "actual_end": date(2025, 5, 28), "completion_pct": 100,
      "gates": [
          {"name": "Discovery Gate", "gate_type": "quality_gate", "status": "passed",
-          "criteria": "İş gereksinimleri %100 toplanmış, Signavio L1 haritalanmış"},
+          "criteria": "Business requirements 100% gathered, Signavio L1 mapped"},
      ]},
-    {"name": "Prepare", "description": "Hazırlık: Proje planı, ekip, altyapı, Signavio L2 modelleme",
+    {"name": "Prepare", "description": "Preparation: Project plan, team, infrastructure, Signavio L2 modeling",
      "order": 2, "status": "completed",
      "planned_start": date(2025, 6, 1), "planned_end": date(2025, 8, 31),
      "actual_start": date(2025, 6, 2), "actual_end": date(2025, 8, 29), "completion_pct": 100,
      "gates": [
          {"name": "Preparation Gate", "gate_type": "quality_gate", "status": "passed",
-          "criteria": "Proje planı onaylı, ortamlar hazır, Signavio L2 tamamlanmış"},
+          "criteria": "Project plan approved, environments ready, Signavio L2 completed"},
      ]},
-    {"name": "Explore", "description": "Keşfet: Fit-to-Standard workshop'ları, L3/L4 süreç analizi",
+    {"name": "Explore", "description": "Explore: Fit-to-Standard workshops, L3/L4 process analysis",
      "order": 3, "status": "completed",
      "planned_start": date(2025, 9, 1), "planned_end": date(2025, 12, 31),
      "actual_start": date(2025, 9, 1), "actual_end": date(2025, 12, 20), "completion_pct": 100,
      "gates": [
          {"name": "Explore Gate", "gate_type": "quality_gate", "status": "passed",
-          "criteria": "Fit-Gap %100, gereksinimler onaylı, WRICEF listesi kesin"},
+          "criteria": "Fit-Gap 100%, requirements approved, WRICEF list finalized"},
      ]},
-    {"name": "Realize", "description": "Gerçekleştir: Konfigürasyon, WRICEF geliştirme, birim test, SIT",
+    {"name": "Realize", "description": "Realize: Configuration, WRICEF development, unit testing, SIT",
      "order": 4, "status": "in_progress",
      "planned_start": date(2026, 1, 5), "planned_end": date(2026, 6, 30),
      "actual_start": date(2026, 1, 5), "completion_pct": 45,
      "gates": [
          {"name": "Realize Gate — Sprint Review 1", "gate_type": "milestone", "status": "passed",
-          "criteria": "Sprint 1 tamamlanmış, birim testler geçmiş"},
+          "criteria": "Sprint 1 completed, unit tests passed"},
          {"name": "Realize Gate — SIT Complete", "gate_type": "quality_gate", "status": "pending",
-          "criteria": "SIT P1/P2 sıfır, geçiş oranı >%95"},
+          "criteria": "SIT P1/P2 zero, pass rate >95%"},
      ]},
-    {"name": "Deploy", "description": "Dağıtım: UAT, eğitim, veri göçü, cutover hazırlık",
+    {"name": "Deploy", "description": "Deploy: UAT, training, data migration, cutover preparation",
      "order": 5, "status": "not_started",
      "planned_start": date(2026, 7, 1), "planned_end": date(2026, 10, 31),
      "gates": [
          {"name": "Deploy Gate — UAT Sign-Off", "gate_type": "quality_gate", "status": "pending",
-          "criteria": "UAT onayı, eğitim tamamlanmış, cutover planı hazır"},
+          "criteria": "UAT approved, training completed, cutover plan ready"},
          {"name": "Go-Live Readiness Gate", "gate_type": "go_no_go", "status": "pending",
-          "criteria": "Go/No-Go kararı, tüm kriterler yeşil"},
+          "criteria": "Go/No-Go decision, all criteria green"},
      ]},
-    {"name": "Run", "description": "Çalıştır: Hypercare, stabilizasyon, optimizasyon",
+    {"name": "Run", "description": "Run: Hypercare, stabilization, optimization",
      "order": 6, "status": "not_started",
      "planned_start": date(2026, 11, 1), "planned_end": date(2027, 1, 31)},
 ]
 
 WORKSTREAMS = [
-    {"name": "Finance (FI/CO)", "ws_type": "functional", "lead_name": "Ahmet Yıldız",
-     "description": "Muhasebe, maliyet muhasebesi, konsolidasyon, vergi"},
+    {"name": "Finance (FI/CO)", "ws_type": "functional", "lead_name": "Ahmet Yildiz",
+     "description": "Accounting, cost accounting, consolidation, tax"},
     {"name": "Materials Management (MM)", "ws_type": "functional", "lead_name": "Elif Kara",
-     "description": "Satınalma, stok yönetimi, fatura doğrulama"},
-    {"name": "Sales & Distribution (SD)", "ws_type": "functional", "lead_name": "Burak Şahin",
-     "description": "Satış, sevkiyat, faturalama, fiyatlandırma"},
-    {"name": "Production Planning (PP/QM)", "ws_type": "functional", "lead_name": "Deniz Aydın",
-     "description": "Üretim planlama, MRP, kalite yönetimi, HACCP"},
-    {"name": "Warehouse Management (EWM)", "ws_type": "functional", "lead_name": "Gökhan Demir",
-     "description": "Depo yönetimi, raf yönetimi, wave picking"},
+     "description": "Procurement, inventory management, invoice verification"},
+    {"name": "Sales & Distribution (SD)", "ws_type": "functional", "lead_name": "Burak Sahin",
+     "description": "Sales, shipping, billing, pricing"},
+    {"name": "Production Planning (PP/QM)", "ws_type": "functional", "lead_name": "Deniz Aydin",
+     "description": "Production planning, MRP, quality management, HACCP"},
+    {"name": "Warehouse Management (EWM)", "ws_type": "functional", "lead_name": "Gokhan Demir",
+     "description": "Warehouse management, shelf management, wave picking"},
     {"name": "Human Capital (HCM)", "ws_type": "functional", "lead_name": "Seda Arslan",
-     "description": "Bordro, izin yönetimi, performans yönetimi"},
-    {"name": "Basis / Technology", "ws_type": "technical", "lead_name": "Murat Çelik",
-     "description": "Sistem yönetimi, yetkilendirme, Fiori, performans"},
-    {"name": "Integration (BTP)", "ws_type": "technical", "lead_name": "Zeynep Koç",
-     "description": "BTP CPI, arayüzler, API yönetimi, e-Belge"},
-    {"name": "Data Migration", "ws_type": "technical", "lead_name": "Hakan Güneş",
-     "description": "Veri göçü, veri temizlik, LTMC, doğrulama"},
-    {"name": "Testing & Quality", "ws_type": "management", "lead_name": "Ayşe Polat",
-     "description": "Test yönetimi, SIT, UAT, regresyon, otomasyon"},
-    {"name": "Change Management", "ws_type": "management", "lead_name": "Canan Öztürk",
-     "description": "Değişim yönetimi, eğitim, iletişim, change agent ağı"},
-    {"name": "PMO", "ws_type": "management", "lead_name": "Kemal Erdoğan",
-     "description": "Program yönetimi, planlama, risk, bütçe, raporlama"},
+     "description": "Payroll, leave management, performance management"},
+    {"name": "Basis / Technology", "ws_type": "technical", "lead_name": "Murat Celik",
+     "description": "System administration, authorization, Fiori, performance"},
+    {"name": "Integration (BTP)", "ws_type": "technical", "lead_name": "Zeynep Koc",
+     "description": "BTP CPI, interfaces, API management, e-Document"},
+    {"name": "Data Migration", "ws_type": "technical", "lead_name": "Hakan Gunes",
+     "description": "Data migration, data cleansing, LTMC, validation"},
+    {"name": "Testing & Quality", "ws_type": "management", "lead_name": "Ayse Polat",
+     "description": "Test management, SIT, UAT, regression, automation"},
+    {"name": "Change Management", "ws_type": "management", "lead_name": "Canan Ozturk",
+     "description": "Change management, training, communication, change agent network"},
+    {"name": "PMO", "ws_type": "management", "lead_name": "Kemal Erdogan",
+     "description": "Program management, planning, risk, budget, reporting"},
 ]
 
 TEAM_MEMBERS = [
-    {"name": "Kemal Erdoğan", "email": "kemal.erdogan@anadolugida.com",
-     "role": "project_manager", "raci": "accountable", "organization": "Anadolu Gıda"},
-    {"name": "Ahmet Yıldız", "email": "ahmet.yildiz@anadolugida.com",
-     "role": "functional_lead", "raci": "responsible", "organization": "Anadolu Gıda"},
+    {"name": "Kemal Erdogan", "email": "kemal.erdogan@anadolugida.com",
+     "role": "project_manager", "raci": "accountable", "organization": "Anadolu Food"},
+    {"name": "Ahmet Yildiz", "email": "ahmet.yildiz@anadolugida.com",
+     "role": "functional_lead", "raci": "responsible", "organization": "Anadolu Food"},
     {"name": "Elif Kara", "email": "elif.kara@anadolugida.com",
-     "role": "functional_lead", "raci": "responsible", "organization": "Anadolu Gıda"},
-    {"name": "Burak Şahin", "email": "burak.sahin@anadolugida.com",
-     "role": "functional_lead", "raci": "responsible", "organization": "Anadolu Gıda"},
-    {"name": "Deniz Aydın", "email": "deniz.aydin@partner.com",
+     "role": "functional_lead", "raci": "responsible", "organization": "Anadolu Food"},
+    {"name": "Burak Sahin", "email": "burak.sahin@anadolugida.com",
+     "role": "functional_lead", "raci": "responsible", "organization": "Anadolu Food"},
+    {"name": "Deniz Aydin", "email": "deniz.aydin@partner.com",
      "role": "functional_lead", "raci": "responsible", "organization": "SAP Partner"},
-    {"name": "Zeynep Koç", "email": "zeynep.koc@partner.com",
+    {"name": "Zeynep Koc", "email": "zeynep.koc@partner.com",
      "role": "technical_lead", "raci": "responsible", "organization": "SAP Partner"},
-    {"name": "Murat Çelik", "email": "murat.celik@partner.com",
+    {"name": "Murat Celik", "email": "murat.celik@partner.com",
      "role": "technical_lead", "raci": "responsible", "organization": "SAP Partner"},
-    {"name": "Hakan Güneş", "email": "hakan.gunes@anadolugida.com",
-     "role": "team_member", "raci": "responsible", "organization": "Anadolu Gıda"},
-    {"name": "Ayşe Polat", "email": "ayse.polat@partner.com",
+    {"name": "Hakan Gunes", "email": "hakan.gunes@anadolugida.com",
+     "role": "team_member", "raci": "responsible", "organization": "Anadolu Food"},
+    {"name": "Ayse Polat", "email": "ayse.polat@partner.com",
      "role": "team_member", "raci": "responsible", "organization": "SAP Partner"},
-    {"name": "Canan Öztürk", "email": "canan.ozturk@anadolugida.com",
-     "role": "team_member", "raci": "consulted", "organization": "Anadolu Gıda"},
+    {"name": "Canan Ozturk", "email": "canan.ozturk@anadolugida.com",
+     "role": "team_member", "raci": "consulted", "organization": "Anadolu Food"},
     {"name": "Seda Arslan", "email": "seda.arslan@anadolugida.com",
-     "role": "functional_lead", "raci": "responsible", "organization": "Anadolu Gıda"},
-    {"name": "Gökhan Demir", "email": "gokhan.demir@partner.com",
+     "role": "functional_lead", "raci": "responsible", "organization": "Anadolu Food"},
+    {"name": "Gokhan Demir", "email": "gokhan.demir@partner.com",
      "role": "functional_lead", "raci": "responsible", "organization": "SAP Partner"},
 ]
 
 COMMITTEES = [
     {"name": "Steering Committee", "committee_type": "steering",
-     "meeting_frequency": "monthly", "chair_name": "Osman Aydın (CEO)",
-     "description": "Üst yönetim karar komitesi. Go/No-Go, bütçe, kapsam değişikliği onayı."},
+     "meeting_frequency": "monthly", "chair_name": "Osman Aydin (CEO)",
+     "description": "Executive decision committee. Go/No-Go, budget, scope change approval."},
     {"name": "PMO Weekly", "committee_type": "pmo",
-     "meeting_frequency": "weekly", "chair_name": "Kemal Erdoğan",
-     "description": "Haftalık proje durum toplantısı. Risk, issue, timeline takibi."},
+     "meeting_frequency": "weekly", "chair_name": "Kemal Erdogan",
+     "description": "Weekly project status meeting. Risk, issue, timeline tracking."},
     {"name": "Change Advisory Board (CAB)", "committee_type": "advisory",
-     "meeting_frequency": "biweekly", "chair_name": "Murat Çelik",
-     "description": "Transport onay, teknik değişiklik yönetimi, ortam stratejisi."},
+     "meeting_frequency": "biweekly", "chair_name": "Murat Celik",
+     "description": "Transport approval, technical change management, environment strategy."},
     {"name": "Architecture Review Board", "committee_type": "advisory",
-     "meeting_frequency": "monthly", "chair_name": "Zeynep Koç",
-     "description": "Mimari kararlar, entegrasyon tasarımı, BTP stratejisi."},
+     "meeting_frequency": "monthly", "chair_name": "Zeynep Koc",
+     "description": "Architecture decisions, integration design, BTP strategy."},
 ]
 
 
@@ -369,7 +443,8 @@ def seed_all(app, append=False, verbose=False):
     with app.app_context():
         if not append:
             print("🗑️  Clearing existing data...")
-            for model in [HypercareSLA, HypercareIncident, GoNoGoItem,
+            for model in [PostGoliveChangeRequest, HypercareWarRoom,
+                          HypercareSLA, HypercareIncident, GoNoGoItem,
                           TaskDependency, RunbookTask, CutoverScopeItem,
                           Rehearsal, CutoverPlan,
                           InterfaceChecklist, SwitchPlan, ConnectivityTest, Interface, IntWave,
@@ -390,10 +465,12 @@ def seed_all(app, append=False, verbose=False):
 
         # ── 0. Tenants, Roles & Users ─────────────────────────────────────
         _seed_admin_data()
+        _ensure_demo_project_access()
 
         # ── 1. Program ───────────────────────────────────────────────────
         print("📦 Creating program...")
-        program = Program(**PROGRAM_DATA)
+        anadolu_tenant = Tenant.query.filter_by(slug="anadolu-gida").first()
+        program = Program(tenant_id=anadolu_tenant.id, **PROGRAM_DATA)
         db.session.add(program)
         db.session.flush()
         pid = program.id
@@ -1509,7 +1586,11 @@ def seed_all(app, append=False, verbose=False):
 
         for inc_data in HYPERCARE_INCIDENTS:
             plan_key = inc_data.pop("_plan")
-            inc = HypercareIncident(cutover_plan_id=cut_plan_map[plan_key].id, **inc_data)
+            inc = HypercareIncident(
+                cutover_plan_id=cut_plan_map[plan_key].id,
+                tenant_id=anadolu_tenant.id,
+                **inc_data,
+            )
             db.session.add(inc)
             inc_data["_plan"] = plan_key
             _p(f"   🏥 Incident: {inc.code} [{inc.severity}] {inc.title[:40]}", verbose)
@@ -1524,9 +1605,130 @@ def seed_all(app, append=False, verbose=False):
         db.session.flush()
         print(f"   ✅ {len(SLA_TARGETS)} SLA targets")
 
+        # FDD-B03-Phase-3: War Rooms
+        wr_map = {}  # _key → HypercareWarRoom
+        inc_code_map = {}  # code → HypercareIncident
+        for inc in HypercareIncident.query.filter_by(tenant_id=anadolu_tenant.id).all():
+            inc_code_map[inc.code] = inc
+
+        for wr_data in WAR_ROOMS:
+            plan_key = wr_data.pop("_plan")
+            wr_key = wr_data.pop("_key")
+            assign_incs = wr_data.pop("_assign_incidents", [])
+            assign_crs = wr_data.pop("_assign_crs", [])
+            wr = HypercareWarRoom(
+                cutover_plan_id=cut_plan_map[plan_key].id,
+                tenant_id=anadolu_tenant.id,
+                **wr_data,
+            )
+            db.session.add(wr)
+            db.session.flush()
+            wr_map[wr_key] = wr
+            wr_data["_plan"] = plan_key
+            wr_data["_key"] = wr_key
+            wr_data["_assign_incidents"] = assign_incs
+            wr_data["_assign_crs"] = assign_crs
+            # Assign incidents to this war room
+            for inc_code in assign_incs:
+                inc_obj = inc_code_map.get(inc_code)
+                if inc_obj:
+                    inc_obj.war_room_id = wr.id
+            _p(f"   🏠 War Room: {wr.code} — {wr.name} [{wr.status}]", verbose)
+        db.session.flush()
+        print(f"   ✅ {len(WAR_ROOMS)} war rooms")
+
+        # FDD-B03-Phase-3: Post Go-Live Change Requests
+        cr_map = {}  # _key → PostGoliveChangeRequest
+        for cr_data in CHANGE_REQUESTS:
+            plan_key = cr_data.pop("_plan")
+            cr_key = cr_data.pop("_key")
+            plan = cut_plan_map[plan_key]
+            cr_number = cr_data.pop("cr_number")
+            title = cr_data.pop("title")
+            description = cr_data.pop("description", None)
+            category = cr_data.pop("category", "config_change")
+            priority = cr_data.pop("priority", "P3")
+            status = cr_data.pop("status", "draft")
+            impact = cr_data.pop("impact_assessment", None)
+            # Pop non-model fields to avoid passing them
+            cr_data.pop("requested_by", None)
+            cr_data.pop("assigned_to", None)
+            cr_data.pop("requested_at", None)
+            cr_data.pop("module", None)
+            cr = PostGoliveChangeRequest(
+                program_id=plan.program_id,
+                tenant_id=anadolu_tenant.id,
+                cr_number=cr_number,
+                title=title,
+                description=description,
+                change_type=category,
+                priority=priority,
+                status=status,
+                impact_assessment=impact,
+            )
+            db.session.add(cr)
+            db.session.flush()
+            cr_map[cr_key] = cr
+            # Restore seed data dict keys for idempotency
+            cr_data["_plan"] = plan_key
+            cr_data["_key"] = cr_key
+            cr_data["cr_number"] = cr_number
+            cr_data["title"] = title
+            cr_data["description"] = description
+            cr_data["category"] = category
+            cr_data["priority"] = priority
+            cr_data["status"] = status
+            cr_data["impact_assessment"] = impact
+            _p(f"   📝 CR: {cr.cr_number} — {cr.title[:40]} [{cr.status}]", verbose)
+        db.session.flush()
+
+        # Assign CRs to war rooms (from WAR_ROOMS._assign_crs)
+        for wr_data in WAR_ROOMS:
+            wr_key = wr_data["_key"]
+            wr_obj = wr_map.get(wr_key)
+            if wr_obj:
+                for cr_key in wr_data.get("_assign_crs", []):
+                    cr_obj = cr_map.get(cr_key)
+                    if cr_obj:
+                        cr_obj.war_room_id = wr_obj.id
+        db.session.flush()
+        print(f"   ✅ {len(CHANGE_REQUESTS)} change requests")
+
+        # FDD-B03-Phase-2: Seed exit criteria and escalation rules for Plan 1
+        _exit_criteria_count = 0
+        _escalation_rules_count = 0
+        try:
+            from app.models.run_sustain import HypercareExitCriteria
+            from app.models.cutover import EscalationRule, seed_default_escalation_rules
+
+            plan1 = cut_plan_map.get("plan1")
+            if plan1:
+                # Seed exit criteria (uses service helper data)
+                from app.services.hypercare_service import _STANDARD_EXIT_CRITERIA
+                for spec in _STANDARD_EXIT_CRITERIA:
+                    ec = HypercareExitCriteria(
+                        tenant_id=anadolu_tenant.id,
+                        cutover_plan_id=plan1.id,
+                        **spec,
+                    )
+                    db.session.add(ec)
+                    _exit_criteria_count += 1
+                db.session.flush()
+
+                # Seed escalation rules
+                esc_rules = seed_default_escalation_rules(plan1.id, tenant_id=anadolu_tenant.id)
+                _escalation_rules_count = len(esc_rules)
+                db.session.flush()
+
+            print(f"   ✅ {_exit_criteria_count} exit criteria + {_escalation_rules_count} escalation rules")
+        except Exception as e:
+            print(f"   ⚠️ Phase-2 seed skipped: {e}")
+
         cutover_total = (len(CUTOVER_PLANS) + len(CUT_SCOPE_ITEMS) + len(RUNBOOK_TASKS)
                          + dep_count + len(REHEARSALS) + len(GO_NO_GO_ITEMS)
-                         + len(HYPERCARE_INCIDENTS) + len(SLA_TARGETS))
+                         + len(HYPERCARE_INCIDENTS) + len(SLA_TARGETS)
+                         + len(WAR_ROOMS) + len(CHANGE_REQUESTS)
+                         + _exit_criteria_count + _escalation_rules_count)
         print(f"   🚀 Cutover Hub total: {cutover_total} records")
 
         # ── Commit ───────────────────────────────────────────────────────
@@ -1565,6 +1767,7 @@ def main():
     args = parser.parse_args()
 
     app = create_app()
+    app.config["SEEDING"] = True
     print(f"🎯 DB: {app.config['SQLALCHEMY_DATABASE_URI']}\n")
     with app.app_context():
         db.create_all()

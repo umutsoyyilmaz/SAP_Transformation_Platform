@@ -87,6 +87,14 @@ jobs:
             -m "not performance and not ai_accuracy" \
             --junitxml=test-results/results.xml
 
+      - name: Project-Scope Regression Pack
+        env:
+          APP_ENV: testing
+          GEMINI_API_KEY: ""
+        run: |
+          chmod +x scripts/ci_project_scope_regression.sh
+          bash scripts/ci_project_scope_regression.sh
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()

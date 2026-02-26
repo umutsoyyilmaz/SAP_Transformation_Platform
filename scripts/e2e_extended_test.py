@@ -412,7 +412,7 @@ def block_2_explore():
         "project_id": pid, "title": "e-Invoice Integration",
         "type": "integration", "priority": "P1",
         "fit_status": "gap", "sap_module": "FI",
-        "description": "Türkiye e-Fatura integration required",
+        "description": "Turkey e-Invoice integration required",
         "scope_item_id": IDS.get("l3"),
     })
     req_id = body.get("id") if code == 201 else None
@@ -556,8 +556,8 @@ def block_2_explore():
 
     # ── Scope Change Requests ──
     body, code = expect("Create SCR", "POST", "/api/v1/explore/scope-change-requests", {
-        "project_id": pid, "title": "Add e-Arşiv scope",
-        "description": "Customer requested e-Arşiv in addition to e-Fatura",
+        "project_id": pid, "title": "Add e-Archive scope",
+        "description": "Customer requested e-Archive in addition to e-Invoice",
         "change_type": "add_to_scope",
         "justification": "Customer contract amendment",
         "impact": "medium", "requested_by": "Customer PM",
@@ -696,7 +696,7 @@ def block_4_integration():
     # ── Interfaces ──
     body, code = expect("Create interface", "POST", f"/api/v1/programs/{pid}/interfaces", {
         "name": "e-Invoice to GIB",
-        "description": "e-Fatura integration via GIB portal",
+        "description": "e-Invoice integration via GIB portal",
         "source_system": "SAP S/4HANA",
         "target_system": "GIB Portal",
         "direction": "outbound",

@@ -106,7 +106,7 @@ def block_1():
         "name": "ACME S/4HANA Transformation",
         "code": "ACME-S4H",
         "description": "SAP ECC 6.0 to S/4HANA 2023 FPS02 Greenfield transformation for ACME Manufacturing.",
-        "customer": "ACME Manufacturing A.Ş.",
+        "customer": "ACME Manufacturing A.S.",
         "status": "Active",
         "start_date": "2026-03-01",
         "end_date": "2026-12-15",
@@ -158,18 +158,18 @@ def block_1():
 
     # 1.3 — Team Members
     team = [
-        {"name": "Mehmet Yılmaz", "role": "Project Manager", "email": "mehmet.yilmaz@acme.com.tr"},
-        {"name": "Ayşe Kaya", "role": "Solution Architect", "email": "ayse.kaya@acme.com.tr"},
+        {"name": "Mehmet Yilmaz", "role": "Project Manager", "email": "mehmet.yilmaz@acme.com.tr"},
+        {"name": "Ayse Kaya", "role": "Solution Architect", "email": "ayse.kaya@acme.com.tr"},
         {"name": "Ali Demir", "role": "MM Functional Consultant", "email": "ali.demir@partner.com"},
         {"name": "Zeynep Arslan", "role": "SD Functional Consultant", "email": "zeynep.arslan@partner.com"},
-        {"name": "Can Öztürk", "role": "FI/CO Functional Consultant", "email": "can.ozturk@partner.com"},
-        {"name": "Burak Şahin", "role": "ABAP Developer", "email": "burak.sahin@partner.com"},
-        {"name": "Emre Çelik", "role": "Basis/Tech Consultant", "email": "emre.celik@partner.com"},
-        {"name": "Hakan Aydın", "role": "Business Process Owner", "email": "hakan.aydin@acme.com.tr"},
-        {"name": "Selin Yıldız", "role": "Key User - Sales", "email": "selin.yildiz@acme.com.tr"},
-        {"name": "Deniz Koç", "role": "Key User - Finance", "email": "deniz.koc@acme.com.tr"},
-        {"name": "Gizem Aktaş", "role": "Test Manager", "email": "gizem.aktas@partner.com"},
-        {"name": "Berna Güneş", "role": "Change Management Lead", "email": "berna.gunes@acme.com.tr"},
+        {"name": "Can Ozturk", "role": "FI/CO Functional Consultant", "email": "can.ozturk@partner.com"},
+        {"name": "Burak Sahin", "role": "ABAP Developer", "email": "burak.sahin@partner.com"},
+        {"name": "Emre Celik", "role": "Basis/Tech Consultant", "email": "emre.celik@partner.com"},
+        {"name": "Hakan Aydin", "role": "Business Process Owner", "email": "hakan.aydin@acme.com.tr"},
+        {"name": "Selin Yildiz", "role": "Key User - Sales", "email": "selin.yildiz@acme.com.tr"},
+        {"name": "Deniz Koc", "role": "Key User - Finance", "email": "deniz.koc@acme.com.tr"},
+        {"name": "Gizem Aktas", "role": "Test Manager", "email": "gizem.aktas@partner.com"},
+        {"name": "Berna Gunes", "role": "Change Management Lead", "email": "berna.gunes@acme.com.tr"},
     ]
     team_ok = 0
     for t in team:
@@ -281,8 +281,8 @@ def block_1():
     workstreams = [
         {"name": "SD/O2C", "module": "SD", "lead": "Zeynep Arslan"},
         {"name": "MM/P2P", "module": "MM", "lead": "Ali Demir"},
-        {"name": "FI/CO", "module": "FICO", "lead": "Can Öztürk"},
-        {"name": "PP/M2S", "module": "PP", "lead": "Ayşe Kaya"},
+        {"name": "FI/CO", "module": "FICO", "lead": "Can Ozturk"},
+        {"name": "PP/M2S", "module": "PP", "lead": "Ayse Kaya"},
     ]
     ws_ok = 0
     for ws in workstreams:
@@ -319,9 +319,9 @@ def block_2():
         {"name": "P2P Workshop 2 — Service Procurement & Import", "process_area": "MM",
          "scheduled_date": "2026-04-24", "facilitator": "Ali Demir"},
         {"name": "R2R Workshop 1 — GL, AP/AR, Period-End Closing", "process_area": "FICO",
-         "scheduled_date": "2026-04-29", "facilitator": "Can Öztürk"},
+         "scheduled_date": "2026-04-29", "facilitator": "Can Ozturk"},
         {"name": "M2S Workshop 1 — Production Planning, MRP", "process_area": "PP",
-         "scheduled_date": "2026-05-06", "facilitator": "Ayşe Kaya"},
+         "scheduled_date": "2026-05-06", "facilitator": "Ayse Kaya"},
     ]
 
     ws_ok = 0
@@ -349,7 +349,7 @@ def block_2():
     # 2.1c — Workshop attendees
     if IDS.get("ws1_o2c"):
         body, code = api("POST", f"/api/v1/explore/workshops/{IDS['ws1_o2c']}/attendees", {
-            "name": "Selin Yıldız", "role": "Key User", "email": "selin.yildiz@acme.com.tr"
+            "name": "Selin Yildiz", "role": "Key User", "email": "selin.yildiz@acme.com.tr"
         })
         log("block_2_explore", "2.1c Add Attendee", "PASS" if code in (200,201) else "FAIL", f"code={code}")
 
@@ -391,7 +391,7 @@ def block_2():
         {"title": "Customer-Specific Pricing Agreement Portal", "description": "Fiori extension + custom CDS views needed.",
          "area_code": "SD", "priority": "P1",
          "workshop_id": IDS.get("ws1_o2c"), "project_id": pid, "scope_item_id": IDS.get("sso_l3")},
-        {"title": "Turkish e-Invoice (e-Fatura) Integration", "description": "UBL-TR XML, digital signature, GIB portal.",
+        {"title": "Turkish e-Invoice Integration", "description": "UBL-TR XML, digital signature, GIB portal.",
          "area_code": "FI", "priority": "P1",
          "workshop_id": IDS.get("ws1_o2c"), "project_id": pid, "scope_item_id": IDS.get("sso_l3")},
         # P2P Requirements
@@ -570,10 +570,10 @@ def block_3():
     if bl_id:
         body, code = api("POST", f"/api/v1/backlog/{bl_id}/functional-spec", {
             "title": "FS — Turkish e-Invoice Integration",
-            "content": "## 1. Overview\nIntegration between SAP S/4HANA billing documents and Turkish GIB e-Invoice system.\n\n## 2. Scope\n- e-Fatura (B2B)\n- e-Arşiv (B2C)\n- e-İrsaliye (Dispatch Note)",
+            "content": "## 1. Overview\nIntegration between SAP S/4HANA billing documents and Turkish GIB e-Invoice system.\n\n## 2. Scope\n- e-Invoice (B2B)\n- e-Archive (B2C)\n- e-Waybill (Dispatch Note)",
             "status": "Draft",
             "version": "1.0",
-            "author": "Can Öztürk"
+            "author": "Can Ozturk"
         })
         if code in (200, 201):
             IDS["fs_einvoice"] = body.get("id")
@@ -589,7 +589,7 @@ def block_3():
                 "content": "## 1. Architecture\nCustom ABAP class ZCL_EINVOICE_HANDLER.\n\n## 2. Custom Objects\n- ZCL_EINVOICE_HANDLER\n- ZTABLE_EINV_LOG",
                 "status": "Draft",
                 "version": "1.0",
-                "author": "Burak Şahin"
+                "author": "Burak Sahin"
             })
             if code in (200, 201):
                 IDS["ts_einvoice"] = body.get("id")
@@ -603,7 +603,7 @@ def block_3():
          "source_system": "SAP S/4HANA", "target_system": "Foriba Connect → GIB Portal",
          "protocol": "rest", "frequency": "Real-time", "status": "identified"},
         {"name": "Bank Statement Import (MT940/CAMT.053)", "direction": "inbound",
-         "source_system": "İş Bankası / Garanti BBVA", "target_system": "SAP S/4HANA FI",
+         "source_system": "Isbank / Garanti BBVA", "target_system": "SAP S/4HANA FI",
          "protocol": "file", "frequency": "Daily", "status": "identified"},
         {"name": "EDI Integration with OEM Customers", "direction": "bidirectional",
          "source_system": "SAP S/4HANA SD", "target_system": "Customer EDI Platforms",
@@ -765,7 +765,7 @@ def block_4():
         body, code = api("POST", f"/api/v1/testing/cycles/{cycle_id}/runs", {
             "test_case_id": IDS["tc_einvoice"],
             "status": "Fail",
-            "executed_by": "Can Öztürk",
+            "executed_by": "Can Ozturk",
             "executed_date": "2026-09-05",
             "actual_result": "Digital signature fails with CERT_EXPIRED.",
             "environment": "QAS-100"
@@ -781,7 +781,7 @@ def block_4():
         {"title": "e-Invoice digital signature fails — expired test certificate",
          "description": "CERT_EXPIRED error during SIT. Need to renew test certificate.",
          "severity": "High", "priority": "High", "status": "Open", "module": "FI",
-         "assigned_to": "Emre Çelik", "environment": "QAS-100"},
+         "assigned_to": "Emre Celik", "environment": "QAS-100"},
         {"title": "Intercompany billing uses wrong transfer price",
          "description": "Using sales price instead of cost-plus. Pricing procedure ZVKIC needs fix.",
          "severity": "Critical", "priority": "Critical", "status": "Open", "module": "SD",
@@ -789,7 +789,7 @@ def block_4():
         {"title": "MRP run takes 4+ hours for full planning run",
          "description": "Target: under 2 hours. Evaluate MRP Live.",
          "severity": "High", "priority": "Medium", "status": "Open", "module": "PP",
-         "assigned_to": "Emre Çelik", "category": "Performance", "environment": "QAS-100"},
+         "assigned_to": "Emre Celik", "category": "Performance", "environment": "QAS-100"},
     ]
     def_ok = 0
     for i, d in enumerate(defects):
@@ -810,7 +810,7 @@ def block_4():
     # 4.4c — Defect comment
     if IDS.get("defect_cert"):
         body, code = api("POST", f"/api/v1/testing/defects/{IDS['defect_cert']}/comments", {
-            "author": "Emre Çelik", "body": "Renewing certificate from GIB test portal."
+            "author": "Emre Celik", "body": "Renewing certificate from GIB test portal."
         })
         log("block_4_testing", "4.4c Defect Comment", "PASS" if code in (200,201) else "FAIL", f"code={code}")
 
@@ -885,7 +885,7 @@ def block_5():
     if si_id:
         tasks = [
             {"title": "Lock ECC transactions via SM01", "sequence": 1, "duration_hours": 1,
-             "responsible": "Emre Çelik", "status": "Planned"},
+             "responsible": "Emre Celik", "status": "Planned"},
             {"title": "Run final data extract programs", "sequence": 2, "duration_hours": 4,
              "responsible": "Ali Demir", "status": "Planned"},
         ]
@@ -963,7 +963,7 @@ def block_5():
         {"title": "Go-Live date at risk due to e-Invoice delays",
          "description": "GIB certification timeline uncertain.",
          "probability": 3, "impact": 5, "status": "identified", "risk_category": "technical",
-         "owner": "Can Öztürk"},
+         "owner": "Can Ozturk"},
     ]
     risk_ok = 0
     for r in risks:

@@ -4,7 +4,7 @@
 > AI araçları tarafından otomatik olarak okunur. Her kod üretme/düzenleme işleminde
 > aşağıdaki kurallar geçerlidir.
 >
-> Tam standartlar: `docs/plans/CODING_STANDARDS.md`
+> Tam standartlar: `docs/plans/CODING_STANDARDS.md` ve '.github/copilot-instructions.md'
 > AI review kuralları: `docs/plans/CODING_STANDARDS.md` §17 ve §21
 
 ---
