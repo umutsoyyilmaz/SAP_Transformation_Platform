@@ -1,5 +1,18 @@
 # Architecture Handbook
 
+## Muhendislik Felsefesi
+
+Bu projedeki her kararin arkasindaki 6 temel ilke:
+
+1. **Bir sonraki bug'i tahmin et.** Her fonksiyon beklemedigin sekilde cagirilacak. Defensive coding varsayilandir.
+2. **Okuyucu icin optimize et.** Kod yazildigindan 10x fazla okunur. Netlik > zekalik.
+3. **Sesli ve erken hatala.** Sessiz hatalar uretim kesintisidir. Yanlis olan bir sey varsa firsat, logla, yuzeyine cikar.
+4. **Tenant izolasyonu bir guvenlik siniridir.** Tek bir cross-tenant veri sizintisi sirket-sonlandirici olaydır. `tenant_id` filtrelemeyi auth kadar ciddiye al.
+5. **Her commit kodu buldugundan daha iyi biraksin.** Dosyaya dokunuyorsan kucuk seyleri duzelt — eksik type hint, belirsiz degisken adi.
+6. **Talepleri sorgula.** Feature uygulamak mimari olarak yanlis hissettiriyorsa soyle. Daha iyi yaklasim oner.
+
+---
+
 ## Katman Mimarisi
 
 ```
@@ -192,6 +205,131 @@ Idempotent ve non-blocking.
 
 ---
 
+## Cache Stratejisi
+
+**Pattern:** Cache-Aside with Explicit Invalidation
+
+```python
+from app.services.cache_service import cache
+
+def get_project(tenant_id: int, project_id: int) -> dict:
+    cache_key = f"project:{tenant_id}:{project_id}"  # tenant_id ZORUNLU
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+
+    project = Project.query_for_tenant(tenant_id).get_or_404(project_id)
+    result = project.to_dict()
+    cache.set(cache_key, result, ttl=300)
+    return result
+
+def update_project(tenant_id: int, project_id: int, data: dict) -> dict:
+    # ... update logic ...
+    db.session.commit()
+
+    # Invalidation ZORUNLU
+    cache.delete(f"project:{tenant_id}:{project_id}")
+    cache.delete_pattern(f"project_list:{tenant_id}:*")
+    return project.to_dict()
+```
+
+### Cache Kurallari
+1. Cache key MUTLAKA `tenant_id` icermeli (cross-tenant cache pollution onlenir)
+2. Cache okumasi sadece service'te — blueprint veya model'de ASLA
+3. Her yazma islemi etkilenen cache'leri invalidate etmeli
+4. Liste/aggregate cache'ler icin `delete_pattern` kullan
+5. TTL varsayilanlari: referans veri = 1 saat, islemsel veri = 5 dk, session = 30 dk
+6. Supheye dusersen cache'leme — dogruluk > performans
+
+---
+
+## Tasarim Pattern'leri
+
+### State Machine (status alanlari icin)
+```python
+# Gecisleri explicit tanimla — keyfi status degisikligine IZIN VERME
+REQUIREMENT_TRANSITIONS: dict[str, set[str]] = {
+    "draft":       {"in_review", "cancelled"},
+    "in_review":   {"approved", "draft", "cancelled"},
+    "approved":    {"implemented", "cancelled"},
+    "implemented": {"verified", "approved"},
+    "verified":    {"closed"},
+    "closed":      set(),      # Terminal
+    "cancelled":   set(),      # Terminal
+}
+
+def validate_transition(current: str, target: str) -> bool:
+    return target in REQUIREMENT_TRANSITIONS.get(current, set())
+```
+
+### Repository Pattern (karmasik sorgular icin)
+```python
+class RequirementRepository:
+    """Karmasik requirement sorgularini kapsullar.
+    Service'leri is mantigi odakli tutar, sorgu yapimi ile ugrastirmaz."""
+
+    @staticmethod
+    def find_by_project(tenant_id: int, project_id: int,
+                        status: str | None = None) -> list[Requirement]:
+        stmt = select(Requirement).where(
+            Requirement.tenant_id == tenant_id,
+            Requirement.project_id == project_id
+        )
+        if status:
+            stmt = stmt.where(Requirement.status == status)
+        return db.session.execute(stmt).scalars().all()
+```
+
+### Service Composition (kalitim degil, bilesim)
+```python
+# Service'ler baska service'leri compose eder — kalitim zinciri YOK
+class TestExecutionService:
+    def __init__(self):
+        self.requirement_service = RequirementService()
+        self.notification_service = NotificationService()
+
+    def execute_test_run(self, tenant_id: int, run_id: int) -> dict:
+        run = self._get_run(tenant_id, run_id)
+        results = self._execute_steps(run)
+        self.requirement_service.update_coverage(tenant_id, run.requirement_id)
+        if any(r.status == "failed" for r in results):
+            self.notification_service.notify_test_failure(tenant_id, run)
+        return run.to_dict()
+```
+
+**Kural:** 3+ service cagirisi derinligi = tasarim kokusu. Coordinator service veya event dusun.
+
+---
+
+## SAP Domain Konteksti
+
+### Veri Modeli Hiyerarsisi
+```
+Program
+  +-- Project
+        +-- Scenario (orn: "Order-to-Cash", "Procure-to-Pay")
+              +-- Requirement (classification: fit | partial_fit | gap)
+                    |-- fit         -> ConfigItem (standart SAP yapilandirmasi)
+                    |-- gap         -> WricefItem (ozel gelistirme)
+                    |-- partial_fit -> WricefItem
+                    +-- TestCase
+                          +-- TestStep
+```
+
+### Domain Terimleri
+
+| SAP Terimi | Kod Karsiligi | Aciklama |
+|------------|--------------|----------|
+| SAP Modulu | `sap_module` alani ("FI", "MM", "SD") | Standart SAP modul kodlari |
+| Fit/Gap | `classification` enum | Config vs WRICEF yonlendirmesini belirler |
+| WRICEF | `WricefItem` modeli | 6 tip: Workflow, Report, Interface, Conversion, Enhancement, Form |
+| Go-Live | Project status gecisi | Cutover kontrolleri gerektirir |
+| Transport | `TransportRequest` modeli | SAP degisiklik yonetimi |
+| Yetki Konsepti | RBAC mapping | SAP rolu = Platform permission seti |
+| Activate | `methodology` alani | SAP Activate metodolojisi (Discover-Explore-Realize-Deploy-Run) |
+
+---
+
 ## Entegrasyon Noktalari
 
 ### AI Gateway (`app/ai/gateway.py`)
@@ -215,7 +353,60 @@ Idempotent ve non-blocking.
 ### Logger Kurali
 ```python
 logger = logging.getLogger(__name__)  # her dosyanin basinda
-logger.info("Requirement created id=%s tenant=%s", req.id, tenant_id)
+```
+
+### Structured Logging (extra dict pattern)
+```python
+# Temel format yerine structured log kullan
+logger.info(
+    "Requirement status transitioned",
+    extra={
+        "tenant_id": tenant_id,
+        "requirement_id": req_id,
+        "from_status": old_status,
+        "to_status": new_status,
+        "user_id": user_id,
+        "duration_ms": elapsed_ms
+    }
+)
+
+# Kullanici verisi kisaltilmali
+logger.info("Processing name=%s", str(name)[:200])
+```
+
+### Log Seviyeleri
+| Seviye | Ne Zaman | Ornek |
+|--------|----------|-------|
+| `DEBUG` | Dahili state, degisken degerleri (prod'da KAPALI) | Sorgu parametreleri |
+| `INFO` | Is olaylari (olusturma, guncelleme, gecis) | `Requirement created id=42` |
+| `WARNING` | Kurtarilabilir sorunlar (retry, fallback, deprecation) | `Slow query detected 1200ms` |
+| `ERROR` | Mevcut istegi etkileyen hatalar | `Service call failed` |
+| `CRITICAL` | Sistem seviyesi arizalar (DB kapali, cache erisemez) | `Database connection lost` |
+
+### Performans Loglama
+```python
+import time
+
+def expensive_operation(tenant_id: int) -> dict:
+    start = time.perf_counter()
+    result = do_work()
+    elapsed_ms = (time.perf_counter() - start) * 1000
+
+    if elapsed_ms > 1000:  # Esik: 1 saniye
+        logger.warning(
+            "Slow operation detected",
+            extra={"operation": "expensive_operation",
+                   "duration_ms": elapsed_ms, "tenant_id": tenant_id}
+        )
+    return result
+```
+
+### Hassas Veri YASAK
+```python
+# YANLIS — hassas veri loglama
+logger.info("password=%s", password)
+logger.debug("token=%s", token)
+logger.info("API key used: %s", api_key)
 ```
 
 ### Audit Trail

@@ -299,7 +299,193 @@ Atlamak icin: `git commit --no-verify` (sadece acil durumlarda)
 
 ---
 
-## Sik Yapilan Hatalar
+## API Tasarim Kurallari
+
+### URL Pattern
+```
+/api/v1/<domain>/<resource>/<id>/<sub-resource>
+
+GET    /api/v1/projects/42/requirements          # Liste
+POST   /api/v1/projects/42/requirements          # Olustur
+GET    /api/v1/requirements/108                   # Tekil oku
+PUT    /api/v1/requirements/108                   # Guncelle
+DELETE /api/v1/requirements/108                   # Sil
+POST   /api/v1/requirements/108/transition        # State machine aksiyonu
+```
+
+### Response Envelope
+
+```python
+# Tekil kaynak
+return jsonify({
+    "id": req.id, "code": "REQ-042", "title": "...", "status": "draft"
+}), 200
+
+# Koleksiyon — her zaman pagination metadata ile
+return jsonify({
+    "items": [r.to_dict() for r in requirements],
+    "total": total_count,
+    "page": page,
+    "per_page": per_page,
+    "has_next": page < total_pages,
+    "has_prev": page > 1
+}), 200
+
+# Hata — structured ve actionable
+return jsonify({
+    "error": "Validation failed",
+    "code": "VALIDATION_ERROR",
+    "details": {
+        "title": "Title is required and must be <= 255 characters",
+        "priority": "Must be one of: critical, high, medium, low"
+    }
+}), 400
+```
+
+### HTTP Status Kodlari
+
+| Senaryo | Kod | Ne Zaman |
+|---------|-----|----------|
+| Olusturuldu | 201 | POST ile yeni kaynak olusturuldu |
+| Basarili okuma/guncelleme | 200 | GET, PUT, PATCH basarili |
+| Icerik yok | 204 | DELETE basarili, donus yok |
+| Gecersiz input | 400 | Bozuk JSON, eksik zorunlu alan, yanlis tip |
+| Kimlik dogrulanmadi | 401 | Token yok, suresi dolmus, gecersiz |
+| Yetki yok | 403 | Gecerli token ama yetersiz izin |
+| Bulunamadi | 404 | Kaynak yok VEYA baska tenant'a ait (varligini aciklama) |
+| Cakisma | 409 | Duplicate unique alan (ornek: ayni requirement code) |
+| Is kurali ihlali | 422 | Gecerli veri ama domain mantigi engeller |
+| Sunucu hatasi | 500 | Beklenmeyen exception — her zaman fail-closed |
+
+### Backward Compatibility
+- Yeni opsiyonel alanlar ekle (mevcut client'lar bozulmaz)
+- Mevcut response alanlarini ASLA silme veya yeniden adlandirma
+- Alan tipini ASLA degistirme (string -> int)
+- Kaldirilacak alanlar icin: yeni alan ekle -> deprecation logla -> sonraki major versiyonda kaldir
+
+### Input Validation Pattern
+```python
+def validate_requirement_input(data: dict) -> tuple[dict, dict]:
+    errors = {}
+    cleaned = {}
+
+    title = data.get("title", "").strip()
+    if not title:
+        errors["title"] = "Title is required"
+    elif len(title) > 255:
+        errors["title"] = "Title must be <= 255 characters"
+    else:
+        cleaned["title"] = title
+
+    VALID_CLASSIFICATIONS = {"fit", "partial_fit", "gap"}
+    classification = data.get("classification", "gap")
+    if classification not in VALID_CLASSIFICATIONS:
+        errors["classification"] = f"Must be one of: {', '.join(sorted(VALID_CLASSIFICATIONS))}"
+    else:
+        cleaned["classification"] = classification
+
+    cleaned["description"] = data.get("description", "")[:5000]  # Truncate, reject etme
+    return cleaned, errors
+```
+
+---
+
+## N+1 Sorgu Onleme
+
+```python
+# YANLIS — N+1: 1 + N sorgu calistirir
+runs = TestRun.query_for_tenant(tenant_id).all()
+for run in runs:
+    steps = TestStep.query.filter_by(run_id=run.id).all()  # Iterasyon basina sorgu!
+
+# DOGRU — Eager load: tam 2 sorgu (1 runs, 1 tum steps)
+stmt = (
+    select(TestRun)
+    .where(TestRun.tenant_id == tenant_id)
+    .options(selectinload(TestRun.steps))
+)
+runs = db.session.execute(stmt).scalars().all()
+```
+
+---
+
+## PostgreSQL vs SQLite Farklari
+
+Test ortami SQLite kullanir, prod PostgreSQL. Dikkat edilmesi gerekenler:
+
+| PostgreSQL Ozelligi | SQLite Karsiligi |
+|---------------------|-----------------|
+| `JSONB` kolonlar | `db.JSON` kullan (her ikisinde calisir) |
+| `ARRAY` kolonlar | Association table kullan |
+| `INSERT ... ON CONFLICT` | `merge()` veya check-then-insert |
+| Full-text search (tsvector) | Test'lerde mock'la |
+| `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` | `db.create_all()` |
+
+**Kural:** Varsayilan olarak dialect-safe kod yaz. PostgreSQL-spesifik ozellik gerekiyorsa belgeleve test'te mock'la.
+
+---
+
+## Type Hint Rehberi
+
+```python
+# DOGRU — Kesin tipler niyet iletir
+from typing import TypedDict, Literal
+
+class RequirementCreateDTO(TypedDict):
+    title: str
+    description: str | None
+    classification: Literal["fit", "partial_fit", "gap"]
+    priority: Literal["critical", "high", "medium", "low"]
+
+def create_requirement(tenant_id: int, data: RequirementCreateDTO) -> dict:
+    """..."""
+
+# None gecerli bir deger oldugunda Optional kullan
+def find_requirement(tenant_id: int, req_id: int) -> Requirement | None:
+    """..."""
+```
+
+- **mypy strict mode** — `Any` kullanimi gerekce gerektirir
+- **Ruff** lint + format (Black/isort yok, Ruff hepsini yapar)
+- **Satir uzunlugu:** 120 karakter (`ruff.toml` ile zorunlu)
+- **Her zaman cift tirnak** (tek tirnak ASLA)
+
+---
+
+## Self-Review Checklist (Kod Sunmadan Once)
+
+### Mimari
+- [ ] 3 katman sinirina uyuyor mu?
+- [ ] Her sorguda `tenant_id` scope'u var mi?
+- [ ] Transaction sadece service katmaninda mi?
+- [ ] Mevcut API'larla backward compatible mi?
+
+### Guvenlik
+- [ ] Tum route'larda `@require_permission` var mi?
+- [ ] Log veya response'ta hassas veri yok mu?
+- [ ] SQL injection vektoru yok mu?
+- [ ] Input validate ve sanitize edildi mi?
+
+### Kalite
+- [ ] Tum public fonksiyonlarda type hint var mi?
+- [ ] Anlamli docstring (NEDEN, ne degil) var mi?
+- [ ] N+1 sorgu yok mu?
+- [ ] Hata yonetimi fail-closed mi?
+- [ ] Yazma islemlerinde cache invalidation yapildi mi?
+
+### Test
+- [ ] Bu kodu nasil test ederim? (Cevap belirsizse tasarim basitlestirilmeli)
+- [ ] Edge case'ler dusunuldu mu? (null, bos, sinir, esanlamli)
+- [ ] Tenant izolasyonu test edildi mi?
+
+### Domain
+- [ ] Isimlendirme SAP domain sozlugune uyuyor mu?
+- [ ] Veri akisi hiyerarsiyi takip ediyor mu? (Program → Project → Scenario → ... → TestCase)
+- [ ] Kidemli bir SAP danismani bu kodu aciklama olmadan anlayabilir mi?
+
+---
+
+## Sik Yapilan Hatalar (Kapsamli)
 
 | Hata | Dogru Yaklasim |
 |------|----------------|
@@ -311,3 +497,14 @@ Atlamak icin: `git commit --no-verify` (sadece acil durumlarda)
 | `API_KEY = "sk-..."` | `.env` dosyasindan `os.environ.get()` |
 | Blueprint'ten blueprint cagirma | Ortak logic service'e tasir |
 | `f"SELECT * FROM {table}"` | SQLAlchemy ORM veya parameterized query |
+| `if g.role == "admin":` | `permission_service.has_permission()` kullan |
+| `eval()`, `exec()` | Gecerli kullanim senaryosu yok — ASLA |
+| ORM sorgusu dongu icinde | `selectinload()` ile eager loading kullan |
+| `from module import *` | Acik import kullan (isim catismasi onlenir) |
+| `g` erisimi service'te | `tenant_id`, `user_id` parametre olarak gecir |
+| `API_AUTH_ENABLED=false` prod'da | Startup'ta ortam degiskeni dogrulamasi ekle |
+| `Model.query.filter_by(id=x).first()` tenant'siz | Her zaman `tenant_id` filtresi ekle |
+| `db.session.commit()` dongu icinde | Toplu islem, tek commit |
+| `except Exception:` ile `200` donme | Uygun hata kodu don (400/404/500) |
+| `def f(items=[])` mutable default | `None` kullan, fonksiyon icinde baslat |
+| `datetime.now()` timezone'suz | `datetime.now(timezone.utc)` kullan |
