@@ -1,4 +1,4 @@
-"""Unit tests for app.services.cloud_alm_service — FDD-F07 Faz B, S4-02.
+"""Unit tests for app.services.cloud_alm_service — FDD-F07 Phase B, S4-02.
 
 Test strategy
 -------------

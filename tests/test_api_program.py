@@ -53,7 +53,14 @@ def _setup_db(app):
 def session(app, _setup_db):
     """Wrap each test in a clean state."""
     with app.app_context():
+        from app.models.auth import Tenant
+        from app.services.permission_service import invalidate_all_cache
+        invalidate_all_cache()
+        if not Tenant.query.filter_by(slug="test-default").first():
+            _db.session.add(Tenant(name="Test Default", slug="test-default"))
+            _db.session.commit()
         yield
+        invalidate_all_cache()
         _db.session.rollback()
         _db.drop_all()
         _db.create_all()

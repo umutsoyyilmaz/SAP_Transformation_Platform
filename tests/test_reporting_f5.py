@@ -445,11 +445,11 @@ class TestDashboardGadgets:
     """Test dashboard gadget type listing and data computation."""
 
     def test_list_gadget_types(self, client):
-        """GET /reports/gadgets/types returns all 12 gadget types."""
+        """GET /reports/gadgets/types returns all 16 gadget types."""
         res = client.get("/api/v1/reports/gadgets/types")
         assert res.status_code == 200
         data = res.get_json()
-        assert len(data["gadgets"]) == 12
+        assert len(data["gadgets"]) == 16
 
     def test_gadget_pass_rate(self, client, program, test_cases, executions):
         """Compute pass_rate_gauge gadget."""
@@ -558,10 +558,10 @@ class TestDashboardEngine:
     """Direct tests on the DashboardEngine class."""
 
     def test_list_gadget_types(self, app):
-        """list_gadget_types returns 12 types."""
+        """list_gadget_types returns 16 types."""
         from app.services.dashboard_engine import DashboardEngine
         types = DashboardEngine.list_gadget_types()
-        assert len(types) == 12
+        assert len(types) == 16
 
     def test_compute_unknown(self, app):
         """Computing unknown gadget returns error."""

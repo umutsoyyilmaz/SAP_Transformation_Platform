@@ -156,7 +156,7 @@ def oidc_config(app, tenant):
         tenant_id=tenant.id,
         provider_type="oidc",
         provider_name="azure_ad",
-        display_name="Azure AD ile Giriş",
+        display_name="Sign in with Azure AD",
         is_enabled=True,
         client_id="test-client-id-12345",
         client_secret="test-secret-67890",
@@ -178,7 +178,7 @@ def saml_config(app, tenant):
         tenant_id=tenant.id,
         provider_type="saml",
         provider_name="sap_ias",
-        display_name="SAP IAS ile Giriş",
+        display_name="Sign in with SAP IAS",
         is_enabled=True,
         idp_entity_id="https://sap-ias.example.com",
         idp_sso_url="https://sap-ias.example.com/saml/sso",
@@ -925,7 +925,7 @@ class TestSSOAdminUI:
         res = client.get("/sso-admin")
         assert res.status_code == 200
         assert b"Domain" in res.data
-        assert b"providers" in res.data or b"Providers" in res.data or "sağlayıcı" in res.data.decode("utf-8").lower()
+        assert b"providers" in res.data or b"Providers" in res.data or "provider" in res.data.decode("utf-8").lower()
 
 
 # ═══════════════════════════════════════════════════════════════

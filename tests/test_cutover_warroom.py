@@ -228,6 +228,41 @@ def test_live_status_marks_is_behind_schedule_when_delayed(tenant: Tenant, progr
 
 
 @pytest.mark.unit
+def test_live_status_uses_plan_window_for_planned_total_minutes(
+    tenant: Tenant, program: Program, ready_plan: CutoverPlan, scope_item: CutoverScopeItem
+) -> None:
+    """planned_total_minutes is derived from plan.planned_start/end when present."""
+    ready_plan.planned_start = datetime.now(timezone.utc)
+    ready_plan.planned_end = ready_plan.planned_start + timedelta(hours=3)
+    db.session.flush()
+
+    snap = cutover_service.get_cutover_live_status(
+        tenant_id=tenant.id,
+        program_id=program.id,
+        plan_id=ready_plan.id,
+    )
+
+    assert snap["clock"]["planned_total_minutes"] == 180
+
+
+@pytest.mark.unit
+def test_live_status_falls_back_to_task_durations_for_planned_total_minutes(
+    tenant: Tenant, program: Program, ready_plan: CutoverPlan, scope_item: CutoverScopeItem
+) -> None:
+    """When plan window is missing, planned_total_minutes falls back to task sums."""
+    _make_task(tenant.id, scope_item.id, title="A", planned_duration_min=40)
+    _make_task(tenant.id, scope_item.id, title="B", planned_duration_min=20)
+
+    snap = cutover_service.get_cutover_live_status(
+        tenant_id=tenant.id,
+        program_id=program.id,
+        plan_id=ready_plan.id,
+    )
+
+    assert snap["clock"]["planned_total_minutes"] == 60
+
+
+@pytest.mark.unit
 def test_calculate_critical_path_returns_correct_task_ids(tenant: Tenant, program: Program, ready_plan: CutoverPlan, scope_item: CutoverScopeItem) -> None:
     """calculate_critical_path() returns the longest-chain task IDs."""
     # Build chain: A(60m) → B(30m) → C(90m)   (critical path total: 180m)

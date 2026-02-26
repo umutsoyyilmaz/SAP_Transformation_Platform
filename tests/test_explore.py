@@ -43,7 +43,14 @@ def _setup_db(app):
 @pytest.fixture(autouse=True)
 def session(app, _setup_db):
     with app.app_context():
+        from app.models.auth import Tenant
+        from app.services.permission_service import invalidate_all_cache
+        invalidate_all_cache()
+        if not Tenant.query.filter_by(slug="test-default").first():
+            _db.session.add(Tenant(name="Test Default", slug="test-default"))
+            _db.session.commit()
         yield
+        invalidate_all_cache()
         _db.session.rollback()
         _db.drop_all()
         _db.create_all()
@@ -56,7 +63,9 @@ def client(app):
 
 @pytest.fixture
 def program():
-    prog = Program(name="Test Project", status="active", methodology="agile")
+    from app.models.auth import Tenant
+    t = Tenant.query.filter_by(slug="test-default").first()
+    prog = Program(name="Test Project", status="active", methodology="agile", tenant_id=t.id)
     _db.session.add(prog)
     _db.session.flush()
     return prog
@@ -77,7 +86,9 @@ def hierarchy(project_id):
 # ---------------------------------------------------------------------------
 
 def _make_program():
-    prog = Program(name="Test Project", status="active", methodology="agile")
+    from app.models.auth import Tenant
+    t = Tenant.query.filter_by(slug="test-default").first()
+    prog = Program(name="Test Project", status="active", methodology="agile", tenant_id=t.id)
     _db.session.add(prog)
     _db.session.flush()
     return prog

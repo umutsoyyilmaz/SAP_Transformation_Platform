@@ -42,8 +42,10 @@ def _seed_explore_tree():
     Needs a Program for project_id FK.
     """
     from app.models.program import Program
+    from app.models.auth import Tenant
 
-    prog = Program(name="TraceTest", methodology="agile")
+    t = Tenant.query.filter_by(slug="test-default").first()
+    prog = Program(name="TraceTest", methodology="agile", tenant_id=t.id)
     db.session.add(prog)
     db.session.flush()
     pid = prog.id

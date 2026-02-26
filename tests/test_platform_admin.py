@@ -62,6 +62,10 @@ def full_setup(app):
         ("projects.create", "projects"),
         ("projects.edit", "projects"),
         ("projects.archive", "projects"),
+        ("programs.view", "programs"),
+        ("programs.create", "programs"),
+        ("programs.edit", "programs"),
+        ("programs.delete", "programs"),
         ("reports.view", "reports"),
         ("reports.export", "reports"),
         ("admin.settings", "admin"),
@@ -115,7 +119,7 @@ def full_setup(app):
         "requirements.view", "requirements.create", "requirements.edit",
         "workshops.view", "workshops.create", "workshops.facilitate",
         "tests.view", "tests.create",
-        "projects.view",
+        "projects.view", "programs.view",
         "reports.view", "reports.export",
         "backlog.view", "backlog.create", "backlog.edit",
         "raid.view", "raid.create", "raid.edit",
@@ -367,30 +371,30 @@ class TestBlueprintPermissions:
     # ── Program BP (projects.*) ──────────────────────────────────────────
 
     def test_program_get_allowed_for_viewer(self, app, client, full_setup):
-        """Viewer has projects.view → GET /programs should work."""
+        """Viewer has programs.view → GET /programs should work."""
         s = full_setup
         h = _headers(app, s["viewer_id"], s["tenant_id"])
         res = client.get("/api/v1/programs", headers=h)
         assert res.status_code == 200
 
     def test_program_post_denied_for_viewer(self, app, client, full_setup):
-        """Viewer lacks projects.create → POST /programs should be 403."""
+        """Viewer lacks programs.create → POST /programs should be 403."""
         s = full_setup
         h = _headers(app, s["viewer_id"], s["tenant_id"])
         res = client.post("/api/v1/programs", headers=h, json={
             "name": "Blocked", "methodology": "agile",
         })
         assert res.status_code == 403
-        assert "projects.create" in res.get_json()["required"]
+        assert "programs.create" in res.get_json()["required"]
 
     def test_program_post_allowed_for_consultant(self, app, client, full_setup):
-        """Consultant should NOT have projects.create → 403."""
+        """Consultant should NOT have programs.create → 403."""
         s = full_setup
         h = _headers(app, s["consul_id"], s["tenant_id"])
         res = client.post("/api/v1/programs", headers=h, json={
             "name": "Consul Program", "methodology": "agile",
         })
-        # Consultant only has projects.view, not projects.create
+        # Consultant only has programs.view, not programs.create
         assert res.status_code == 403
 
     def test_program_all_ops_allowed_for_admin(self, app, client, full_setup):

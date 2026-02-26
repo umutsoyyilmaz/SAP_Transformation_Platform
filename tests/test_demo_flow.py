@@ -29,7 +29,9 @@ from app.models.backlog import BacklogItem, ConfigItem
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 def _make_program():
-    p = Program(name="WR3 Demo Program", methodology="activate")
+    from app.models.auth import Tenant
+    t = Tenant.query.filter_by(slug="test-default").first()
+    p = Program(name="WR3 Demo Program", methodology="activate", tenant_id=t.id)
     db.session.add(p)
     db.session.flush()
     return p
@@ -363,7 +365,7 @@ class TestE2EDemoFlow:
     def test_full_demo_flow(self, client):
         # ── Step 0: Create program ─────────────────────────────────
         res = client.post("/api/v1/programs", json={
-            "name": "Demo Flow Program", "methodology": "activate"
+            "name": "Demo Flow Program", "methodology": "sap_activate"
         })
         assert res.status_code == 201
         pid = res.get_json()["id"]
@@ -472,7 +474,7 @@ class TestE2EDemoFlow:
     def test_demo_flow_workshop_to_requirement_link(self, client):
         """Creating a requirement linked to a workshop should maintain FK."""
         res = client.post("/api/v1/programs", json={
-            "name": "Link Test Program", "methodology": "activate"
+            "name": "Link Test Program", "methodology": "sap_activate"
         })
         pid = res.get_json()["id"]
 

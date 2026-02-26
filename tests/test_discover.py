@@ -1,5 +1,5 @@
 """
-Tests: Discover Fazı MVP — FDD-B02 / S3-01.
+Tests: Discover Phase MVP — FDD-B02 / S3-01.
 
 Covers all required test cases:
   1.  POST charter → 201
@@ -372,11 +372,15 @@ def test_gate_status_returns_404_for_nonexistent_program(client: object) -> None
 
 
 def test_discover_returns_422_for_program_without_tenant_id(client: object) -> None:
-    """Programs with no tenant_id association → 422 (Tenant Required)."""
+    """Programs with no tenant_id → DB rejects the insert (nullable=False).
+
+    Since SEC-03 enforces tenant_id NOT NULL at the model level,
+    a Program without tenant_id can no longer be created. We verify the
+    DB-level constraint instead.
+    """
+    import sqlalchemy.exc
     prog = Program(name="Orphan Program", methodology="agile")
     _db.session.add(prog)
-    _db.session.flush()
-
-    res = client.get(f"/api/v1/programs/{prog.id}/discover/charter")
-    assert res.status_code == 422
-    assert res.get_json().get("code") == "TENANT_REQUIRED"
+    with pytest.raises(sqlalchemy.exc.IntegrityError):
+        _db.session.flush()
+    _db.session.rollback()

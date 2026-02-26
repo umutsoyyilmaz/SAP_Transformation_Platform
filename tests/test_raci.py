@@ -136,7 +136,7 @@ def test_upsert_raci_entry_creates_new_record(client) -> None:
     """PUT /programs/<id>/raci/entries creates a new RaciEntry when none exists."""
     tenant = _make_tenant("raci-upsert-create")
     prog = _make_program(tenant.id)
-    act = _make_activity(tenant.id, prog.id, name="Workshop Yönetimi")
+    act = _make_activity(tenant.id, prog.id, name="Workshop Management")
     mem = _make_member(tenant.id, prog.id, name="Bob")
 
     res = client.put(
@@ -161,7 +161,7 @@ def test_upsert_raci_entry_with_null_role_deletes_record(client) -> None:
     """PUT /programs/<id>/raci/entries with raci_role=null deletes the entry."""
     tenant = _make_tenant("raci-delete")
     prog = _make_program(tenant.id)
-    act = _make_activity(tenant.id, prog.id, name="SIT Koordinasyonu")
+    act = _make_activity(tenant.id, prog.id, name="SIT Coordination")
     mem = _make_member(tenant.id, prog.id, name="Carol")
     _make_entry(tenant.id, prog.id, act.id, mem.id, "I")
 
@@ -191,7 +191,7 @@ def test_raci_validation_flags_activity_without_accountable(client) -> None:
     """GET /programs/<id>/raci/validate lists activities missing Accountable."""
     tenant = _make_tenant("raci-val-no-a")
     prog = _make_program(tenant.id)
-    act = _make_activity(tenant.id, prog.id, name="Go-Live Kararı")
+    act = _make_activity(tenant.id, prog.id, name="Go-Live Decision")
     mem = _make_member(tenant.id, prog.id, name="Dave")
     # Only R assigned — no A
     _make_entry(tenant.id, prog.id, act.id, mem.id, "R")
@@ -234,7 +234,7 @@ def test_accountable_role_cannot_be_assigned_twice_same_activity(client) -> None
     """
     tenant = _make_tenant("raci-unique-a")
     prog = _make_program(tenant.id)
-    act = _make_activity(tenant.id, prog.id, name="Data Migration Onayı")
+    act = _make_activity(tenant.id, prog.id, name="Data Migration Approval")
     mem1 = _make_member(tenant.id, prog.id, name="Frank")
     mem2 = _make_member(tenant.id, prog.id, name="Grace")
     # First Accountable — OK

@@ -20,7 +20,7 @@ def seeded_program(app, client, session):
             "name": "Test Program",
             "project_type": "greenfield",
             "methodology": "sap_activate",
-            "sap_product": "s4hana",
+            "sap_product": "S/4HANA",
             "status": "active",
         },
     )
@@ -28,9 +28,13 @@ def seeded_program(app, client, session):
     pid = res.get_json()["id"]
 
     with app.app_context():
+        from app.models.program import Program
+        prog = _db.session.get(Program, pid)
+        tid = prog.tenant_id
 
         ph = Phase(
             program_id=pid,
+            tenant_id=tid,
             name="Explore",
             status="active",
             completion_pct=60,

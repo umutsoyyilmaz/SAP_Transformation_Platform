@@ -40,7 +40,10 @@ from app.core.exceptions import NotFoundError
 
 
 def _make_tenant(tenant_id: int, slug: str | None = None) -> Tenant:
-    """Create and persist a Tenant row. slug defaults to 'test-<id>'."""
+    """Create or return existing Tenant row. slug defaults to 'test-<id>'."""
+    existing = db.session.get(Tenant, tenant_id)
+    if existing:
+        return existing
     t = Tenant(id=tenant_id, name=f"Tenant {tenant_id}", slug=slug or f"test-{tenant_id}")
     db.session.add(t)
     db.session.flush()
@@ -416,12 +419,13 @@ class TestTenantIsolation:
         ))
         db.session.commit()
 
-        imports_t1 = pms.list_imports(1, prog1.id)
-        assert all(r["tenant_id"] == 1 for r in imports_t1)
-        assert len(imports_t1) == 1
-        assert imports_t1[0]["variant_id"] == "V001"
+        page_t1 = pms.list_imports(1, prog1.id)
+        items_t1 = page_t1["items"]
+        assert page_t1["total"] == 1
+        assert all(r["tenant_id"] == 1 for r in items_t1)
+        assert items_t1[0]["variant_id"] == "V001"
 
         # Tenant 2 project should not return tenant 1's records
-        imports_t2 = pms.list_imports(2, prog2.id)
-        assert len(imports_t2) == 1
-        assert imports_t2[0]["variant_id"] == "V999"
+        page_t2 = pms.list_imports(2, prog2.id)
+        assert page_t2["total"] == 1
+        assert page_t2["items"][0]["variant_id"] == "V999"

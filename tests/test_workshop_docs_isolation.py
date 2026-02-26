@@ -1,4 +1,4 @@
-"""Bölüm 3 — workshop_docs + minutes_generator tenant isolation tests.
+"""Section 3 — workshop_docs + minutes_generator tenant isolation tests.
 
 Tests the P0 security gap in WorkshopDocumentService (workshop_docs.py)
 and MinutesGeneratorService (minutes_generator.py): both services accept
@@ -32,7 +32,9 @@ from app.services.workshop_docs import WorkshopDocumentService
 
 def _make_program(name: str) -> Program:
     """Create and flush a minimal Program (the top-level project entity)."""
-    prog = Program(name=name, status="active", methodology="agile")
+    from app.models.auth import Tenant
+    t = Tenant.query.filter_by(slug="test-default").first()
+    prog = Program(name=name, status="active", methodology="agile", tenant_id=t.id)
     db.session.add(prog)
     db.session.flush()
     return prog

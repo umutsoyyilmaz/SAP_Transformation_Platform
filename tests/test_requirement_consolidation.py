@@ -25,7 +25,9 @@ from app.models.program import Program
 @pytest.fixture
 def program():
     """Minimal Program required as project_id for all explore requirements."""
-    prog = Program(name="B01 Test Project", methodology="agile")
+    from app.models.auth import Tenant
+    t = Tenant.query.filter_by(slug="test-default").first()
+    prog = Program(name="B01 Test Project", methodology="agile", tenant_id=t.id)
     _db.session.add(prog)
     _db.session.flush()
     return prog

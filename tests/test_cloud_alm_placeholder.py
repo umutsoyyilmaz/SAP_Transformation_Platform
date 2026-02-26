@@ -1,4 +1,4 @@
-"""S3-04 tests — FDD-F07 Faz A: SAP Cloud ALM sync-log placeholder endpoint.
+"""S3-04 tests — FDD-F07 Phase A: SAP Cloud ALM sync-log placeholder endpoint.
 
 Scope
 ─────
@@ -6,7 +6,7 @@ Phase A delivers a UI placeholder only.  No live SAP Cloud ALM connection
 exists yet; the endpoint must communicate this clearly so the frontend can
 render the 'Coming Q2 2026' card without masking the absence of real data.
 
-Phase B (S4-02, FDD-F07 Faz B) will replace this with a real OAuth2 sync.
+Phase B (S4-02, FDD-F07 Phase B) will replace this with a real OAuth2 sync.
 """
 
 import pytest

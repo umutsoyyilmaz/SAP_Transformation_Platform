@@ -35,7 +35,9 @@ _seq = iter(range(1, 9999))
 
 
 def _make_program():
-    p = Program(name="WR2-Test", methodology="agile")
+    from app.models.auth import Tenant
+    t = Tenant.query.filter_by(slug="test-default").first()
+    p = Program(name="WR2-Test", methodology="agile", tenant_id=t.id)
     db.session.add(p)
     db.session.flush()
     return p

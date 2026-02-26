@@ -29,7 +29,9 @@ def _create_plan():
     from app.models.cutover import CutoverPlan
     from app.models.program import Program
 
-    prog = Program(name="Test Program", status="active")
+    from app.models.auth import Tenant
+    t = Tenant.query.filter_by(slug="test-default").first()
+    prog = Program(name="Test Program", status="active", tenant_id=t.id)
     db.session.add(prog)
     db.session.flush()
 

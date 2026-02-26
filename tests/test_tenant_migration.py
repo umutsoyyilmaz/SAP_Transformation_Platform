@@ -148,13 +148,24 @@ class TestTenantIdSchema:
         assert missing == [], f"Models missing tenant_id: {missing}"
 
     def test_tenant_id_column_is_nullable(self, app):
-        """tenant_id must be nullable during the transition period."""
+        """tenant_id must be nullable during the transition period.
+
+        Some models have already completed migration to nullable=False
+        (security audit fix SEC-03).
+        """
+        # Tables that have completed tenant_id migration to NOT NULL
+        enforced_tables = {
+            "programs", "phases", "gates", "workstreams",
+            "team_members", "committees", "hypercare_incidents",
+        }
         insp = sa_inspect(_db.engine)
         models = self._get_all_models()
         non_nullable = []
         for group, model_list in models.items():
             for model in model_list:
                 table = model.__tablename__
+                if table in enforced_tables:
+                    continue
                 cols = {c["name"]: c for c in insp.get_columns(table)}
                 if "tenant_id" in cols and not cols["tenant_id"]["nullable"]:
                     non_nullable.append(table)
@@ -231,13 +242,14 @@ class TestTenantIdCRUD:
         return t
 
     def test_program_create_without_tenant_id(self, app):
-        """Backward compat: create Program without tenant_id (NULL)."""
+        """SEC-03: Program without tenant_id → DB rejects (nullable=False)."""
+        import sqlalchemy.exc
         from app.models.program import Program
         p = Program(name="Legacy Program", methodology="agile")
         _db.session.add(p)
-        _db.session.flush()
-        assert p.id is not None
-        assert p.tenant_id is None
+        with pytest.raises(sqlalchemy.exc.IntegrityError):
+            _db.session.flush()
+        _db.session.rollback()
 
     def test_program_create_with_tenant_id(self, app, tenant):
         """Create Program with explicit tenant_id."""
@@ -598,7 +610,11 @@ class TestCrossModelConsistency:
         assert prog.tenant_id == sprint.tenant_id == item.tenant_id == tenant.id
 
     def test_tenant_filter_query(self, app, tenant):
-        """Querying by tenant_id returns only tenant-scoped records."""
+        """Querying by tenant_id returns only tenant-scoped records.
+
+        SEC-03: Program.tenant_id is now NOT NULL, so all programs must
+        belong to a tenant. Test verifies cross-tenant isolation.
+        """
         from app.models.program import Program
         other = Tenant(name="Other Corp", slug="other", plan="trial", max_users=5)
         _db.session.add(other)
@@ -606,8 +622,7 @@ class TestCrossModelConsistency:
 
         p1 = Program(name="Tenant A prog", methodology="agile", tenant_id=tenant.id)
         p2 = Program(name="Tenant B prog", methodology="waterfall", tenant_id=other.id)
-        p3 = Program(name="No tenant prog", methodology="agile")  # NULL tenant_id
-        _db.session.add_all([p1, p2, p3])
+        _db.session.add_all([p1, p2])
         _db.session.flush()
 
         tenant_programs = _db.session.execute(
@@ -616,18 +631,15 @@ class TestCrossModelConsistency:
         assert len(tenant_programs) == 1
         assert tenant_programs[0].name == "Tenant A prog"
 
-    def test_null_tenant_excluded_from_filter(self, app, tenant):
-        """Records with tenant_id=NULL are excluded from tenant filter."""
+    def test_null_tenant_program_rejected_by_db(self, app, tenant):
+        """SEC-03: Program with tenant_id=NULL → IntegrityError."""
+        import sqlalchemy.exc
         from app.models.program import Program
-        p1 = Program(name="Has tenant", methodology="agile", tenant_id=tenant.id)
-        p2 = Program(name="No tenant", methodology="agile", tenant_id=None)
-        _db.session.add_all([p1, p2])
-        _db.session.flush()
-
-        results = _db.session.execute(
-            _db.select(Program).where(Program.tenant_id == tenant.id)
-        ).scalars().all()
-        assert len(results) == 1
+        p = Program(name="No tenant", methodology="agile")
+        _db.session.add(p)
+        with pytest.raises(sqlalchemy.exc.IntegrityError):
+            _db.session.flush()
+        _db.session.rollback()
 
 
 # ══════════════════════════════════════════════════════════════════════════════

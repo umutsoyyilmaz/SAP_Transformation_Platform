@@ -49,9 +49,14 @@ def _make_phase(
     planned_start: date | None = None,
     planned_end: date | None = None,
     completion_pct: int = 0,
+    tenant_id: int | None = None,
 ) -> Phase:
+    if tenant_id is None:
+        prog = _db.session.get(Program, program_id)
+        tenant_id = prog.tenant_id if prog else None
     ph = Phase(
         program_id=program_id,
+        tenant_id=tenant_id,
         name=name,
         status=status,
         planned_start=planned_start,
@@ -69,8 +74,12 @@ def _make_gate(
     name: str = "Quality Gate",
     planned_date: date | None = None,
     status: str = "pending",
+    tenant_id: int | None = None,
 ) -> Gate:
-    g = Gate(phase_id=phase_id, name=name, planned_date=planned_date, status=status)
+    if tenant_id is None:
+        phase = _db.session.get(Phase, phase_id)
+        tenant_id = phase.tenant_id if phase else None
+    g = Gate(phase_id=phase_id, tenant_id=tenant_id, name=name, planned_date=planned_date, status=status)
     _db.session.add(g)
     _db.session.flush()
     return g

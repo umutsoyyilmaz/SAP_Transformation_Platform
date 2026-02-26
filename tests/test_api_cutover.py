@@ -7,6 +7,19 @@ Covers: CutoverPlan, CutoverScopeItem, RunbookTask, TaskDependency,
 """
 
 import pytest
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
+from app.models import db
+from app.models.cutover import (
+    CutoverPlan,
+    CutoverScopeItem,
+    GoNoGoItem,
+    HypercareIncident,
+    HypercareSLA,
+    Rehearsal,
+    RunbookTask,
+)
+from app.models.program import Program
 
 BASE = "/api/v1/cutover"
 
@@ -933,6 +946,8 @@ class TestHypercare:
     def test_plan_to_dict_includes_hypercare(self, client):
         pid = _program(client)
         plan = _plan(client, pid)
+        assert "tenant_id" in plan
+        assert plan["tenant_id"] is not None
         assert "hypercare_duration_weeks" in plan
         assert plan["hypercare_duration_weeks"] == 4
         assert "incident_count" in plan
@@ -975,3 +990,100 @@ class TestHypercare:
         data = rv.get_json()
         assert data["hypercare_manager"] == "Jane Doe"
         assert data["hypercare_duration_weeks"] == 6
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# Tenant Propagation (regression)
+# ═════════════════════════════════════════════════════════════════════════
+
+class TestTenantPropagation:
+    def test_create_chain_carries_program_tenant_id(self, client):
+        pid = _program(client)
+        program = db.session.get(Program, pid)
+        assert program is not None
+
+        plan = _plan(client, pid)
+        plan_row = db.session.get(CutoverPlan, plan["id"])
+        assert plan_row is not None
+        assert plan_row.tenant_id is not None
+        expected_tenant_id = plan_row.tenant_id
+
+        si = _scope_item(client, plan["id"])
+        si_row = db.session.get(CutoverScopeItem, si["id"])
+        assert si_row is not None
+        assert si_row.tenant_id == expected_tenant_id
+
+        task = _task(client, si["id"])
+        task_row = db.session.get(RunbookTask, task["id"])
+        assert task_row is not None
+        assert task_row.tenant_id == expected_tenant_id
+
+        rehearsal = _rehearsal(client, plan["id"])
+        rehearsal_row = db.session.get(Rehearsal, rehearsal["id"])
+        assert rehearsal_row is not None
+        assert rehearsal_row.tenant_id == expected_tenant_id
+
+        gng = _go_no_go(client, plan["id"])
+        gng_row = db.session.get(GoNoGoItem, gng["id"])
+        assert gng_row is not None
+        assert gng_row.tenant_id == expected_tenant_id
+
+        rv_sla = client.post(f"{BASE}/plans/{plan['id']}/sla-targets", json={
+            "severity": "P2",
+            "response_target_min": 15,
+            "resolution_target_min": 180,
+        })
+        assert rv_sla.status_code == 201
+        sla_id = rv_sla.get_json()["id"]
+        sla_row = db.session.get(HypercareSLA, sla_id)
+        assert sla_row is not None
+        assert sla_row.tenant_id == expected_tenant_id
+
+        inc = _incident(client, plan["id"], title="Tenant propagation check")
+        inc_row = db.session.get(HypercareIncident, inc["id"])
+        assert inc_row is not None
+        assert inc_row.tenant_id == expected_tenant_id
+
+
+class TestProgramScopeGuard:
+    def test_plan_get_rejects_wrong_program_scope(self, client):
+        pid1 = _program(client)
+        pid2 = _program(client)
+        plan = _plan(client, pid1)
+
+        rv = client.get(f"{BASE}/plans/{plan['id']}?program_id={pid2}")
+        assert rv.status_code == 404
+
+    def test_task_get_rejects_wrong_program_scope(self, client):
+        pid1 = _program(client)
+        pid2 = _program(client)
+        plan = _plan(client, pid1)
+        si = _scope_item(client, plan["id"])
+        task = _task(client, si["id"])
+
+        rv = client.get(f"{BASE}/tasks/{task['id']}?program_id={pid2}")
+        assert rv.status_code == 404
+
+
+class TestCutoverDbErrorHandling:
+    def test_integrity_error_returns_409(self, client, monkeypatch):
+        pid = _program(client)
+
+        def _boom(*args, **kwargs):
+            raise IntegrityError("insert", {"k": "v"}, Exception("constraint"))
+
+        monkeypatch.setattr("app.blueprints.cutover_bp.cutover_service.create_plan", _boom)
+        rv = client.post(f"{BASE}/plans", json={"program_id": pid, "name": "X"})
+        assert rv.status_code == 409
+        assert "error" in rv.get_json()
+
+    def test_sqlalchemy_error_returns_500(self, client, monkeypatch):
+        pid = _program(client)
+
+        def _boom(*args, **kwargs):
+            raise SQLAlchemyError("db down")
+
+        monkeypatch.setattr("app.blueprints.cutover_bp.cutover_service.create_plan", _boom)
+        rv = client.post(f"{BASE}/plans", json={"program_id": pid, "name": "Y"})
+        assert rv.status_code == 500
+        assert rv.get_json()["error"] == "Database error"

@@ -2282,7 +2282,7 @@ class TestGenerateFromWricef:
             from app.models import db as _db2
             bi = BacklogItem(
                 program_id=p["id"], code="WF-MM-001",
-                title="Satınalma Onay WF", wricef_type="workflow",
+                title="Procurement Approval WF", wricef_type="workflow",
                 module="MM", technical_notes="Step 1: Create PO\nStep 2: Approve",
             )
             _db2.session.add(bi)

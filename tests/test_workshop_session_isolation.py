@@ -1,4 +1,4 @@
-"""Bölüm 2 — workshop_session.py tenant isolation tests.
+"""Section 2 — workshop_session.py tenant isolation tests.
 
 These tests document the P0 security gap in workshop_session.py where
 carry_forward_steps, link_session_steps, get_session_summary, and
@@ -35,7 +35,9 @@ from app.services.workshop_session import (
 
 def _make_program(name: str) -> Program:
     """Create and flush a minimal Program (the 'project' entity)."""
-    prog = Program(name=name, status="active", methodology="agile")
+    from app.models.auth import Tenant
+    t = Tenant.query.filter_by(slug="test-default").first()
+    prog = Program(name=name, status="active", methodology="agile", tenant_id=t.id)
     db.session.add(prog)
     db.session.flush()
     return prog

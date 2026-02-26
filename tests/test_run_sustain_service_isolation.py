@@ -1,4 +1,4 @@
-"""Bölüm 6 — run_sustain_service.py tenant isolation tests.
+"""Section 6 — run_sustain_service.py tenant isolation tests.
 
 Covers the P0 security gap where 7 service functions and 10 blueprint
 routes accept arbitrary plan_id / entity IDs without verifying the
@@ -41,7 +41,9 @@ from app.services import run_sustain_service
 
 
 def _make_program(name: str) -> Program:
-    prog = Program(name=name, status="active", methodology="agile")
+    from app.models.auth import Tenant
+    t = Tenant.query.filter_by(slug="test-default").first()
+    prog = Program(name=name, status="active", methodology="agile", tenant_id=t.id)
     db.session.add(prog)
     db.session.flush()
     return prog

@@ -39,34 +39,34 @@ def _create_requirement(program_id, title, description):
 # ── Labeled Test Data ────────────────────────────────────────────────────
 
 LABELED_REQUIREMENTS = [
-    {"description": "SAP standart kredi kontrolü yeterli, ek geliştirme gerekmez", "expected": "Fit"},
-    {"description": "Müşteriye özel fiyatlama mantığı geliştirilmeli, SAP standart pricing yok", "expected": "Gap"},
-    {"description": "SAP standart MRP çalıştırması kullanılacak, parametrik ayar yeterli", "expected": "Fit"},
-    {"description": "Lojistik takip için özel ABAP raporu gerekli", "expected": "Gap"},
-    {"description": "SAP standart satınalma talebi onay akışı workflow ile ayarlanacak", "expected": "Fit"},
-    {"description": "Standart depo yönetimi warehouse management modülü ile karşılanır", "expected": "Fit"},
-    {"description": "Kimyevi madde etiketleme için yasal düzenlemeye uygun özel form gerekli", "expected": "Gap"},
-    {"description": "SAP standart mali raporlama (FI) yapısı kullanılacak", "expected": "Fit"},
-    {"description": "Özel müşteri portalı entegrasyonu için web servisi geliştirilmeli", "expected": "Gap"},
-    {"description": "SAP standart kalite yönetimi QM modülü ile numune kontrolü yapılacak", "expected": "Fit"},
-    {"description": "SAP standart HR modülü ile bordro hesaplama yapılacak ancak yerel vergi tablosu ek gel.", "expected": "Partial Fit"},
-    {"description": "Standart SD modülü satış siparişi akışı kullanılacak, ek geliştirme gereksiz", "expected": "Fit"},
-    {"description": "Müşteri segmentasyonu için makine öğrenmesi modeli entegre edilecek", "expected": "Gap"},
-    {"description": "SAP standart banka havalesi ile ödeme yapılacak, country-specific format uygu.", "expected": "Partial Fit"},
-    {"description": "Anlık envanter görünürlüğü SAP MMIM transaction ile sağlanacak", "expected": "Fit"},
+    {"description": "SAP standard credit control is sufficient, no additional development needed", "expected": "Fit"},
+    {"description": "Customer-specific pricing logic must be developed, SAP standard pricing unavailable", "expected": "Gap"},
+    {"description": "SAP standard MRP run will be used, parametric configuration is sufficient", "expected": "Fit"},
+    {"description": "Custom ABAP report required for logistics tracking", "expected": "Gap"},
+    {"description": "SAP standard purchase requisition approval workflow will be configured", "expected": "Fit"},
+    {"description": "Standard warehouse management module covers depot management", "expected": "Fit"},
+    {"description": "Custom form required for chemical labeling to comply with legal regulations", "expected": "Gap"},
+    {"description": "SAP standard financial reporting (FI) structure will be used", "expected": "Fit"},
+    {"description": "Web service must be developed for custom customer portal integration", "expected": "Gap"},
+    {"description": "SAP standard quality management QM module will handle sample inspection", "expected": "Fit"},
+    {"description": "SAP standard HR module will handle payroll calculation but local tax table needs additional dev.", "expected": "Partial Fit"},
+    {"description": "Standard SD module sales order flow will be used, no additional development needed", "expected": "Fit"},
+    {"description": "Machine learning model will be integrated for customer segmentation", "expected": "Gap"},
+    {"description": "SAP standard bank transfer will be used for payment, country-specific format applies", "expected": "Partial Fit"},
+    {"description": "Real-time inventory visibility will be provided via SAP MMIM transaction", "expected": "Fit"},
 ]
 
 LABELED_DEFECTS = [
-    {"title": "Üretim ortamında BAPI_PO_CREATE çağrısı zaman aşımına uğruyor", "expected_severity": "critical"},
-    {"title": "Küçük yazı tipi hatasından dolayı rapor başlığı okunmuyor", "expected_severity": "low"},
-    {"title": "Müşteri siparişi oluştururken 500 hatası alınıyor", "expected_severity": "high"},
-    {"title": "Dashboard grafiğinde renk skalası yanlış gösteriliyor", "expected_severity": "medium"},
-    {"title": "Mali kapanış raporunda tutarsız rakamlar çıkıyor", "expected_severity": "critical"},
-    {"title": "Kullanıcı arayüzünde hizalama sorunu var", "expected_severity": "low"},
-    {"title": "Toplu veri yükleme sırasında sistem çöküyor", "expected_severity": "critical"},
-    {"title": "Bildirim e-postaları yanlış alıcıya gidiyor", "expected_severity": "high"},
-    {"title": "Arama fonksiyonunda Türkçe karakter sorunu", "expected_severity": "medium"},
-    {"title": "Onay akışında atanan kişi gösterilmiyor", "expected_severity": "medium"},
+    {"title": "BAPI_PO_CREATE call times out in production environment", "expected_severity": "critical"},
+    {"title": "Report header unreadable due to small font size error", "expected_severity": "low"},
+    {"title": "500 error when creating customer order", "expected_severity": "high"},
+    {"title": "Color scale displayed incorrectly in dashboard chart", "expected_severity": "medium"},
+    {"title": "Inconsistent numbers in financial closing report", "expected_severity": "critical"},
+    {"title": "Alignment issue in user interface", "expected_severity": "low"},
+    {"title": "System crashes during bulk data upload", "expected_severity": "critical"},
+    {"title": "Notification emails going to wrong recipient", "expected_severity": "high"},
+    {"title": "Special character issue in search function", "expected_severity": "medium"},
+    {"title": "Assigned person not displayed in approval workflow", "expected_severity": "medium"},
 ]
 
 
@@ -190,10 +190,10 @@ class TestNLQueryAccuracy:
     """Natural Language Query SQL generation test."""
 
     QUERIES = [
-        {"nl": "Kaç tane requirement var?", "should_contain": "requirement"},
-        {"nl": "Kritik defect'leri listele", "should_contain": "defect"},
-        {"nl": "Açık riskler neler?", "should_contain": "risk"},
-        {"nl": "Test başarı oranı nedir?", "should_contain": "test"},
+        {"nl": "How many requirements are there?", "should_contain": "requirement"},
+        {"nl": "List the critical defects", "should_contain": "defect"},
+        {"nl": "What are the open risks?", "should_contain": "risk"},
+        {"nl": "What is the test success rate?", "should_contain": "test"},
     ]
 
     def test_nl_queries_produce_results(self, client):

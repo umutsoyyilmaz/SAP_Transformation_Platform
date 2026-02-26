@@ -28,7 +28,9 @@ from app.models.program import Program
 
 def _make_program(name: str = "FDD-F01-Prog") -> Program:
     """Create and flush a Program; return it."""
-    prog = Program(name=name, methodology="agile")
+    from app.models.auth import Tenant
+    t = Tenant.query.filter_by(slug="test-default").first()
+    prog = Program(name=name, methodology="agile", tenant_id=t.id)
     db.session.add(prog)
     db.session.flush()
     return prog

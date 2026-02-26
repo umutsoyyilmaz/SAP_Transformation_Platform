@@ -149,7 +149,7 @@ class TestSmartSearch:
     def test_search_by_module(self, app, test_cases, program):
         from app.ai.assistants.smart_search import SmartSearch
         s = SmartSearch()
-        result = s.search("FI modülündeki test case'ler", program["id"])
+        result = s.search("test cases in FI module", program["id"])
         assert "results" in result
         assert result["count"] >= 0
 

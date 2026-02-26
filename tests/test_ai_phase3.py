@@ -54,7 +54,16 @@ def _setup_db(app):
 @pytest.fixture(autouse=True)
 def session(app, _setup_db):
     with app.app_context():
+        from app.models.auth import Tenant
+        from app.services.permission_service import invalidate_all_cache
+        invalidate_all_cache()
+        t = Tenant.query.filter_by(slug="test-default").first()
+        if not t:
+            t = Tenant(name="Test Default", slug="test-default")
+            _db.session.add(t)
+            _db.session.commit()
         yield
+        invalidate_all_cache()
         _db.session.rollback()
         _db.drop_all()
         _db.create_all()
@@ -76,8 +85,11 @@ def _create_program(client, **kw):
 
 
 def _create_cutover_plan(app, program_id, **kw):
+    from app.models.program import Program
+    prog = _db.session.get(Program, program_id)
     plan = CutoverPlan(
         program_id=program_id,
+        tenant_id=kw.get("tenant_id") or (prog.tenant_id if prog else None),
         code=kw.get("code", "CUT-T01"),
         name=kw.get("name", "Test Cutover Plan"),
         status=kw.get("status", "draft"),
@@ -314,7 +326,7 @@ class TestCutoverOptimizerWithGateway:
 SAMPLE_MEETING_TEXT = """
 Meeting: SAP S/4HANA Cutover Planning
 Date: 2026-03-15
-Attendees: Umut (PM), Ayşe (Data Lead), Mehmet (Technical Lead), Zeynep (Testing Lead)
+Attendees: Umut (PM), Ayse (Data Lead), Mehmet (Technical Lead), Zeynep (Testing Lead)
 
 Agenda:
 1. Cutover rehearsal results review
@@ -324,7 +336,7 @@ Agenda:
 Discussion:
 - Umut opened the meeting and reviewed the rehearsal results. First rehearsal completed
   in 9 hours vs planned 8 hours (12.5% variance).
-- Ayşe reported that data load reconciliation showed 99.7% match rate.
+- Ayse reported that data load reconciliation showed 99.7% match rate.
   Decision: Accepted as within tolerance (target was >99.5%).
 - Mehmet raised concern about interface INT-042 timeout issue found during rehearsal.
   Action: Mehmet will increase timeout from 30s to 120s by March 18.
@@ -337,7 +349,7 @@ Action items:
 - Mehmet: Fix INT-042 timeout (due: March 18)
 - Zeynep: Document P2 workarounds (due: March 17)
 - Umut: Schedule mini-rehearsal (due: March 16)
-- Ayşe: Prepare data reconciliation final report (due: March 18)
+- Ayse: Prepare data reconciliation final report (due: March 18)
 
 Next meeting: March 19, 2026 - Go/No-Go Decision Meeting
 """
@@ -643,6 +655,7 @@ class TestCutoverOptimizerEdgeCases:
         plan = _create_cutover_plan(app, prog["id"])
         inc = HypercareIncident(
             cutover_plan_id=plan.id,
+            tenant_id=plan.tenant_id,
             code="INC-001",
             title="Test incident",
             severity="P1",
@@ -675,8 +688,8 @@ class TestMeetingMinutesEdgeCases:
         registry = PromptRegistry()
         mm = MeetingMinutesAssistant(gateway=gw, prompt_registry=registry)
         result = mm.generate_minutes(
-            "Toplantı: SAP geçiş planlaması. Katılımcılar: Umut, Ayşe. "
-            "Karar: Go-live tarihi 15 Mart olarak kesinleşti."
+            "Meeting: SAP transition planning. Attendees: Umut, Ayse. "
+            "Decision: Go-live date confirmed as March 15."
         )
         assert isinstance(result, dict)
 
