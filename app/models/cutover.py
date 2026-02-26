@@ -13,6 +13,7 @@ Models:
     - HypercareSLA:              SLA response / resolution targets per severity level
     - PostGoliveChangeRequest:   change requests raised during hypercare window (FDD-B03)
     - IncidentComment:           audit-log comments on hypercare incidents (FDD-B03)
+    - HypercareWarRoom:          war room session grouping incidents and CRs (FDD-B03-Phase-3)
 
 Architecture:
     Program ──1:N──▶ CutoverPlan ──1:N──▶ CutoverScopeItem ──1:N──▶ RunbookTask
@@ -87,6 +88,20 @@ INCIDENT_TRANSITIONS = {
     "investigating": ["resolved", "closed"],
     "resolved":      ["closed", "open"],   # re-open if regression found
     "closed":        ["open"],             # re-open edge case
+}
+
+# ── FDD-B03-Phase-2: Escalation constants ──────────────────────────────────
+
+ESCALATION_LEVELS = {"L1", "L2", "L3", "vendor", "management"}
+
+ESCALATION_LEVEL_ORDER = ["L1", "L2", "L3", "vendor", "management"]
+
+ESCALATION_TRIGGER_TYPES = {
+    "no_response",          # first_response_at still None after threshold
+    "no_update",            # no IncidentComment within threshold since last activity
+    "no_resolution",        # approaching/exceeding resolution SLA deadline
+    "severity_escalation",  # severity upgraded (e.g. P2 -> P1)
+    "manual",               # manually triggered by operator
 }
 
 
@@ -314,6 +329,7 @@ class CutoverPlan(db.Model):
     def to_dict(self, include_children=False):
         result = {
             "id": self.id,
+            "tenant_id": self.tenant_id,
             "program_id": self.program_id,
             "code": self.code,
             "name": self.name,
@@ -1092,6 +1108,37 @@ class HypercareIncident(db.Model):
         nullable=True,
     )
 
+    # ── FDD-B03-Phase-3: War Room assignment ─────────────────────────────
+    war_room_id = db.Column(
+        db.Integer, db.ForeignKey("hypercare_war_rooms.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Assigned war room session (nullable — incident may exist unassigned)",
+    )
+
+    # ── FDD-B03-Phase-2: Escalation tracking ──────────────────────────────
+    current_escalation_level = db.Column(
+        db.String(20), nullable=True,
+        comment="Current highest escalation level: L1 | L2 | L3 | vendor | management",
+    )
+    escalation_count = db.Column(
+        db.Integer, nullable=False, default=0,
+        comment="Total number of times this incident has been escalated",
+    )
+    last_escalated_at = db.Column(
+        db.DateTime(timezone=True), nullable=True,
+        comment="Timestamp of most recent escalation event",
+    )
+    last_activity_at = db.Column(
+        db.DateTime(timezone=True), nullable=True,
+        comment="Timestamp of last comment, status change, or assignment — used by no_update trigger",
+    )
+
+    # Relationship to escalation events
+    escalation_events = db.relationship(
+        "EscalationEvent", backref="incident", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+
     # Metadata
     created_at = db.Column(
         db.DateTime(timezone=True),
@@ -1157,6 +1204,13 @@ class HypercareIncident(db.Model):
             "linked_backlog_item_id": self.linked_backlog_item_id,
             "requires_change_request": self.requires_change_request,
             "change_request_id": self.change_request_id,
+            # FDD-B03-Phase-3: war room
+            "war_room_id": self.war_room_id,
+            # FDD-B03-Phase-2: escalation tracking
+            "current_escalation_level": self.current_escalation_level,
+            "escalation_count": self.escalation_count,
+            "last_escalated_at": self.last_escalated_at.isoformat() if self.last_escalated_at else None,
+            "last_activity_at": self.last_activity_at.isoformat() if self.last_activity_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -1302,7 +1356,309 @@ def seed_default_sla_targets(cutover_plan_id):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# 9. PostGoliveChangeRequest — FDD-B03
+# 9. EscalationRule — FDD-B03-Phase-2
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class EscalationRule(db.Model):
+    """Configurable escalation rule for hypercare incidents.
+
+    Each rule defines when an incident at a given severity should be escalated
+    to the next organizational level. Rules are evaluated in ascending
+    level_order within each severity tier.
+
+    Example chain for P1:
+        level_order=1, L1, no_response, 10 min  -> Module Lead
+        level_order=2, L2, no_response, 30 min  -> Hypercare Manager
+        level_order=3, L3, no_resolution, 60 min -> Program Director
+        level_order=4, vendor, no_resolution, 120 min -> SAP Support
+
+    The escalation engine (evaluate_escalations in hypercare_service)
+    processes rules in level_order. For each rule, if the trigger condition
+    is met AND no EscalationEvent already exists at that level for the
+    incident, a new event is created and a notification is sent.
+    """
+
+    __tablename__ = "escalation_rules"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    cutover_plan_id = db.Column(
+        db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    severity = db.Column(
+        db.String(10), nullable=False,
+        comment="P1 | P2 | P3 | P4 — which severity this rule applies to",
+    )
+    escalation_level = db.Column(
+        db.String(20), nullable=False,
+        comment="L1 | L2 | L3 | vendor | management — target escalation level",
+    )
+    level_order = db.Column(
+        db.Integer, nullable=False, default=1,
+        comment="Evaluation order within severity: 1 = first to fire, 2 = second, etc.",
+    )
+
+    # Trigger configuration
+    trigger_type = db.Column(
+        db.String(30), nullable=False, default="no_response",
+        comment="no_response | no_update | no_resolution | severity_escalation",
+    )
+    trigger_after_min = db.Column(
+        db.Integer, nullable=False,
+        comment="Minutes after incident creation (or last activity) before escalation fires",
+    )
+
+    # Contact assignment
+    escalate_to_role = db.Column(
+        db.String(100), default="",
+        comment="Role or team name: 'Hypercare Manager', 'SAP Basis Team', etc.",
+    )
+    escalate_to_user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Specific platform user to notify (optional — role is primary)",
+    )
+    notification_channel = db.Column(
+        db.String(30), default="platform",
+        comment="platform | email — delivery channel for escalation alert",
+    )
+
+    is_active = db.Column(
+        db.Boolean, nullable=False, default=True,
+        comment="Inactive rules are skipped during evaluation",
+    )
+
+    # Metadata
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "cutover_plan_id", "severity", "level_order",
+            name="uq_escalation_severity_level",
+        ),
+        db.CheckConstraint(
+            "severity IN ('P1','P2','P3','P4')",
+            name="ck_esc_rule_severity",
+        ),
+        db.CheckConstraint(
+            "escalation_level IN ('L1','L2','L3','vendor','management')",
+            name="ck_esc_rule_level",
+        ),
+    )
+
+    def to_dict(self) -> dict:
+        """Serialize escalation rule to dict."""
+        return {
+            "id": self.id,
+            "tenant_id": self.tenant_id,
+            "cutover_plan_id": self.cutover_plan_id,
+            "severity": self.severity,
+            "escalation_level": self.escalation_level,
+            "level_order": self.level_order,
+            "trigger_type": self.trigger_type,
+            "trigger_after_min": self.trigger_after_min,
+            "escalate_to_role": self.escalate_to_role,
+            "escalate_to_user_id": self.escalate_to_user_id,
+            "notification_channel": self.notification_channel,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"<EscalationRule {self.id}: {self.severity} L{self.level_order} "
+            f"{self.trigger_type} after {self.trigger_after_min}m>"
+        )
+
+
+# ── Escalation Rule Seed Helper ─────────────────────────────────────────────
+
+
+def seed_default_escalation_rules(cutover_plan_id, tenant_id=None):
+    """Create SAP-standard escalation matrix for P1-P4 severity levels.
+
+    Default escalation timings aligned with SAP Activate best practice:
+        P1: L1 @10min, L2 @30min, L3 @60min, vendor @120min
+        P2: L1 @20min, L2 @60min
+        P3: L1 @120min
+        P4: L1 @240min
+
+    Idempotent: returns empty list if rules already exist for this plan.
+
+    Args:
+        cutover_plan_id: The CutoverPlan to seed rules for.
+        tenant_id: Optional tenant scope.
+
+    Returns:
+        List of created EscalationRule instances.
+    """
+    existing = EscalationRule.query.filter_by(
+        cutover_plan_id=cutover_plan_id
+    ).first()
+    if existing:
+        return []
+
+    defaults = [
+        # P1: 4-level escalation chain
+        {"severity": "P1", "escalation_level": "L1", "level_order": 1,
+         "trigger_type": "no_response", "trigger_after_min": 10,
+         "escalate_to_role": "Module Lead"},
+        {"severity": "P1", "escalation_level": "L2", "level_order": 2,
+         "trigger_type": "no_response", "trigger_after_min": 30,
+         "escalate_to_role": "Hypercare Manager"},
+        {"severity": "P1", "escalation_level": "L3", "level_order": 3,
+         "trigger_type": "no_resolution", "trigger_after_min": 60,
+         "escalate_to_role": "Program Director"},
+        {"severity": "P1", "escalation_level": "vendor", "level_order": 4,
+         "trigger_type": "no_resolution", "trigger_after_min": 120,
+         "escalate_to_role": "SAP Support"},
+        # P2: 2-level escalation chain
+        {"severity": "P2", "escalation_level": "L1", "level_order": 1,
+         "trigger_type": "no_response", "trigger_after_min": 20,
+         "escalate_to_role": "Module Lead"},
+        {"severity": "P2", "escalation_level": "L2", "level_order": 2,
+         "trigger_type": "no_response", "trigger_after_min": 60,
+         "escalate_to_role": "Hypercare Manager"},
+        # P3: 1-level escalation
+        {"severity": "P3", "escalation_level": "L1", "level_order": 1,
+         "trigger_type": "no_response", "trigger_after_min": 120,
+         "escalate_to_role": "Module Lead"},
+        # P4: 1-level escalation
+        {"severity": "P4", "escalation_level": "L1", "level_order": 1,
+         "trigger_type": "no_response", "trigger_after_min": 240,
+         "escalate_to_role": "Module Lead"},
+    ]
+
+    items = []
+    for d in defaults:
+        items.append(EscalationRule(
+            cutover_plan_id=cutover_plan_id,
+            tenant_id=tenant_id,
+            **d,
+        ))
+    db.session.add_all(items)
+    db.session.flush()
+    return items
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 10. EscalationEvent — FDD-B03-Phase-2
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class EscalationEvent(db.Model):
+    """Immutable record of an escalation action on a hypercare incident.
+
+    Append-only — events are never updated or deleted. This provides a
+    complete audit trail of who was notified, when, and whether they
+    acknowledged receipt.
+
+    Events can be auto-generated by the escalation engine (is_auto=True) or
+    created manually by a war room operator (is_auto=False).
+    """
+
+    __tablename__ = "escalation_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    incident_id = db.Column(
+        db.Integer, db.ForeignKey("hypercare_incidents.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    escalation_rule_id = db.Column(
+        db.Integer, db.ForeignKey("escalation_rules.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Null for manual escalations; populated for auto-triggered",
+    )
+
+    escalation_level = db.Column(
+        db.String(20), nullable=False,
+        comment="L1 | L2 | L3 | vendor | management",
+    )
+    escalated_to = db.Column(
+        db.String(150), nullable=False,
+        comment="Role or person name that the incident was escalated to",
+    )
+    escalated_to_user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Platform user notified (if resolvable from rule)",
+    )
+
+    trigger_type = db.Column(
+        db.String(30), nullable=False,
+        comment="no_response | no_update | no_resolution | severity_escalation | manual",
+    )
+    is_auto = db.Column(
+        db.Boolean, nullable=False, default=True,
+        comment="True = auto-triggered by rule engine; False = manual by operator",
+    )
+
+    notes = db.Column(db.Text, default="")
+
+    # Acknowledgement tracking
+    acknowledged_at = db.Column(
+        db.DateTime(timezone=True), nullable=True,
+        comment="When the escalation recipient confirmed receipt",
+    )
+    acknowledged_by_user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        db.Index("ix_esc_event_incident_time", "incident_id", "created_at"),
+        db.Index("ix_esc_event_unack", "acknowledged_at"),
+    )
+
+    def to_dict(self) -> dict:
+        """Serialize escalation event to dict."""
+        return {
+            "id": self.id,
+            "tenant_id": self.tenant_id,
+            "incident_id": self.incident_id,
+            "escalation_rule_id": self.escalation_rule_id,
+            "escalation_level": self.escalation_level,
+            "escalated_to": self.escalated_to,
+            "escalated_to_user_id": self.escalated_to_user_id,
+            "trigger_type": self.trigger_type,
+            "is_auto": self.is_auto,
+            "notes": self.notes,
+            "acknowledged_at": self.acknowledged_at.isoformat() if self.acknowledged_at else None,
+            "acknowledged_by_user_id": self.acknowledged_by_user_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"<EscalationEvent {self.id}: incident={self.incident_id} "
+            f"{self.escalation_level} -> {self.escalated_to}>"
+        )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 11. PostGoliveChangeRequest — FDD-B03
 # ═════════════════════════════════════════════════════════════════════════════
 
 
@@ -1363,6 +1719,14 @@ class PostGoliveChangeRequest(db.Model):
     test_required = db.Column(db.Boolean, nullable=False, default=True)
     rollback_plan = db.Column(db.Text, nullable=True)
     rejection_reason = db.Column(db.Text, nullable=True)
+
+    # FDD-B03-Phase-3: War Room assignment
+    war_room_id = db.Column(
+        db.Integer, db.ForeignKey("hypercare_war_rooms.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Assigned war room session (nullable)",
+    )
+
     created_at = db.Column(
         db.DateTime(timezone=True), nullable=False,
         default=lambda: datetime.now(timezone.utc),
@@ -1411,6 +1775,10 @@ class IncidentComment(db.Model):
         db.Boolean, nullable=False, default=False,
         comment="True = consultant-only note; False = visible to customer",
     )
+    comment_type = db.Column(
+        db.String(20), nullable=False, default="comment",
+        comment="comment | escalation | status_change | assignment — enables filtering and audit",
+    )
     created_at = db.Column(
         db.DateTime(timezone=True), nullable=False,
         default=lambda: datetime.now(timezone.utc),
@@ -1421,3 +1789,127 @@ class IncidentComment(db.Model):
 
     def __repr__(self) -> str:
         return f"<IncidentComment {self.id} on incident={self.incident_id}>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 12. HypercareWarRoom — FDD-B03-Phase-3
+# ═════════════════════════════════════════════════════════════════════════════
+
+WAR_ROOM_STATUSES = {"active", "monitoring", "resolved", "closed"}
+
+
+class HypercareWarRoom(db.Model):
+    """War room session for coordinating hypercare response.
+
+    War rooms group related incidents and change requests under a single
+    operational context.  Each war room has a lead, priority level, and
+    lifecycle: active → monitoring → resolved → closed.
+
+    Code format: WR-001 (plan-scoped, auto-generated in service layer).
+    """
+
+    __tablename__ = "hypercare_war_rooms"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=False,
+        index=True,
+    )
+    cutover_plan_id = db.Column(
+        db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    code = db.Column(
+        db.String(30), nullable=True,
+        comment="Auto-generated: WR-001 (plan-scoped)",
+    )
+    name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, default="")
+    status = db.Column(
+        db.String(20), default="active",
+        comment="active | monitoring | resolved | closed",
+    )
+    priority = db.Column(
+        db.String(5), default="P2",
+        comment="P1 | P2 | P3 | P4",
+    )
+
+    # Context
+    affected_module = db.Column(
+        db.String(20), nullable=True,
+        comment="SAP module: FI | MM | SD | HCM | PP | etc.",
+    )
+    war_room_lead = db.Column(db.String(100), default="")
+    war_room_lead_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Platform user leading this war room",
+    )
+
+    # Timeline
+    opened_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    closed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    # Metadata
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # ── Constraints ──────────────────────────────────────────────────────
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('active','monitoring','resolved','closed')",
+            name="ck_war_room_status",
+        ),
+        db.CheckConstraint(
+            "priority IN ('P1','P2','P3','P4')",
+            name="ck_war_room_priority",
+        ),
+    )
+
+    # ── Relationships ────────────────────────────────────────────────────
+    incidents = db.relationship(
+        "HypercareIncident", backref="war_room", lazy="dynamic",
+    )
+    change_requests = db.relationship(
+        "PostGoliveChangeRequest", backref="war_room", lazy="dynamic",
+    )
+
+    def to_dict(self) -> dict:
+        """Serialize war room with aggregated counts."""
+        return {
+            "id": self.id,
+            "tenant_id": self.tenant_id,
+            "cutover_plan_id": self.cutover_plan_id,
+            "code": self.code,
+            "name": self.name,
+            "description": self.description,
+            "status": self.status,
+            "priority": self.priority,
+            "affected_module": self.affected_module,
+            "war_room_lead": self.war_room_lead,
+            "war_room_lead_id": self.war_room_lead_id,
+            "opened_at": self.opened_at.isoformat() if self.opened_at else None,
+            "closed_at": self.closed_at.isoformat() if self.closed_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "incident_count": self.incidents.count(),
+            "open_incident_count": self.incidents.filter_by(status="open").count()
+                + self.incidents.filter_by(status="investigating").count(),
+            "cr_count": self.change_requests.count(),
+        }
+
+    def __repr__(self) -> str:
+        return f"<HypercareWarRoom {self.id}: {self.code or '#'} {self.name[:40]} [{self.status}]>"

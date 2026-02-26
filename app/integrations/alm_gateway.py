@@ -13,7 +13,7 @@ Design mirrors `app/ai/gateway.py`:
 
 Threading: token cache and circuit breaker state are in-memory dicts.
 Flask is single-threaded by default; for multi-worker deployments migrate
-to Redis-backed state (deferred: Faz C, ADR-003 appendix item).
+to Redis-backed state (deferred: Phase C, ADR-003 appendix item).
 
 Testability: pass a mock `session` to ALMGateway() in tests instead of
 letting it create a real requests.Session internally.

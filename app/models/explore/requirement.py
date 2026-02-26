@@ -54,6 +54,14 @@ class ExploreDecision(db.Model):
         nullable=True,
         index=True,
     )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
+    )
+    # LEGACY: project_id currently FK -> programs.id (naming bug).
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -83,6 +91,7 @@ class ExploreDecision(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "program_id": self.program_id,
             "project_id": self.project_id,
             "process_step_id": self.process_step_id,
             "code": self.code,
@@ -119,6 +128,7 @@ class ExploreOpenItem(db.Model):
         db.Index("idx_eoi_project_status", "project_id", "status"),
         db.Index("idx_eoi_assignee_status", "assignee_id", "status"),
         db.Index("idx_eoi_workshop", "workshop_id"),
+        db.Index("idx_eoi_program", "program_id"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
@@ -128,6 +138,14 @@ class ExploreOpenItem(db.Model):
         nullable=True,
         index=True,
     )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
+    )
+    # LEGACY: project_id currently FK -> programs.id (naming bug).
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -234,6 +252,7 @@ class ExploreOpenItem(db.Model):
 
         return {
             "id": self.id,
+            "program_id": self.program_id,
             "project_id": self.project_id,
             "process_step_id": self.process_step_id,
             "workshop_id": self.workshop_id,
@@ -303,6 +322,7 @@ class ExploreRequirement(db.Model):
         db.Index("idx_ereq_project_area", "project_id", "process_area"),
         db.Index("idx_ereq_workshop", "workshop_id"),
         db.Index("idx_ereq_scope_item", "scope_item_id"),
+        db.Index("idx_ereq_program", "program_id"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
@@ -312,6 +332,14 @@ class ExploreRequirement(db.Model):
         nullable=True,
         index=True,
     )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
+    )
+    # LEGACY: project_id currently FK -> programs.id (naming bug).
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -571,6 +599,7 @@ class ExploreRequirement(db.Model):
 
         d = {
             "id": self.id,
+            "program_id": self.program_id,
             "project_id": self.project_id,
             "process_step_id": self.process_step_id,
             "workshop_id": self.workshop_id,
@@ -647,12 +676,25 @@ class RequirementOpenItemLink(db.Model):
     __tablename__ = "requirement_open_item_links"
     __table_args__ = (
         db.UniqueConstraint("requirement_id", "open_item_id", name="uq_roil_req_oi"),
+        db.Index("ix_roil_tenant_program_project", "tenant_id", "program_id", "project_id"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
     tenant_id = db.Column(
         db.Integer,
         db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -673,6 +715,8 @@ class RequirementOpenItemLink(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "program_id": self.program_id,
+            "project_id": self.project_id,
             "requirement_id": self.requirement_id,
             "open_item_id": self.open_item_id,
             "link_type": self.link_type,
@@ -696,12 +740,25 @@ class RequirementDependency(db.Model):
         db.CheckConstraint(
             "requirement_id != depends_on_id", name="ck_rdep_no_self_ref",
         ),
+        db.Index("ix_rdep_tenant_program_project", "tenant_id", "program_id", "project_id"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
     tenant_id = db.Column(
         db.Integer,
         db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -722,6 +779,8 @@ class RequirementDependency(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "program_id": self.program_id,
+            "project_id": self.project_id,
             "requirement_id": self.requirement_id,
             "depends_on_id": self.depends_on_id,
             "dependency_type": self.dependency_type,
@@ -740,11 +799,26 @@ class OpenItemComment(db.Model):
     """Activity log entry for an open item — comments, status changes, etc."""
 
     __tablename__ = "open_item_comments"
+    __table_args__ = (
+        db.Index("ix_oic_tenant_program_project", "tenant_id", "program_id", "project_id"),
+    )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
     tenant_id = db.Column(
         db.Integer,
         db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -763,6 +837,8 @@ class OpenItemComment(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "program_id": self.program_id,
+            "project_id": self.project_id,
             "open_item_id": self.open_item_id,
             "user_id": self.user_id,
             "type": self.type,

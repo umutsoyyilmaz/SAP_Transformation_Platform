@@ -1,13 +1,13 @@
 """
 Governance Rules Registry — WR-1.1
 
-Merkezi governance kuralları, threshold'lar, block/warn koşulları ve RACI template.
-Lifecycle servislerine dokunmaz — üzerlerine eklenir.
+Central governance rules, thresholds, block/warn conditions, and RACI template.
+Does not touch lifecycle services — layers on top of them.
 
-Kullanım:
+Usage:
     from app.services.governance_rules import GovernanceRules
     result = GovernanceRules.evaluate("workshop_complete", context)
-    # → {"allowed": True, "warnings": [...], "blocks": [...]}
+    # -> {"allowed": True, "warnings": [...], "blocks": [...]}
 """
 
 from __future__ import annotations
@@ -85,19 +85,19 @@ class GovernanceResult:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Threshold Configuration — tek yerden yönetilir
+# Threshold Configuration — managed from a single location
 # ═════════════════════════════════════════════════════════════════════════════
 
 THRESHOLDS: dict[str, Any] = {
     # Workshop completion gates
-    "ws_complete_max_open_p1_oi": 0,          # P1 OI limiti: 0 = hiç olmamalı
-    "ws_complete_max_open_p2_oi": 5,          # P2 OI soft warning sınırı
-    "ws_complete_min_step_assessment_pct": 100,  # Final session: %100 assessed gerekli
-    "ws_complete_max_unresolved_flags": 0,    # Cross-module flag: 0 = hepsi resolved
+    "ws_complete_max_open_p1_oi": 0,          # P1 OI limit: 0 = none allowed
+    "ws_complete_max_open_p2_oi": 5,          # P2 OI soft warning threshold
+    "ws_complete_min_step_assessment_pct": 100,  # Final session: 100% assessed required
+    "ws_complete_max_unresolved_flags": 0,    # Cross-module flag: 0 = all must be resolved
 
     # Requirement approval gates
-    "req_approve_blocking_oi_allowed": False,  # Blocking OI varsa onay engellenir
-    "req_approve_min_description_len": 20,     # Min açıklama uzunluğu
+    "req_approve_blocking_oi_allowed": False,  # Approval blocked if blocking OI exists
+    "req_approve_min_description_len": 20,     # Min description length
 
     # L3 sign-off gates
     "signoff_require_all_l4_assessed": True,
@@ -105,12 +105,12 @@ THRESHOLDS: dict[str, Any] = {
     "signoff_require_reqs_approved": True,
 
     # Escalation thresholds
-    "oi_aging_warn_days": 7,                  # OI 7 gün açık → warning
-    "oi_aging_escalate_days": 14,             # OI 14 gün açık → escalation
-    "gap_ratio_warn_pct": 30,                 # Gap ratio > %30 → warning
-    "gap_ratio_escalate_pct": 50,             # Gap ratio > %50 → escalation
-    "req_coverage_warn_pct": 70,              # Req coverage < %70 → warning
-    "req_coverage_escalate_pct": 50,          # Req coverage < %50 → escalation
+    "oi_aging_warn_days": 7,                  # OI open 7 days -> warning
+    "oi_aging_escalate_days": 14,             # OI open 14 days -> escalation
+    "gap_ratio_warn_pct": 30,                 # Gap ratio > 30% -> warning
+    "gap_ratio_escalate_pct": 50,             # Gap ratio > 50% -> escalation
+    "req_coverage_warn_pct": 70,              # Req coverage < 70% -> warning
+    "req_coverage_escalate_pct": 50,          # Req coverage < 50% -> escalation
 
     # Metrics health RAG thresholds
     "health_green_min_pct": 80,
@@ -151,13 +151,13 @@ RACI_TEMPLATES: dict[str, dict[str, RACIRole]] = {
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Rule Definitions — gate-specific rule fonksiyonları
+# Rule Definitions — gate-specific rule functions
 # ═════════════════════════════════════════════════════════════════════════════
 
 def _rules_workshop_complete(ctx: dict) -> list[GovernanceViolation]:
-    """Workshop tamamlama kuralları.
+    """Workshop completion rules.
 
-    ctx beklenen anahtarlar:
+    Expected ctx keys:
         is_final_session: bool
         total_steps: int
         unassessed_steps: int
@@ -170,7 +170,7 @@ def _rules_workshop_complete(ctx: dict) -> list[GovernanceViolation]:
     is_final = ctx.get("is_final_session", False)
     force = ctx.get("force", False)
 
-    # RULE-WC-01: Final session'da tüm step'ler assessed olmalı
+    # RULE-WC-01: All steps must be assessed in the final session
     total = ctx.get("total_steps", 0)
     unassessed = ctx.get("unassessed_steps", 0)
     if is_final and total > 0:
@@ -194,7 +194,7 @@ def _rules_workshop_complete(ctx: dict) -> list[GovernanceViolation]:
             details={"unassessed": unassessed},
         ))
 
-    # RULE-WC-02: P1 open item'lar kapatılmış olmalı
+    # RULE-WC-02: P1 open items must be closed
     p1_count = ctx.get("open_p1_oi_count", 0)
     max_p1 = THRESHOLDS["ws_complete_max_open_p1_oi"]
     if p1_count > max_p1:
@@ -231,15 +231,15 @@ def _rules_workshop_complete(ctx: dict) -> list[GovernanceViolation]:
 
 
 def _rules_requirement_approve(ctx: dict) -> list[GovernanceViolation]:
-    """Requirement onaylama kuralları.
+    """Requirement approval rules.
 
-    ctx beklenen anahtarlar:
+    Expected ctx keys:
         blocking_oi_ids: list[str]
         description_length: int
     """
     violations = []
 
-    # RULE-RA-01: Blocking OI kontrolü
+    # RULE-RA-01: Blocking OI check
     blocking = ctx.get("blocking_oi_ids", [])
     if blocking and not THRESHOLDS["req_approve_blocking_oi_allowed"]:
         violations.append(GovernanceViolation(
@@ -264,16 +264,16 @@ def _rules_requirement_approve(ctx: dict) -> list[GovernanceViolation]:
 
 
 def _rules_l3_signoff(ctx: dict) -> list[GovernanceViolation]:
-    """L3 sign-off kuralları.
+    """L3 sign-off rules.
 
-    ctx beklenen anahtarlar:
+    Expected ctx keys:
         unassessed_l4_count: int
         p1_open_count: int
         unapproved_req_count: int
     """
     violations = []
 
-    # RULE-SO-01: Tüm L4 assessed
+    # RULE-SO-01: All L4 assessed
     unassessed = ctx.get("unassessed_l4_count", 0)
     if unassessed > 0 and THRESHOLDS["signoff_require_all_l4_assessed"]:
         violations.append(GovernanceViolation(
@@ -283,7 +283,7 @@ def _rules_l3_signoff(ctx: dict) -> list[GovernanceViolation]:
             details={"unassessed_l4": unassessed},
         ))
 
-    # RULE-SO-02: P1 OI kapalı
+    # RULE-SO-02: P1 OI closed
     p1_open = ctx.get("p1_open_count", 0)
     if p1_open > 0 and THRESHOLDS["signoff_require_p1_oi_closed"]:
         violations.append(GovernanceViolation(
@@ -338,7 +338,7 @@ def _rules_l3_signoff(ctx: dict) -> list[GovernanceViolation]:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Gate Registry — gate adlarını kural fonksiyonlarıyla eşler
+# Gate Registry — maps gate names to rule functions
 # ═════════════════════════════════════════════════════════════════════════════
 
 _GATE_RULES: dict[str, callable] = {
@@ -353,18 +353,18 @@ _GATE_RULES: dict[str, callable] = {
 # ═════════════════════════════════════════════════════════════════════════════
 
 class GovernanceRules:
-    """Merkezi governance kural değerlendirme motoru."""
+    """Central governance rule evaluation engine."""
 
     @staticmethod
     def evaluate(gate: str, context: dict) -> GovernanceResult:
-        """Belirtilen gate için tüm kuralları çalıştır.
+        """Run all rules for the specified gate.
 
         Args:
-            gate: Gate adı (workshop_complete, requirement_approve, l3_signoff)
-            context: Rule fonksiyonlarının beklediği context dict
+            gate: Gate name (workshop_complete, requirement_approve, l3_signoff)
+            context: Context dict expected by the rule functions
 
         Returns:
-            GovernanceResult — allowed=True ise işlem devam edebilir
+            GovernanceResult — allowed=True means the operation can proceed
         """
         rule_fn = _GATE_RULES.get(gate)
         if not rule_fn:
@@ -381,17 +381,17 @@ class GovernanceRules:
 
     @staticmethod
     def get_threshold(key: str, default=None):
-        """Tek bir threshold değeri oku."""
+        """Read a single threshold value."""
         return THRESHOLDS.get(key, default)
 
     @staticmethod
     def get_all_thresholds() -> dict:
-        """Tüm threshold'ları döndür."""
+        """Return all thresholds."""
         return dict(THRESHOLDS)
 
     @staticmethod
     def update_threshold(key: str, value) -> bool:
-        """Runtime'da threshold güncelle (restart'a kadar geçerli)."""
+        """Update a threshold at runtime (valid until restart)."""
         if key in THRESHOLDS:
             THRESHOLDS[key] = value
             return True
@@ -399,7 +399,7 @@ class GovernanceRules:
 
     @staticmethod
     def get_raci(gate: str) -> dict[str, str] | None:
-        """Gate için RACI template döndür."""
+        """Return the RACI template for a gate."""
         template = RACI_TEMPLATES.get(gate)
         if not template:
             return None
@@ -407,12 +407,12 @@ class GovernanceRules:
 
     @staticmethod
     def list_gates() -> list[str]:
-        """Kayıtlı tüm gate'leri listele."""
+        """List all registered gates."""
         return list(_GATE_RULES.keys())
 
     @staticmethod
     def list_rules() -> list[dict]:
-        """Tüm gate'lerin kural ID'lerini ve açıklamalarını listele."""
+        """List rule IDs and descriptions for all gates."""
         rules = []
         for gate_name, rule_fn in _GATE_RULES.items():
             rules.append({

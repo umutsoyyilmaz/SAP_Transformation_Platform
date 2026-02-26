@@ -272,12 +272,22 @@ def api_assign_role(user_id):
 
     data = request.get_json(silent=True) or {}
     role_name = data.get("role_name", "").strip()
+    scope_tenant_id = data.get("tenant_id", g.jwt_tenant_id)
+    scope_program_id = data.get("program_id")
+    scope_project_id = data.get("project_id")
 
     if not role_name:
         return jsonify({"error": "role_name is required"}), 400
 
     try:
-        ur = assign_role(user_id, role_name, assigned_by=g.jwt_user_id)
+        ur = assign_role(
+            user_id,
+            role_name,
+            assigned_by=g.jwt_user_id,
+            tenant_id=scope_tenant_id,
+            program_id=scope_program_id,
+            project_id=scope_project_id,
+        )
         invalidate_cache(user_id)
         return jsonify({
             "message": f"Role '{role_name}' assigned",
@@ -285,6 +295,9 @@ def api_assign_role(user_id):
                 "user_id": ur.user_id,
                 "role_id": ur.role_id,
                 "role_name": role_name,
+                "tenant_id": ur.tenant_id,
+                "program_id": ur.program_id,
+                "project_id": ur.project_id,
             },
         }), 201
     except UserServiceError as e:
@@ -395,6 +408,9 @@ def api_add_project_member(project_id):
     data = request.get_json(silent=True) or {}
     user_id = data.get("user_id")
     role_in_project = data.get("role_in_project", "member")
+    role_name = data.get("role_name") or data.get("role_in_project") or "project_member"
+    starts_at = data.get("starts_at")
+    ends_at = data.get("ends_at")
 
     if not user_id:
         return jsonify({"error": "user_id is required"}), 400
@@ -406,7 +422,20 @@ def api_add_project_member(project_id):
 
     try:
         pm = assign_to_project(user_id, project_id, role_in_project, assigned_by=g.jwt_user_id)
-        return jsonify({"member": pm.to_dict()}), 201
+        ur = assign_role(
+            user_id,
+            role_name,
+            assigned_by=g.jwt_user_id,
+            tenant_id=g.jwt_tenant_id,
+            program_id=data.get("program_id"),
+            project_id=project_id,
+            starts_at=starts_at,
+            ends_at=ends_at,
+        )
+        return jsonify({
+            "member": pm.to_dict(),
+            "role_assignment": ur.to_dict(),
+        }), 201
     except UserServiceError as e:
         return jsonify({"error": e.message}), e.status_code
 

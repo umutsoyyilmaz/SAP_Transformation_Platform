@@ -1,10 +1,10 @@
 """
 Explore Metrics Engine — WR-1.2
 
-Explore-only KPI hesaplama: gap ratio, OI aging, requirement coverage,
-fit distribution.  Testing modülü bağımlılığı yoktur.
+Explore-only KPI computation: gap ratio, OI aging, requirement coverage,
+fit distribution.  No testing module dependency.
 
-Kullanım:
+Usage:
     from app.services.metrics import ExploreMetrics
     health = ExploreMetrics.program_health(project_id=1)
 """
@@ -50,7 +50,7 @@ def _safe_pct(numerator: int, denominator: int) -> float:
 # ═════════════════════════════════════════════════════════════════════════════
 
 def compute_gap_ratio(project_id: int) -> dict:
-    """Assessed step'lerdeki gap oranı.
+    """Gap ratio among assessed steps.
 
     gap_ratio = gap_count / assessed_count * 100
     """
@@ -92,9 +92,9 @@ def compute_gap_ratio(project_id: int) -> dict:
 
 
 def compute_oi_aging(project_id: int) -> dict:
-    """Open item aging analizi.
+    """Open item aging analysis.
 
-    Açık OI'lar için yaş dağılımı ve overdue metrikleri.
+    Age distribution and overdue metrics for open OIs.
     """
     today = date.today()
     open_statuses = ["open", "in_progress", "blocked"]
@@ -176,7 +176,7 @@ def compute_oi_aging(project_id: int) -> dict:
 
 
 def compute_requirement_coverage(project_id: int) -> dict:
-    """Requirement durumu ve coverage analizi.
+    """Requirement status and coverage analysis.
 
     coverage = (approved + in_backlog + realized + verified) / total * 100
     """
@@ -227,10 +227,10 @@ def compute_requirement_coverage(project_id: int) -> dict:
 
 
 def compute_fit_distribution(project_id: int) -> dict:
-    """Fit/Gap dağılımı — ProcessLevel L3 ve L4 seviyesinde.
+    """Fit/Gap distribution — at ProcessLevel L3 and L4 levels.
 
-    L4 seviye: ProcessStep fit_decision bazında
-    L3 seviye: consolidated_fit_decision bazında
+    L4 level: based on ProcessStep fit_decision
+    L3 level: based on consolidated_fit_decision
     """
     # L4 — ProcessStep via workshop
     steps = (
@@ -277,7 +277,7 @@ def compute_fit_distribution(project_id: int) -> dict:
 
 
 def compute_workshop_progress(project_id: int) -> dict:
-    """Workshop ilerleme metrikleri."""
+    """Workshop progress metrics."""
     ws_all = ExploreWorkshop.query.filter_by(project_id=project_id).all()
     total = len(ws_all)
 
@@ -316,7 +316,7 @@ def compute_workshop_progress(project_id: int) -> dict:
 # ═════════════════════════════════════════════════════════════════════════════
 
 def compute_testing_metrics(program_id: int) -> dict:
-    """Testing modülü KPI'ları: test coverage, pass rate, defect severity.
+    """Testing module KPIs: test coverage, pass rate, defect severity.
 
     Returns:
         {
@@ -423,11 +423,11 @@ def compute_testing_metrics(program_id: int) -> dict:
 # ═════════════════════════════════════════════════════════════════════════════
 
 class ExploreMetrics:
-    """Explore modülü metrikleri — tek çağrıyla tüm KPI'lar."""
+    """Explore module metrics — all KPIs in a single call."""
 
     @staticmethod
     def program_health(project_id: int) -> dict:
-        """Program seviyesi Explore health raporu.
+        """Program-level Explore health report.
 
         Returns:
             {

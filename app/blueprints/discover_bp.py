@@ -1,7 +1,7 @@
 """
-Discover Fazı Blueprint — FDD-B02 / S3-01.
+Discover Phase Blueprint — FDD-B02 / S3-01.
 
-SAP Activate Discover fazı endpoint'leri:
+SAP Activate Discover phase endpoints:
   Project Charter   GET    /api/v1/programs/<pid>/discover/charter
                     POST   /api/v1/programs/<pid>/discover/charter
                     PUT    /api/v1/programs/<pid>/discover/charter
@@ -23,10 +23,11 @@ Permissions: discover.view / discover.edit / discover.approve
 
 import logging
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from app.models.program import Program
 from app.services import discover_service
+from app.services.helpers.scoped_queries import get_scoped_or_none
 from app.utils.helpers import get_or_404 as _get_or_404
 
 logger = logging.getLogger(__name__)
@@ -54,9 +55,15 @@ def _resolve_program_and_tenant(program_id: int):
 
     404 if program missing; 422 if program has no tenant association.
     """
-    prog, err = _get_or_404(Program, program_id)
-    if err:
-        return None, None, err
+    jwt_tenant_id = getattr(g, "jwt_tenant_id", None)
+    if jwt_tenant_id is not None:
+        prog = get_scoped_or_none(Program, program_id, tenant_id=jwt_tenant_id)
+        if not prog:
+            return None, None, (jsonify({"error": "Program not found"}), 404)
+    else:
+        prog, err = _get_or_404(Program, program_id)
+        if err:
+            return None, None, err
 
     tenant_id = getattr(prog, "tenant_id", None)
     if tenant_id is None:

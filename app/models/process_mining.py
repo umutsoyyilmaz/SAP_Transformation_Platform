@@ -145,6 +145,7 @@ class ProcessVariantImport(db.Model):
     __tablename__ = "process_variant_imports"
     __table_args__ = (
         db.Index("idx_pvi_tenant_project", "tenant_id", "project_id"),
+        db.Index("idx_pvi_tenant_program", "tenant_id", "program_id"),
         db.Index("idx_pvi_connection", "connection_id"),
         {"extend_existing": True},
     )
@@ -159,12 +160,20 @@ class ProcessVariantImport(db.Model):
         index=True,
         comment="Tenant scope — mandatory for row-level isolation.",
     )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
+    )
+    # LEGACY: project_id currently FK -> programs.id (naming bug).
     project_id = db.Column(
         db.Integer,
         db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
-        comment="Owning program/project. Corrected from FDD which incorrectly said 'projects.id'.",
+        comment="LEGACY: FK -> programs.id (naming bug). Will be re-pointed to projects.id.",
     )
     connection_id = db.Column(
         db.Integer,

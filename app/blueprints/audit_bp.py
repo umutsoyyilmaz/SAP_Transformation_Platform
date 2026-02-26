@@ -25,6 +25,7 @@ def list_audit_logs():
 
     Query params:
         program_id   — filter by program
+        project_id   — filter by project
         entity_type  — filter by entity type
         entity_id    — filter by entity PK
         action       — filter by action string (prefix match)
@@ -38,6 +39,10 @@ def list_audit_logs():
     program_id = request.args.get("program_id", type=int)
     if program_id is not None:
         q = q.filter(AuditLog.program_id == program_id)
+
+    project_id = request.args.get("project_id", type=int)
+    if project_id is not None:
+        q = q.filter(AuditLog.project_id == project_id)
 
     entity_type = request.args.get("entity_type")
     if entity_type:

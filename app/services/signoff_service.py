@@ -16,14 +16,14 @@ Reviewer audit fixes applied (S1-04):
     A2  approver_name_snapshot populated from User.full_name at sign-off time
     A3  Self-approval guard here, never in blueprint
     A4  is_entity_approved() exported for governance_rules.py integration
-    A5  _get_client_ip() uses X-Forwarded-For
+    A5  client IP extracted in blueprint (X-Forwarded-For) and passed as parameter
+        to approve_entity() / revoke_approval() — service layer must not touch Flask request.
 """
 
 from __future__ import annotations
 
 import logging
 
-from flask import request
 from sqlalchemy import func, select
 
 from app.models import db
@@ -34,20 +34,6 @@ logger = logging.getLogger(__name__)
 
 
 # ── Private helpers ────────────────────────────────────────────────────────────
-
-
-def _get_client_ip() -> str | None:
-    """Return real client IP, honouring X-Forwarded-For from load balancers.
-
-    A5: request.remote_addr alone is wrong when behind a proxy — it returns
-    the LB address.  X-Forwarded-For first entry is the originating client.
-    Gracefully falls back to remote_addr if header absent.
-    """
-    forwarded_for = request.headers.get("X-Forwarded-For", "")
-    if forwarded_for:
-        # First entry in the comma-delimited list is the client
-        return forwarded_for.split(",")[0].strip()
-    return request.remote_addr
 
 
 def _snapshot_approver_name(approver_id: int) -> str | None:
@@ -92,6 +78,7 @@ def approve_entity(
     is_override: bool = False,
     override_reason: str | None = None,
     requestor_id: int | None = None,
+    client_ip: str | None = None,
 ) -> tuple[dict, None] | tuple[None, dict]:
     """Create an 'approved' or 'override_approved' SignoffRecord.
 
@@ -143,7 +130,6 @@ def approve_entity(
         }
 
     approver_name = _snapshot_approver_name(approver_id)
-    client_ip = _get_client_ip()
 
     record = SignoffRecord(
         tenant_id=tenant_id,
@@ -183,6 +169,7 @@ def revoke_approval(
     entity_id: str,
     revoker_id: int,
     reason: str,
+    client_ip: str | None = None,
 ) -> tuple[dict, None] | tuple[None, dict]:
     """Revoke the current approval by appending a 'revoked' record.
 
@@ -213,7 +200,6 @@ def revoke_approval(
         }
 
     revoker_name = _snapshot_approver_name(revoker_id)
-    client_ip = _get_client_ip()
 
     record = SignoffRecord(
         tenant_id=tenant_id,
@@ -290,10 +276,15 @@ def get_pending_signoffs(
     """
     latest_sub = _latest_record_subquery(tenant_id, program_id)
 
+    # Both 'approved' and 'override_approved' represent a completed approval state.
+    # Filtering only action != 'approved' would falsely surface override_approved
+    # records as pending — they are approved via exception and must not re-appear
+    # in the dashboard pending queue.  B04 BLOCKER fix.
+    _APPROVED_ACTIONS = ("approved", "override_approved")
     stmt = (
         select(SignoffRecord)
         .join(latest_sub, SignoffRecord.id == latest_sub.c.max_id)
-        .where(SignoffRecord.action != "approved")
+        .where(SignoffRecord.action.notin_(_APPROVED_ACTIONS))
     )
     if entity_type:
         stmt = stmt.where(SignoffRecord.entity_type == entity_type)

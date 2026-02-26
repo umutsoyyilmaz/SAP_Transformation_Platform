@@ -272,7 +272,7 @@ def openapi_spec():
 
 
 # ══════════════════════════════════════════════════════════════════
-# 5.  SAP Cloud ALM — Phase A Placeholder (FDD-F07 Faz A, S3-04)
+# 5.  SAP Cloud ALM — Phase A Placeholder (FDD-F07 Phase A, S3-04)
 # ══════════════════════════════════════════════════════════════════
 
 @integrations_bp.route(
@@ -285,7 +285,7 @@ def cloud_alm_sync_log(pid):
     Returns connection_active=False and an empty logs list so the UI can render
     the 'Coming Soon' card without masking the absence of real integration.
 
-    Phase B (FDD-F07 Faz B, S4-02) will replace this with a real OAuth2 sync
+    Phase B (FDD-F07 Phase B, S4-02) will replace this with a real OAuth2 sync
     that populates CloudALMSyncLog records keyed to this program.
 
     Args:
@@ -298,14 +298,14 @@ def cloud_alm_sync_log(pid):
     return jsonify({
         "connection_active": False,
         "program_id": pid,
-        "message": "SAP Cloud ALM entegrasyonu henüz yapılandırılmadı. Tahmini: Q2 2026.",
+        "message": "SAP Cloud ALM integration has not been configured yet. Estimated: Q2 2026.",
         "logs": [],
         "total": 0,
     })
 
 
 # ════════════════════════════════════════════════════════════════
-# 6.  SAP Cloud ALM — Faz B: OAuth2 Integration (FDD-F07 Faz B, S4-02)
+# 6.  SAP Cloud ALM — Phase B: OAuth2 Integration (FDD-F07 Phase B, S4-02)
 # ════════════════════════════════════════════════════════════════
 
 

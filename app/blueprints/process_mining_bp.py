@@ -276,16 +276,21 @@ def import_variants(proj_id: int):
     methods=["GET"],
 )
 def list_imports(proj_id: int):
-    """List all imported variants for a project.
+    """List imported variants for a project (paginated).
 
-    Query params: tenant_id (required)
-    Returns: { "items": list, "total": int }
+    Query params:
+        tenant_id (required)
+        page      (optional, default 1)
+        per_page  (optional, default 50, max 200)
+    Returns: { "items": list, "total": int, "page": int, "per_page": int }
     """
     tenant_id, err = _tenant_required()
     if err:
         return err
-    imports = pms.list_imports(tenant_id, proj_id)
-    return jsonify({"items": imports, "total": len(imports)}), 200
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 50, type=int)
+    result = pms.list_imports(tenant_id, proj_id, page=page, per_page=per_page)
+    return jsonify(result), 200
 
 
 @process_mining_bp.route(

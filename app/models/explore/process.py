@@ -53,6 +53,7 @@ class ProcessLevel(db.Model):
         db.Index("idx_pl_project_parent", "project_id", "parent_id"),
         db.Index("idx_pl_project_level", "project_id", "level"),
         db.Index("idx_pl_scope_item", "project_id", "scope_item_code"),
+        db.Index("idx_pl_program", "program_id"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
@@ -62,6 +63,15 @@ class ProcessLevel(db.Model):
         nullable=True,
         index=True,
     )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
+    )
+    # LEGACY: project_id currently FK -> programs.id (naming bug).
+    # After Faz 1.4 Migration B, this will be re-pointed to projects.id.
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -162,6 +172,7 @@ class ProcessLevel(db.Model):
     def to_dict(self, include_children=False):
         d = {
             "id": self.id,
+            "program_id": self.program_id,
             "project_id": self.project_id,
             "parent_id": self.parent_id,
             "level": self.level,
@@ -214,12 +225,25 @@ class ProcessStep(db.Model):
     __tablename__ = "process_steps"
     __table_args__ = (
         db.UniqueConstraint("workshop_id", "process_level_id", name="uq_ps_ws_pl"),
+        db.Index("ix_ps_tenant_program_project", "tenant_id", "program_id", "project_id"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
     tenant_id = db.Column(
         db.Integer,
         db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -274,6 +298,8 @@ class ProcessStep(db.Model):
         l3 = pl.parent if pl else None  # L3 parent ProcessLevel
         d = {
             "id": self.id,
+            "program_id": self.program_id,
+            "project_id": self.project_id,
             "workshop_id": self.workshop_id,
             "process_level_id": self.process_level_id,
             "sort_order": self.sort_order,
@@ -314,7 +340,7 @@ class ProcessStep(db.Model):
 # ═════════════════════════════════════════════════════════════════════════════
 
 class L1SeedCatalog(db.Model):
-    """SAP S/4HANA Process Catalog — Level 1 (Business Area / Süreç Alanı).
+    """SAP S/4HANA Process Catalog — Level 1 (Business Area).
 
     Global data shared across all tenants — no tenant_id.
     Examples: Financial Management, Procurement, Sales Management.
@@ -327,7 +353,7 @@ class L1SeedCatalog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(
         db.String(10), nullable=False, unique=True,
-        comment="Örn: L1-FI, L1-MM, L1-SD",
+        comment="E.g.: L1-FI, L1-MM, L1-SD",
     )
     name = db.Column(db.String(200), nullable=False)
     sap_module_group = db.Column(
@@ -357,7 +383,7 @@ class L1SeedCatalog(db.Model):
 # ═════════════════════════════════════════════════════════════════════════════
 
 class L2SeedCatalog(db.Model):
-    """SAP S/4HANA Process Catalog — Level 2 (Process Group / Süreç Grubu).
+    """SAP S/4HANA Process Catalog — Level 2 (Process Group).
 
     Global data shared across all tenants — no tenant_id.
     Examples: Accounts Payable, Accounts Receivable, Purchasing.
@@ -374,7 +400,7 @@ class L2SeedCatalog(db.Model):
     )
     code = db.Column(
         db.String(15), nullable=False, unique=True,
-        comment="Örn: L2-FI-AP, L2-MM-PUR",
+        comment="E.g.: L2-FI-AP, L2-MM-PUR",
     )
     name = db.Column(db.String(200), nullable=False)
     sap_module = db.Column(
@@ -409,7 +435,7 @@ class L2SeedCatalog(db.Model):
 # ═════════════════════════════════════════════════════════════════════════════
 
 class L3SeedCatalog(db.Model):
-    """SAP S/4HANA Process Catalog — Level 3 (E2E Process / Uçtan Uca Süreç).
+    """SAP S/4HANA Process Catalog — Level 3 (End-to-End Process).
 
     Global data shared across all tenants — no tenant_id.
     Examples: Vendor Invoice Processing, Payment Run, Period-End Closing.
@@ -428,7 +454,7 @@ class L3SeedCatalog(db.Model):
     )
     code = db.Column(
         db.String(20), nullable=False, unique=True,
-        comment="Örn: L3-FI-AP-01, L3-MM-PUR-02",
+        comment="E.g.: L3-FI-AP-01, L3-MM-PUR-02",
     )
     name = db.Column(db.String(200), nullable=False)
     sap_scope_item_id = db.Column(

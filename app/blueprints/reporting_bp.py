@@ -1,20 +1,43 @@
 from datetime import datetime
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, g, jsonify, request, send_file
 
 from app.models import db
 from app.models.program import Program
-from app.models.reporting import ReportDefinition, DashboardLayout
-from app.services.reporting import compute_program_health
-from app.services.metrics import ExploreMetrics
-from app.services.report_engine import ReportEngine
+from app.models.reporting import DashboardLayout, ReportDefinition
 from app.services.dashboard_engine import DashboardEngine
 from app.services.export_service import (
     export_program_health_html,
     export_program_health_xlsx,
 )
+from app.services.helpers.scoped_queries import get_scoped_or_none
+from app.services.metrics import ExploreMetrics
+from app.services.report_engine import ReportEngine
+from app.services.reporting import compute_program_health
 
 reporting_bp = Blueprint("reporting", __name__, url_prefix="/api/v1/reports")
+
+
+def _get_tenant_id():
+    """Return tenant_id from JWT or session context."""
+    tid = getattr(g, "jwt_tenant_id", None)
+    if tid is None:
+        tenant = getattr(g, "tenant", None)
+        tid = getattr(tenant, "id", None)
+    return tid
+
+
+def _get_scoped_program_or_404(pid):
+    """Fetch program with tenant isolation; return (program, error_response)."""
+    tenant_id = _get_tenant_id()
+    if tenant_id is not None:
+        program = get_scoped_or_none(Program, pid, tenant_id=tenant_id)
+    else:
+        # Legacy/test mode — no tenant context available
+        program = db.session.get(Program, pid)
+    if not program:
+        return None, (jsonify({"error": "Program not found"}), 404)
+    return program, None
 
 
 @reporting_bp.route("/program-health/<int:pid>", methods=["GET"])
@@ -23,9 +46,9 @@ def program_health(pid):
     GET /api/v1/reports/program-health/<pid>
     Returns full program health snapshot with RAG per area.
     """
-    program = db.session.get(Program, pid)
-    if not program:
-        return jsonify({"error": "Program not found"}), 404
+    program, err = _get_scoped_program_or_404(pid)
+    if err:
+        return err
     return jsonify(compute_program_health(pid)), 200
 
 
@@ -35,10 +58,9 @@ def program_explore_health(pid):
     GET /api/v1/reports/program/<pid>/health
     Returns Explore-only health metrics with governance thresholds.
     """
-    from app.models.program import Program as _Prog
-    program = db.session.get(_Prog, pid)
-    if not program:
-        return jsonify({"error": "Program not found"}), 404
+    program, err = _get_scoped_program_or_404(pid)
+    if err:
+        return err
     return jsonify(ExploreMetrics.program_health(pid)), 200
 
 
@@ -50,9 +72,9 @@ def weekly_report(pid):
     For now, just returns current health. Historical snapshots will be
     added when we implement snapshot storage.
     """
-    program = db.session.get(Program, pid)
-    if not program:
-        return jsonify({"error": "Program not found"}), 404
+    program, err = _get_scoped_program_or_404(pid)
+    if err:
+        return err
 
     health = compute_program_health(pid)
     health["report_type"] = "weekly"
@@ -62,9 +84,9 @@ def weekly_report(pid):
 @reporting_bp.route("/export/xlsx/<int:pid>", methods=["GET"])
 def export_xlsx(pid):
     """GET /api/v1/reports/export/xlsx/<pid> — Download Excel report."""
-    program = db.session.get(Program, pid)
-    if not program:
-        return jsonify({"error": "Program not found"}), 404
+    program, err = _get_scoped_program_or_404(pid)
+    if err:
+        return err
     health = compute_program_health(pid)
     buf = export_program_health_xlsx(health)
     filename = f"program_health_{pid}_{datetime.now().strftime('%Y%m%d')}.xlsx"
@@ -78,9 +100,9 @@ def export_xlsx(pid):
 @reporting_bp.route("/export/pdf/<int:pid>", methods=["GET"])
 def export_pdf(pid):
     """GET /api/v1/reports/export/pdf/<pid> — Download HTML report (print-ready)."""
-    program = db.session.get(Program, pid)
-    if not program:
-        return jsonify({"error": "Program not found"}), 404
+    program, err = _get_scoped_program_or_404(pid)
+    if err:
+        return err
     health = compute_program_health(pid)
     html = export_program_health_html(health)
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
@@ -103,9 +125,9 @@ def list_presets():
 @reporting_bp.route("/presets/<string:report_key>/<int:pid>", methods=["GET"])
 def run_preset(report_key, pid):
     """GET /api/v1/reports/presets/<key>/<pid> — Run a preset report."""
-    program = db.session.get(Program, pid)
-    if not program:
-        return jsonify({"error": "Program not found"}), 404
+    program, err = _get_scoped_program_or_404(pid)
+    if err:
+        return err
     kwargs = {}
     if request.args.get("days"):
         kwargs["days"] = int(request.args["days"])
@@ -295,9 +317,9 @@ def gadget_types():
 @reporting_bp.route("/gadgets/<string:gadget_type>/<int:pid>", methods=["GET"])
 def gadget_data(gadget_type, pid):
     """GET /api/v1/reports/gadgets/<type>/<pid> — Get gadget data."""
-    program = db.session.get(Program, pid)
-    if not program:
-        return jsonify({"error": "Program not found"}), 404
+    program, err = _get_scoped_program_or_404(pid)
+    if err:
+        return err
     result = DashboardEngine.compute(gadget_type, pid)
     if "error" in result:
         return jsonify(result), 400

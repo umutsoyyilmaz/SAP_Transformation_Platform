@@ -16,9 +16,13 @@ from flask import Blueprint, g, jsonify, request, Response
 from app.middleware.permission_required import require_permission
 from app.services.bulk_import_service import (
     BulkImportError,
+    generate_project_assignment_csv_template,
     generate_csv_template,
+    import_project_assignments_from_csv,
     import_users_from_csv,
+    parse_project_assignment_csv,
     parse_csv,
+    validate_project_assignment_rows,
     validate_import_rows,
 )
 
@@ -107,6 +111,63 @@ def import_csv():
 
     except BulkImportError as e:
         return jsonify({"error": e.message}), e.status_code
+
+
+@bulk_import_bp.route("/project-assignments/template", methods=["GET"])
+@require_permission("admin.settings")
+def download_project_assignment_template():
+    """Download CSV template for project-level role assignments."""
+    csv_content = generate_project_assignment_csv_template()
+    return Response(
+        csv_content,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=project_assignment_template.csv"},
+    )
+
+
+@bulk_import_bp.route("/project-assignments/validate", methods=["POST"])
+@require_permission("admin.settings")
+def validate_project_assignment_csv():
+    tenant_id = getattr(g, "jwt_tenant_id", None)
+    if not tenant_id:
+        return jsonify({"error": "Tenant context required"}), 400
+    file_content = _extract_file_content()
+    if not file_content:
+        return jsonify({"error": "CSV file is required (file upload or raw body)"}), 400
+    auto_create_users = request.args.get("auto_create_users", "true").lower() != "false"
+    rows = parse_project_assignment_csv(file_content)
+    result = validate_project_assignment_rows(
+        tenant_id,
+        rows,
+        auto_create_users=auto_create_users,
+    )
+    return jsonify({
+        "total_rows": len(rows),
+        "valid_count": len(result["valid"]),
+        "error_count": len(result["errors"]),
+        "valid_rows": result["valid"],
+        "errors": result["errors"],
+    }), 200
+
+
+@bulk_import_bp.route("/project-assignments", methods=["POST"])
+@require_permission("admin.settings")
+def import_project_assignments_csv():
+    tenant_id = getattr(g, "jwt_tenant_id", None)
+    if not tenant_id:
+        return jsonify({"error": "Tenant context required"}), 400
+    file_content = _extract_file_content()
+    if not file_content:
+        return jsonify({"error": "CSV file is required (file upload or raw body)"}), 400
+    auto_create_users = request.args.get("auto_create_users", "true").lower() != "false"
+    result = import_project_assignments_from_csv(
+        tenant_id,
+        file_content,
+        actor_user_id=getattr(g, "jwt_user_id", None),
+        auto_create_users=auto_create_users,
+    )
+    status_code = 200 if result["status"] == "completed" else 207
+    return jsonify(result), status_code
 
 
 # ═══════════════════════════════════════════════════════════════

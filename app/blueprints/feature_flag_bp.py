@@ -145,11 +145,11 @@ th{background:#2d3748;color:#fff;font-weight:600}
 <div class="container">
 <h1>🚩 Feature Flags</h1>
 <p style="color:#4a5568;margin-bottom:16px;line-height:1.6">
-  Feature Flags, platformdaki özelliklerin tenant bazında açılıp kapatılmasını sağlar.
-  Yeni özellikler kademeli olarak yayınlanabilir (gradual rollout), A/B testleri yapılabilir
-  ve belirli müşterilere özel fonksiyonlar sunulabilir.
-  <strong>Örnek:</strong> AI Assistant, Beta Dashboard, Advanced Reporting gibi özellikleri
-  belirli tenant'lara açabilir, diğerlerinde kapalı tutabilirsiniz.
+  Feature Flags allow you to enable or disable platform features on a per-tenant basis.
+  New features can be gradually rolled out (gradual rollout), A/B tests can be conducted,
+  and specific customers can be offered custom functionality.
+  <strong>Example:</strong> You can enable features like AI Assistant, Beta Dashboard, and Advanced Reporting
+  for specific tenants while keeping them disabled for others.
 </p>
 <div id="msg"></div>
 <h3>Create Flag</h3>

@@ -1,18 +1,18 @@
 """
-Discover fazı iş mantığı — FDD-B02 / S3-01.
+Discover phase business logic — FDD-B02 / S3-01.
 
-SAP Activate metodolojisinin Discover fazını yönetir:
-  - ProjectCharter: neden bu proje? (gerekçe, kapsam, hedefler)
-  - SystemLandscape: AS-IS sistem envanteri
-  - ScopeAssessment: SAP modül bazında ilk büyüklük tahmini
+Manages the Discover phase of the SAP Activate methodology:
+  - ProjectCharter: why this project? (justification, scope, objectives)
+  - SystemLandscape: AS-IS system inventory
+  - ScopeAssessment: initial sizing estimate per SAP module
 
-Discover → Prepare Gate geçiş kriterleri (get_discover_gate_status):
+Discover -> Prepare Gate transition criteria (get_discover_gate_status):
   1. charter_approved     — ProjectCharter.status == 'approved'
-  2. landscape_defined    — En az 1 aktif SystemLandscape kaydı
-  3. min_3_modules        — En az 3 ScopeAssessment modülü tanımlanmış
+  2. landscape_defined    — At least 1 active SystemLandscape record
+  3. min_3_modules        — At least 3 ScopeAssessment modules defined
 
-Tüm fonksiyonlar tenant_id parametresi alır; g nesnesine ASLA erişilmez.
-db.session.commit() yalnızca bu dosyada çağrılır (servis katmanı sahipliği).
+All functions accept tenant_id as a parameter; the g object is NEVER accessed.
+db.session.commit() is called only in this file (service layer ownership).
 """
 
 import logging
@@ -25,7 +25,7 @@ from app.models.program import ProjectCharter, ScopeAssessment, SystemLandscape
 
 logger = logging.getLogger(__name__)
 
-# ── Sabitler ─────────────────────────────────────────────────────────────────
+# ── Constants ────────────────────────────────────────────────────────────────
 
 VALID_PROJECT_TYPES = {"greenfield", "brownfield", "selective_migration", "cloud_move"}
 VALID_CHARTER_STATUSES = {"draft", "in_review", "approved", "rejected"}
@@ -35,7 +35,7 @@ VALID_ENVIRONMENTS = {"dev", "test", "q", "prod"}
 VALID_COMPLEXITIES = {"low", "medium", "high", "very_high"}
 VALID_ASSESSMENT_BASES = {"workshop", "document_review", "interview", "expert_estimate"}
 
-# Discover Gate için minimum modül sayısı
+# Minimum number of modules for the Discover Gate
 DISCOVER_GATE_MIN_MODULES = 3
 
 
@@ -436,21 +436,21 @@ def get_discover_gate_status(tenant_id: int, program_id: int) -> dict:
     criteria = [
         {
             "name": "charter_approved",
-            "label": "Project Charter onaylanmış",
+            "label": "Project Charter approved",
             "passed": charter_approved,
             "current": charter.status if charter else "missing",
             "required": "approved",
         },
         {
             "name": "landscape_defined",
-            "label": "En az 1 AS-IS sistem tanımlı",
+            "label": "At least 1 AS-IS system defined",
             "passed": landscape_defined,
             "current": landscape_count,
             "required": 1,
         },
         {
             "name": "min_3_modules",
-            "label": f"En az {DISCOVER_GATE_MIN_MODULES} SAP modülü değerlendirilmiş",
+            "label": f"At least {DISCOVER_GATE_MIN_MODULES} SAP modules assessed",
             "passed": min_modules_assessed,
             "current": module_count,
             "required": DISCOVER_GATE_MIN_MODULES,

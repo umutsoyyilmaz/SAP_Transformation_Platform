@@ -205,6 +205,8 @@ def _get_default_schedule(job_name: str) -> dict:
                                        "description": "Daily at 02:00"},
         "sla_compliance_check": {"hour": "*/4", "minute": "0",
                                  "description": "Every 4 hours"},
+        "data_quality_guard_daily": {"hour": "3", "minute": "30",
+                                     "description": "Daily at 03:30 (report-only)"},
     }
     return defaults.get(job_name, {"hour": "0", "minute": "0",
                                     "description": "Daily at midnight"})

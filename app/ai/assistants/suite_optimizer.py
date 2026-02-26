@@ -8,7 +8,7 @@ Per §4.4:
     - Execution cost: duration × priority weight
 
   Sort by risk DESC → recommend minimal execution set.
-  "Bu cycle için önerilen minimal set: N/M TC (pass confidence: X%)"
+  "Recommended minimal set for this cycle: N/M TC (pass confidence: X%)"
 """
 
 import logging
@@ -151,6 +151,6 @@ class SuiteOptimizer:
                 "total_test_cases": total,
                 "recommended_count": rec_count,
                 "confidence_pct": confidence,
-                "message": f"Önerilen minimal set: {rec_count}/{total} TC (pass confidence: {confidence}%)",
+                "message": f"Recommended minimal set: {rec_count}/{total} TC (pass confidence: {confidence}%)",
             },
         }

@@ -9,21 +9,37 @@ comments, stats.
   - POST               /open-items/<id>/reassign
   - POST               /open-items/<id>/comments
   - GET                /open-items/stats
-"""
 
-from datetime import date
+Note: ExploreOpenItem.project_id FK → programs.id (legacy naming).
+      Scope resolution via resolve_scope_or_error will be enabled once
+      the explore models are migrated to reference the projects table.
+"""
 
 from flask import jsonify, request
 
+from app.blueprints.explore import explore_bp
 from app.services import explore_service
 from app.services.open_item_lifecycle import (
     OITransitionError,
 )
 from app.services.permission import PermissionDenied
-
-from app.blueprints.explore import explore_bp
-from app.utils.errors import api_error, E
+from app.utils.errors import E, api_error
 from app.utils.helpers import parse_date_input as _parse_date_input
+
+
+def _get_project_id(data=None):
+    """Extract project_id from request data or query params.
+
+    Returns (project_id, error_response) tuple.
+    """
+    pid = None
+    if data:
+        pid = data.get("project_id")
+    if pid is None:
+        pid = request.args.get("project_id", type=int)
+    if not pid:
+        return None, api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    return pid, None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -34,9 +50,9 @@ from app.utils.helpers import parse_date_input as _parse_date_input
 @explore_bp.route("/open-items", methods=["GET"])
 def list_open_items():
     """List open items with filters, grouping, pagination."""
-    project_id = request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_project_id()
+    if err:
+        return err
 
     filters = {
         "project_id": project_id,
@@ -62,9 +78,9 @@ def list_open_items():
 def create_open_item_flat():
     """Create an open item without requiring a process-step parent."""
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id")
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_project_id(data)
+    if err:
+        return err
     if not data.get("title"):
         return api_error(E.VALIDATION_REQUIRED, "title is required")
 
@@ -86,9 +102,9 @@ def create_open_item_flat():
 @explore_bp.route("/open-items/<oi_id>", methods=["GET"])
 def get_open_item(oi_id):
     """Get a single open item."""
-    project_id = request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_project_id()
+    if err:
+        return err
     result = explore_service.get_open_item_service(oi_id, project_id=project_id)
     if isinstance(result, tuple):
         return result
@@ -99,9 +115,9 @@ def get_open_item(oi_id):
 def update_open_item(oi_id):
     """Update open item fields (not status — use transition)."""
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id") or request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_project_id(data)
+    if err:
+        return err
     result = explore_service.update_open_item_service(oi_id, data, project_id=project_id)
     if isinstance(result, tuple):
         return result
@@ -118,17 +134,20 @@ def transition_open_item_endpoint(oi_id):
     """Execute an open item lifecycle transition."""
     data = request.get_json(silent=True) or {}
     action = data.get("action")
-    user_id = data.get("user_id", "system")
 
     if not action:
         return api_error(E.VALIDATION_REQUIRED, "action is required")
 
-    project_id = data.get("project_id") or request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_project_id(data)
+    if err:
+        return err
 
     try:
-        result = explore_service.transition_open_item_service(oi_id, data, project_id=project_id)
+        result = explore_service.transition_open_item_service(
+            oi_id,
+            data,
+            project_id=project_id,
+        )
         if isinstance(result, tuple):
             return result
         return jsonify(result)
@@ -144,17 +163,20 @@ def reassign_open_item_endpoint(oi_id):
     data = request.get_json(silent=True) or {}
     new_assignee_id = data.get("assignee_id")
     new_assignee_name = data.get("assignee_name")
-    user_id = data.get("user_id", "system")
 
     if not new_assignee_id or not new_assignee_name:
         return api_error(E.VALIDATION_REQUIRED, "assignee_id and assignee_name are required")
 
-    project_id = data.get("project_id") or request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_project_id(data)
+    if err:
+        return err
 
     try:
-        result = explore_service.reassign_open_item_service(oi_id, data, project_id=project_id)
+        result = explore_service.reassign_open_item_service(
+            oi_id,
+            data,
+            project_id=project_id,
+        )
         if isinstance(result, tuple):
             return result
         return jsonify(result)
@@ -167,16 +189,19 @@ def add_comment(oi_id):
     """Add an activity log comment to an open item."""
     data = request.get_json(silent=True) or {}
     content = data.get("content")
-    user_id = data.get("user_id", "system")
 
     if not content:
         return api_error(E.VALIDATION_REQUIRED, "content is required")
 
-    project_id = data.get("project_id") or request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_project_id(data)
+    if err:
+        return err
 
-    result = explore_service.add_open_item_comment_service(oi_id, data, project_id=project_id)
+    result = explore_service.add_open_item_comment_service(
+        oi_id,
+        data,
+        project_id=project_id,
+    )
     if not isinstance(result, tuple):
         return result
     payload, status_code = result
@@ -191,9 +216,8 @@ def add_comment(oi_id):
 @explore_bp.route("/open-items/stats", methods=["GET"])
 def open_item_stats():
     """Open item KPI aggregation."""
-    project_id = request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
-
+    project_id, err = _get_project_id()
+    if err:
+        return err
     result = explore_service.open_item_stats_service(project_id)
     return jsonify(result)

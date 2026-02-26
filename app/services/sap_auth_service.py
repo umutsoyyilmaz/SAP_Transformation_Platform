@@ -19,16 +19,15 @@ db.session.commit() is called only inside this service (3-layer contract).
 
 import io
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
 from app.models import db
 from app.models.sap_auth import (
-    SOD_RULES,
-    RISK_LEVELS,
     ROLE_STATUSES,
     ROLE_TYPES,
+    SOD_RULES,
     SapAuthObject,
     SapAuthRole,
     SodMatrix,
@@ -57,15 +56,15 @@ def _validate_role_name(role_name: str) -> str | None:
 
 
 def _require_project(tenant_id: int, project_id: int) -> None:
-    """Raise ValueError if tenant has no matching program.
+    """Raise ValueError if tenant has no matching project.
 
     Why: tenant isolation — a project_id from another tenant must not
     be accessible, and the error must be the same as 'not found'.
     """
     from app.models.program import Program  # local import avoids circular dep
 
-    prog = db.session.get(Program, project_id)
-    if not prog or prog.tenant_id != tenant_id:
+    program = Program.query.filter_by(id=project_id, tenant_id=tenant_id).first()
+    if not program:
         raise ValueError(f"Project {project_id} not found in tenant {tenant_id}")
 
 
@@ -237,7 +236,7 @@ def update_sap_auth_role(
         if field in data:
             setattr(role, field, data[field])
 
-    role.updated_at = datetime.now(timezone.utc)
+    role.updated_at = datetime.now(UTC)
     db.session.commit()
 
     logger.info("SapAuthRole updated id=%s tenant=%s", role_id, tenant_id)
@@ -415,7 +414,7 @@ def link_role_to_process_steps(
         raise ValueError(f"SapAuthRole {role_id} not found")
 
     role.linked_process_step_ids = list(set(process_step_ids))  # dedup
-    role.updated_at = datetime.now(timezone.utc)
+    role.updated_at = datetime.now(UTC)
     db.session.commit()
 
     logger.info(
@@ -617,7 +616,7 @@ def accept_sod_risk(
     row.is_accepted = True
     row.mitigating_control = control[:2000]
     row.accepted_by_id = accepted_by_id
-    row.accepted_at = datetime.now(timezone.utc)
+    row.accepted_at = datetime.now(UTC)
     db.session.commit()
 
     logger.info(
@@ -721,7 +720,7 @@ def export_auth_concept_excel(tenant_id: int, project_id: int) -> bytes:
     weasyprint is excluded (production stability risk — FDD-F03 §review).
     """
     import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
 
     HEADER_FONT = Font(bold=True, color="FFFFFF")

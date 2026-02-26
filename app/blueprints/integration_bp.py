@@ -42,7 +42,7 @@ Endpoints (Sprint 9 scope — aligned with master plan):
 
 import logging
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from app.models import db
 from app.models.integration import (
@@ -52,12 +52,33 @@ from app.models.integration import (
 )
 from app.models.program import Program
 from app.services import integration_service
+from app.services.helpers.scoped_queries import get_scoped_or_none
 from app.blueprints import paginate_query
 from app.utils.helpers import db_commit_or_error, get_or_404 as _get_or_404
 
 logger = logging.getLogger(__name__)
 
 integration_bp = Blueprint("integration", __name__, url_prefix="/api/v1")
+
+
+def _get_program_or_404(program_id: int):
+    tenant_id = getattr(g, "jwt_tenant_id", None)
+    if tenant_id is not None:
+        program = get_scoped_or_none(Program, program_id, tenant_id=tenant_id)
+        if not program:
+            return None, (jsonify({"error": "Program not found"}), 404)
+        return program, None
+    return _get_or_404(Program, program_id)
+
+
+def _get_entity_or_404(model, entity_id: int):
+    tenant_id = getattr(g, "jwt_tenant_id", None)
+    if tenant_id is not None:
+        entity = get_scoped_or_none(model, entity_id, tenant_id=tenant_id)
+        if not entity:
+            return None, (jsonify({"error": f"{model.__name__} not found"}), 404)
+        return entity, None
+    return _get_or_404(model, entity_id)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -76,7 +97,7 @@ def list_interfaces(program_id):
         priority  — filter by priority
         wave_id   — filter by wave (0 = unassigned)
     """
-    program, err = _get_or_404(Program, program_id)
+    program, err = _get_program_or_404(program_id)
     if err:
         return err
 
@@ -102,7 +123,7 @@ def list_interfaces(program_id):
 @integration_bp.route("/programs/<int:program_id>/interfaces", methods=["POST"])
 def create_interface(program_id):
     """Create a new interface and seed default 12-item checklist."""
-    program, err = _get_or_404(Program, program_id)
+    program, err = _get_program_or_404(program_id)
     if err:
         return err
 
@@ -122,7 +143,7 @@ def create_interface(program_id):
 @integration_bp.route("/interfaces/<int:interface_id>", methods=["GET"])
 def get_interface(interface_id):
     """Get interface detail with children (connectivity tests, switch plans, checklist)."""
-    iface, err = _get_or_404(Interface, interface_id)
+    iface, err = _get_entity_or_404(Interface, interface_id)
     if err:
         return err
     return jsonify(iface.to_dict(include_children=True))
@@ -131,7 +152,7 @@ def get_interface(interface_id):
 @integration_bp.route("/interfaces/<int:interface_id>", methods=["PUT"])
 def update_interface(interface_id):
     """Update interface fields."""
-    iface, err = _get_or_404(Interface, interface_id)
+    iface, err = _get_entity_or_404(Interface, interface_id)
     if err:
         return err
 
@@ -149,7 +170,7 @@ def update_interface(interface_id):
 @integration_bp.route("/interfaces/<int:interface_id>", methods=["DELETE"])
 def delete_interface(interface_id):
     """Delete an interface and all children (cascade)."""
-    iface, err = _get_or_404(Interface, interface_id)
+    iface, err = _get_entity_or_404(Interface, interface_id)
     if err:
         return err
     db.session.delete(iface)
@@ -162,7 +183,7 @@ def delete_interface(interface_id):
 @integration_bp.route("/interfaces/<int:interface_id>/status", methods=["PATCH"])
 def update_interface_status(interface_id):
     """Quick status update for an interface."""
-    iface, err = _get_or_404(Interface, interface_id)
+    iface, err = _get_entity_or_404(Interface, interface_id)
     if err:
         return err
 
@@ -183,7 +204,7 @@ def update_interface_status(interface_id):
 @integration_bp.route("/programs/<int:program_id>/interfaces/stats", methods=["GET"])
 def interface_stats(program_id):
     """Aggregated stats for interfaces in a program."""
-    program, err = _get_or_404(Program, program_id)
+    program, err = _get_program_or_404(program_id)
     if err:
         return err
     return jsonify(integration_service.compute_interface_stats(program_id))
@@ -196,7 +217,7 @@ def interface_stats(program_id):
 @integration_bp.route("/programs/<int:program_id>/waves", methods=["GET"])
 def list_waves(program_id):
     """List waves for a program, ordered by 'order' field."""
-    program, err = _get_or_404(Program, program_id)
+    program, err = _get_program_or_404(program_id)
     if err:
         return err
 
@@ -207,7 +228,7 @@ def list_waves(program_id):
 @integration_bp.route("/programs/<int:program_id>/waves", methods=["POST"])
 def create_wave(program_id):
     """Create a new deployment wave."""
-    program, err = _get_or_404(Program, program_id)
+    program, err = _get_program_or_404(program_id)
     if err:
         return err
 
@@ -227,7 +248,7 @@ def create_wave(program_id):
 @integration_bp.route("/waves/<int:wave_id>", methods=["GET"])
 def get_wave(wave_id):
     """Get wave detail with interfaces."""
-    wave, err = _get_or_404(Wave, wave_id)
+    wave, err = _get_entity_or_404(Wave, wave_id)
     if err:
         return err
     return jsonify(wave.to_dict(include_interfaces=True))
@@ -236,7 +257,7 @@ def get_wave(wave_id):
 @integration_bp.route("/waves/<int:wave_id>", methods=["PUT"])
 def update_wave(wave_id):
     """Update a wave."""
-    wave, err = _get_or_404(Wave, wave_id)
+    wave, err = _get_entity_or_404(Wave, wave_id)
     if err:
         return err
 
@@ -254,7 +275,7 @@ def update_wave(wave_id):
 @integration_bp.route("/waves/<int:wave_id>", methods=["DELETE"])
 def delete_wave(wave_id):
     """Delete a wave. Interfaces are NOT deleted — their wave_id is set to NULL."""
-    wave, err = _get_or_404(Wave, wave_id)
+    wave, err = _get_entity_or_404(Wave, wave_id)
     if err:
         return err
 
@@ -268,7 +289,7 @@ def delete_wave(wave_id):
 @integration_bp.route("/interfaces/<int:interface_id>/assign-wave", methods=["PATCH"])
 def assign_wave(interface_id):
     """Assign an interface to a wave (or unassign with wave_id=null)."""
-    iface, err = _get_or_404(Interface, interface_id)
+    iface, err = _get_entity_or_404(Interface, interface_id)
     if err:
         return err
 
@@ -276,7 +297,7 @@ def assign_wave(interface_id):
     wave_id = data.get("wave_id")
 
     if wave_id is not None:
-        wave, err = _get_or_404(Wave, wave_id)
+        wave, err = _get_entity_or_404(Wave, wave_id)
         if err:
             return err
 
@@ -294,7 +315,7 @@ def assign_wave(interface_id):
 @integration_bp.route("/interfaces/<int:interface_id>/connectivity-tests", methods=["GET"])
 def list_connectivity_tests(interface_id):
     """List connectivity tests for an interface (newest first)."""
-    iface, err = _get_or_404(Interface, interface_id)
+    iface, err = _get_entity_or_404(Interface, interface_id)
     if err:
         return err
 
@@ -307,7 +328,7 @@ def list_connectivity_tests(interface_id):
 @integration_bp.route("/interfaces/<int:interface_id>/connectivity-tests", methods=["POST"])
 def create_connectivity_test(interface_id):
     """Record a connectivity test result."""
-    iface, err = _get_or_404(Interface, interface_id)
+    iface, err = _get_entity_or_404(Interface, interface_id)
     if err:
         return err
 
@@ -325,7 +346,7 @@ def create_connectivity_test(interface_id):
 @integration_bp.route("/connectivity-tests/<int:test_id>", methods=["GET"])
 def get_connectivity_test(test_id):
     """Get a single connectivity test record."""
-    test, err = _get_or_404(ConnectivityTest, test_id)
+    test, err = _get_entity_or_404(ConnectivityTest, test_id)
     if err:
         return err
     return jsonify(test.to_dict())
@@ -334,7 +355,7 @@ def get_connectivity_test(test_id):
 @integration_bp.route("/connectivity-tests/<int:test_id>", methods=["DELETE"])
 def delete_connectivity_test(test_id):
     """Delete a connectivity test record."""
-    test, err = _get_or_404(ConnectivityTest, test_id)
+    test, err = _get_entity_or_404(ConnectivityTest, test_id)
     if err:
         return err
     db.session.delete(test)
@@ -351,7 +372,7 @@ def delete_connectivity_test(test_id):
 @integration_bp.route("/interfaces/<int:interface_id>/switch-plans", methods=["GET"])
 def list_switch_plans(interface_id):
     """List switch plan entries for an interface (ordered by sequence)."""
-    iface, err = _get_or_404(Interface, interface_id)
+    iface, err = _get_entity_or_404(Interface, interface_id)
     if err:
         return err
 
@@ -364,7 +385,7 @@ def list_switch_plans(interface_id):
 @integration_bp.route("/interfaces/<int:interface_id>/switch-plans", methods=["POST"])
 def create_switch_plan(interface_id):
     """Create a switch plan entry."""
-    iface, err = _get_or_404(Interface, interface_id)
+    iface, err = _get_entity_or_404(Interface, interface_id)
     if err:
         return err
 
@@ -382,7 +403,7 @@ def create_switch_plan(interface_id):
 @integration_bp.route("/switch-plans/<int:plan_id>", methods=["PUT"])
 def update_switch_plan(plan_id):
     """Update a switch plan entry."""
-    plan, err = _get_or_404(SwitchPlan, plan_id)
+    plan, err = _get_entity_or_404(SwitchPlan, plan_id)
     if err:
         return err
 
@@ -400,7 +421,7 @@ def update_switch_plan(plan_id):
 @integration_bp.route("/switch-plans/<int:plan_id>", methods=["DELETE"])
 def delete_switch_plan(plan_id):
     """Delete a switch plan entry."""
-    plan, err = _get_or_404(SwitchPlan, plan_id)
+    plan, err = _get_entity_or_404(SwitchPlan, plan_id)
     if err:
         return err
     db.session.delete(plan)
@@ -413,7 +434,7 @@ def delete_switch_plan(plan_id):
 @integration_bp.route("/switch-plans/<int:plan_id>/execute", methods=["PATCH"])
 def execute_switch_plan(plan_id):
     """Mark a switch plan entry as executed (record actual duration + timestamp)."""
-    plan, err = _get_or_404(SwitchPlan, plan_id)
+    plan, err = _get_entity_or_404(SwitchPlan, plan_id)
     if err:
         return err
 
@@ -432,7 +453,7 @@ def execute_switch_plan(plan_id):
 @integration_bp.route("/interfaces/<int:interface_id>/checklist", methods=["GET"])
 def list_checklist(interface_id):
     """List checklist items for an interface (ordered)."""
-    iface, err = _get_or_404(Interface, interface_id)
+    iface, err = _get_entity_or_404(Interface, interface_id)
     if err:
         return err
 
@@ -445,7 +466,7 @@ def list_checklist(interface_id):
 @integration_bp.route("/interfaces/<int:interface_id>/checklist", methods=["POST"])
 def add_checklist_item(interface_id):
     """Add a custom checklist item to an interface."""
-    iface, err = _get_or_404(Interface, interface_id)
+    iface, err = _get_entity_or_404(Interface, interface_id)
     if err:
         return err
 
@@ -465,7 +486,7 @@ def add_checklist_item(interface_id):
 @integration_bp.route("/checklist/<int:item_id>", methods=["PUT"])
 def update_checklist_item(item_id):
     """Update (toggle / edit) a checklist item."""
-    item, err = _get_or_404(InterfaceChecklist, item_id)
+    item, err = _get_entity_or_404(InterfaceChecklist, item_id)
     if err:
         return err
 
@@ -481,7 +502,7 @@ def update_checklist_item(item_id):
 @integration_bp.route("/checklist/<int:item_id>", methods=["DELETE"])
 def delete_checklist_item(item_id):
     """Delete a checklist item."""
-    item, err = _get_or_404(InterfaceChecklist, item_id)
+    item, err = _get_entity_or_404(InterfaceChecklist, item_id)
     if err:
         return err
     db.session.delete(item)

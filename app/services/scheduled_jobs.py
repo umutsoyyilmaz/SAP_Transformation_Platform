@@ -11,6 +11,7 @@ Jobs:
     - weekly_digest: Sends weekly summary emails
     - stale_notification_cleanup: Archives old read notifications
     - sla_compliance_check: Checks Hypercare SLA compliance
+    - data_quality_guard_daily: Report-only project scope integrity checks
 """
 
 from __future__ import annotations
@@ -395,3 +396,112 @@ def check_sla_compliance(app) -> dict[str, Any]:
 
     logger.info("SLA compliance check: %s", results)
     return results
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Job 7: Hypercare Auto-Escalation — FDD-B03-Phase-2
+# ═══════════════════════════════════════════════════════════════════════════
+
+@register_job("auto_escalate_incidents")
+def auto_escalate_incidents(app) -> dict[str, Any]:
+    """Evaluate escalation rules for all active hypercare plans.
+
+    Only processes CutoverPlans with status='hypercare' to avoid evaluating
+    closed/draft plans.  Uses the same lazy evaluation pattern as the API-level
+    escalation engine but triggered on a schedule.
+    """
+    from sqlalchemy import select
+    from app.models.cutover import CutoverPlan
+
+    results = {"plans_evaluated": 0, "new_escalations": 0, "errors": 0}
+
+    try:
+        plans = db.session.execute(
+            select(CutoverPlan).where(CutoverPlan.status == "hypercare")
+        ).scalars().all()
+
+        for plan in plans:
+            try:
+                from app.services.hypercare_service import evaluate_escalations
+                new_events = evaluate_escalations(plan.tenant_id, plan.id)
+                results["plans_evaluated"] += 1
+                results["new_escalations"] += len(new_events)
+            except Exception as e:
+                results["errors"] += 1
+                logger.error(
+                    "Auto-escalation failed for plan %s: %s", plan.id, e,
+                )
+
+        db.session.commit()
+    except Exception as e:
+        logger.error("Auto-escalation job failed: %s", e)
+        results["errors"] += 1
+
+    logger.info("Auto-escalation: %s", results)
+    return results
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Job 8: RBAC Assignment Expiry — Story 4.2
+# ═══════════════════════════════════════════════════════════════════════════
+
+@register_job("rbac_assignment_expiry")
+def expire_rbac_assignments(app) -> dict[str, Any]:
+    """Deactivate time-bound role assignments whose end date has passed."""
+    from app.services.permission_service import expire_temporary_assignments
+
+    try:
+        result = expire_temporary_assignments()
+        logger.info("RBAC assignment expiry: %s", result)
+        return result
+    except Exception as exc:
+        logger.error("RBAC assignment expiry failed: %s", exc)
+        return {"expired_assignments": 0, "error": str(exc)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Job 9: Data Quality Guard (Report-Only) — Story 5.2
+# ═══════════════════════════════════════════════════════════════════════════
+
+@register_job("data_quality_guard_daily")
+def run_data_quality_guard_daily(app) -> dict[str, Any]:
+    """Run report-only project scope integrity checks and emit critical alerts."""
+    from app.models.audit import write_audit
+    from app.services.data_quality_guard_service import collect_project_scope_quality_report
+    from app.services.notification import NotificationService
+
+    report = collect_project_scope_quality_report(report_only=True)
+    summary = report["summary"]
+
+    alerts_created = 0
+    if summary.get("critical_rows", 0) > 0:
+        NotificationService.create(
+            title="Data Quality Guard: critical project-scope anomalies detected",
+            message=(
+                f"Critical rows={summary['critical_rows']}, "
+                f"critical tables={summary['critical_tables']}, "
+                f"tables_with_issues={summary['tables_with_issues']}."
+            ),
+            category="system",
+            severity="error",
+            entity_type="data_quality_guard",
+            entity_id=None,
+        )
+        alerts_created += 1
+
+    write_audit(
+        entity_type="data_quality_report",
+        entity_id=summary.get("tables_scanned", 0),
+        action="data_quality.report",
+        actor="system",
+        diff=summary,
+    )
+
+    db.session.commit()
+    result = {
+        "mode": report["mode"],
+        "summary": summary,
+        "alerts_created": alerts_created,
+    }
+    logger.info("Data quality guard: %s", result)
+    return result

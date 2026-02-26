@@ -209,7 +209,7 @@ class WebhookDelivery(db.Model):
         }
 
 
-# ── S4-02: CloudALMConfig — SAP Cloud ALM connection config (FDD-F07 Faz B) ──
+# ── S4-02: CloudALMConfig — SAP Cloud ALM connection config (FDD-F07 Phase B) ──
 
 class CloudALMConfig(db.Model):
     """SAP Cloud ALM OAuth2 connection configuration, one row per tenant.

@@ -87,6 +87,7 @@ class ProjectRole(db.Model):
             "project_id", "user_id", "role", "process_area",
             name="uq_prole_project_user_role_area",
         ),
+        db.Index("idx_prole_program", "program_id"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
@@ -96,6 +97,14 @@ class ProjectRole(db.Model):
         nullable=True,
         index=True,
     )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
+    )
+    # LEGACY: project_id currently FK -> programs.id (naming bug).
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -117,6 +126,7 @@ class ProjectRole(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "program_id": self.program_id,
             "project_id": self.project_id,
             "user_id": self.user_id,
             "role": self.role,
@@ -147,6 +157,14 @@ class PhaseGate(db.Model):
         nullable=True,
         index=True,
     )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
+    )
+    # LEGACY: project_id currently FK -> programs.id (naming bug).
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -179,6 +197,7 @@ class PhaseGate(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "program_id": self.program_id,
             "project_id": self.project_id,
             "phase": self.phase,
             "gate_type": self.gate_type,
@@ -296,6 +315,7 @@ class ScopeChangeRequest(db.Model):
     __table_args__ = (
         db.UniqueConstraint("project_id", "code", name="uq_scr_project_code"),
         db.Index("idx_scr_project_status", "project_id", "status"),
+        db.Index("idx_scr_program", "program_id"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
@@ -305,6 +325,14 @@ class ScopeChangeRequest(db.Model):
         nullable=True,
         index=True,
     )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
+    )
+    # LEGACY: project_id currently FK -> programs.id (naming bug).
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -354,6 +382,7 @@ class ScopeChangeRequest(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "program_id": self.program_id,
             "project_id": self.project_id,
             "code": self.code,
             "process_level_id": self.process_level_id,
@@ -390,6 +419,7 @@ class ScopeChangeLog(db.Model):
     __table_args__ = (
         db.Index("idx_scl_project", "project_id"),
         db.Index("idx_scl_process_level", "process_level_id"),
+        db.Index("idx_scl_program", "program_id"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
@@ -399,6 +429,14 @@ class ScopeChangeLog(db.Model):
         nullable=True,
         index=True,
     )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
+    )
+    # LEGACY: project_id currently FK -> programs.id (naming bug).
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -426,6 +464,7 @@ class ScopeChangeLog(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "program_id": self.program_id,
             "project_id": self.project_id,
             "process_level_id": self.process_level_id,
             "field_changed": self.field_changed,

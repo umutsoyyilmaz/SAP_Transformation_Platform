@@ -26,6 +26,7 @@ VALID_ENTITY_TYPES = frozenset({
     "uat",
     "explore_requirement",
     "backlog_item",
+    "hypercare_exit",          # FDD-B03-Phase-2: formal hypercare exit sign-off
 })
 
 VALID_ACTIONS = frozenset({"approved", "revoked", "override_approved"})
@@ -125,7 +126,7 @@ class SignoffRecord(db.Model):
     )
 
     created_at = db.Column(
-        db.DateTime,
+        db.DateTime(timezone=True),  # B04 fix: timezone=True required for SOX/GDPR compliance
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )

@@ -16,6 +16,7 @@ Business logic for:
 import logging
 from datetime import datetime, timezone
 
+from flask import g, has_request_context
 from sqlalchemy import func, select
 
 from app.models import db
@@ -36,6 +37,8 @@ from app.models.cutover import (
     validate_rehearsal_transition,
     validate_task_transition,
 )
+from app.models.auth import Tenant
+from app.models.program import Program
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +124,17 @@ def transition_plan(plan: CutoverPlan, new_status: str) -> tuple[bool, str]:
         pending = plan.go_no_go_items.filter(GoNoGoItem.verdict == "pending").count()
         if pending > 0:
             return False, f"{pending} Go/No-Go item(s) still pending"
+
+    # Guard: hypercare → closed requires approved exit sign-off (BR-E05)
+    if old == "hypercare" and new_status == "closed":
+        from app.services.signoff_service import is_entity_approved
+        if not is_entity_approved(
+            tenant_id=plan.tenant_id,
+            program_id=plan.program_id,
+            entity_type="hypercare_exit",
+            entity_id=str(plan.id),
+        ):
+            return False, "Hypercare exit sign-off required before closing the plan"
 
     plan.status = new_status
     if new_status == "executing" and not plan.actual_start:
@@ -533,6 +547,83 @@ def _parse_dt(val: str | datetime | None) -> datetime | None:
     return val
 
 
+def _tenant_id_for_program(program_id: int) -> int | None:
+    """Return tenant_id for a program, or None if program is missing."""
+    tenant_id = db.session.execute(
+        select(Program.tenant_id).where(Program.id == program_id)
+    ).scalar_one_or_none()
+    if tenant_id is not None:
+        return tenant_id
+    return _tenant_id_from_request() or _fallback_tenant_id()
+
+
+def _tenant_id_for_plan(plan_id: int) -> int | None:
+    """Return tenant_id for a cutover plan, or None if plan is missing."""
+    row = db.session.execute(
+        select(CutoverPlan.tenant_id, CutoverPlan.program_id).where(CutoverPlan.id == plan_id)
+    ).one_or_none()
+    if not row:
+        return _tenant_id_from_request() or _fallback_tenant_id()
+    plan_tenant_id, program_id = row
+    if plan_tenant_id is not None:
+        return plan_tenant_id
+    program_tenant_id = db.session.execute(
+        select(Program.tenant_id).where(Program.id == program_id)
+    ).scalar_one_or_none()
+    if program_tenant_id is not None:
+        return program_tenant_id
+    return _tenant_id_from_request() or _fallback_tenant_id()
+
+
+def _tenant_id_for_scope_item(scope_item_id: int) -> int | None:
+    """Return tenant_id for a scope item, or None if scope item is missing."""
+    row = db.session.execute(
+        select(CutoverScopeItem.tenant_id, CutoverScopeItem.cutover_plan_id)
+        .where(CutoverScopeItem.id == scope_item_id)
+    ).one_or_none()
+    if not row:
+        return _tenant_id_from_request() or _fallback_tenant_id()
+    scope_tenant_id, plan_id = row
+    if scope_tenant_id is not None:
+        return scope_tenant_id
+    return _tenant_id_for_plan(plan_id)
+
+
+def _tenant_id_from_request() -> int | None:
+    """Best-effort tenant_id from current request context.
+
+    In test/dev flows where Program.tenant_id is not populated, auth middleware can
+    still provide tenant information via Flask ``g``.
+    """
+    if not has_request_context():
+        return None
+    for attr in ("tenant_id", "jwt_tenant_id"):
+        tenant_id = getattr(g, attr, None)
+        if tenant_id is not None:
+            try:
+                return int(tenant_id)
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def _fallback_tenant_id() -> int | None:
+    """Return a valid tenant_id fallback from DB.
+
+    If no tenant exists (common in local tests without auth bootstrap), create a
+    minimal default tenant so tenant-scoped foreign keys remain valid.
+    """
+    tenant_id = db.session.execute(
+        select(Tenant.id).order_by(Tenant.id.asc()).limit(1)
+    ).scalar_one_or_none()
+    if tenant_id is not None:
+        return tenant_id
+    tenant = Tenant(name="Default Tenant", slug="default-tenant")
+    db.session.add(tenant)
+    db.session.flush()
+    return tenant.id
+
+
 # ── CutoverPlan CRUD ─────────────────────────────────────────────────────────
 
 
@@ -573,6 +664,7 @@ def create_plan(data: dict) -> CutoverPlan:
     """
     code = generate_plan_code(data["program_id"])
     plan = CutoverPlan(
+        tenant_id=_tenant_id_for_program(data["program_id"]),
         program_id=data["program_id"],
         code=code,
         name=data["name"],
@@ -673,6 +765,7 @@ def create_scope_item(plan_id: int, data: dict) -> CutoverScopeItem:
         The persisted CutoverScopeItem instance.
     """
     si = CutoverScopeItem(
+        tenant_id=_tenant_id_for_plan(plan_id),
         cutover_plan_id=plan_id,
         name=data["name"],
         category=data.get("category", "custom"),
@@ -755,6 +848,7 @@ def create_task(si_id: int, plan_id: int, data: dict, *, program_id: int | None 
     """
     code = generate_task_code(plan_id, program_id=program_id)
     task = RunbookTask(
+        tenant_id=_tenant_id_for_scope_item(si_id),
         scope_item_id=si_id,
         code=code,
         sequence=data.get("sequence", 0),
@@ -880,6 +974,7 @@ def create_rehearsal(plan_id: int, data: dict) -> Rehearsal:
     ).scalar() or 0
 
     r = Rehearsal(
+        tenant_id=_tenant_id_for_plan(plan_id),
         cutover_plan_id=plan_id,
         rehearsal_number=max_num + 1,
         name=data["name"],
@@ -969,6 +1064,7 @@ def create_go_no_go(plan_id: int, data: dict) -> GoNoGoItem:
         The persisted GoNoGoItem instance.
     """
     item = GoNoGoItem(
+        tenant_id=_tenant_id_for_plan(plan_id),
         cutover_plan_id=plan_id,
         source_domain=data.get("source_domain", "custom"),
         criterion=data["criterion"],
@@ -1094,6 +1190,7 @@ def create_incident(plan_id: int, data: dict) -> HypercareIncident:
     """
     code = generate_incident_code(plan_id)
     inc = HypercareIncident(
+        tenant_id=_tenant_id_for_plan(plan_id),
         cutover_plan_id=plan_id,
         code=code,
         title=data["title"],
@@ -1183,6 +1280,7 @@ def create_sla_target(plan_id: int, data: dict) -> HypercareSLA:
         The persisted HypercareSLA instance.
     """
     sla = HypercareSLA(
+        tenant_id=_tenant_id_for_plan(plan_id),
         cutover_plan_id=plan_id,
         severity=data["severity"],
         response_target_min=data["response_target_min"],
@@ -1509,6 +1607,7 @@ def get_cutover_live_status(tenant_id: int, program_id: int, plan_id: int) -> di
 
     # ── Clock metrics ─────────────────────────────────────────────────────
     elapsed_minutes: int | None = None
+    planned_total_minutes: int | None = None
     estimated_completion: str | None = None
     is_behind_schedule = False
     total_delay_minutes = 0
@@ -1545,6 +1644,21 @@ def get_cutover_live_status(tenant_id: int, program_id: int, plan_id: int) -> di
             RunbookTask.tenant_id == tenant_id,
         )
     ).scalars().all()
+
+    # Planned total for war-room clock:
+    # 1) Prefer explicit plan window (planned_start -> planned_end).
+    # 2) Fallback to sum of runbook task planned durations.
+    if plan.planned_start and plan.planned_end:
+        planned_start = plan.planned_start
+        planned_end = plan.planned_end
+        if planned_start.tzinfo is None:
+            planned_start = planned_start.replace(tzinfo=timezone.utc)
+        if planned_end.tzinfo is None:
+            planned_end = planned_end.replace(tzinfo=timezone.utc)
+        planned_total_minutes = int((planned_end - planned_start).total_seconds() / 60)
+    else:
+        task_planned_total = sum((t.planned_duration_min or 0) for t in all_tasks)
+        planned_total_minutes = task_planned_total if task_planned_total > 0 else None
 
     status_counts: dict[str, int] = {}
     workstream_counts: dict[str, dict[str, int]] = {}
@@ -1594,7 +1708,7 @@ def get_cutover_live_status(tenant_id: int, program_id: int, plan_id: int) -> di
         "clock": {
             "started_at": plan.actual_start.isoformat() if plan.actual_start else None,
             "elapsed_minutes": elapsed_minutes,
-            "planned_total_minutes": plan.planned_duration_minutes if hasattr(plan, "planned_duration_minutes") else None,
+            "planned_total_minutes": planned_total_minutes,
             "estimated_completion": estimated_completion,
             "is_behind_schedule": is_behind_schedule,
             "total_delay_minutes": total_delay_minutes,

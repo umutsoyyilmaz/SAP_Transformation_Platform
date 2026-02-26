@@ -68,12 +68,12 @@ SAP_GLOSSARY = {
     "basis": {"column": "module", "values": ["BASIS"]},
     "btp": {"column": "module", "values": ["BTP"]},
 
-    # Turkish shortcuts
+    # Localized shortcuts (Turkish)
     "gereksinim": {"table": "requirements", "alias": "requirement"},
     "hata": {"table": "defects", "alias": "defect"},
     "risk": {"table": "risks", "alias": "risk"},
     "test": {"table": "test_cases", "alias": "test case"},
-    "görev": {"table": "actions", "alias": "action item"},
+    "gorev": {"table": "actions", "alias": "action item"},
     "karar": {"table": "decisions", "alias": "decision"},
     "sorun": {"table": "issues", "alias": "issue"},
 }

@@ -17,6 +17,10 @@ from flask import Blueprint, g, jsonify, request
 
 from app.middleware.timing import get_recent_metrics
 from app.models import db
+from app.services.security_observability import (
+    evaluate_security_alerts,
+    get_recent_security_events,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +190,26 @@ def ai_usage():
     except Exception:
         logger.exception("Failed to fetch AI usage metrics")
         return jsonify({"error": "Failed to fetch AI metrics"}), 500
+
+
+@metrics_bp.route("/security/events", methods=["GET"])
+def security_events():
+    """Recent security events related to scope isolation."""
+    window = request.args.get("window", 3600, type=int)
+    event_type = request.args.get("event_type") or None
+    rows = get_recent_security_events(seconds=window, event_type=event_type)
+    return jsonify({
+        "window_seconds": window,
+        "total": len(rows),
+        "items": rows[-200:],
+    })
+
+
+@metrics_bp.route("/security/alerts", methods=["GET"])
+def security_alerts():
+    """Evaluate threshold-based alerts for scope security events."""
+    result = evaluate_security_alerts()
+    return jsonify(result)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

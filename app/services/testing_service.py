@@ -736,7 +736,11 @@ def compute_traceability_matrix(program_id, source="both"):
             })
 
     if source in ("explore", "both"):
-        explore_reqs = ExploreRequirement.query.filter_by(project_id=program_id).all()
+        # Resolve project scope: prefer default project, fall back to legacy program_id mapping
+        from app.models.project import Project
+        default_project = Project.query.filter_by(program_id=program_id, is_default=True).first()
+        _project_id = default_project.id if default_project else program_id
+        explore_reqs = ExploreRequirement.query.filter_by(project_id=_project_id).all()
         tc_by_ereq = {}
         for tc in test_cases:
             if tc.explore_requirement_id:

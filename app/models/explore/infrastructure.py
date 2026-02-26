@@ -61,7 +61,7 @@ class CloudALMSyncLog(db.Model):
     payload = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
 
-    # ── S4-02 Faz B additions: richer audit trail ─────────────────────────
+    # ── S4-02 Phase B additions: richer audit trail ─────────────────────────
     http_status_code = db.Column(db.Integer, nullable=True, comment="HTTP status from ALM API")
     records_pushed = db.Column(db.Integer, nullable=True, comment="Count of records sent to ALM")
     records_pulled = db.Column(db.Integer, nullable=True, comment="Count of records received from ALM")
@@ -122,6 +122,7 @@ class Attachment(db.Model):
             "idx_att_entity", "entity_type", "entity_id",
         ),
         db.Index("idx_att_project", "project_id"),
+        db.Index("idx_att_program", "program_id"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
@@ -131,6 +132,14 @@ class Attachment(db.Model):
         nullable=True,
         index=True,
     )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
+    )
+    # LEGACY: project_id currently FK -> programs.id (naming bug).
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -158,6 +167,7 @@ class Attachment(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "program_id": self.program_id,
             "project_id": self.project_id,
             "entity_type": self.entity_type,
             "entity_id": self.entity_id,

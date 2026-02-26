@@ -1,5 +1,5 @@
 """
-SAP Cloud ALM Service — FDD-F07 Faz B, S4-02.
+SAP Cloud ALM Service — FDD-F07 Phase B, S4-02.
 
 Business logic for SAP Cloud ALM integration:
   - Config management (Fernet-encrypted client_secret)

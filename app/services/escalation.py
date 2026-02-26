@@ -1,10 +1,10 @@
 """
 Escalation & Alert Service — WR-1.3
 
-Threshold aşımında alert üretir, dedup key ile spam engeller.
-Mevcut NotificationService üzerinden notification oluşturur.
+Generates alerts when thresholds are exceeded, prevents spam via dedup keys.
+Creates notifications through the existing NotificationService.
 
-Kullanım:
+Usage:
     from app.services.escalation import EscalationService
     alerts = EscalationService.check_and_alert(project_id=1)
 """
@@ -42,7 +42,7 @@ def _dedup_key(project_id: int, alert_type: str, entity_id: str = "") -> str:
 
 
 def _alert_exists(dedup_key: str) -> bool:
-    """Aynı dedup key ile bugün notification var mı?"""
+    """Check if a notification with the same dedup key exists today."""
     today_start = datetime.combine(date.today(), datetime.min.time(), tzinfo=timezone.utc)
     return (
         Notification.query
@@ -59,7 +59,7 @@ def _alert_exists(dedup_key: str) -> bool:
 # ═════════════════════════════════════════════════════════════════════════════
 
 def _check_oi_aging_alerts(project_id: int) -> list[dict]:
-    """OI aging threshold aşımı kontrolü."""
+    """Check for OI aging threshold violations."""
     alerts = []
     oi_data = compute_oi_aging(project_id)
 
@@ -114,7 +114,7 @@ def _check_oi_aging_alerts(project_id: int) -> list[dict]:
 
 
 def _check_gap_ratio_alerts(project_id: int) -> list[dict]:
-    """Gap ratio threshold kontrolü."""
+    """Check for gap ratio threshold violations."""
     alerts = []
     gap_data = compute_gap_ratio(project_id)
     gap_ratio = gap_data["gap_ratio"]
@@ -149,7 +149,7 @@ def _check_gap_ratio_alerts(project_id: int) -> list[dict]:
 
 
 def _check_req_coverage_alerts(project_id: int) -> list[dict]:
-    """Requirement coverage threshold kontrolü."""
+    """Check for requirement coverage threshold violations."""
     alerts = []
     req_data = compute_requirement_coverage(project_id)
     coverage = req_data["coverage_pct"]
@@ -187,15 +187,15 @@ def _check_req_coverage_alerts(project_id: int) -> list[dict]:
 # ═════════════════════════════════════════════════════════════════════════════
 
 class EscalationService:
-    """Threshold aşımı kontrolü ve alert üretimi."""
+    """Threshold violation checking and alert generation."""
 
     @staticmethod
     def check_and_alert(project_id: int, *, commit: bool = True) -> dict:
-        """Tüm threshold'ları kontrol et ve gerekli alert'leri üret.
+        """Check all thresholds and generate necessary alerts.
 
         Args:
             project_id: Program/project ID
-            commit: True ise notification'ları commit'le, False ise sadece döndür
+            commit: If True, commit notifications; if False, just return them
 
         Returns:
             {"alerts_generated": int, "alerts_skipped": int, "alerts": [...]}
@@ -235,7 +235,7 @@ class EscalationService:
 
     @staticmethod
     def check_only(project_id: int) -> dict:
-        """Alert üretmeden sadece threshold durumunu kontrol et.
+        """Check threshold status without generating alerts.
 
         Returns:
             {"oi_aging": {...}, "gap_ratio": {...}, "req_coverage": {...}, "violations": [...]}

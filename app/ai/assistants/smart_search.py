@@ -40,13 +40,13 @@ TERM_MAP = {
     "deprecated": "deprecated", "submitted": "submitted",
     # Priorities
     "critical": "Critical", "high": "High", "medium": "Medium", "low": "Low",
-    # Turkish aliases
-    "başarılı": "pass", "başarısız": "fail", "engelli": "blocked",
-    "son": "recent", "hafta": "week", "gün": "day", "ay": "month",
+    # Localized aliases (Turkish)
+    "basarili": "pass", "basarisiz": "fail", "engelli": "blocked",
+    "son": "recent", "hafta": "week", "gun": "day", "ay": "month",
 }
 
 DATE_PATTERNS = [
-    (r"last\s+(\d+)\s*days?|son\s+(\d+)\s*gün", "days"),
+    (r"last\s+(\d+)\s*days?|son\s+(\d+)\s*gun", "days"),
     (r"last\s+(\d+)\s*weeks?|son\s+(\d+)\s*hafta", "weeks"),
     (r"last\s+(\d+)\s*months?|son\s+(\d+)\s*ay", "months"),
 ]
@@ -87,7 +87,7 @@ class SmartSearch:
         # Detect entity type
         if any(w in q for w in ("defect", "bug", "hata", "kusur")):
             parsed["entity_type"] = "defect"
-        elif any(w in q for w in ("execution", "run", "çalıştırma", "yürütme")):
+        elif any(w in q for w in ("execution", "run", "calistirma", "yurutme")):
             parsed["entity_type"] = "execution"
 
         # Extract date ranges
@@ -103,7 +103,7 @@ class SmartSearch:
                 break
 
         # Token-based extraction
-        tokens = re.findall(r'[a-zA-ZçğıöşüÇĞİÖŞÜ_]+', q)
+        tokens = re.findall(r'[a-zA-Z_]+', q)
         for token in tokens:
             mapped = TERM_MAP.get(token)
             if not mapped:
@@ -122,8 +122,8 @@ class SmartSearch:
         # Extract remaining keywords (not mapped)
         noise = set(TERM_MAP.keys()) | {"the", "in", "of", "for", "with", "and", "or", "a", "an",
                                          "test", "case", "cases", "tests", "olan", "ve", "ile",
-                                         "modülü", "modül", "olan", "olmayan", "tüm", "all", "list",
-                                         "show", "find", "search", "göster", "bul", "ara"}
+                                         "modulu", "modul", "olan", "olmayan", "tum", "all", "list",
+                                         "show", "find", "search", "goster", "bul", "ara"}
         parsed["keywords"] = [t for t in tokens if t not in noise and len(t) > 2]
 
         return parsed

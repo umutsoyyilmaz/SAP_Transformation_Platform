@@ -18,16 +18,16 @@ logger = logging.getLogger(__name__)
 def get_or_404(model, pk, label=None):
     """Fetch a model instance by primary key or return a 404 error tuple.
 
-    Mevcut codebase pattern'ini birebir korur:
-    - Başarılı: (obj, None)
-    - Başarısız: (None, (jsonify_response, 404))
+    Preserves the existing codebase pattern exactly:
+    - Success: (obj, None)
+    - Failure: (None, (jsonify_response, 404))
 
-    Tüm 8 kopyada bu pattern kullanılıyor:
+    This pattern is used in all 8 copies:
         obj, err = get_or_404(Program, pid)
         if err:
             return err
 
-    NOT: abort(404) kullanılmıyor — mevcut pattern tuple-return.
+    NOTE: abort(404) is not used — the existing pattern is tuple-return.
     """
     label = label or model.__name__
     obj = db.session.get(model, pk)

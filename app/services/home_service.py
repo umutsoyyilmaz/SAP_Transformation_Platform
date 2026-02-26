@@ -107,7 +107,7 @@ def get_home_actions() -> list[dict]:
     if open_defects:
         severity = "critical" if open_defects > 5 else "warning"
         actions.append({
-            "message": f"{open_defects} açık defect bekliyor",
+            "message": f"{open_defects} open defect(s) awaiting resolution",
             "view": "defect-management",
             "severity": severity,
         })
@@ -119,7 +119,7 @@ def get_home_actions() -> list[dict]:
     )
     if open_risks:
         actions.append({
-            "message": f"{open_risks} risk değerlendirme bekliyor",
+            "message": f"{open_risks} risk(s) awaiting assessment",
             "view": "raid",
             "severity": "warning",
         })
@@ -127,7 +127,7 @@ def get_home_actions() -> list[dict]:
     wricef_count = BacklogItem.query.count()
     if wricef_count:
         actions.append({
-            "message": f"{wricef_count} WRICEF kalemi backlog'da",
+            "message": f"{wricef_count} WRICEF item(s) in backlog",
             "view": "backlog",
             "severity": "info",
         })
@@ -150,7 +150,7 @@ def get_home_recent_activity() -> list[dict]:
     )
     return [
         {
-            "user_name": log.actor or "Sistem",
+            "user_name": log.actor or "System",
             "action": log.action or "",
             "object_code": log.entity_type or "",
             "created_at": (

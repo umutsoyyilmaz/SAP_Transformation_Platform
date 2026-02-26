@@ -203,7 +203,11 @@ def get_program_traceability_summary(program_id: int) -> dict:
     Returns counts of linked vs unlinked items across the chain.
     """
     # Canonical requirement source (ADR-001)
-    requirements = ExploreRequirement.query.filter_by(project_id=program_id).all()
+    # Resolve project scope: prefer default project, fall back to legacy program_id mapping
+    from app.models.project import Project
+    default_project = Project.query.filter_by(program_id=program_id, is_default=True).first()
+    _project_id = default_project.id if default_project else program_id
+    requirements = ExploreRequirement.query.filter_by(project_id=_project_id).all()
     backlog_items = BacklogItem.query.filter_by(program_id=program_id).all()
     config_items = ConfigItem.query.filter_by(program_id=program_id).all()
 

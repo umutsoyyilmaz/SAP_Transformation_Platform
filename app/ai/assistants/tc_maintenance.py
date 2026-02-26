@@ -68,7 +68,7 @@ class TCMaintenance:
                     "title": tc.title,
                     "module": tc.module,
                     "created_at": tc.created_at.isoformat() if tc.created_at else None,
-                    "recommendation": "Hiç çalıştırılmamış — execution planına ekleyin veya geçerliliğini gözden geçirin.",
+                    "recommendation": "Never executed — add to the execution plan or review its validity.",
                 })
                 issues.append({
                     "test_case_id": tc.id,
@@ -90,7 +90,7 @@ class TCMaintenance:
                         "title": tc.title,
                         "last_executed_at": exec_date.isoformat(),
                         "days_since": days_ago,
-                        "recommendation": f"{days_ago} gündür çalıştırılmamış — regresyon setine dahil edin veya arşivleyin.",
+                        "recommendation": f"Not executed for {days_ago} days — include in the regression set or archive.",
                     })
                     issues.append({
                         "test_case_id": tc.id,
@@ -107,7 +107,7 @@ class TCMaintenance:
                     "test_case_id": tc.id,
                     "code": tc.code,
                     "title": tc.title,
-                    "recommendation": "Bağlı gereksinim yok — traceability eksik, requirement ile ilişkilendirin.",
+                    "recommendation": "No linked requirement — traceability is missing, associate with a requirement.",
                 })
                 issues.append({
                     "test_case_id": tc.id,
@@ -134,11 +134,11 @@ class TCMaintenance:
                 "duplicate_groups": len(duplicates),
                 "total_issues": len(issues),
                 "message": (
-                    f"{len(test_cases)} TC analiz edildi: "
-                    f"{len(never_executed)} hiç çalıştırılmamış, "
-                    f"{len(stale_list)} bayat, "
-                    f"{len(unlinked)} bağlantısız, "
-                    f"{len(duplicates)} olası kopya grubu."
+                    f"{len(test_cases)} TCs analyzed: "
+                    f"{len(never_executed)} never executed, "
+                    f"{len(stale_list)} stale, "
+                    f"{len(unlinked)} unlinked, "
+                    f"{len(duplicates)} potential duplicate groups."
                 ),
             },
         }

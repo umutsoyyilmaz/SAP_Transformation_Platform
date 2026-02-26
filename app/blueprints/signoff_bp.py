@@ -116,6 +116,10 @@ def create_signoff(program_id: int, entity_type: str, entity_id: str):
     if not approver_id:
         return jsonify({"error": "Field 'approver_id' is required."}), 400
 
+    # Extract client IP here in the HTTP layer (services must not touch Flask request)
+    client_ip_header = request.headers.get("X-Forwarded-For", "")
+    client_ip = client_ip_header.split(",")[0].strip() if client_ip_header else request.remote_addr
+
     # Route to approve vs revoke flows
     if action == "revoked":
         reason = (data.get("comment") or data.get("reason") or "").strip()
@@ -129,6 +133,7 @@ def create_signoff(program_id: int, entity_type: str, entity_id: str):
             entity_id=entity_id,
             revoker_id=approver_id,
             reason=reason,
+            client_ip=client_ip,
         )
     else:
         is_override = action == "override_approved"
@@ -142,6 +147,7 @@ def create_signoff(program_id: int, entity_type: str, entity_id: str):
             is_override=is_override,
             override_reason=data.get("override_reason"),
             requestor_id=data.get("requestor_id"),
+            client_ip=client_ip,
         )
 
     if err_dict:

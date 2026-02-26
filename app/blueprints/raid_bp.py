@@ -32,7 +32,7 @@ Endpoints summary:
 
 import logging
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from app.models import db
 from app.models.program import Program
@@ -43,6 +43,7 @@ from app.models.raid import (
 )
 from app.services import raid_service
 from app.services.notification import NotificationService
+from app.services.helpers.scoped_queries import get_scoped_or_none
 from app.blueprints import paginate_query
 from app.utils.helpers import db_commit_or_error
 
@@ -55,10 +56,25 @@ raid_bp = Blueprint("raid", __name__, url_prefix="/api/v1")
 
 
 def _get_program_or_404(pid):
-    prog = db.session.get(Program, pid)
+    tenant_id = getattr(g, "jwt_tenant_id", None)
+    if tenant_id is not None:
+        prog = get_scoped_or_none(Program, pid, tenant_id=tenant_id)
+    else:
+        prog = Program.query.filter_by(id=pid).first()
     if not prog:
         return None, (jsonify({"error": "Program not found"}), 404)
     return prog, None
+
+
+def _get_entity_or_404(model, entity_id: int):
+    tenant_id = getattr(g, "jwt_tenant_id", None)
+    if tenant_id is not None:
+        entity = get_scoped_or_none(model, entity_id, tenant_id=tenant_id)
+    else:
+        entity = db.session.get(model, entity_id)
+    if not entity:
+        return None, (jsonify({"error": f"{model.__name__} not found"}), 404)
+    return entity, None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -111,17 +127,17 @@ def create_risk(pid):
 
 @raid_bp.route("/risks/<int:rid>", methods=["GET"])
 def get_risk(rid):
-    risk = db.session.get(Risk, rid)
-    if not risk:
-        return jsonify({"error": "Risk not found"}), 404
+    risk, err = _get_entity_or_404(Risk, rid)
+    if err:
+        return err
     return jsonify(risk.to_dict())
 
 
 @raid_bp.route("/risks/<int:rid>", methods=["PUT"])
 def update_risk(rid):
-    risk = db.session.get(Risk, rid)
-    if not risk:
-        return jsonify({"error": "Risk not found"}), 404
+    risk, err = _get_entity_or_404(Risk, rid)
+    if err:
+        return err
 
     data = request.get_json(silent=True) or {}
 
@@ -135,9 +151,9 @@ def update_risk(rid):
 
 @raid_bp.route("/risks/<int:rid>", methods=["DELETE"])
 def delete_risk(rid):
-    risk = db.session.get(Risk, rid)
-    if not risk:
-        return jsonify({"error": "Risk not found"}), 404
+    risk, err = _get_entity_or_404(Risk, rid)
+    if err:
+        return err
     db.session.delete(risk)
     err = db_commit_or_error()
     if err:
@@ -148,9 +164,9 @@ def delete_risk(rid):
 @raid_bp.route("/risks/<int:rid>/score", methods=["PATCH"])
 def recalculate_risk_score(rid):
     """Force recalculate risk score from current probability & impact."""
-    risk = db.session.get(Risk, rid)
-    if not risk:
-        return jsonify({"error": "Risk not found"}), 404
+    risk, err = _get_entity_or_404(Risk, rid)
+    if err:
+        return err
 
     raid_service.recalculate_risk_score(risk)
     err = db_commit_or_error()
@@ -203,17 +219,17 @@ def create_action(pid):
 
 @raid_bp.route("/actions/<int:aid>", methods=["GET"])
 def get_action(aid):
-    action = db.session.get(Action, aid)
-    if not action:
-        return jsonify({"error": "Action not found"}), 404
+    action, err = _get_entity_or_404(Action, aid)
+    if err:
+        return err
     return jsonify(action.to_dict())
 
 
 @raid_bp.route("/actions/<int:aid>", methods=["PUT"])
 def update_action(aid):
-    action = db.session.get(Action, aid)
-    if not action:
-        return jsonify({"error": "Action not found"}), 404
+    action, err = _get_entity_or_404(Action, aid)
+    if err:
+        return err
 
     data = request.get_json(silent=True) or {}
 
@@ -226,9 +242,9 @@ def update_action(aid):
 
 @raid_bp.route("/actions/<int:aid>", methods=["DELETE"])
 def delete_action(aid):
-    action = db.session.get(Action, aid)
-    if not action:
-        return jsonify({"error": "Action not found"}), 404
+    action, err = _get_entity_or_404(Action, aid)
+    if err:
+        return err
     db.session.delete(action)
     err = db_commit_or_error()
     if err:
@@ -238,9 +254,9 @@ def delete_action(aid):
 
 @raid_bp.route("/actions/<int:aid>/status", methods=["PATCH"])
 def patch_action_status(aid):
-    action = db.session.get(Action, aid)
-    if not action:
-        return jsonify({"error": "Action not found"}), 404
+    action, err = _get_entity_or_404(Action, aid)
+    if err:
+        return err
     data = request.get_json(silent=True) or {}
     new_status = data.get("status")
     if not new_status:
@@ -298,17 +314,17 @@ def create_issue(pid):
 
 @raid_bp.route("/issues/<int:iid>", methods=["GET"])
 def get_issue(iid):
-    issue = db.session.get(Issue, iid)
-    if not issue:
-        return jsonify({"error": "Issue not found"}), 404
+    issue, err = _get_entity_or_404(Issue, iid)
+    if err:
+        return err
     return jsonify(issue.to_dict())
 
 
 @raid_bp.route("/issues/<int:iid>", methods=["PUT"])
 def update_issue(iid):
-    issue = db.session.get(Issue, iid)
-    if not issue:
-        return jsonify({"error": "Issue not found"}), 404
+    issue, err = _get_entity_or_404(Issue, iid)
+    if err:
+        return err
 
     data = request.get_json(silent=True) or {}
 
@@ -321,9 +337,9 @@ def update_issue(iid):
 
 @raid_bp.route("/issues/<int:iid>", methods=["DELETE"])
 def delete_issue(iid):
-    issue = db.session.get(Issue, iid)
-    if not issue:
-        return jsonify({"error": "Issue not found"}), 404
+    issue, err = _get_entity_or_404(Issue, iid)
+    if err:
+        return err
     db.session.delete(issue)
     err = db_commit_or_error()
     if err:
@@ -333,9 +349,9 @@ def delete_issue(iid):
 
 @raid_bp.route("/issues/<int:iid>/status", methods=["PATCH"])
 def patch_issue_status(iid):
-    issue = db.session.get(Issue, iid)
-    if not issue:
-        return jsonify({"error": "Issue not found"}), 404
+    issue, err = _get_entity_or_404(Issue, iid)
+    if err:
+        return err
     data = request.get_json(silent=True) or {}
     new_status = data.get("status")
     if not new_status:
@@ -389,17 +405,17 @@ def create_decision(pid):
 
 @raid_bp.route("/decisions/<int:did>", methods=["GET"])
 def get_decision(did):
-    decision = db.session.get(Decision, did)
-    if not decision:
-        return jsonify({"error": "Decision not found"}), 404
+    decision, err = _get_entity_or_404(Decision, did)
+    if err:
+        return err
     return jsonify(decision.to_dict())
 
 
 @raid_bp.route("/decisions/<int:did>", methods=["PUT"])
 def update_decision(did):
-    decision = db.session.get(Decision, did)
-    if not decision:
-        return jsonify({"error": "Decision not found"}), 404
+    decision, err = _get_entity_or_404(Decision, did)
+    if err:
+        return err
 
     data = request.get_json(silent=True) or {}
 
@@ -413,9 +429,9 @@ def update_decision(did):
 
 @raid_bp.route("/decisions/<int:did>", methods=["DELETE"])
 def delete_decision(did):
-    decision = db.session.get(Decision, did)
-    if not decision:
-        return jsonify({"error": "Decision not found"}), 404
+    decision, err = _get_entity_or_404(Decision, did)
+    if err:
+        return err
     db.session.delete(decision)
     err = db_commit_or_error()
     if err:
@@ -425,9 +441,9 @@ def delete_decision(did):
 
 @raid_bp.route("/decisions/<int:did>/status", methods=["PATCH"])
 def patch_decision_status(did):
-    decision = db.session.get(Decision, did)
-    if not decision:
-        return jsonify({"error": "Decision not found"}), 404
+    decision, err = _get_entity_or_404(Decision, did)
+    if err:
+        return err
     data = request.get_json(silent=True) or {}
     new_status = data.get("status")
     if not new_status:

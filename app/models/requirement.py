@@ -2,7 +2,7 @@
 SAP Transformation Management Platform
 Requirement & OpenItem domain models — refactored hierarchy.
 
-Chain:  Workshop/Analiz → Requirement (L2'ye bağlı) → OpenItem
+Chain:  Workshop/Analysis → Requirement (linked to L2) → OpenItem
         Requirement ↔ L3 Process (N:M via RequirementProcessMapping)
 
 Models:
@@ -200,8 +200,11 @@ def _block_requirement_insert(mapper, connection, target) -> None:  # noqa: ANN0
     """
     from flask import current_app, has_app_context
 
-    if has_app_context() and current_app.config.get("TESTING", False):
-        return  # Allow seeding in tests — full block only in prod/dev
+    if has_app_context() and (
+        current_app.config.get("TESTING", False)
+        or current_app.config.get("SEEDING", False)
+    ):
+        return  # Allow seeding in tests and seed scripts
 
     raise RuntimeError(
         "The `requirements` table is write-blocked (B-01 migration, S1-05). "

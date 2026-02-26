@@ -25,8 +25,12 @@ Endpoints:
   Hypercare Dashboard: GET /cutover/plans/<id>/hypercare/metrics
 """
 
-from flask import Blueprint, jsonify, request
+import logging
 
+from flask import Blueprint, g, jsonify, request
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
+from app.models import db
 from app.models.cutover import (
     CutoverPlan,
     CutoverScopeItem,
@@ -37,12 +41,56 @@ from app.models.cutover import (
     RunbookTask,
     TaskDependency,
 )
+from app.models.program import Program
 from app.services import cutover_service
 from app.utils.helpers import get_or_404 as _get_or_404
 
 cutover_bp = Blueprint(
     "cutover", __name__, url_prefix="/api/v1/cutover",
 )
+logger = logging.getLogger(__name__)
+
+
+def _request_tenant_id() -> int | None:
+    """Resolve tenant_id from request context if auth middleware populated it."""
+    for attr in ("jwt_tenant_id", "tenant_id"):
+        val = getattr(g, attr, None)
+        if val is not None:
+            try:
+                return int(val)
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def _plan_in_scope(plan: CutoverPlan, program_id: int | None = None) -> bool:
+    """Return True when plan belongs to requested program + request tenant scope."""
+    if program_id is not None and plan.program_id != program_id:
+        return False
+    req_tenant_id = _request_tenant_id()
+    if req_tenant_id is not None and plan.tenant_id != req_tenant_id:
+        return False
+    return True
+
+
+def _scope_404(label: str = "Resource"):
+    return jsonify({"error": f"{label} not found"}), 404
+
+
+@cutover_bp.errorhandler(IntegrityError)
+def _handle_integrity_error(exc):
+    """Return stable API response for DB constraint violations."""
+    db.session.rollback()
+    logger.exception("Cutover integrity error: %s", exc)
+    return jsonify({"error": "Database integrity error"}), 409
+
+
+@cutover_bp.errorhandler(SQLAlchemyError)
+def _handle_sqlalchemy_error(exc):
+    """Return stable API response for unexpected DB failures."""
+    db.session.rollback()
+    logger.exception("Cutover database error: %s", exc)
+    return jsonify({"error": "Database error"}), 500
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -55,6 +103,7 @@ def list_plans():
     pid = request.args.get("program_id", type=int)
     status = request.args.get("status")
     items = cutover_service.list_plans(program_id=pid, status=status)
+    items = [p for p in items if _plan_in_scope(p, program_id=pid)]
     return jsonify({"items": [p.to_dict() for p in items], "total": len(items)})
 
 
@@ -64,6 +113,12 @@ def create_plan():
     data = request.get_json(silent=True) or {}
     if not data.get("program_id") or not data.get("name"):
         return jsonify({"error": "program_id and name are required"}), 400
+    program, err = _get_or_404(Program, data["program_id"], "Program")
+    if err:
+        return err
+    req_tenant_id = _request_tenant_id()
+    if req_tenant_id is not None and program.tenant_id != req_tenant_id:
+        return _scope_404("Program")
 
     plan = cutover_service.create_plan(data)
     return jsonify(plan.to_dict()), 201
@@ -75,6 +130,9 @@ def get_plan(plan_id):
     plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
     if err:
         return err
+    pid = request.args.get("program_id", type=int)
+    if not _plan_in_scope(plan, program_id=pid):
+        return _scope_404("CutoverPlan")
     include = request.args.get("include") == "children"
     return jsonify(plan.to_dict(include_children=include))
 
@@ -86,6 +144,9 @@ def update_plan(plan_id):
     if err:
         return err
     data = request.get_json(silent=True) or {}
+    pid = data.get("program_id")
+    if not _plan_in_scope(plan, program_id=pid):
+        return _scope_404("CutoverPlan")
     cutover_service.update_plan(plan, data)
     return jsonify(plan.to_dict())
 
@@ -96,6 +157,9 @@ def delete_plan(plan_id):
     plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
     if err:
         return err
+    pid = request.args.get("program_id", type=int)
+    if not _plan_in_scope(plan, program_id=pid):
+        return _scope_404("CutoverPlan")
     cutover_service.delete_plan(plan)
     return jsonify({"deleted": True})
 
@@ -107,6 +171,8 @@ def transition_plan_status(plan_id):
     if err:
         return err
     data = request.get_json(silent=True) or {}
+    if not _plan_in_scope(plan, program_id=data.get("program_id")):
+        return _scope_404("CutoverPlan")
     new_status = data.get("status")
     if not new_status:
         return jsonify({"error": "status is required"}), 400
@@ -123,6 +189,9 @@ def plan_progress(plan_id):
     plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
     if err:
         return err
+    pid = request.args.get("program_id", type=int)
+    if not _plan_in_scope(plan, program_id=pid):
+        return _scope_404("CutoverPlan")
     progress = cutover_service.compute_plan_progress(plan)
     return jsonify(progress)
 
@@ -134,6 +203,12 @@ def plan_progress(plan_id):
 @cutover_bp.route("/plans/<int:plan_id>/scope-items", methods=["GET"])
 def list_scope_items(plan_id):
     """List scope items for a cutover plan."""
+    plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
+    if err:
+        return err
+    pid = request.args.get("program_id", type=int)
+    if not _plan_in_scope(plan, program_id=pid):
+        return _scope_404("CutoverPlan")
     items = cutover_service.list_scope_items(plan_id)
     return jsonify({"items": [si.to_dict() for si in items], "total": len(items)})
 
@@ -144,6 +219,8 @@ def create_scope_item(plan_id):
     plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
     if err:
         return err
+    if not _plan_in_scope(plan):
+        return _scope_404("CutoverPlan")
     data = request.get_json(silent=True) or {}
     if not data.get("name"):
         return jsonify({"error": "name is required"}), 400
@@ -158,6 +235,8 @@ def get_scope_item(si_id):
     si, err = _get_or_404(CutoverScopeItem, si_id, "CutoverScopeItem")
     if err:
         return err
+    if not _plan_in_scope(si.cutover_plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("CutoverScopeItem")
     include = request.args.get("include") == "children"
     return jsonify(si.to_dict(include_children=include))
 
@@ -169,6 +248,8 @@ def update_scope_item(si_id):
     if err:
         return err
     data = request.get_json(silent=True) or {}
+    if not _plan_in_scope(si.cutover_plan, program_id=data.get("program_id")):
+        return _scope_404("CutoverScopeItem")
     cutover_service.update_scope_item(si, data)
     return jsonify(si.to_dict())
 
@@ -179,6 +260,8 @@ def delete_scope_item(si_id):
     si, err = _get_or_404(CutoverScopeItem, si_id, "CutoverScopeItem")
     if err:
         return err
+    if not _plan_in_scope(si.cutover_plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("CutoverScopeItem")
     cutover_service.delete_scope_item(si)
     return jsonify({"deleted": True})
 
@@ -190,6 +273,11 @@ def delete_scope_item(si_id):
 @cutover_bp.route("/scope-items/<int:si_id>/tasks", methods=["GET"])
 def list_tasks(si_id):
     """List runbook tasks for a scope item."""
+    si, err = _get_or_404(CutoverScopeItem, si_id, "CutoverScopeItem")
+    if err:
+        return err
+    if not _plan_in_scope(si.cutover_plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("CutoverScopeItem")
     tasks = cutover_service.list_tasks(si_id)
     return jsonify({"items": [t.to_dict(include_dependencies=True) for t in tasks],
                      "total": len(tasks)})
@@ -201,6 +289,8 @@ def create_task(si_id):
     si, err = _get_or_404(CutoverScopeItem, si_id, "CutoverScopeItem")
     if err:
         return err
+    if not _plan_in_scope(si.cutover_plan):
+        return _scope_404("CutoverScopeItem")
     data = request.get_json(silent=True) or {}
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
@@ -222,6 +312,8 @@ def get_task(task_id):
     task, err = _get_or_404(RunbookTask, task_id, "RunbookTask")
     if err:
         return err
+    if not _plan_in_scope(task.scope_item.cutover_plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("RunbookTask")
     return jsonify(task.to_dict(include_dependencies=True))
 
 
@@ -232,6 +324,8 @@ def update_task(task_id):
     if err:
         return err
     data = request.get_json(silent=True) or {}
+    if not _plan_in_scope(task.scope_item.cutover_plan, program_id=data.get("program_id")):
+        return _scope_404("RunbookTask")
     cutover_service.update_task(task, data)
     return jsonify(task.to_dict(include_dependencies=True))
 
@@ -242,6 +336,8 @@ def delete_task(task_id):
     task, err = _get_or_404(RunbookTask, task_id, "RunbookTask")
     if err:
         return err
+    if not _plan_in_scope(task.scope_item.cutover_plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("RunbookTask")
     cutover_service.delete_task(task)
     return jsonify({"deleted": True})
 
@@ -253,6 +349,8 @@ def transition_task_status(task_id):
     if err:
         return err
     data = request.get_json(silent=True) or {}
+    if not _plan_in_scope(task.scope_item.cutover_plan, program_id=data.get("program_id")):
+        return _scope_404("RunbookTask")
     new_status = data.get("status")
     if not new_status:
         return jsonify({"error": "status is required"}), 400
@@ -273,6 +371,8 @@ def list_dependencies(task_id):
     task, err = _get_or_404(RunbookTask, task_id, "RunbookTask")
     if err:
         return err
+    if not _plan_in_scope(task.scope_item.cutover_plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("RunbookTask")
     preds = [d.to_dict() for d in task.predecessors]
     succs = [d.to_dict() for d in task.successors]
     return jsonify({"predecessors": preds, "successors": succs})
@@ -285,6 +385,8 @@ def create_dependency(task_id):
     succ_task, err = _get_or_404(RunbookTask, task_id, "RunbookTask")
     if err:
         return err
+    if not _plan_in_scope(succ_task.scope_item.cutover_plan):
+        return _scope_404("RunbookTask")
     data = request.get_json(silent=True) or {}
     if not data.get("predecessor_id"):
         return jsonify({"error": "predecessor_id is required"}), 400
@@ -307,6 +409,9 @@ def delete_dependency(dep_id):
     dep, err = _get_or_404(TaskDependency, dep_id, "TaskDependency")
     if err:
         return err
+    succ = dep.successor_task
+    if succ and not _plan_in_scope(succ.scope_item.cutover_plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("TaskDependency")
     cutover_service.delete_dependency(dep)
     return jsonify({"deleted": True})
 
@@ -318,6 +423,11 @@ def delete_dependency(dep_id):
 @cutover_bp.route("/plans/<int:plan_id>/rehearsals", methods=["GET"])
 def list_rehearsals(plan_id):
     """List rehearsals for a cutover plan."""
+    plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
+    if err:
+        return err
+    if not _plan_in_scope(plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("CutoverPlan")
     items = cutover_service.list_rehearsals(plan_id)
     return jsonify({"items": [r.to_dict() for r in items], "total": len(items)})
 
@@ -328,6 +438,8 @@ def create_rehearsal(plan_id):
     plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
     if err:
         return err
+    if not _plan_in_scope(plan):
+        return _scope_404("CutoverPlan")
     data = request.get_json(silent=True) or {}
     if not data.get("name"):
         return jsonify({"error": "name is required"}), 400
@@ -342,6 +454,8 @@ def get_rehearsal(r_id):
     r, err = _get_or_404(Rehearsal, r_id, "Rehearsal")
     if err:
         return err
+    if not _plan_in_scope(r.cutover_plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("Rehearsal")
     return jsonify(r.to_dict())
 
 
@@ -352,6 +466,8 @@ def update_rehearsal(r_id):
     if err:
         return err
     data = request.get_json(silent=True) or {}
+    if not _plan_in_scope(r.cutover_plan, program_id=data.get("program_id")):
+        return _scope_404("Rehearsal")
     cutover_service.update_rehearsal(r, data)
     return jsonify(r.to_dict())
 
@@ -362,6 +478,8 @@ def delete_rehearsal(r_id):
     r, err = _get_or_404(Rehearsal, r_id, "Rehearsal")
     if err:
         return err
+    if not _plan_in_scope(r.cutover_plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("Rehearsal")
     cutover_service.delete_rehearsal(r)
     return jsonify({"deleted": True})
 
@@ -373,6 +491,8 @@ def transition_rehearsal_status(r_id):
     if err:
         return err
     data = request.get_json(silent=True) or {}
+    if not _plan_in_scope(r.cutover_plan, program_id=data.get("program_id")):
+        return _scope_404("Rehearsal")
     new_status = data.get("status")
     if not new_status:
         return jsonify({"error": "status is required"}), 400
@@ -389,6 +509,8 @@ def rehearsal_compute_metrics(r_id):
     r, err = _get_or_404(Rehearsal, r_id, "Rehearsal")
     if err:
         return err
+    if not _plan_in_scope(r.cutover_plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("Rehearsal")
     plan, err2 = _get_or_404(CutoverPlan, r.cutover_plan_id, "CutoverPlan")
     if err2:
         return err2
@@ -404,6 +526,11 @@ def rehearsal_compute_metrics(r_id):
 @cutover_bp.route("/plans/<int:plan_id>/go-no-go", methods=["GET"])
 def list_go_no_go(plan_id):
     """List Go/No-Go items for a cutover plan."""
+    plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
+    if err:
+        return err
+    if not _plan_in_scope(plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("CutoverPlan")
     items = cutover_service.list_go_no_go(plan_id)
     return jsonify({"items": [g.to_dict() for g in items], "total": len(items)})
 
@@ -414,6 +541,8 @@ def create_go_no_go(plan_id):
     plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
     if err:
         return err
+    if not _plan_in_scope(plan):
+        return _scope_404("CutoverPlan")
     data = request.get_json(silent=True) or {}
     if not data.get("criterion"):
         return jsonify({"error": "criterion is required"}), 400
@@ -428,6 +557,8 @@ def get_go_no_go(item_id):
     item, err = _get_or_404(GoNoGoItem, item_id, "GoNoGoItem")
     if err:
         return err
+    if not _plan_in_scope(item.cutover_plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("GoNoGoItem")
     return jsonify(item.to_dict())
 
 
@@ -438,6 +569,8 @@ def update_go_no_go(item_id):
     if err:
         return err
     data = request.get_json(silent=True) or {}
+    if not _plan_in_scope(item.cutover_plan, program_id=data.get("program_id")):
+        return _scope_404("GoNoGoItem")
     cutover_service.update_go_no_go(item, data)
     return jsonify(item.to_dict())
 
@@ -448,6 +581,8 @@ def delete_go_no_go(item_id):
     item, err = _get_or_404(GoNoGoItem, item_id, "GoNoGoItem")
     if err:
         return err
+    if not _plan_in_scope(item.cutover_plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("GoNoGoItem")
     cutover_service.delete_go_no_go(item)
     return jsonify({"deleted": True})
 
@@ -458,6 +593,8 @@ def seed_go_no_go(plan_id):
     plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
     if err:
         return err
+    if not _plan_in_scope(plan):
+        return _scope_404("CutoverPlan")
     try:
         items = cutover_service.seed_go_no_go_items(plan_id)
     except ValueError as exc:
@@ -471,6 +608,8 @@ def go_no_go_summary(plan_id):
     plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
     if err:
         return err
+    if not _plan_in_scope(plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("CutoverPlan")
     summary = cutover_service.compute_go_no_go_summary(plan)
     return jsonify(summary)
 
@@ -482,6 +621,11 @@ def go_no_go_summary(plan_id):
 @cutover_bp.route("/plans/<int:plan_id>/incidents", methods=["GET"])
 def list_incidents(plan_id):
     """List hypercare incidents for a cutover plan."""
+    plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
+    if err:
+        return err
+    if not _plan_in_scope(plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("CutoverPlan")
     severity = request.args.get("severity")
     status = request.args.get("status")
     items = cutover_service.list_incidents(plan_id, severity=severity, status=status)
@@ -494,6 +638,8 @@ def create_incident(plan_id):
     plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
     if err:
         return err
+    if not _plan_in_scope(plan):
+        return _scope_404("CutoverPlan")
     data = request.get_json(silent=True) or {}
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
@@ -508,6 +654,8 @@ def get_incident(inc_id):
     inc, err = _get_or_404(HypercareIncident, inc_id, "HypercareIncident")
     if err:
         return err
+    if not _plan_in_scope(inc.cutover_plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("HypercareIncident")
     return jsonify(inc.to_dict())
 
 
@@ -518,6 +666,8 @@ def update_incident(inc_id):
     if err:
         return err
     data = request.get_json(silent=True) or {}
+    if not _plan_in_scope(inc.cutover_plan, program_id=data.get("program_id")):
+        return _scope_404("HypercareIncident")
     cutover_service.update_incident(inc, data)
     return jsonify(inc.to_dict())
 
@@ -528,6 +678,8 @@ def delete_incident(inc_id):
     inc, err = _get_or_404(HypercareIncident, inc_id, "HypercareIncident")
     if err:
         return err
+    if not _plan_in_scope(inc.cutover_plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("HypercareIncident")
     cutover_service.delete_incident(inc)
     return jsonify({"deleted": True})
 
@@ -539,6 +691,8 @@ def transition_incident_status(inc_id):
     if err:
         return err
     data = request.get_json(silent=True) or {}
+    if not _plan_in_scope(inc.cutover_plan, program_id=data.get("program_id")):
+        return _scope_404("HypercareIncident")
     new_status = data.get("status")
     if not new_status:
         return jsonify({"error": "status is required"}), 400
@@ -556,6 +710,11 @@ def transition_incident_status(inc_id):
 @cutover_bp.route("/plans/<int:plan_id>/sla-targets", methods=["GET"])
 def list_sla_targets(plan_id):
     """List SLA targets for a cutover plan."""
+    plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
+    if err:
+        return err
+    if not _plan_in_scope(plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("CutoverPlan")
     items = cutover_service.list_sla_targets(plan_id)
     return jsonify({"items": [s.to_dict() for s in items], "total": len(items)})
 
@@ -566,6 +725,8 @@ def create_sla_target(plan_id):
     plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
     if err:
         return err
+    if not _plan_in_scope(plan):
+        return _scope_404("CutoverPlan")
     data = request.get_json(silent=True) or {}
     if not data.get("severity") or not data.get("response_target_min") or not data.get("resolution_target_min"):
         return jsonify({"error": "severity, response_target_min, and resolution_target_min are required"}), 400
@@ -581,6 +742,8 @@ def update_sla_target(sla_id):
     if err:
         return err
     data = request.get_json(silent=True) or {}
+    if not _plan_in_scope(sla.cutover_plan, program_id=data.get("program_id")):
+        return _scope_404("HypercareSLA")
     cutover_service.update_sla_target(sla, data)
     return jsonify(sla.to_dict())
 
@@ -591,6 +754,8 @@ def delete_sla_target(sla_id):
     sla, err = _get_or_404(HypercareSLA, sla_id, "HypercareSLA")
     if err:
         return err
+    if not _plan_in_scope(sla.cutover_plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("HypercareSLA")
     cutover_service.delete_sla_target(sla)
     return jsonify({"deleted": True})
 
@@ -601,6 +766,8 @@ def seed_sla_targets(plan_id):
     plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
     if err:
         return err
+    if not _plan_in_scope(plan):
+        return _scope_404("CutoverPlan")
     try:
         items = cutover_service.seed_sla_targets_for_plan(plan_id)
     except ValueError as exc:
@@ -618,6 +785,8 @@ def hypercare_metrics(plan_id):
     plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
     if err:
         return err
+    if not _plan_in_scope(plan, program_id=request.args.get("program_id", type=int)):
+        return _scope_404("CutoverPlan")
     metrics = cutover_service.compute_hypercare_metrics(plan)
     return jsonify(metrics)
 

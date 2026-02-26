@@ -348,7 +348,146 @@ class StabilizationMetric(db.Model):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# 4. LessonLearned  (S6-01 / FDD-I04)
+# 4. HypercareExitCriteria  (FDD-B03-Phase-2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class HypercareExitCriteria(db.Model):
+    """Persistent hypercare exit gate criterion with evaluation state.
+
+    Each criterion represents one exit gate for transitioning from hypercare
+    to BAU operations. Criteria can be auto-evaluated (linked to incident/SLA/KT/
+    handover/metric data) or custom (manually assessed by the hypercare manager).
+
+    Auto-evaluated criteria are refreshed by evaluate_exit_criteria() in
+    hypercare_service; custom criteria require explicit status updates via
+    update_exit_criterion().
+
+    The 5 standard SAP criteria are seeded by seed_exit_criteria(); additional
+    custom criteria can be created by the hypercare manager at any time.
+    """
+
+    __tablename__ = "hypercare_exit_criteria"
+
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    cutover_plan_id = db.Column(
+        db.Integer, db.ForeignKey("cutover_plans.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+
+    # Criterion identity — uses EXIT_CRITERIA_TYPES constant
+    criteria_type = db.Column(
+        db.String(20), nullable=False,
+        comment="incident | sla | kt | handover | metric | custom",
+    )
+    name = db.Column(db.String(300), nullable=False)
+    description = db.Column(db.Text, default="")
+
+    # Threshold configuration (for auto-eval criteria)
+    threshold_operator = db.Column(
+        db.String(5), nullable=True,
+        comment="gte | lte | eq — comparison operator for auto-evaluation",
+    )
+    threshold_value = db.Column(
+        db.Float, nullable=True,
+        comment="Target threshold: e.g. 0 for zero open P1, 95.0 for 95% SLA",
+    )
+    current_value = db.Column(
+        db.Float, nullable=True,
+        comment="Last evaluated value: e.g. 2 open P1s, 88.5% SLA compliance",
+    )
+
+    # Evaluation state — uses EXIT_CRITERIA_STATUSES constant
+    status = db.Column(
+        db.String(15), nullable=False, default="not_met",
+        comment="not_met | partially_met | met",
+    )
+    is_auto_evaluated = db.Column(
+        db.Boolean, nullable=False, default=True,
+        comment="True = service auto-evaluates from live data; False = manual only",
+    )
+    is_mandatory = db.Column(
+        db.Boolean, nullable=False, default=True,
+        comment="True = blocks exit sign-off; False = advisory / informational",
+    )
+    weight = db.Column(
+        db.Integer, nullable=False, default=1,
+        comment="Relative weight for weighted readiness score calculation",
+    )
+
+    # Evaluation audit trail
+    evaluated_at = db.Column(
+        db.DateTime(timezone=True), nullable=True,
+        comment="Timestamp of last evaluation (auto or manual)",
+    )
+    evaluated_by = db.Column(
+        db.String(150), default="",
+        comment="'system' for auto-eval, user name for manual assessment",
+    )
+    evidence = db.Column(
+        db.Text, default="",
+        comment="Human-readable proof: e.g. 'Last P1 resolved 52h ago'",
+    )
+    notes = db.Column(db.Text, default="")
+
+    # Metadata
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "criteria_type IN ('incident','sla','kt','handover','metric','custom')",
+            name="ck_exit_criteria_type",
+        ),
+        db.CheckConstraint(
+            "status IN ('not_met','partially_met','met')",
+            name="ck_exit_criteria_status",
+        ),
+    )
+
+    def to_dict(self) -> dict:
+        """Serialize exit criterion to dict."""
+        return {
+            "id": self.id,
+            "tenant_id": self.tenant_id,
+            "cutover_plan_id": self.cutover_plan_id,
+            "criteria_type": self.criteria_type,
+            "name": self.name,
+            "description": self.description,
+            "threshold_operator": self.threshold_operator,
+            "threshold_value": self.threshold_value,
+            "current_value": self.current_value,
+            "status": self.status,
+            "is_auto_evaluated": self.is_auto_evaluated,
+            "is_mandatory": self.is_mandatory,
+            "weight": self.weight,
+            "evaluated_at": self.evaluated_at.isoformat() if self.evaluated_at else None,
+            "evaluated_by": self.evaluated_by,
+            "evidence": self.evidence,
+            "notes": self.notes,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self) -> str:
+        return f"<HypercareExitCriteria {self.id}: {self.name[:40]} [{self.status}]>"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 5. LessonLearned  (S6-01 / FDD-I04)
 # ═════════════════════════════════════════════════════════════════════════════
 
 LESSON_CATEGORIES = [

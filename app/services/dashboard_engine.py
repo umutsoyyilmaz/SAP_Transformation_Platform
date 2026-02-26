@@ -12,6 +12,10 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, case
 
 from app.models import db
+from app.models.audit import AuditLog
+from app.models.backlog import BacklogItem
+from app.models.explore.requirement import ExploreRequirement
+from app.models.raid import Risk
 from app.models.testing import (
     TestCase, TestExecution, TestCycle, TestPlan,
     Defect,
@@ -390,4 +394,174 @@ def _recent_activity(pid, **kw):
         "title": "Recent Activity",
         "type": "table",
         "data": {"columns": ["tc_code", "tc_title", "result", "tester", "when"], "rows": data},
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# OVERVIEW GADGETS (migrated from Home Dashboard)
+# ═════════════════════════════════════════════════════════════════════════════
+
+_DEFECT_OPEN = {"open", "in_progress", "reopened"}
+_RISK_OPEN = {"open", "in_progress"}
+
+
+# 13 ── Health Score ───────────────────────────────────────────────────────
+@DashboardEngine.register("health_score", "Health Score", "1x1")
+def _health_score(pid, **kw):
+    """Program health gauge based on open defects & risks."""
+    open_defects = Defect.query.filter(
+        Defect.program_id == pid, Defect.status.in_(_DEFECT_OPEN),
+    ).count()
+    open_risks = Risk.query.filter(
+        Risk.program_id == pid, Risk.status.in_(_RISK_OPEN),
+    ).count()
+
+    health = 80
+    if open_defects > 5:
+        health -= 15
+    elif open_defects > 2:
+        health -= 8
+    if open_risks > 5:
+        health -= 10
+    elif open_risks > 2:
+        health -= 5
+    health = max(0, min(100, health))
+
+    req_count = ExploreRequirement.query.filter_by(project_id=pid).count()
+    tc_count = TestCase.query.filter_by(program_id=pid).count()
+    test_coverage = min(100.0, round(tc_count / req_count * 100, 1)) if req_count else 0
+
+    return {
+        "title": "Health Score",
+        "type": "gauge",
+        "data": {
+            "value": health,
+            "max": 100,
+            "thresholds": [50, 70, 85],
+            "extra": {
+                "requirements": req_count,
+                "test_coverage": test_coverage,
+            },
+        },
+        "chart_config": {"colors": ["#dc2626", "#ca8a04", "#16a34a"]},
+    }
+
+
+# 14 ── KPI Strip ─────────────────────────────────────────────────────────
+@DashboardEngine.register("kpi_strip", "KPI Strip", "2x1")
+def _kpi_strip(pid, **kw):
+    """Five key counters: requirements, WRICEF, test cases, defects, risks."""
+    return {
+        "title": "KPI Strip",
+        "type": "kpi_strip",
+        "data": {
+            "items": [
+                {
+                    "label": "Requirements",
+                    "value": ExploreRequirement.query.filter_by(project_id=pid).count(),
+                    "view": "explore-requirements",
+                    "icon": "requirements",
+                },
+                {
+                    "label": "WRICEF",
+                    "value": BacklogItem.query.filter_by(program_id=pid).count(),
+                    "view": "backlog",
+                    "icon": "build",
+                },
+                {
+                    "label": "Test Case",
+                    "value": TestCase.query.filter_by(program_id=pid).count(),
+                    "view": "test-planning",
+                    "icon": "test",
+                },
+                {
+                    "label": "Defect",
+                    "value": Defect.query.filter(
+                        Defect.program_id == pid,
+                        Defect.status.in_(_DEFECT_OPEN),
+                    ).count(),
+                    "view": "defect-management",
+                    "icon": "defect",
+                },
+                {
+                    "label": "Risk",
+                    "value": Risk.query.filter(
+                        Risk.program_id == pid,
+                        Risk.status.in_(_RISK_OPEN),
+                    ).count(),
+                    "view": "raid",
+                    "icon": "raid",
+                },
+            ],
+        },
+    }
+
+
+# 15 ── Action Items ───────────────────────────────────────────────────────
+@DashboardEngine.register("action_items", "Action Items", "1x1")
+def _action_items(pid, **kw):
+    """Actionable items requiring attention for the program."""
+    actions: list[dict] = []
+
+    open_defects = Defect.query.filter(
+        Defect.program_id == pid, Defect.status.in_(_DEFECT_OPEN),
+    ).count()
+    if open_defects:
+        severity = "critical" if open_defects > 5 else "warning"
+        actions.append({
+            "message": f"{open_defects} open defect(s) awaiting resolution",
+            "view": "defect-management",
+            "severity": severity,
+        })
+
+    open_risks = Risk.query.filter(
+        Risk.program_id == pid, Risk.status.in_(_RISK_OPEN),
+    ).count()
+    if open_risks:
+        actions.append({
+            "message": f"{open_risks} risk(s) awaiting assessment",
+            "view": "raid",
+            "severity": "warning",
+        })
+
+    wricef_count = BacklogItem.query.filter_by(program_id=pid).count()
+    if wricef_count:
+        actions.append({
+            "message": f"{wricef_count} WRICEF item(s) in backlog",
+            "view": "backlog",
+            "severity": "info",
+        })
+
+    return {
+        "title": "Action Items",
+        "type": "action_list",
+        "data": {"actions": actions},
+    }
+
+
+# 16 ── Audit Activity ────────────────────────────────────────────────────
+@DashboardEngine.register("audit_activity", "Audit Activity", "2x1")
+def _audit_activity(pid, **kw):
+    """Recent audit log entries for the program."""
+    limit = kw.get("limit", 10)
+    logs = (
+        AuditLog.query
+        .filter(AuditLog.program_id == pid)
+        .order_by(AuditLog.timestamp.desc())
+        .limit(limit)
+        .all()
+    )
+    rows = [
+        {
+            "user": log.actor or "System",
+            "action": log.action or "",
+            "entity": log.entity_type or "",
+            "when": log.timestamp.isoformat() if log.timestamp else "",
+        }
+        for log in logs
+    ]
+    return {
+        "title": "Audit Activity",
+        "type": "table",
+        "data": {"columns": ["user", "action", "entity", "when"], "rows": rows},
     }

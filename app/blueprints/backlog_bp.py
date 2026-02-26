@@ -47,7 +47,7 @@ Endpoints (Sprint 4 scope — aligned with master plan):
 
 import logging
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from app.models import db
 from app.models.backlog import (
@@ -56,11 +56,32 @@ from app.models.backlog import (
 from app.models.program import Program
 from app.blueprints import paginate_query
 from app.services import backlog_service
+from app.services.helpers.scoped_queries import get_scoped_or_none
 from app.utils.helpers import db_commit_or_error, get_or_404 as _get_or_404
 
 logger = logging.getLogger(__name__)
 
 backlog_bp = Blueprint("backlog", __name__, url_prefix="/api/v1")
+
+
+def _get_program_or_404(program_id: int):
+    tenant_id = getattr(g, "jwt_tenant_id", None)
+    if tenant_id is not None:
+        program = get_scoped_or_none(Program, program_id, tenant_id=tenant_id)
+        if not program:
+            return None, (jsonify({"error": "Program not found"}), 404)
+        return program, None
+    return _get_or_404(Program, program_id)
+
+
+def _get_entity_or_404(model, entity_id: int):
+    tenant_id = getattr(g, "jwt_tenant_id", None)
+    if tenant_id is not None:
+        entity = get_scoped_or_none(model, entity_id, tenant_id=tenant_id)
+        if not entity:
+            return None, (jsonify({"error": f"{model.__name__} not found"}), 404)
+        return entity, None
+    return _get_or_404(model, entity_id)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -71,7 +92,7 @@ backlog_bp = Blueprint("backlog", __name__, url_prefix="/api/v1")
 @backlog_bp.route("/programs/<int:program_id>/backlog", methods=["GET"])
 def list_backlog(program_id):
     """List backlog items for a program."""
-    program, err = _get_or_404(Program, program_id)
+    program, err = _get_program_or_404(program_id)
     if err:
         return err
 
@@ -99,7 +120,7 @@ def list_backlog(program_id):
 @backlog_bp.route("/programs/<int:program_id>/backlog", methods=["POST"])
 def create_backlog_item(program_id):
     """Create a backlog item under a program."""
-    program, err = _get_or_404(Program, program_id)
+    program, err = _get_program_or_404(program_id)
     if err:
         return err
 
@@ -117,7 +138,7 @@ def create_backlog_item(program_id):
 @backlog_bp.route("/backlog/<int:item_id>", methods=["GET"])
 def get_backlog_item(item_id):
     """Get a single backlog item, optionally with specs."""
-    item, err = _get_or_404(BacklogItem, item_id)
+    item, err = _get_entity_or_404(BacklogItem, item_id)
     if err:
         return err
     include_specs = request.args.get("include_specs") == "true"
@@ -127,7 +148,7 @@ def get_backlog_item(item_id):
 @backlog_bp.route("/backlog/<int:item_id>", methods=["PUT"])
 def update_backlog_item(item_id):
     """Update a backlog item."""
-    item, err = _get_or_404(BacklogItem, item_id)
+    item, err = _get_entity_or_404(BacklogItem, item_id)
     if err:
         return err
 
@@ -145,7 +166,7 @@ def update_backlog_item(item_id):
 @backlog_bp.route("/backlog/<int:item_id>", methods=["DELETE"])
 def delete_backlog_item(item_id):
     """Delete a backlog item."""
-    item, err = _get_or_404(BacklogItem, item_id)
+    item, err = _get_entity_or_404(BacklogItem, item_id)
     if err:
         return err
     db.session.delete(item)
@@ -158,7 +179,7 @@ def delete_backlog_item(item_id):
 @backlog_bp.route("/backlog/<int:item_id>/move", methods=["PATCH"])
 def move_backlog_item(item_id):
     """Move a backlog item — change status, sprint assignment, or board order."""
-    item, err = _get_or_404(BacklogItem, item_id)
+    item, err = _get_entity_or_404(BacklogItem, item_id)
     if err:
         return err
 
@@ -180,7 +201,7 @@ def move_backlog_item(item_id):
 @backlog_bp.route("/programs/<int:program_id>/backlog/board", methods=["GET"])
 def backlog_board(program_id):
     """Return backlog items grouped by status for kanban board view."""
-    program, err = _get_or_404(Program, program_id)
+    program, err = _get_program_or_404(program_id)
     if err:
         return err
     return jsonify(backlog_service.compute_board(program_id)), 200
@@ -189,7 +210,7 @@ def backlog_board(program_id):
 @backlog_bp.route("/programs/<int:program_id>/backlog/stats", methods=["GET"])
 def backlog_stats(program_id):
     """Aggregated backlog statistics for a program."""
-    program, err = _get_or_404(Program, program_id)
+    program, err = _get_program_or_404(program_id)
     if err:
         return err
     return jsonify(backlog_service.compute_stats(program_id)), 200
@@ -208,7 +229,7 @@ def generate_specs_for_backlog(item_id):
     """
     from app.services.spec_template_service import generate_specs_for_backlog_item
 
-    item, err = _get_or_404(BacklogItem, item_id)
+    item, err = _get_entity_or_404(BacklogItem, item_id)
     if err:
         return err
 
@@ -236,7 +257,7 @@ def generate_specs_for_config(item_id):
     """Generate FS + TS drafts for a config item."""
     from app.services.spec_template_service import generate_specs_for_config_item
 
-    item, err = _get_or_404(ConfigItem, item_id)
+    item, err = _get_entity_or_404(ConfigItem, item_id)
     if err:
         return err
 
@@ -307,7 +328,7 @@ def update_spec_template(tpl_id):
 @backlog_bp.route("/programs/<int:program_id>/sprints", methods=["GET"])
 def list_sprints(program_id):
     """List sprints for a program."""
-    program, err = _get_or_404(Program, program_id)
+    program, err = _get_program_or_404(program_id)
     if err:
         return err
     sprints = Sprint.query.filter_by(program_id=program_id)\
@@ -318,7 +339,7 @@ def list_sprints(program_id):
 @backlog_bp.route("/programs/<int:program_id>/sprints", methods=["POST"])
 def create_sprint(program_id):
     """Create a sprint under a program."""
-    program, err = _get_or_404(Program, program_id)
+    program, err = _get_program_or_404(program_id)
     if err:
         return err
 
@@ -336,7 +357,7 @@ def create_sprint(program_id):
 @backlog_bp.route("/sprints/<int:sprint_id>", methods=["GET"])
 def get_sprint(sprint_id):
     """Get a single sprint with its items."""
-    sprint, err = _get_or_404(Sprint, sprint_id)
+    sprint, err = _get_entity_or_404(Sprint, sprint_id)
     if err:
         return err
     return jsonify(sprint.to_dict(include_items=True)), 200
@@ -345,7 +366,7 @@ def get_sprint(sprint_id):
 @backlog_bp.route("/sprints/<int:sprint_id>", methods=["PUT"])
 def update_sprint(sprint_id):
     """Update a sprint."""
-    sprint, err = _get_or_404(Sprint, sprint_id)
+    sprint, err = _get_entity_or_404(Sprint, sprint_id)
     if err:
         return err
 
@@ -363,7 +384,7 @@ def update_sprint(sprint_id):
 @backlog_bp.route("/sprints/<int:sprint_id>", methods=["DELETE"])
 def delete_sprint(sprint_id):
     """Delete a sprint and unassign its items."""
-    sprint, err = _get_or_404(Sprint, sprint_id)
+    sprint, err = _get_entity_or_404(Sprint, sprint_id)
     if err:
         return err
 
@@ -381,7 +402,7 @@ def delete_sprint(sprint_id):
 @backlog_bp.route("/programs/<int:program_id>/config-items", methods=["GET"])
 def list_config_items(program_id):
     """List config items for a program."""
-    program, err = _get_or_404(Program, program_id)
+    program, err = _get_program_or_404(program_id)
     if err:
         return err
 
@@ -398,7 +419,7 @@ def list_config_items(program_id):
 @backlog_bp.route("/programs/<int:program_id>/config-items", methods=["POST"])
 def create_config_item(program_id):
     """Create a config item under a program."""
-    program, err = _get_or_404(Program, program_id)
+    program, err = _get_program_or_404(program_id)
     if err:
         return err
 
@@ -416,7 +437,7 @@ def create_config_item(program_id):
 @backlog_bp.route("/config-items/<int:item_id>", methods=["GET"])
 def get_config_item(item_id):
     """Get a single config item."""
-    item, err = _get_or_404(ConfigItem, item_id)
+    item, err = _get_entity_or_404(ConfigItem, item_id)
     if err:
         return err
     include_specs = request.args.get("include_specs") == "true"
@@ -426,7 +447,7 @@ def get_config_item(item_id):
 @backlog_bp.route("/config-items/<int:item_id>", methods=["PUT"])
 def update_config_item(item_id):
     """Update a config item."""
-    item, err = _get_or_404(ConfigItem, item_id)
+    item, err = _get_entity_or_404(ConfigItem, item_id)
     if err:
         return err
 
@@ -444,7 +465,7 @@ def update_config_item(item_id):
 @backlog_bp.route("/config-items/<int:item_id>", methods=["DELETE"])
 def delete_config_item(item_id):
     """Delete a config item."""
-    item, err = _get_or_404(ConfigItem, item_id)
+    item, err = _get_entity_or_404(ConfigItem, item_id)
     if err:
         return err
     db.session.delete(item)
@@ -461,7 +482,7 @@ def delete_config_item(item_id):
 @backlog_bp.route("/backlog/<int:item_id>/functional-spec", methods=["POST"])
 def create_fs_for_backlog(item_id):
     """Create a functional spec for a WRICEF item."""
-    item, err = _get_or_404(BacklogItem, item_id)
+    item, err = _get_entity_or_404(BacklogItem, item_id)
     if err:
         return err
     if item.functional_spec:
@@ -481,7 +502,7 @@ def create_fs_for_backlog(item_id):
 @backlog_bp.route("/config-items/<int:item_id>/functional-spec", methods=["POST"])
 def create_fs_for_config(item_id):
     """Create a functional spec for a config item."""
-    item, err = _get_or_404(ConfigItem, item_id)
+    item, err = _get_entity_or_404(ConfigItem, item_id)
     if err:
         return err
     if item.functional_spec:
@@ -501,7 +522,7 @@ def create_fs_for_config(item_id):
 @backlog_bp.route("/functional-specs/<int:fs_id>", methods=["GET"])
 def get_functional_spec(fs_id):
     """Get a functional spec with optional technical spec."""
-    fs, err = _get_or_404(FunctionalSpec, fs_id)
+    fs, err = _get_entity_or_404(FunctionalSpec, fs_id)
     if err:
         return err
     return jsonify(fs.to_dict(include_ts=True)), 200
@@ -513,7 +534,7 @@ def update_functional_spec(fs_id):
 
     Side-effect: when status → approved, auto-creates draft TechnicalSpec.
     """
-    fs, err = _get_or_404(FunctionalSpec, fs_id)
+    fs, err = _get_entity_or_404(FunctionalSpec, fs_id)
     if err:
         return err
 
@@ -551,7 +572,7 @@ def update_functional_spec(fs_id):
 @backlog_bp.route("/functional-specs/<int:fs_id>/technical-spec", methods=["POST"])
 def create_technical_spec(fs_id):
     """Create a technical spec for a functional spec."""
-    fs, err = _get_or_404(FunctionalSpec, fs_id)
+    fs, err = _get_entity_or_404(FunctionalSpec, fs_id)
     if err:
         return err
     if fs.technical_spec:
@@ -571,7 +592,7 @@ def create_technical_spec(fs_id):
 @backlog_bp.route("/technical-specs/<int:ts_id>", methods=["GET"])
 def get_technical_spec(ts_id):
     """Get a technical spec."""
-    ts, err = _get_or_404(TechnicalSpec, ts_id)
+    ts, err = _get_entity_or_404(TechnicalSpec, ts_id)
     if err:
         return err
     return jsonify(ts.to_dict()), 200
@@ -583,7 +604,7 @@ def update_technical_spec(ts_id):
 
     Side-effect: when status → approved, auto-moves parent BacklogItem to 'build'.
     """
-    ts, err = _get_or_404(TechnicalSpec, ts_id)
+    ts, err = _get_entity_or_404(TechnicalSpec, ts_id)
     if err:
         return err
 
@@ -651,7 +672,7 @@ def requirement_linked_items(req_id):
 @backlog_bp.route("/programs/<int:program_id>/traceability/summary", methods=["GET"])
 def traceability_summary(program_id):
     """Get program-level traceability coverage summary."""
-    program, err = _get_or_404(Program, program_id)
+    program, err = _get_program_or_404(program_id)
     if err:
         return err
 

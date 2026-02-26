@@ -3,7 +3,7 @@ SAP Transformation Management Platform
 Scenario & Workshop domain models — Business Scenario → Workshop → Requirement flow.
 
 Models:
-    - Scenario: business / process scenario (e.g. "Sevkiyat Süreci", "Satın Alma")
+    - Scenario: business / process scenario (e.g. "Shipping Process", "Procurement")
     - Workshop: analysis session linked to a scenario (Fit-Gap, requirement gathering, etc.)
 """
 
@@ -44,7 +44,7 @@ PROCESS_AREAS = {
     "other",
 }
 
-VALUE_CHAIN_CATEGORIES = {"yonetimsel", "cekirdek", "destek", ""}
+VALUE_CHAIN_CATEGORIES = {"management", "core", "support", ""}
 
 
 class Scenario(db.Model):
@@ -52,7 +52,7 @@ class Scenario(db.Model):
     Business / process scenario for SAP transformation.
 
     Represents a real business process area to be analyzed:
-    e.g. "Sevkiyat Süreci", "Satın Alma Süreci", "Pricing Süreci".
+    e.g. "Shipping Process", "Procurement Process", "Pricing Process".
 
     Workshops and analysis sessions are conducted under each scenario,
     and requirements emerge from those sessions.
@@ -88,7 +88,7 @@ class Scenario(db.Model):
     # Signavio L1 Value Chain classification
     value_chain_category = db.Column(
         db.String(30), default="",
-        comment="yonetimsel | cekirdek | destek  (Signavio L1)",
+        comment="management | core | support  (Signavio L1)",
     )
     signavio_code = db.Column(
         db.String(20), default="",

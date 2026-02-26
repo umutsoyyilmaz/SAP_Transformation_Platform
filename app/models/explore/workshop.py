@@ -54,6 +54,7 @@ class ExploreWorkshop(db.Model):
         db.Index("idx_ews_project_date", "project_id", "date"),
         db.Index("idx_ews_project_area", "project_id", "process_area"),
         db.Index("idx_ews_facilitator", "facilitator_id", "date"),
+        db.Index("idx_ews_program", "program_id"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
@@ -63,6 +64,14 @@ class ExploreWorkshop(db.Model):
         nullable=True,
         index=True,
     )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
+    )
+    # LEGACY: project_id currently FK -> programs.id (naming bug).
     project_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
@@ -149,6 +158,7 @@ class ExploreWorkshop(db.Model):
     def to_dict(self, include_details=False):
         d = {
             "id": self.id,
+            "program_id": self.program_id,
             "project_id": self.project_id,
             "code": self.code,
             "name": self.name,
@@ -197,12 +207,25 @@ class WorkshopScopeItem(db.Model):
     __tablename__ = "workshop_scope_items"
     __table_args__ = (
         db.UniqueConstraint("workshop_id", "process_level_id", name="uq_wsi_ws_pl"),
+        db.Index("ix_wsi_tenant_program_project", "tenant_id", "program_id", "project_id"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
     tenant_id = db.Column(
         db.Integer,
         db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -219,6 +242,8 @@ class WorkshopScopeItem(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "program_id": self.program_id,
+            "project_id": self.project_id,
             "workshop_id": self.workshop_id,
             "process_level_id": self.process_level_id,
             "sort_order": self.sort_order,
@@ -236,11 +261,26 @@ class WorkshopAttendee(db.Model):
     """Workshop participant with role and attendance tracking."""
 
     __tablename__ = "workshop_attendees"
+    __table_args__ = (
+        db.Index("ix_wa_tenant_program_project", "tenant_id", "program_id", "project_id"),
+    )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
     tenant_id = db.Column(
         db.Integer,
         db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -264,6 +304,8 @@ class WorkshopAttendee(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "program_id": self.program_id,
+            "project_id": self.project_id,
             "workshop_id": self.workshop_id,
             "user_id": self.user_id,
             "name": self.name,
@@ -286,11 +328,26 @@ class WorkshopAgendaItem(db.Model):
     """Time-ordered agenda entry for a workshop session."""
 
     __tablename__ = "workshop_agenda_items"
+    __table_args__ = (
+        db.Index("ix_wai_tenant_program_project", "tenant_id", "program_id", "project_id"),
+    )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
     tenant_id = db.Column(
         db.Integer,
         db.ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    program_id = db.Column(
+        db.Integer,
+        db.ForeignKey("programs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -311,6 +368,8 @@ class WorkshopAgendaItem(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "program_id": self.program_id,
+            "project_id": self.project_id,
             "workshop_id": self.workshop_id,
             "time": self.time.isoformat() if self.time else None,
             "title": self.title,

@@ -17,6 +17,7 @@ Permission mapping reference (from seed_roles.py):
     requirements : view, create, edit, delete, approve
     workshops    : view, create, facilitate, approve
     tests        : view, create, execute, approve
+    programs     : view, create, edit, delete
     projects     : view, create, edit, archive
     backlog      : view, create, edit
     raid         : view, create, edit, resolve
@@ -41,11 +42,11 @@ logger = logging.getLogger(__name__)
 # the closest write permission (usually .edit or .create).
 BLUEPRINT_PERMISSIONS = {
     "program": {
-        "GET": "projects.view",
-        "POST": "projects.create",
-        "PUT": "projects.edit",
-        "PATCH": "projects.edit",
-        "DELETE": "projects.edit",
+        "GET": "programs.view",
+        "POST": "programs.create",
+        "PUT": "programs.edit",
+        "PATCH": "programs.edit",
+        "DELETE": "programs.delete",
     },
     "testing": {
         "GET": "tests.view",
@@ -104,6 +105,14 @@ BLUEPRINT_PERMISSIONS = {
         "PATCH": "cutover.edit",
         "DELETE": "cutover.edit",
     },
+    # FDD-B03-Phase-2: Hypercare War Room (shared url_prefix with run_sustain)
+    "hypercare": {
+        "GET": "cutover.view",
+        "POST": "cutover.create",
+        "PUT": "cutover.edit",
+        "PATCH": "cutover.edit",
+        "DELETE": "cutover.edit",
+    },
     "traceability": {
         "GET": "requirements.view",
     },
@@ -133,6 +142,13 @@ BLUEPRINT_PERMISSIONS = {
     "onboarding": {
         "GET": "admin.settings",
         "POST": "admin.settings",
+    },
+    # ── Sprint 8: Process Mining Integration (S8-01 FDD-I05) ─────────────────
+    "process_mining": {
+        "GET":    "integration.view",
+        "POST":   "integration.create",
+        "PUT":    "integration.edit",
+        "DELETE": "integration.edit",
     },
 }
 
@@ -226,6 +242,7 @@ def apply_all_blueprint_permissions(app: Flask):
     @app.before_request
     def _enforce_blueprint_permission():
         from app.services.permission_service import has_permission
+        from app.services.security_observability import record_security_event
 
         # Determine which blueprint this request belongs to
         endpoint = request.endpoint
@@ -262,10 +279,29 @@ def apply_all_blueprint_permissions(app: Flask):
         if codename is None:
             return None
 
-        if not has_permission(user_id, codename):
+        tenant_id = getattr(g, "jwt_tenant_id", None) or getattr(g, "tenant_id", None)
+        if not has_permission(user_id, codename, tenant_id=tenant_id):
+            request_id = getattr(g, "request_id", None)
+            record_security_event(
+                event_type="cross_scope_access_attempt",
+                reason="blueprint_permission_denied",
+                severity="warning",
+                tenant_id=tenant_id,
+                request_id=request_id,
+                details={
+                    "required_permission": codename,
+                    "endpoint": endpoint,
+                },
+            )
             logger.warning(
                 "Blueprint permission denied: user=%d required=%s endpoint=%s",
                 user_id, codename, endpoint,
+                extra={
+                    "tenant_id": tenant_id,
+                    "request_id": request_id,
+                    "event_type": "cross_scope_access_attempt",
+                    "security_code": "SEC-CROSS-SCOPE-001",
+                },
             )
             return jsonify({
                 "error": "Permission denied",

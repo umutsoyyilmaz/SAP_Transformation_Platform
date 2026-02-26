@@ -298,12 +298,31 @@ def import_variants(
     Raises:
         NotFoundError: If no active connection exists.
     """
-    result = fetch_variants(tenant_id, process_id)
-    if not result["ok"]:
-        raise ValidationError(f"Failed to fetch variants from provider: {result['error']}")
+    # Load connection once; pass to gateway directly to avoid a second DB hit.
+    from app.integrations.process_mining_gateway import (
+        build_process_mining_gateway,
+        ProviderConnectionError,
+    )
 
     conn = _require_active_connection(tenant_id)
-    variants = result["variants"]
+    try:
+        gw = build_process_mining_gateway(conn)
+        gw_result = gw.fetch_variants(process_id)
+    except ProviderConnectionError as exc:
+        raise ValidationError(f"Failed to fetch variants from provider: {exc}") from exc
+
+    if not gw_result.ok:
+        raise ValidationError(f"Failed to fetch variants from provider: {gw_result.error}")
+
+    raw = gw_result.data or []
+    if isinstance(raw, dict):
+        raw = raw.get("value") or raw.get("items") or raw.get("data") or []
+
+    logger.info(
+        "Process mining fetched %d variants for import process_id=%s tenant_id=%s",
+        len(raw), process_id, tenant_id,
+    )
+    variants = raw
 
     if selected_variant_ids is not None:
         selected_set = set(selected_variant_ids)
@@ -362,25 +381,50 @@ def import_variants(
     }
 
 
-def list_imports(tenant_id: int, project_id: int) -> list[dict]:
-    """List all imported variants for a project, ordered by import date (newest first).
+def list_imports(
+    tenant_id: int,
+    project_id: int,
+    page: int = 1,
+    per_page: int = 50,
+) -> dict:
+    """List imported variants for a project, paginated, ordered by import date (newest first).
 
     Args:
         tenant_id:  Tenant scope (mandatory — isolation boundary).
         project_id: Target program/project ID.
+        page:       1-based page number.
+        per_page:   Page size; clamped to [1, 200].
 
     Returns:
-        List of ProcessVariantImport dicts.
+        {"items": list[dict], "total": int, "page": int, "per_page": int}
     """
-    rows = db.session.execute(
+    per_page = max(1, min(per_page, 200))
+    page = max(1, page)
+    offset = (page - 1) * per_page
+
+    base = (
         select(ProcessVariantImport)
         .where(
             ProcessVariantImport.tenant_id == tenant_id,
             ProcessVariantImport.project_id == project_id,
         )
-        .order_by(ProcessVariantImport.imported_at.desc())
+    )
+    total: int = db.session.execute(
+        select(db.func.count()).select_from(base.subquery())
+    ).scalar_one()
+
+    rows = db.session.execute(
+        base.order_by(ProcessVariantImport.imported_at.desc())
+        .limit(per_page)
+        .offset(offset)
     ).scalars().all()
-    return [r.to_dict() for r in rows]
+
+    return {
+        "items": [r.to_dict() for r in rows],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+    }
 
 
 # ── Promote / reject ──────────────────────────────────────────────────────────
@@ -425,7 +469,15 @@ def promote_variant_to_process_level(
             f"process_level_id={variant.promoted_to_process_level_id}."
         )
 
-    parent = db.session.get(ProcessLevel, parent_process_level_id)
+    # Explicit tenant + project scope — do not use db.session.get() which performs
+    # a global PK lookup with no tenant boundary enforcement.
+    parent = db.session.execute(
+        select(ProcessLevel).where(
+            ProcessLevel.id == parent_process_level_id,
+            ProcessLevel.tenant_id == tenant_id,
+            ProcessLevel.project_id == project_id,
+        )
+    ).scalar_one_or_none()
     if parent is None:
         raise NotFoundError(resource="ProcessLevel", resource_id=parent_process_level_id)
     if parent.level != 3:
@@ -433,8 +485,6 @@ def promote_variant_to_process_level(
             f"Parent process level must be L3 (E2E Process). "
             f"Got level={parent.level} for id={parent_process_level_id}."
         )
-    if parent.project_id != project_id:
-        raise NotFoundError(resource="ProcessLevel", resource_id=parent_process_level_id)
 
     # Generate a sequential code under the parent
     sibling_count = db.session.execute(

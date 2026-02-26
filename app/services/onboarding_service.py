@@ -15,6 +15,8 @@ from app.utils.crypto import hash_password
 
 from app.models import db
 from app.models.auth import Tenant, User, Role, UserRole
+from app.models.project import Project
+from app.services.user_service import assign_role, assign_to_project, UserServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,31 @@ def create_first_admin(tenant_id, data):
         db.session.add(ur)
 
     db.session.commit()
+
+    # Optional direct project assignment in onboarding flow.
+    project_id = data.get("project_id")
+    role_name = data.get("project_role") or "project_manager"
+    starts_at = data.get("assignment_starts_at")
+    ends_at = data.get("assignment_ends_at")
+    if project_id is not None:
+        project = db.session.get(Project, int(project_id))
+        if not project or project.tenant_id != tenant_id:
+            return None, "Project not found in tenant"
+        try:
+            assign_to_project(user.id, project.id, role_in_project=role_name, assigned_by=user.id)
+            assign_role(
+                user.id,
+                role_name,
+                assigned_by=user.id,
+                tenant_id=tenant_id,
+                program_id=project.program_id,
+                project_id=project.id,
+                starts_at=starts_at,
+                ends_at=ends_at,
+            )
+        except UserServiceError as exc:
+            return None, exc.message
+
     logger.info("Onboarding step 2: admin user %s for tenant %d", user.email, tenant_id)
     return user.to_dict(), None
 

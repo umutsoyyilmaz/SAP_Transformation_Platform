@@ -10,5 +10,5 @@ This mirrors the `app/ai/gateway.py` pattern: every call is:
   - Logged to the relevant audit table
 
 Current gateways:
-  alm_gateway.ALMGateway — SAP Cloud ALM REST API (FDD-F07 Faz B)
+  alm_gateway.ALMGateway — SAP Cloud ALM REST API (FDD-F07 Phase B)
 """
