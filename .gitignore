@@ -45,6 +45,16 @@ Thumbs.db
 
 # --- Instance / Config ---
 instance/
-instance/
 *.bak
-.env
+
+# --- Node.js ---
+node_modules/
+
+# --- Rollback Checkpoints ---
+.rollback_checkpoints/
+
+# --- Test Output ---
+test_output.txt
+bolum3_test_report.txt
+e2e/playwright-report/
+e2e/test-results/
