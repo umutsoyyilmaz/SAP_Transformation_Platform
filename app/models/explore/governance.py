@@ -84,10 +84,9 @@ class ProjectRole(db.Model):
     __tablename__ = "project_roles"
     __table_args__ = (
         db.UniqueConstraint(
-            "project_id", "user_id", "role", "process_area",
-            name="uq_prole_project_user_role_area",
+            "program_id", "user_id", "role", "process_area",
+            name="uq_prole_program_user_role_area",
         ),
-        db.Index("idx_prole_program", "program_id"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
@@ -104,10 +103,10 @@ class ProjectRole(db.Model):
         index=True,
         comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
     )
-    # LEGACY: project_id currently FK -> programs.id (naming bug).
+    # Faz 1.4: Re-pointed from programs.id → projects.id (was naming bug).
     project_id = db.Column(
-        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        db.Integer, db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True, index=True,
     )
     user_id = db.Column(
         db.String(36), nullable=False, index=True,
@@ -164,10 +163,10 @@ class PhaseGate(db.Model):
         index=True,
         comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
     )
-    # LEGACY: project_id currently FK -> programs.id (naming bug).
+    # Faz 1.4: Re-pointed from programs.id → projects.id (was naming bug).
     project_id = db.Column(
-        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        db.Integer, db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True, index=True,
     )
     phase = db.Column(
         db.String(10), nullable=False,
@@ -313,9 +312,8 @@ class ScopeChangeRequest(db.Model):
 
     __tablename__ = "scope_change_requests"
     __table_args__ = (
-        db.UniqueConstraint("project_id", "code", name="uq_scr_project_code"),
-        db.Index("idx_scr_project_status", "project_id", "status"),
-        db.Index("idx_scr_program", "program_id"),
+        db.UniqueConstraint("program_id", "code", name="uq_scr_program_code"),
+        db.Index("idx_scr_program_status", "program_id", "status"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
@@ -332,14 +330,14 @@ class ScopeChangeRequest(db.Model):
         index=True,
         comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
     )
-    # LEGACY: project_id currently FK -> programs.id (naming bug).
+    # Faz 1.4: Re-pointed from programs.id → projects.id (was naming bug).
     project_id = db.Column(
-        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        db.Integer, db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True, index=True,
     )
     code = db.Column(
         db.String(10), nullable=False,
-        comment="Auto: SCR-{seq}. Project-wide.",
+        comment="Auto: SCR-{seq}. Program-wide.",
     )
     process_level_id = db.Column(
         db.String(36), db.ForeignKey("process_levels.id", ondelete="SET NULL"),
@@ -417,9 +415,8 @@ class ScopeChangeLog(db.Model):
 
     __tablename__ = "scope_change_logs"
     __table_args__ = (
-        db.Index("idx_scl_project", "project_id"),
-        db.Index("idx_scl_process_level", "process_level_id"),
         db.Index("idx_scl_program", "program_id"),
+        db.Index("idx_scl_process_level", "process_level_id"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
@@ -436,10 +433,10 @@ class ScopeChangeLog(db.Model):
         index=True,
         comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
     )
-    # LEGACY: project_id currently FK -> programs.id (naming bug).
+    # Faz 1.4: Re-pointed from programs.id → projects.id (was naming bug).
     project_id = db.Column(
-        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        db.Integer, db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True, index=True,
     )
     process_level_id = db.Column(
         db.String(36), db.ForeignKey("process_levels.id", ondelete="SET NULL"),

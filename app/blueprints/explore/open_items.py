@@ -17,7 +17,7 @@ Note: ExploreOpenItem.project_id FK → programs.id (legacy naming).
 
 from flask import jsonify, request
 
-from app.blueprints.explore import explore_bp
+from app.blueprints.explore import _get_program_id, explore_bp
 from app.services import explore_service
 from app.services.open_item_lifecycle import (
     OITransitionError,
@@ -25,21 +25,6 @@ from app.services.open_item_lifecycle import (
 from app.services.permission import PermissionDenied
 from app.utils.errors import E, api_error
 from app.utils.helpers import parse_date_input as _parse_date_input
-
-
-def _get_project_id(data=None):
-    """Extract project_id from request data or query params.
-
-    Returns (project_id, error_response) tuple.
-    """
-    pid = None
-    if data:
-        pid = data.get("project_id")
-    if pid is None:
-        pid = request.args.get("project_id", type=int)
-    if not pid:
-        return None, api_error(E.VALIDATION_REQUIRED, "project_id is required")
-    return pid, None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -50,7 +35,7 @@ def _get_project_id(data=None):
 @explore_bp.route("/open-items", methods=["GET"])
 def list_open_items():
     """List open items with filters, grouping, pagination."""
-    project_id, err = _get_project_id()
+    project_id, err = _get_program_id()
     if err:
         return err
 
@@ -78,7 +63,7 @@ def list_open_items():
 def create_open_item_flat():
     """Create an open item without requiring a process-step parent."""
     data = request.get_json(silent=True) or {}
-    project_id, err = _get_project_id(data)
+    project_id, err = _get_program_id(data)
     if err:
         return err
     if not data.get("title"):
@@ -102,7 +87,7 @@ def create_open_item_flat():
 @explore_bp.route("/open-items/<oi_id>", methods=["GET"])
 def get_open_item(oi_id):
     """Get a single open item."""
-    project_id, err = _get_project_id()
+    project_id, err = _get_program_id()
     if err:
         return err
     result = explore_service.get_open_item_service(oi_id, project_id=project_id)
@@ -115,7 +100,7 @@ def get_open_item(oi_id):
 def update_open_item(oi_id):
     """Update open item fields (not status — use transition)."""
     data = request.get_json(silent=True) or {}
-    project_id, err = _get_project_id(data)
+    project_id, err = _get_program_id(data)
     if err:
         return err
     result = explore_service.update_open_item_service(oi_id, data, project_id=project_id)
@@ -138,7 +123,7 @@ def transition_open_item_endpoint(oi_id):
     if not action:
         return api_error(E.VALIDATION_REQUIRED, "action is required")
 
-    project_id, err = _get_project_id(data)
+    project_id, err = _get_program_id(data)
     if err:
         return err
 
@@ -167,7 +152,7 @@ def reassign_open_item_endpoint(oi_id):
     if not new_assignee_id or not new_assignee_name:
         return api_error(E.VALIDATION_REQUIRED, "assignee_id and assignee_name are required")
 
-    project_id, err = _get_project_id(data)
+    project_id, err = _get_program_id(data)
     if err:
         return err
 
@@ -193,7 +178,7 @@ def add_comment(oi_id):
     if not content:
         return api_error(E.VALIDATION_REQUIRED, "content is required")
 
-    project_id, err = _get_project_id(data)
+    project_id, err = _get_program_id(data)
     if err:
         return err
 
@@ -216,7 +201,7 @@ def add_comment(oi_id):
 @explore_bp.route("/open-items/stats", methods=["GET"])
 def open_item_stats():
     """Open item KPI aggregation."""
-    project_id, err = _get_project_id()
+    project_id, err = _get_program_id()
     if err:
         return err
     result = explore_service.open_item_stats_service(project_id)

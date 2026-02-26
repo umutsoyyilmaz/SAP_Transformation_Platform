@@ -50,11 +50,11 @@ from app.utils.helpers import parse_date_input as _parse_date_input
 
 def list_workshops():
     """List workshops with filters, sorting, pagination."""
-    project_id = request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
-    q = ExploreWorkshop.query.filter_by(project_id=project_id)
+    q = ExploreWorkshop.query.filter_by(program_id=project_id)
 
     # Filters
     status = request.args.get("status")
@@ -246,16 +246,17 @@ def create_workshop():
     """Create a new workshop with auto-generated code."""
     data = request.get_json(silent=True) or {}
 
-    project_id = data.get("project_id")
+    project_id = data.get("program_id") or data.get("project_id")
     process_area = data.get("process_area") or data.get("area_code")
     name = data.get("name")
     if not project_id or not process_area or not name:
-        return api_error(E.VALIDATION_REQUIRED, "project_id, process_area, and name are required")
+        return api_error(E.VALIDATION_REQUIRED, "program_id, process_area, and name are required")
 
     session_number = data.get("session_number", 1)
     code = generate_workshop_code(project_id, process_area, session_number)
 
     ws = ExploreWorkshop(
+        program_id=project_id,
         project_id=project_id,
         code=code,
         name=name,
@@ -666,6 +667,7 @@ def create_delta_workshop(workshop_id):
 
     delta = ExploreWorkshop(
         id=_uuid(),
+        program_id=original.project_id,
         project_id=original.project_id,
         code=delta_code,
         name=data.get("name", f"Delta: {original.name}"),
@@ -717,14 +719,14 @@ def create_delta_workshop(workshop_id):
 
 def workshop_capacity():
     """Facilitator capacity — weekly load per facilitator."""
-    project_id = request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
     workshops = (
         ExploreWorkshop.query
         .filter(
-            ExploreWorkshop.project_id == project_id,
+            ExploreWorkshop.program_id == project_id,
             ExploreWorkshop.facilitator_id.isnot(None),
             ExploreWorkshop.date.isnot(None),
             ExploreWorkshop.status.in_(["draft", "scheduled", "in_progress"]),
@@ -756,23 +758,23 @@ def workshop_capacity():
 
 def workshop_stats():
     """Workshop KPI aggregation — totals, by_status, by_wave."""
-    project_id = request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
-    base = ExploreWorkshop.query.filter_by(project_id=project_id)
+    base = ExploreWorkshop.query.filter_by(program_id=project_id)
     total = base.count()
 
     by_status = {}
     for row in db.session.query(
         ExploreWorkshop.status, func.count(ExploreWorkshop.id)
-    ).filter_by(project_id=project_id).group_by(ExploreWorkshop.status).all():
+    ).filter_by(program_id=project_id).group_by(ExploreWorkshop.status).all():
         by_status[row[0]] = row[1]
 
     by_wave = {}
     for row in db.session.query(
         ExploreWorkshop.wave, func.count(ExploreWorkshop.id)
-    ).filter_by(project_id=project_id).group_by(ExploreWorkshop.wave).all():
+    ).filter_by(program_id=project_id).group_by(ExploreWorkshop.wave).all():
         by_wave[str(row[0]) if row[0] else "unassigned"] = row[1]
 
     completed = by_status.get("completed", 0)

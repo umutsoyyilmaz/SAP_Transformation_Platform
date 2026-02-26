@@ -121,7 +121,6 @@ class Attachment(db.Model):
         db.Index(
             "idx_att_entity", "entity_type", "entity_id",
         ),
-        db.Index("idx_att_project", "project_id"),
         db.Index("idx_att_program", "program_id"),
     )
 
@@ -139,10 +138,10 @@ class Attachment(db.Model):
         index=True,
         comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
     )
-    # LEGACY: project_id currently FK -> programs.id (naming bug).
+    # Faz 1.4: Re-pointed from programs.id → projects.id (was naming bug).
     project_id = db.Column(
-        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        db.Integer, db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True, index=True,
     )
     entity_type = db.Column(
         db.String(20), nullable=False,

@@ -158,14 +158,15 @@ def test_resolve_project_scope_fallback_flag_on_and_off(app, caplog):
         assert "fallback is disabled" in exc.message
 
 
-def test_open_items_list_requires_project_id_with_program_only(client):
-    """With fallback disabled, program_id alone is not sufficient — project_id required."""
+def test_open_items_list_accepts_program_id_alone(client):
+    """After Faz 1.3, program_id alone is accepted by the open-items endpoint."""
     tenant, program, _project = _seed_program_with_default_project("Open Item Program")
     _set_flag(default_enabled=True)
     user = _seed_tenant_admin_user(tenant.id)
 
     oi = ExploreOpenItem(
-        project_id=_project.id,
+        project_id=program.id,
+        program_id=program.id,
         code="OI-001",
         title="Legacy Scoped OI",
         created_by_id="system",
@@ -177,30 +178,26 @@ def test_open_items_list_requires_project_id_with_program_only(client):
     _db.session.commit()
 
     headers = _jwt_headers(client.application, user_id=user.id, tenant_id=tenant.id)
-    # program_id alone should fail — fallback is disabled
+    # program_id alone is accepted after Faz 1.3 migration
     res = client.get(f"/api/v1/explore/open-items?program_id={program.id}", headers=headers)
-    assert res.status_code == 400
-    assert "project_id" in res.get_json()["error"].lower()
+    assert res.status_code == 200
 
-    # With explicit project_id, should succeed
+    # With explicit project_id (legacy param name), should also succeed
     res = client.get(
-        f"/api/v1/explore/open-items?program_id={program.id}&project_id={_project.id}",
+        f"/api/v1/explore/open-items?project_id={program.id}",
         headers=headers,
     )
     assert res.status_code == 200
-    body = res.get_json()
-    assert body["total"] == 1
-    assert body["items"][0]["title"] == "Legacy Scoped OI"
 
 
-def test_open_items_list_rejects_program_only_when_flag_disabled(client):
-    """With flag disabled and fallback off, program_id alone yields 400."""
+def test_open_items_list_accepts_program_id_when_flag_disabled(client):
+    """After Faz 1.3, program_id alone is accepted regardless of flag state."""
     tenant, program, _project = _seed_program_with_default_project("Open Item Disabled")
     _set_flag(default_enabled=False)
     user = _seed_tenant_admin_user(tenant.id)
     _db.session.commit()
 
     headers = _jwt_headers(client.application, user_id=user.id, tenant_id=tenant.id)
+    # program_id alone is accepted — open-items uses _get_program_id helper
     res = client.get(f"/api/v1/explore/open-items?program_id={program.id}", headers=headers)
-    assert res.status_code == 400
-    assert "project_id" in res.get_json()["error"].lower()
+    assert res.status_code == 200

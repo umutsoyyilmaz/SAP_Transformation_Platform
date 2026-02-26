@@ -57,11 +57,11 @@ from app.utils.errors import api_error, E
 
 def list_requirements():
     """List requirements with filters, grouping, pagination."""
-    project_id = request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
-    q = ExploreRequirement.query.filter_by(project_id=project_id)
+    q = ExploreRequirement.query.filter_by(program_id=project_id)
 
     # Filters
     status = request.args.get("status")
@@ -158,9 +158,9 @@ def _validate_sap_module(data):
 def create_requirement_flat():
     """Create a requirement without requiring a process-step parent."""
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id")
+    project_id = data.get("program_id") or data.get("project_id")
     if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+        return api_error(E.VALIDATION_REQUIRED, "program_id is required")
     if not data.get("title"):
         return api_error(E.VALIDATION_REQUIRED, "title is required")
 
@@ -177,6 +177,7 @@ def create_requirement_flat():
     code = generate_requirement_code(project_id)
 
     req = ExploreRequirement(
+        program_id=project_id,
         project_id=project_id,
         code=code,
         title=data["title"],
@@ -353,10 +354,10 @@ def batch_transition_endpoint():
     requirement_ids = data.get("requirement_ids", [])
     action = data.get("action")
     user_id = data.get("user_id", "system")
-    project_id = data.get("project_id")
+    project_id = data.get("program_id") or data.get("project_id")
 
     if not requirement_ids or not action or not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "requirement_ids, action, and project_id are required")
+        return api_error(E.VALIDATION_REQUIRED, "requirement_ids, action, and program_id are required")
 
     result = batch_transition(
         requirement_ids, action, user_id, project_id,
@@ -376,9 +377,9 @@ def batch_transition_endpoint():
 def bulk_sync_alm():
     """Bulk sync approved requirements to SAP Cloud ALM."""
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id")
+    project_id = data.get("program_id") or data.get("project_id")
     if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+        return api_error(E.VALIDATION_REQUIRED, "program_id is required")
 
     result = bulk_sync_to_alm(
         project_id,
@@ -396,40 +397,40 @@ def bulk_sync_alm():
 
 def requirement_stats():
     """Requirement KPI aggregation."""
-    project_id = request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
-    base = ExploreRequirement.query.filter_by(project_id=project_id)
+    base = ExploreRequirement.query.filter_by(program_id=project_id)
     total = base.count()
 
     by_status = {}
     for row in db.session.query(
         ExploreRequirement.status, func.count(ExploreRequirement.id)
-    ).filter_by(project_id=project_id).group_by(ExploreRequirement.status).all():
+    ).filter_by(program_id=project_id).group_by(ExploreRequirement.status).all():
         by_status[row[0]] = row[1]
 
     by_priority = {}
     for row in db.session.query(
         ExploreRequirement.priority, func.count(ExploreRequirement.id)
-    ).filter_by(project_id=project_id).group_by(ExploreRequirement.priority).all():
+    ).filter_by(program_id=project_id).group_by(ExploreRequirement.priority).all():
         by_priority[row[0]] = row[1]
 
     by_type = {}
     for row in db.session.query(
         ExploreRequirement.type, func.count(ExploreRequirement.id)
-    ).filter_by(project_id=project_id).group_by(ExploreRequirement.type).all():
+    ).filter_by(program_id=project_id).group_by(ExploreRequirement.type).all():
         by_type[row[0]] = row[1]
 
     by_area = {}
     for row in db.session.query(
         ExploreRequirement.process_area, func.count(ExploreRequirement.id)
-    ).filter_by(project_id=project_id).group_by(ExploreRequirement.process_area).all():
+    ).filter_by(program_id=project_id).group_by(ExploreRequirement.process_area).all():
         by_area[row[0] or "unassigned"] = row[1]
 
     total_effort = db.session.query(
         func.sum(ExploreRequirement.effort_hours)
-    ).filter_by(project_id=project_id).scalar() or 0
+    ).filter_by(program_id=project_id).scalar() or 0
 
     alm_synced_count = base.filter_by(alm_synced=True).count()
 
@@ -459,19 +460,19 @@ def requirement_stats():
     by_criticality = {}
     for row in db.session.query(
         ExploreRequirement.business_criticality, func.count(ExploreRequirement.id)
-    ).filter_by(project_id=project_id).group_by(ExploreRequirement.business_criticality).all():
+    ).filter_by(program_id=project_id).group_by(ExploreRequirement.business_criticality).all():
         by_criticality[row[0] or "unassigned"] = row[1]
 
     by_impact = {}
     for row in db.session.query(
         ExploreRequirement.impact, func.count(ExploreRequirement.id)
-    ).filter_by(project_id=project_id).group_by(ExploreRequirement.impact).all():
+    ).filter_by(program_id=project_id).group_by(ExploreRequirement.impact).all():
         by_impact[row[0] or "unassigned"] = row[1]
 
     by_sap_module = {}
     for row in db.session.query(
         ExploreRequirement.sap_module, func.count(ExploreRequirement.id)
-    ).filter_by(project_id=project_id).group_by(ExploreRequirement.sap_module).all():
+    ).filter_by(program_id=project_id).group_by(ExploreRequirement.sap_module).all():
         by_sap_module[row[0] or "unassigned"] = row[1]
 
     # Go-Live Readiness Score — weighted by business_criticality
@@ -522,7 +523,7 @@ def requirement_coverage_matrix():
     Returns breakdown by process_area (or sap_module) and status,
     plus conversion counts per area.
     """
-    project_id = request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
@@ -534,7 +535,7 @@ def requirement_coverage_matrix():
 
     rows = (
         db.session.query(field, ExploreRequirement.status, func.count(ExploreRequirement.id))
-        .filter_by(project_id=project_id)
+        .filter_by(program_id=project_id)
         .group_by(field, ExploreRequirement.status)
         .all()
     )
@@ -549,7 +550,7 @@ def requirement_coverage_matrix():
 
     conv_rows = (
         db.session.query(field, func.count(ExploreRequirement.id))
-        .filter_by(project_id=project_id)
+        .filter_by(program_id=project_id)
         .filter(
             or_(
                 exists(
@@ -583,11 +584,11 @@ def requirement_coverage_matrix():
 def convert_requirement_endpoint(req_id):
     """Convert a single approved requirement to a backlog/config item."""
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id")
+    project_id = data.get("program_id") or data.get("project_id")
     user_id = data.get("user_id", "system")
 
     if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+        return api_error(E.VALIDATION_REQUIRED, "program_id is required")
 
     try:
         result = convert_requirement(
@@ -606,11 +607,11 @@ def batch_convert_endpoint():
     """Batch convert multiple approved requirements. Partial success."""
     data = request.get_json(silent=True) or {}
     requirement_ids = data.get("requirement_ids", [])
-    project_id = data.get("project_id")
+    project_id = data.get("program_id") or data.get("project_id")
     user_id = data.get("user_id", "system")
 
     if not requirement_ids or not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "requirement_ids and project_id are required")
+        return api_error(E.VALIDATION_REQUIRED, "requirement_ids and program_id are required")
 
     results = {"success": [], "errors": []}
     for rid in requirement_ids:
@@ -799,7 +800,7 @@ def unconvert_requirement_endpoint(req_id):
     Query: ?force=true|false
     """
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    project_id = data.get("program_id") or data.get("project_id") or request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     user_id = data.get("user_id", "system")
     force = request.args.get("force", "false").lower() == "true"
 

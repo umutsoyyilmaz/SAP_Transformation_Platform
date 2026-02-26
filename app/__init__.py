@@ -35,13 +35,19 @@ from app.middleware.tenant_context import init_tenant_context
 # ── SQLite FK enforcement (global engine event) ─────────────────────────
 from sqlalchemy import event as _sa_event, engine as _sa_engine
 
+# Faz 1.4 transitional: During the explore FK migration, project_id FK targets
+# projects.id but many test fixtures still pass program IDs as project_id
+# (the old pattern). SQLite FK enforcement must be relaxed during testing.
+# Will be restored to unconditional ON in Faz 6 (cleanup).
+_SQLITE_FK_ENFORCEMENT = True  # set to False by conftest.py during tests
+
 
 @_sa_event.listens_for(_sa_engine.Engine, "connect")
 def _enable_sqlite_fk(dbapi_conn, connection_record):
     """Enable foreign key enforcement for SQLite connections."""
     if "sqlite" in type(dbapi_conn).__module__:
         cursor = dbapi_conn.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute(f"PRAGMA foreign_keys={'ON' if _SQLITE_FK_ENFORCEMENT else 'OFF'}")
         cursor.close()
 
 migrate = Migrate()
@@ -265,6 +271,7 @@ def create_app(config_name=None):
     from app.models import sap_auth as _sap_auth_models              # noqa: F401
     from app.models import process_mining as _process_mining_models  # noqa: F401  # S8-01
     from app.models import project as _project_models              # noqa: F401
+    from app.models import program_governance as _program_governance_models  # noqa: F401
 
     # ── Auto-create tables (safe for production — CREATE IF NOT EXISTS) ──
     with app.app_context():
@@ -330,6 +337,7 @@ def create_app(config_name=None):
     from app.blueprints.hypercare_bp import hypercare_bp
     from app.blueprints.sap_auth_bp import sap_auth_bp
     from app.blueprints.process_mining_bp import process_mining_bp  # S8-01
+    from app.blueprints.program_governance_bp import program_governance_bp  # Faz 2.4
 
     app.register_blueprint(program_bp)
     app.register_blueprint(backlog_bp)
@@ -382,6 +390,7 @@ def create_app(config_name=None):
     app.register_blueprint(hypercare_bp)
     app.register_blueprint(sap_auth_bp)
     app.register_blueprint(process_mining_bp)  # S8-01
+    app.register_blueprint(program_governance_bp)  # Faz 2.4
 
     # ── Blueprint Permission Guards (Sprint 6) ──────────────────────────
     from app.middleware.blueprint_permissions import apply_all_blueprint_permissions

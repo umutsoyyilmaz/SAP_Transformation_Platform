@@ -167,13 +167,13 @@ class ProcessVariantImport(db.Model):
         index=True,
         comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
     )
-    # LEGACY: project_id currently FK -> programs.id (naming bug).
+    # Faz 1.4: Re-pointed from programs.id → projects.id (was naming bug).
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("programs.id", ondelete="CASCADE"),
-        nullable=False,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
-        comment="LEGACY: FK -> programs.id (naming bug). Will be re-pointed to projects.id.",
+        comment="FK → projects.id. Was incorrectly FK → programs.id before Faz 1.4.",
     )
     connection_id = db.Column(
         db.Integer,

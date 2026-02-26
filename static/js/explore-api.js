@@ -29,36 +29,36 @@ const ExploreAPI = (() => {
 
     // ── Process Hierarchy (L1 → L4) ───────────────────────────────
     const levels = {
-        listL1:   (pid)       => _items(API.get(`${B}/process-levels?project_id=${pid}&level=1`)),
+        listL1:   (pid)       => _items(API.get(`${B}/process-levels?program_id=${pid}&level=1`)),
         getL1:    (pid, id)   => API.get(`${B}/process-levels/${id}`),
-        listL2:   (pid)       => _items(API.get(`${B}/process-levels?project_id=${pid}&level=2`)),
+        listL2:   (pid)       => _items(API.get(`${B}/process-levels?program_id=${pid}&level=2`)),
         getL2:    (pid, id)   => API.get(`${B}/process-levels/${id}`),
-        listL3:   (pid)       => _items(API.get(`${B}/process-levels?project_id=${pid}&level=3`)),
+        listL3:   (pid)       => _items(API.get(`${B}/process-levels?program_id=${pid}&level=3`)),
         getL3:    (pid, id)   => API.get(`${B}/process-levels/${id}`),
-        listL4:   (pid)       => _items(API.get(`${B}/process-levels?project_id=${pid}&level=4`)),
+        listL4:   (pid)       => _items(API.get(`${B}/process-levels?program_id=${pid}&level=4`)),
         getL4:    (pid, id)   => API.get(`${B}/process-levels/${id}`),
-        create:         (pid, data) => API.post(`${B}/process-levels`, Object.assign({project_id: pid}, data)),
-        bulkCreate:     (pid, levels) => API.post(`${B}/process-levels/bulk`, {project_id: pid, levels}),
+        create:         (pid, data) => API.post(`${B}/process-levels`, Object.assign({program_id: pid}, data)),
+        bulkCreate:     (pid, levels) => API.post(`${B}/process-levels/bulk`, {program_id: pid, levels}),
         remove:         (id, confirm) => API.delete(`${B}/process-levels/${id}${confirm ? '?confirm=true' : ''}`),
-        importTemplate: (pid, data) => API.post(`${B}/process-levels/import-template`, Object.assign({project_id: pid}, data)),
+        importTemplate: (pid, data) => API.post(`${B}/process-levels/import-template`, Object.assign({program_id: pid}, data)),
         update:        (id, data) => API.put(`${B}/process-levels/${id}`, data),
-        scopeMatrix:   (pid)      => API.get(`${B}/scope-matrix?project_id=${pid}`),
+        scopeMatrix:   (pid)      => API.get(`${B}/scope-matrix?program_id=${pid}`),
         consolidateFit: (l3Id)    => API.post(`${B}/process-levels/${l3Id}/consolidate-fit`),
         consolidatedView: (l3Id)  => API.get(`${B}/process-levels/${l3Id}/consolidated-view`),
         overrideFitStatus: (l3Id, data) => API.post(`${B}/process-levels/${l3Id}/override-fit-status`, data),
         seedFromCatalog: (l3Id)   => API.post(`${B}/process-levels/${l3Id}/seed-from-catalog`),
         addChild:        (l3Id, data) => API.post(`${B}/process-levels/${l3Id}/children`, data),
-        l2Readiness:   (pid)      => API.get(`${B}/process-levels/l2-readiness?project_id=${pid}`),
-        areaMilestones: (pid)     => API.get(`${B}/area-milestones?project_id=${pid}`),
+        l2Readiness:   (pid)      => API.get(`${B}/process-levels/l2-readiness?program_id=${pid}`),
+        areaMilestones: (pid)     => API.get(`${B}/area-milestones?program_id=${pid}`),
         changeHistory: (plId)     => API.get(`${B}/process-levels/${plId}/change-history`),
     };
 
     // ── Workshops ─────────────────────────────────────────────────
     const workshops = {
-        list:     (pid, params) => _items(API.get(`${B}/workshops?project_id=${pid}${_qs(params)}`)),
+        list:     (pid, params) => _items(API.get(`${B}/workshops?program_id=${pid}${_qs(params)}`)),
         get:      (pid, id)     => API.get(`${B}/workshops/${id}`),
         full:     (pid, id)     => API.get(`${B}/workshops/${id}/full`),
-        create:   (pid, data)   => API.post(`${B}/workshops`, Object.assign({project_id: pid}, data)),
+        create:   (pid, data)   => API.post(`${B}/workshops`, Object.assign({program_id: pid}, data)),
         update:   (pid, id, d)  => API.put(`${B}/workshops/${id}`, d),
         delete:   (pid, id)     => API.delete(`${B}/workshops/${id}`),
         start:    (pid, id)     => API.post(`${B}/workshops/${id}/start`),
@@ -69,8 +69,8 @@ const ExploreAPI = (() => {
             if (action === 'reopen') return API.post(`${B}/workshops/${id}/reopen`, d);
             return API.post(`${B}/workshops/${id}/start`, d);
         },
-        capacity: (pid)         => API.get(`${B}/workshops/capacity?project_id=${pid}`),
-        stats:    (pid)         => API.get(`${B}/workshops/stats?project_id=${pid}`),
+        capacity: (pid)         => API.get(`${B}/workshops/capacity?program_id=${pid}`),
+        stats:    (pid)         => API.get(`${B}/workshops/stats?program_id=${pid}`),
         reopen:   (pid, id, data) => API.post(`${B}/workshops/${id}/reopen`, data || {}),
         createDelta: (pid, id, data)  => API.post(`${B}/workshops/${id}/create-delta`, data || {}),
         steps:    (pid, wsId)   => _items(API.get(`${B}/workshops/${wsId}/steps`)),
@@ -105,27 +105,27 @@ const ExploreAPI = (() => {
 
     // ── Requirements ──────────────────────────────────────────────
     const requirements = {
-        list:       (pid, params)    => _items(API.get(`${B}/requirements?project_id=${pid}${_qs(params)}`)),
+        list:       (pid, params)    => _items(API.get(`${B}/requirements?program_id=${pid}${_qs(params)}`)),
         get:        (pid, id)        => API.get(`${B}/requirements/${id}`),
-        create:     (pid, data)      => API.post(`${B}/requirements`, Object.assign({project_id: pid}, data)),
-        update:     (pid, id, d)     => API.put(`${B}/requirements/${id}`, Object.assign({project_id: pid}, d || {})),
+        create:     (pid, data)      => API.post(`${B}/requirements`, Object.assign({program_id: pid}, data)),
+        update:     (pid, id, d)     => API.put(`${B}/requirements/${id}`, Object.assign({program_id: pid}, d || {})),
         delete:     (pid, id)        => Promise.resolve(), // No backend DELETE endpoint — placeholder
-        transition: (pid, id, d)     => API.post(`${B}/requirements/${id}/transition`, Object.assign({project_id: pid}, d || {})),
-        stats:      (pid)            => API.get(`${B}/requirements/stats?project_id=${pid}`),
-        convert:      (pid, id, d)     => API.post(`${B}/requirements/${id}/convert`, Object.assign({project_id: pid}, d || {})),
-        batchConvert: (pid, d)         => API.post(`${B}/requirements/batch-convert`, Object.assign({project_id: pid}, d || {})),
-        coverageMatrix: (pid, params)  => API.get(`${B}/requirements/coverage-matrix?project_id=${pid}${_qs(params)}`),
+        transition: (pid, id, d)     => API.post(`${B}/requirements/${id}/transition`, Object.assign({program_id: pid}, d || {})),
+        stats:      (pid)            => API.get(`${B}/requirements/stats?program_id=${pid}`),
+        convert:      (pid, id, d)     => API.post(`${B}/requirements/${id}/convert`, Object.assign({program_id: pid}, d || {})),
+        batchConvert: (pid, d)         => API.post(`${B}/requirements/batch-convert`, Object.assign({program_id: pid}, d || {})),
+        coverageMatrix: (pid, params)  => API.get(`${B}/requirements/coverage-matrix?program_id=${pid}${_qs(params)}`),
     };
 
     // ── Open Items ────────────────────────────────────────────────
     const openItems = {
-        list:       (pid, params)    => _items(API.get(`${B}/open-items?project_id=${pid}${_qs(params)}`)),
+        list:       (pid, params)    => _items(API.get(`${B}/open-items?program_id=${pid}${_qs(params)}`)),
         get:        (pid, id)        => API.get(`${B}/open-items/${id}`),
-        create:     (pid, data)      => API.post(`${B}/open-items`, Object.assign({project_id: pid}, data)),
-        update:     (pid, id, d)     => API.put(`${B}/open-items/${id}`, Object.assign({project_id: pid}, d || {})),
+        create:     (pid, data)      => API.post(`${B}/open-items`, Object.assign({program_id: pid}, data)),
+        update:     (pid, id, d)     => API.put(`${B}/open-items/${id}`, Object.assign({program_id: pid}, d || {})),
         delete:     (pid, id)        => Promise.resolve(), // No backend DELETE endpoint — placeholder
-        transition: (pid, id, d)     => API.post(`${B}/open-items/${id}/transition`, Object.assign({project_id: pid}, d || {})),
-        stats:      (pid)            => API.get(`${B}/open-items/stats?project_id=${pid}`),
+        transition: (pid, id, d)     => API.post(`${B}/open-items/${id}/transition`, Object.assign({program_id: pid}, d || {})),
+        stats:      (pid)            => API.get(`${B}/open-items/stats?program_id=${pid}`),
     };
 
     // ── Sign-off ──────────────────────────────────────────────────
@@ -136,7 +136,7 @@ const ExploreAPI = (() => {
 
     // ── Fit Propagation ───────────────────────────────────────────
     const fitPropagation = {
-        propagate: (pid)             => API.post(`${B}/fit-propagation/propagate`, {project_id: pid}),
+        propagate: (pid)             => API.post(`${B}/fit-propagation/propagate`, {program_id: pid}),
     };
 
     // ── Agenda Items ──────────────────────────────────────────────
@@ -164,27 +164,27 @@ const ExploreAPI = (() => {
 
     // ── Scope Change Requests ─────────────────────────────────────
     const scopeChangeRequests = {
-        list:     (pid)              => _items(API.get(`${B}/scope-change-requests?project_id=${pid}`)),
+        list:     (pid)              => _items(API.get(`${B}/scope-change-requests?program_id=${pid}`)),
         get:      (pid, id)          => API.get(`${B}/scope-change-requests/${id}`),
-        create:   (pid, data)        => API.post(`${B}/scope-change-requests`, Object.assign({project_id: pid}, data)),
+        create:   (pid, data)        => API.post(`${B}/scope-change-requests`, Object.assign({program_id: pid}, data)),
         update:   (pid, id, d)       => API.post(`${B}/scope-change-requests/${id}/transition`, d),
     };
 
     // ── Attachments ───────────────────────────────────────────────
     const attachments = {
-        list:     (pid, params)      => _items(API.get(`${B}/attachments?project_id=${pid}${_qs(params)}`)),
+        list:     (pid, params)      => _items(API.get(`${B}/attachments?program_id=${pid}${_qs(params)}`)),
         get:      (pid, id)          => API.get(`${B}/attachments/${id}`),
-        create:   (pid, data)        => API.post(`${B}/attachments`, Object.assign({project_id: pid}, data)),
+        create:   (pid, data)        => API.post(`${B}/attachments`, Object.assign({program_id: pid}, data)),
         delete:   (pid, id)          => API.delete(`${B}/attachments/${id}`),
     };
 
     // ── Snapshot / Reports (Phase 2) ──────────────────────────────
     const snapshots = {
-        list:    (pid, params) => API.get(`${B}/snapshots?project_id=${pid}${_qs(params)}`),
-        capture: (pid, data)  => API.post(`${B}/snapshots/capture`, Object.assign({project_id: pid}, data || {})),
+        list:    (pid, params) => API.get(`${B}/snapshots?program_id=${pid}${_qs(params)}`),
+        capture: (pid, data)  => API.post(`${B}/snapshots/capture`, Object.assign({program_id: pid}, data || {})),
     };
     const reports = {
-        steeringCommittee: (pid) => API.get(`${B}/reports/steering-committee?project_id=${pid}`),
+        steeringCommittee: (pid) => API.get(`${B}/reports/steering-committee?program_id=${pid}`),
     };
 
     // ── Workshop Documents (Phase 2) ─────────────────────────────

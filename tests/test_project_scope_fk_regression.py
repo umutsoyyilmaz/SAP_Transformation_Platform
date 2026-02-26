@@ -97,78 +97,64 @@ class TestCorrectProjectIdFK:
             assert _get_fk_target(OpenItemComment, "program_id") == "programs.id"
 
 
-# ── Tests: Models where project_id INCORRECTLY points to programs.id ────────
-# These are the known FK bugs. xfail until Faz 1 fixes them.
+# ── Tests: Models where project_id was FIXED in Faz 1.4 ─────────────────────
+# These models had project_id FK → programs.id (naming bug).
+# Faz 1.4 Migration B re-pointed them to projects.id.
 
 
-class TestBuggyProjectIdFK:
-    """Models whose project_id incorrectly references programs.id (legacy bug).
+class TestFixedProjectIdFK:
+    """Models whose project_id was fixed from programs.id → projects.id (Faz 1.4)."""
 
-    Each test is marked xfail(strict=True) — they document the known bug.
-    When Faz 1 Migration B fixes the FK target, remove the xfail marker.
-    """
-
-    @pytest.mark.xfail(reason="Faz 1 bug: project_id FK -> programs.id", strict=True)
     def test_process_level_project_id(self, app):
         from app.models.explore.process import ProcessLevel
         with app.app_context():
             assert _get_fk_target(ProcessLevel, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 1 bug: project_id FK -> programs.id", strict=True)
     def test_explore_workshop_project_id(self, app):
         from app.models.explore.workshop import ExploreWorkshop
         with app.app_context():
             assert _get_fk_target(ExploreWorkshop, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 1 bug: project_id FK -> programs.id", strict=True)
     def test_explore_decision_project_id(self, app):
         from app.models.explore.requirement import ExploreDecision
         with app.app_context():
             assert _get_fk_target(ExploreDecision, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 1 bug: project_id FK -> programs.id", strict=True)
     def test_explore_open_item_project_id(self, app):
         from app.models.explore.requirement import ExploreOpenItem
         with app.app_context():
             assert _get_fk_target(ExploreOpenItem, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 1 bug: project_id FK -> programs.id", strict=True)
     def test_explore_requirement_project_id(self, app):
         from app.models.explore.requirement import ExploreRequirement
         with app.app_context():
             assert _get_fk_target(ExploreRequirement, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 1 bug: project_id FK -> programs.id", strict=True)
     def test_attachment_project_id(self, app):
         from app.models.explore.infrastructure import Attachment
         with app.app_context():
             assert _get_fk_target(Attachment, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 1 bug: project_id FK -> programs.id", strict=True)
     def test_project_role_project_id(self, app):
         from app.models.explore.governance import ProjectRole
         with app.app_context():
             assert _get_fk_target(ProjectRole, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 1 bug: project_id FK -> programs.id", strict=True)
     def test_phase_gate_project_id(self, app):
         from app.models.explore.governance import PhaseGate
         with app.app_context():
             assert _get_fk_target(PhaseGate, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 1 bug: project_id FK -> programs.id", strict=True)
     def test_scope_change_request_project_id(self, app):
         from app.models.explore.governance import ScopeChangeRequest
         with app.app_context():
             assert _get_fk_target(ScopeChangeRequest, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 1 bug: project_id FK -> programs.id", strict=True)
     def test_scope_change_log_project_id(self, app):
         from app.models.explore.governance import ScopeChangeLog
         with app.app_context():
             assert _get_fk_target(ScopeChangeLog, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 1 bug: project_id FK -> programs.id", strict=True)
     def test_process_variant_import_project_id(self, app):
         from app.models.process_mining import ProcessVariantImport
         with app.app_context():

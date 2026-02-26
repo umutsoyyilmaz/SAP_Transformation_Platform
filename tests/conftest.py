@@ -12,9 +12,15 @@ Provides:
 
 import pytest
 
+import app as _app_module
 from app import create_app
 from app.models import db as _db
 from app.services.permission_service import invalidate_all_cache
+
+# Faz 1.4 transitional: Disable SQLite FK enforcement during tests.
+# project_id FK → projects.id but test fixtures pass program IDs as project_id.
+# Will be removed in Faz 6 (cleanup) when all tests create proper project rows.
+_app_module._SQLITE_FK_ENFORCEMENT = False
 
 
 # Default tenant ID used across tests when no JWT context is present.

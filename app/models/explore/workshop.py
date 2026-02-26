@@ -49,12 +49,11 @@ class ExploreWorkshop(db.Model):
 
     __tablename__ = "explore_workshops"
     __table_args__ = (
-        db.UniqueConstraint("project_id", "code", name="uq_ews_project_code"),
-        db.Index("idx_ews_project_status", "project_id", "status"),
-        db.Index("idx_ews_project_date", "project_id", "date"),
-        db.Index("idx_ews_project_area", "project_id", "process_area"),
+        db.UniqueConstraint("program_id", "code", name="uq_ews_program_code"),
+        db.Index("idx_ews_program_status", "program_id", "status"),
+        db.Index("idx_ews_program_date", "program_id", "date"),
+        db.Index("idx_ews_program_area", "program_id", "process_area"),
         db.Index("idx_ews_facilitator", "facilitator_id", "date"),
-        db.Index("idx_ews_program", "program_id"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
@@ -71,10 +70,10 @@ class ExploreWorkshop(db.Model):
         index=True,
         comment="Correct FK to programs. Replaces legacy project_id -> programs.id naming.",
     )
-    # LEGACY: project_id currently FK -> programs.id (naming bug).
+    # Faz 1.4: Re-pointed from programs.id → projects.id (was naming bug).
     project_id = db.Column(
-        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        db.Integer, db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True, index=True,
     )
     code = db.Column(
         db.String(20), nullable=False,

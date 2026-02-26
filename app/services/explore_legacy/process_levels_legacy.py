@@ -89,11 +89,11 @@ def list_process_levels():
     Query params: project_id (required), level, scope_status, fit_status,
                   process_area, wave, flat (bool), include_stats (bool)
     """
-    project_id = request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
-    q = ProcessLevel.query.filter_by(project_id=project_id)
+    q = ProcessLevel.query.filter_by(program_id=project_id)
 
     level = request.args.get("level", type=int)
     if level:
@@ -138,7 +138,7 @@ def list_process_levels():
     # the tree in-memory to avoid N+1 query explosion (265+ rows = 265+ queries).
     all_items = (
         ProcessLevel.query
-        .filter_by(project_id=project_id)
+        .filter_by(program_id=project_id)
         .order_by(ProcessLevel.level, ProcessLevel.sort_order)
         .all()
     )
@@ -180,7 +180,7 @@ def import_process_template():
     existing = {
         r[0]
         for r in db.session.query(ProcessLevel.code)
-        .filter_by(project_id=project_id)
+        .filter_by(program_id=project_id)
         .all()
     }
 
@@ -210,7 +210,7 @@ def import_process_template():
             )
             if parent_code:
                 existing_parent = ProcessLevel.query.filter_by(
-                    project_id=project_id, code=parent_code
+                    program_id=project_id, code=parent_code
                 ).first()
                 new_parent = existing_parent.id if existing_parent else None
             if not new_parent:
@@ -218,6 +218,7 @@ def import_process_template():
 
         db.session.add(ProcessLevel(
             id=new_id,
+            program_id=project_id,
             project_id=project_id,
             parent_id=new_parent,
             level=t["level"],
@@ -264,7 +265,7 @@ def bulk_create_process_levels():
     import uuid as _uuid_mod
 
     code_map = {}
-    existing_items = ProcessLevel.query.filter_by(project_id=project_id).all()
+    existing_items = ProcessLevel.query.filter_by(program_id=project_id).all()
     for ex in existing_items:
         code_map[ex.code] = ex.id
 
@@ -292,7 +293,7 @@ def bulk_create_process_levels():
         code = (item.get("code") or "").strip()
         if not code:
             count = ProcessLevel.query.filter_by(
-                project_id=project_id, level=lvl
+                program_id=project_id, level=lvl
             ).count() + len([c for c in created if c["level"] == lvl])
             code = f"L{lvl}-{count + 1:03d}"
 
@@ -331,7 +332,7 @@ def bulk_create_process_levels():
                 wave = wave if wave is not None else parent_obj.wave
 
         max_s = db.session.query(func.max(ProcessLevel.sort_order)).filter_by(
-            project_id=project_id, parent_id=parent_id, level=lvl
+            program_id=project_id, parent_id=parent_id, level=lvl
         ).scalar()
         existing_siblings = len([
             c for c in created
@@ -342,6 +343,7 @@ def bulk_create_process_levels():
         new_id = str(_uuid_mod.uuid4())
         pl = ProcessLevel(
             id=new_id,
+            program_id=project_id,
             project_id=project_id,
             parent_id=parent_id,
             level=lvl,
@@ -409,15 +411,15 @@ def create_process_level():
 
     code = data.get("code", "").strip()
     if not code:
-        count = ProcessLevel.query.filter_by(project_id=project_id, level=lvl).count()
+        count = ProcessLevel.query.filter_by(program_id=project_id, level=lvl).count()
         code = f"L{lvl}-{count + 1:03d}"
-    if ProcessLevel.query.filter_by(project_id=project_id, code=code).first():
+    if ProcessLevel.query.filter_by(program_id=project_id, code=code).first():
         return api_error(E.CONFLICT_DUPLICATE, f"Code '{code}' already exists")
 
     sort_order = data.get("sort_order")
     if sort_order is None:
         max_s = db.session.query(func.max(ProcessLevel.sort_order)).filter_by(
-            project_id=project_id, parent_id=parent_id, level=lvl
+            program_id=project_id, parent_id=parent_id, level=lvl
         ).scalar()
         sort_order = (max_s or 0) + 1
 
@@ -432,6 +434,7 @@ def create_process_level():
     import uuid as _uuid_mod
     pl = ProcessLevel(
         id=str(_uuid_mod.uuid4()),
+        program_id=project_id,
         project_id=project_id,
         parent_id=parent_id,
         level=lvl,
@@ -526,6 +529,7 @@ def update_process_level(pl_id):
                 setattr(pl, field, new_val)
                 if field in tracked_fields:
                     log = ScopeChangeLog(
+                        program_id=pl.project_id,
                         project_id=pl.project_id,
                         process_level_id=pl.id,
                         field_changed=field,
@@ -546,13 +550,13 @@ def update_process_level(pl_id):
 
 def get_scope_matrix():
     """L3 flat table with workshop/req/OI stats per row."""
-    project_id = request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
     l3_nodes = (
         ProcessLevel.query
-        .filter_by(project_id=project_id, level=3)
+        .filter_by(program_id=project_id, level=3)
         .order_by(ProcessLevel.process_area_code, ProcessLevel.sort_order)
         .all()
     )
@@ -603,6 +607,7 @@ def seed_from_catalog(l3_id):
             continue
 
         l4 = ProcessLevel(
+            program_id=l3.project_id,
             project_id=l3.project_id,
             parent_id=l3.id,
             level=4,
@@ -653,6 +658,7 @@ def add_l4_child(l3_id):
     ) or 0
 
     l4 = ProcessLevel(
+        program_id=l3.project_id,
         project_id=l3.project_id,
         parent_id=l3.id,
         level=4,
@@ -698,7 +704,7 @@ def consolidate_fit(l3_id):
 
 def get_consolidated_view_endpoint(l3_id):
     """L4 breakdown + blocking items + sign-off status + signoff_ready flag."""
-    project_id = request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     try:
         view = get_consolidated_view(l3_id, project_id=project_id)
         return jsonify(view)
@@ -709,7 +715,7 @@ def get_consolidated_view_endpoint(l3_id):
 def override_fit_endpoint(l3_id):
     """Override L3 consolidated fit status with business rationale."""
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    project_id = data.get("program_id") or data.get("project_id") or request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     user_id = data.get("user_id", "system")
     new_fit = data.get("fit_decision")
     rationale = data.get("rationale")
@@ -728,7 +734,7 @@ def override_fit_endpoint(l3_id):
 def signoff_endpoint(l3_id):
     """Execute L3 sign-off."""
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    project_id = data.get("program_id") or data.get("project_id") or request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     user_id = data.get("user_id", "system")
     fit_decision = data.get("fit_decision")
     rationale = data.get("rationale")
@@ -747,13 +753,13 @@ def signoff_endpoint(l3_id):
 
 def l2_readiness():
     """L2 readiness status for all L2 nodes in a project."""
-    project_id = request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
     l2_nodes = (
         ProcessLevel.query
-        .filter_by(project_id=project_id, level=2)
+        .filter_by(program_id=project_id, level=2)
         .order_by(ProcessLevel.sort_order)
         .all()
     )
@@ -814,13 +820,13 @@ def confirm_l2(l2_id):
 
 def area_milestones():
     """Process area milestone tracker data."""
-    project_id = request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
     l2_nodes = (
         ProcessLevel.query
-        .filter_by(project_id=project_id, level=2)
+        .filter_by(program_id=project_id, level=2)
         .order_by(ProcessLevel.process_area_code, ProcessLevel.sort_order)
         .all()
     )
@@ -900,7 +906,7 @@ def create_bpmn(level_id):
 def run_fit_propagation():
     """Trigger full project hierarchy recalculation."""
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id") or request.args.get("project_id", type=int)
+    project_id = data.get("program_id") or data.get("project_id") or request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
     try:

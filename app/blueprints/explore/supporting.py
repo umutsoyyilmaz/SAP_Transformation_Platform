@@ -22,7 +22,7 @@ from flask import current_app, jsonify, request
 
 from app.services import explore_service
 
-from app.blueprints.explore import explore_bp
+from app.blueprints.explore import _get_program_id, explore_bp
 from app.utils.errors import api_error, E
 
 
@@ -52,9 +52,9 @@ def explore_health():
 def get_workshop_dependencies(workshop_id):
     """List dependencies for a workshop (both outgoing and incoming)."""
     direction = request.args.get("direction", "all")
-    project_id = request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_program_id()
+    if err:
+        return err
     result = explore_service.get_workshop_dependencies_service(workshop_id, direction, project_id=project_id)
     if isinstance(result, tuple):
         return result
@@ -65,9 +65,9 @@ def get_workshop_dependencies(workshop_id):
 def create_workshop_dependency(workshop_id):
     """Create a dependency from this workshop to another."""
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id") or request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_program_id(data)
+    if err:
+        return err
     result = explore_service.create_workshop_dependency_service(workshop_id, data, project_id=project_id)
     if isinstance(result, tuple):
         payload, status = result
@@ -81,9 +81,9 @@ def create_workshop_dependency(workshop_id):
 def resolve_workshop_dependency(dep_id):
     """Mark a workshop dependency as resolved."""
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id") or request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_program_id(data)
+    if err:
+        return err
     result = explore_service.resolve_workshop_dependency_service(dep_id, project_id=project_id)
     if isinstance(result, tuple):
         return result
@@ -112,7 +112,7 @@ def create_attachment():
 def list_attachments():
     """List attachments with filters."""
     filters = {
-        "project_id": request.args.get("project_id", type=int),
+        "project_id": request.args.get("program_id", type=int) or request.args.get("project_id", type=int),
         "entity_type": request.args.get("entity_type"),
         "entity_id": request.args.get("entity_id"),
         "category": request.args.get("category"),
@@ -124,9 +124,9 @@ def list_attachments():
 @explore_bp.route("/attachments/<att_id>", methods=["GET"])
 def get_attachment(att_id):
     """Get a single attachment by ID."""
-    project_id = request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_program_id()
+    if err:
+        return err
     result = explore_service.get_attachment_service(att_id, project_id=project_id)
     if isinstance(result, tuple):
         return result
@@ -136,9 +136,9 @@ def get_attachment(att_id):
 @explore_bp.route("/attachments/<att_id>", methods=["DELETE"])
 def delete_attachment(att_id):
     """Delete an attachment record."""
-    project_id = request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_program_id()
+    if err:
+        return err
     result = explore_service.delete_attachment_service(att_id, project_id=project_id)
     if isinstance(result, tuple):
         return result
@@ -167,7 +167,7 @@ def create_scope_change_request():
 def list_scope_change_requests():
     """List scope change requests with optional filters."""
     filters = {
-        "project_id": request.args.get("project_id", type=int),
+        "project_id": request.args.get("program_id", type=int) or request.args.get("project_id", type=int),
         "status": request.args.get("status"),
         "change_type": request.args.get("change_type"),
     }
@@ -178,9 +178,9 @@ def list_scope_change_requests():
 @explore_bp.route("/scope-change-requests/<scr_id>", methods=["GET"])
 def get_scope_change_request(scr_id):
     """Get a single scope change request with change logs."""
-    project_id = request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_program_id()
+    if err:
+        return err
     result = explore_service.get_scope_change_request_service(scr_id, project_id=project_id)
     if isinstance(result, tuple):
         return result
@@ -191,9 +191,9 @@ def get_scope_change_request(scr_id):
 def transition_scope_change_request(scr_id):
     """Apply a status transition to a scope change request."""
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id") or request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_program_id(data)
+    if err:
+        return err
     result = explore_service.transition_scope_change_request_service(scr_id, data, project_id=project_id)
     if isinstance(result, tuple):
         payload, status = result
@@ -210,9 +210,9 @@ def implement_scope_change_request(scr_id):
     Applies the proposed change to the process level and creates change logs.
     """
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id") or request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_program_id(data)
+    if err:
+        return err
     result = explore_service.implement_scope_change_request_service(scr_id, data, project_id=project_id)
     if isinstance(result, tuple):
         return result
@@ -230,15 +230,13 @@ def generate_minutes(workshop_id):
     from app.services.minutes_generator import MinutesGeneratorService
 
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id", type(None)) or request.args.get("project_id", type=int)
-    if not project_id:
-        project_id = data.get("project_id")
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_program_id(data)
+    if err:
+        return err
     try:
         project_id = int(project_id)
     except (TypeError, ValueError):
-        return api_error(E.VALIDATION, "project_id must be an integer")
+        return api_error(E.VALIDATION, "program_id must be an integer")
     try:
         doc = MinutesGeneratorService.generate(
             workshop_id,
@@ -261,15 +259,13 @@ def generate_ai_summary(workshop_id):
     from app.services.minutes_generator import MinutesGeneratorService
 
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id")
-    if not project_id:
-        project_id = request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_program_id(data)
+    if err:
+        return err
     try:
         project_id = int(project_id)
     except (TypeError, ValueError):
-        return api_error(E.VALIDATION, "project_id must be an integer")
+        return api_error(E.VALIDATION, "program_id must be an integer")
     try:
         doc = MinutesGeneratorService.generate_ai_summary(
             workshop_id,
@@ -294,9 +290,9 @@ def steering_committee_report():
     """A-057: Get steering-committee report for a project."""
     from app.services.snapshot import SnapshotService
 
-    project_id = request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_program_id()
+    if err:
+        return err
     report = SnapshotService.steering_committee_report(str(project_id))
     return jsonify(report)
 
@@ -313,9 +309,9 @@ def capture_snapshot():
     from datetime import date as _date
 
     data = request.get_json(silent=True) or {}
-    project_id = data.get("project_id") or request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_program_id(data)
+    if err:
+        return err
     snap_date_str = data.get("snapshot_date")
     snap_date = _date.fromisoformat(snap_date_str) if snap_date_str else None
 
@@ -333,9 +329,9 @@ def list_snapshots():
     from app.services.snapshot import SnapshotService
     from datetime import date as _date
 
-    project_id = request.args.get("project_id", type=int)
-    if not project_id:
-        return api_error(E.VALIDATION_REQUIRED, "project_id is required")
+    project_id, err = _get_program_id()
+    if err:
+        return err
     from_date = request.args.get("from_date")
     to_date = request.args.get("to_date")
     limit = request.args.get("limit", 90, type=int)
@@ -360,10 +356,10 @@ def get_user_permissions_endpoint():
         project_id  — required
         user_id     — required
     """
-    pid = request.args.get("project_id", type=int)
+    pid = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
     uid = request.args.get("user_id")
     if not pid or not uid:
-        return api_error(E.VALIDATION_REQUIRED, "project_id and user_id are required")
+        return api_error(E.VALIDATION_REQUIRED, "program_id and user_id are required")
 
     from app.services.permission import get_user_permissions, get_user_roles
 
