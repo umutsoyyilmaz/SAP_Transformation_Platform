@@ -115,13 +115,13 @@ class User(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
         if include_roles:
-            d["roles"] = [ur.role.name for ur in self.user_roles.all()]
+            d["roles"] = sorted({ur.role.name for ur in self.user_roles.all() if ur.role})
         return d
 
     @property
     def role_names(self):
         """List of role names for this user."""
-        return [ur.role.name for ur in self.user_roles.all()]
+        return sorted({ur.role.name for ur in self.user_roles.all() if ur.role})
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -229,16 +229,60 @@ class UserRole(db.Model):
     role_id = db.Column(
         db.Integer, db.ForeignKey("roles.id", ondelete="CASCADE"), nullable=False
     )
+    tenant_id = db.Column(
+        db.Integer, db.ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True
+    )
+    program_id = db.Column(
+        db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=True
+    )
+    project_id = db.Column(
+        db.Integer, db.ForeignKey("projects.id", ondelete="CASCADE"), nullable=True
+    )
+    starts_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    ends_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=db.text("1"))
+    revoked_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    revoke_reason = db.Column(db.String(255), nullable=True)
     assigned_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     assigned_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
-        db.UniqueConstraint("user_id", "role_id", name="uq_user_role"),
+        db.UniqueConstraint(
+            "user_id", "role_id", "tenant_id", "program_id", "project_id",
+            name="uq_user_role_scoped",
+        ),
+        db.CheckConstraint(
+            "project_id IS NULL OR program_id IS NOT NULL",
+            name="ck_user_roles_project_requires_program",
+        ),
+        db.CheckConstraint(
+            "ends_at IS NULL OR starts_at IS NULL OR ends_at >= starts_at",
+            name="ck_user_roles_time_window_valid",
+        ),
+        db.Index("ix_user_roles_scope_lookup", "user_id", "tenant_id", "program_id", "project_id"),
     )
 
     # Relationships
     user = db.relationship("User", back_populates="user_roles", foreign_keys=[user_id])
     role = db.relationship("Role", back_populates="user_roles")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "role_id": self.role_id,
+            "role_name": self.role.name if self.role else None,
+            "tenant_id": self.tenant_id,
+            "program_id": self.program_id,
+            "project_id": self.project_id,
+            "starts_at": self.starts_at.isoformat() if self.starts_at else None,
+            "ends_at": self.ends_at.isoformat() if self.ends_at else None,
+            "is_active": self.is_active,
+            "revoked_at": self.revoked_at.isoformat() if self.revoked_at else None,
+            "revoke_reason": self.revoke_reason,
+            "assigned_by": self.assigned_by,
+            "assigned_at": self.assigned_at.isoformat() if self.assigned_at else None,
+        }
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -428,4 +472,3 @@ class TenantDomain(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "tenant_name": self.tenant.name if self.tenant else None,
         }
-

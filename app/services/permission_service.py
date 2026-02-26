@@ -1,28 +1,19 @@
 """
-Permission Service — DB-driven RBAC with cache.
+Permission Service — scope-aware DB-driven RBAC with cache.
 
-Sprint 3 — Replaces the old explore-only PERMISSION_MATRIX approach with
-a fully DB-backed, tenant-scoped permission system.
+Scope hierarchy:
+  global (legacy) < tenant < program < project
 
-Architecture:
-    User ─→ UserRole(s) ─→ Role ─→ RolePermission(s) ─→ Permission (codename)
-
-    get_user_permissions(user_id)  →  set of codename strings
-    has_permission(user_id, "requirements.create")  →  bool
-
-Caching:
-    - Per-user permission set cached for CACHE_TTL seconds (default 300 = 5 min).
-    - Cache automatically invalidated when roles change.
-    - Thread-safe dict-based cache (no Redis dependency).
-
-Tenant-wide role exceptions:
-    - platform_admin, tenant_admin → ALL permissions (wildcard)
-    - program_manager → bypass project membership check
+Evaluation is deterministic and deny-by-default:
+  - request scope must be valid (project requires program, program requires tenant)
+  - only role assignments matching the requested scope are considered
+  - permission granted only if at least one matching role grants the codename
 """
 
 import logging
 import threading
 import time
+from datetime import datetime, timezone
 from typing import Optional
 
 from app.models import db
@@ -37,137 +28,266 @@ from app.models.auth import (
 
 logger = logging.getLogger(__name__)
 
-# ── Cache config ─────────────────────────────────────────────────────────────
-
 CACHE_TTL = 300  # 5 minutes
 
-_permission_cache: dict[int, tuple[float, set[str]]] = {}
+# Cache key: (user_id, tenant_id, program_id, project_id)
+_permission_cache: dict[tuple[int, int | None, int | None, int | None], tuple[float, set[str]]] = {}
 _cache_lock = threading.Lock()
 
-# Roles that bypass all permission checks
 SUPERUSER_ROLES = {"platform_admin", "tenant_admin"}
-
-# Roles that bypass project membership checks (but still need permissions)
 PROJECT_BYPASS_ROLES = {"platform_admin", "tenant_admin", "program_manager"}
 
 
-# ── Cache helpers ────────────────────────────────────────────────────────────
+def _validate_scope(
+    tenant_id: int | None = None,
+    program_id: int | None = None,
+    project_id: int | None = None,
+) -> None:
+    if project_id is not None and program_id is None:
+        raise ValueError("project scope requires program_id")
+    if program_id is not None and tenant_id is None:
+        raise ValueError("program/project scope requires tenant_id")
 
-def _get_cached(user_id: int) -> Optional[set[str]]:
-    """Get cached permissions for user, or None if expired/missing."""
+
+def _cache_key(
+    user_id: int,
+    tenant_id: int | None = None,
+    program_id: int | None = None,
+    project_id: int | None = None,
+) -> tuple[int, int | None, int | None, int | None]:
+    return (user_id, tenant_id, program_id, project_id)
+
+
+def _get_cached(key: tuple[int, int | None, int | None, int | None]) -> Optional[set[str]]:
     with _cache_lock:
-        entry = _permission_cache.get(user_id)
+        entry = _permission_cache.get(key)
         if entry is None:
             return None
         cached_at, perms = entry
         if time.time() - cached_at > CACHE_TTL:
-            del _permission_cache[user_id]
+            del _permission_cache[key]
             return None
         return perms
 
 
-def _set_cached(user_id: int, perms: set[str]) -> None:
-    """Cache permissions for user."""
+def _set_cached(key: tuple[int, int | None, int | None, int | None], perms: set[str]) -> None:
     with _cache_lock:
-        _permission_cache[user_id] = (time.time(), perms)
+        _permission_cache[key] = (time.time(), perms)
 
 
 def invalidate_cache(user_id: int) -> None:
-    """Invalidate cached permissions for a user (call after role changes)."""
     with _cache_lock:
-        _permission_cache.pop(user_id, None)
+        keys = [k for k in _permission_cache if k[0] == user_id]
+        for k in keys:
+            _permission_cache.pop(k, None)
 
 
 def invalidate_all_cache() -> None:
-    """Clear entire permission cache."""
     with _cache_lock:
         _permission_cache.clear()
 
 
-# ── Core permission lookups ──────────────────────────────────────────────────
+def _assignment_matches_scope(
+    *,
+    assignment_tenant_id: int | None,
+    assignment_program_id: int | None,
+    assignment_project_id: int | None,
+    requested_tenant_id: int | None,
+    requested_program_id: int | None,
+    requested_project_id: int | None,
+) -> bool:
+    # No requested scope: legacy mode, include all assignments.
+    if requested_tenant_id is None and requested_program_id is None and requested_project_id is None:
+        return True
 
-def get_user_role_names(user_id: int) -> list[str]:
-    """Get list of role names assigned to a user."""
+    # Assignment scope must not conflict with requested tenant.
+    if assignment_tenant_id is not None and assignment_tenant_id != requested_tenant_id:
+        return False
+
+    # Tenant-scope request: ignore narrower (program/project) assignments.
+    if requested_program_id is None and requested_project_id is None:
+        return assignment_program_id is None and assignment_project_id is None
+
+    # Program-scope request: allow global/tenant/program matches, not project-only.
+    if requested_project_id is None:
+        if assignment_project_id is not None:
+            return False
+        if assignment_program_id is None:
+            return True
+        return assignment_program_id == requested_program_id
+
+    # Project-scope request: allow global/tenant/program/project matches.
+    if assignment_project_id is not None:
+        return assignment_project_id == requested_project_id
+    if assignment_program_id is not None:
+        return assignment_program_id == requested_program_id
+    return True
+
+
+def _matching_role_rows(
+    user_id: int,
+    tenant_id: int | None = None,
+    program_id: int | None = None,
+    project_id: int | None = None,
+) -> list[tuple[int, str]]:
+    _validate_scope(tenant_id, program_id, project_id)
+
+    user = db.session.get(User, user_id)
+    if user is None:
+        return []
+    resolved_tenant = tenant_id if tenant_id is not None else user.tenant_id
+
     rows = (
-        db.session.query(Role.name)
+        db.session.query(
+            Role.id,
+            Role.name,
+            UserRole.tenant_id,
+            UserRole.program_id,
+            UserRole.project_id,
+            UserRole.starts_at,
+            UserRole.ends_at,
+            UserRole.is_active,
+        )
         .join(UserRole, UserRole.role_id == Role.id)
         .filter(UserRole.user_id == user_id)
         .all()
     )
-    return [r[0] for r in rows]
+
+    result: list[tuple[int, str]] = []
+    now = datetime.now(timezone.utc)
+    for (
+        role_id, role_name, ur_tenant_id, ur_program_id, ur_project_id,
+        ur_starts_at, ur_ends_at, ur_is_active,
+    ) in rows:
+        if ur_is_active is False:
+            continue
+        if ur_starts_at and now < ur_starts_at.replace(tzinfo=timezone.utc):
+            continue
+        if ur_ends_at and now > ur_ends_at.replace(tzinfo=timezone.utc):
+            continue
+        # Legacy rows without explicit tenant inherit user's tenant.
+        effective_tenant_id = ur_tenant_id if ur_tenant_id is not None else user.tenant_id
+        if _assignment_matches_scope(
+            assignment_tenant_id=effective_tenant_id,
+            assignment_program_id=ur_program_id,
+            assignment_project_id=ur_project_id,
+            requested_tenant_id=resolved_tenant,
+            requested_program_id=program_id,
+            requested_project_id=project_id,
+        ):
+            result.append((role_id, role_name))
+    return result
 
 
-def get_user_permissions(user_id: int) -> set[str]:
-    """
-    Get the full set of permission codenames for a user.
+def get_user_role_names(
+    user_id: int,
+    tenant_id: int | None = None,
+    program_id: int | None = None,
+    project_id: int | None = None,
+) -> list[str]:
+    rows = _matching_role_rows(user_id, tenant_id, program_id, project_id)
+    return sorted({name for _, name in rows})
 
-    Resolves: User → UserRole(s) → Role → RolePermission(s) → Permission.codename
-    Results are cached for CACHE_TTL seconds.
-    """
-    # Check cache first
-    cached = _get_cached(user_id)
+
+def get_user_permissions(
+    user_id: int,
+    tenant_id: int | None = None,
+    program_id: int | None = None,
+    project_id: int | None = None,
+) -> set[str]:
+    key = _cache_key(user_id, tenant_id, program_id, project_id)
+    cached = _get_cached(key)
     if cached is not None:
         return cached
 
-    # Query DB: join user_roles → roles → role_permissions → permissions
+    role_rows = _matching_role_rows(user_id, tenant_id, program_id, project_id)
+    role_ids = sorted({rid for rid, _ in role_rows})
+    if not role_ids:
+        _set_cached(key, set())
+        return set()
+
     rows = (
         db.session.query(Permission.codename)
         .join(RolePermission, RolePermission.permission_id == Permission.id)
-        .join(Role, Role.id == RolePermission.role_id)
-        .join(UserRole, UserRole.role_id == Role.id)
-        .filter(UserRole.user_id == user_id)
+        .filter(RolePermission.role_id.in_(role_ids))
         .distinct()
         .all()
     )
-
     perms = {r[0] for r in rows}
-
-    # Cache result
-    _set_cached(user_id, perms)
-    logger.debug("Loaded %d permissions for user %d", len(perms), user_id)
-
+    _set_cached(key, perms)
     return perms
 
 
-def has_permission(user_id: int, codename: str) -> bool:
-    """
-    Check if user has a specific permission.
-
-    Superuser roles (platform_admin, tenant_admin) always return True.
-    """
-    # Superuser roles bypass all permission checks
-    role_names = get_user_role_names(user_id)
+def has_permission(
+    user_id: int,
+    codename: str,
+    tenant_id: int | None = None,
+    program_id: int | None = None,
+    project_id: int | None = None,
+) -> bool:
+    role_names = get_user_role_names(user_id, tenant_id, program_id, project_id)
     if any(r in SUPERUSER_ROLES for r in role_names):
         return True
-
-    perms = get_user_permissions(user_id)
+    perms = get_user_permissions(user_id, tenant_id, program_id, project_id)
     return codename in perms
 
 
-def has_any_permission(user_id: int, codenames: list[str]) -> bool:
-    """Check if user has at least one of the listed permissions."""
-    role_names = get_user_role_names(user_id)
+def has_any_permission(
+    user_id: int,
+    codenames: list[str],
+    tenant_id: int | None = None,
+    program_id: int | None = None,
+    project_id: int | None = None,
+) -> bool:
+    role_names = get_user_role_names(user_id, tenant_id, program_id, project_id)
     if any(r in SUPERUSER_ROLES for r in role_names):
         return True
-
-    perms = get_user_permissions(user_id)
+    perms = get_user_permissions(user_id, tenant_id, program_id, project_id)
     return bool(perms & set(codenames))
 
 
-def has_all_permissions(user_id: int, codenames: list[str]) -> bool:
-    """Check if user has ALL of the listed permissions."""
-    role_names = get_user_role_names(user_id)
+def has_all_permissions(
+    user_id: int,
+    codenames: list[str],
+    tenant_id: int | None = None,
+    program_id: int | None = None,
+    project_id: int | None = None,
+) -> bool:
+    role_names = get_user_role_names(user_id, tenant_id, program_id, project_id)
     if any(r in SUPERUSER_ROLES for r in role_names):
         return True
-
-    perms = get_user_permissions(user_id)
+    perms = get_user_permissions(user_id, tenant_id, program_id, project_id)
     return set(codenames).issubset(perms)
 
 
-# ── Project membership checks ───────────────────────────────────────────────
+def evaluate_permission(
+    user_id: int,
+    codename: str,
+    *,
+    tenant_id: int,
+    program_id: int | None = None,
+    project_id: int | None = None,
+) -> dict:
+    _validate_scope(tenant_id, program_id, project_id)
+    role_names = get_user_role_names(user_id, tenant_id, program_id, project_id)
+    if any(r in SUPERUSER_ROLES for r in role_names):
+        return {
+            "allowed": True,
+            "decision": "allow_superuser",
+            "roles": role_names,
+            "permission": codename,
+        }
+    perms = get_user_permissions(user_id, tenant_id, program_id, project_id)
+    allowed = codename in perms
+    return {
+        "allowed": allowed,
+        "decision": "allow_role_grant" if allowed else "deny_by_default",
+        "roles": role_names,
+        "permission": codename,
+    }
+
 
 def is_project_member(user_id: int, project_id: int) -> bool:
-    """Check if user is assigned to a specific project."""
     return (
         db.session.query(ProjectMember.id)
         .filter_by(user_id=user_id, project_id=project_id)
@@ -177,44 +297,84 @@ def is_project_member(user_id: int, project_id: int) -> bool:
 
 def can_access_project(user_id: int, project_id: int) -> bool:
     """
-    Check if user can access a project.
-
-    Tenant Admin & Program Manager bypass project membership.
-    Other roles require explicit ProjectMember record.
+    Program routes still pass <program_id> in many places.
+    Treat the incoming id as program scope for backward compatibility.
     """
-    role_names = get_user_role_names(user_id)
+    user = db.session.get(User, user_id)
+    if not user:
+        return False
 
-    # Bypass roles get all-project access
+    role_names = get_user_role_names(
+        user_id,
+        tenant_id=user.tenant_id,
+        program_id=project_id,
+    )
     if any(r in PROJECT_BYPASS_ROLES for r in role_names):
         return True
-
     return is_project_member(user_id, project_id)
 
 
 def get_accessible_project_ids(user_id: int) -> Optional[list[int]]:
-    """
-    Get list of project IDs the user can access.
+    user = db.session.get(User, user_id)
+    if not user:
+        return []
 
-    Returns None for bypass roles (meaning "all projects").
-    Returns list of IDs for normal users.
-    """
-    role_names = get_user_role_names(user_id)
-    if any(r in PROJECT_BYPASS_ROLES for r in role_names):
-        return None  # All projects
+    tenant_role_names = get_user_role_names(user_id, tenant_id=user.tenant_id)
+    if any(r in PROJECT_BYPASS_ROLES for r in tenant_role_names):
+        return None
 
-    rows = (
-        db.session.query(ProjectMember.project_id)
-        .filter_by(user_id=user_id)
-        .all()
-    )
-    return [r[0] for r in rows]
+    rows = db.session.query(ProjectMember.project_id).filter_by(user_id=user_id).all()
+    return sorted({r[0] for r in rows})
 
-
-# ── Tenant isolation helpers ─────────────────────────────────────────────────
 
 def verify_user_tenant(user_id: int, tenant_id: int) -> bool:
-    """Verify that user belongs to the given tenant."""
     user = db.session.get(User, user_id)
     if user is None:
         return False
     return user.tenant_id == tenant_id
+
+
+def expire_temporary_assignments(now: datetime | None = None) -> dict:
+    """
+    Auto-expire time-bound role assignments.
+
+    Expired assignments are deactivated (is_active=False) and audited.
+    """
+    from app.models.audit import write_audit
+
+    now = now or datetime.now(timezone.utc)
+    rows = (
+        UserRole.query
+        .filter(
+            UserRole.is_active.is_(True),
+            UserRole.ends_at.isnot(None),
+            UserRole.ends_at < now,
+        )
+        .all()
+    )
+    expired = 0
+    for ur in rows:
+        ur.is_active = False
+        ur.revoked_at = now
+        ur.revoke_reason = "expired"
+        expired += 1
+        write_audit(
+            entity_type="user_role",
+            entity_id=str(ur.id),
+            action="user_role.expired",
+            actor="system",
+            actor_user_id=None,
+            tenant_id=ur.tenant_id,
+            program_id=ur.program_id,
+            diff={
+                "user_id": ur.user_id,
+                "role_id": ur.role_id,
+                "project_id": ur.project_id,
+                "ends_at": ur.ends_at.isoformat() if ur.ends_at else None,
+                "expired_at": now.isoformat(),
+            },
+        )
+        invalidate_cache(ur.user_id)
+    if expired:
+        db.session.commit()
+    return {"expired_assignments": expired}

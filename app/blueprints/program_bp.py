@@ -1,15 +1,23 @@
 """
 SAP Transformation Management Platform
 Program Blueprint — CRUD API for programs, phases, gates, workstreams,
-team members and committees.
+team members, committees, and projects.
 
-Endpoints (Sprint 2 scope):
+Endpoints:
     Programs:
         GET    /api/v1/programs                              — List all
         POST   /api/v1/programs                              — Create
         GET    /api/v1/programs/<id>                          — Detail (+ children)
         PUT    /api/v1/programs/<id>                          — Update
         DELETE /api/v1/programs/<id>                          — Delete
+
+    Projects:
+        GET    /api/v1/programs/<pid>/projects                — List projects
+        POST   /api/v1/programs/<pid>/projects                — Create project
+        GET    /api/v1/projects/<id>                          — Get project
+        PUT    /api/v1/projects/<id>                          — Update project
+        DELETE /api/v1/projects/<id>                          — Delete project
+        GET    /api/v1/me/projects                            — My projects
 
     Phases:
         GET    /api/v1/programs/<pid>/phases                  — List phases
@@ -18,6 +26,7 @@ Endpoints (Sprint 2 scope):
         DELETE /api/v1/phases/<id>                            — Delete phase
 
     Gates:
+        GET    /api/v1/phases/<pid>/gates                     — List gates
         POST   /api/v1/phases/<pid>/gates                     — Create gate
         PUT    /api/v1/gates/<id>                             — Update gate
         DELETE /api/v1/gates/<id>                             — Delete gate
@@ -43,7 +52,7 @@ Endpoints (Sprint 2 scope):
 
 import logging
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from app.models import db
 from app.models.program import (
@@ -54,12 +63,106 @@ from app.models.program import (
     TeamMember,
     Workstream,
 )
-from app.services import program_service
-from app.utils.helpers import db_commit_or_error, get_or_404 as _get_or_404
+from app.models.project import Project
+from app.services import program_service, project_service
+from app.services.helpers.scoped_queries import get_scoped_or_none
+from app.services.permission_service import get_accessible_project_ids, has_permission
+from app.services.security_observability import record_security_event
+from app.utils.helpers import db_commit_or_error
 
 logger = logging.getLogger(__name__)
 
 program_bp = Blueprint("program", __name__, url_prefix="/api/v1")
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _require_jwt_tenant():
+    """Require JWT identity and tenant scope for project APIs."""
+    if not getattr(g, "jwt_user_id", None):
+        return jsonify({"error": "Authentication required (JWT)"}), 401
+    if not getattr(g, "jwt_tenant_id", None):
+        return jsonify({"error": "Tenant context required"}), 403
+    return None
+
+
+def _get_scoped_program_or_404(program_id: int, tenant_id: int):
+    """Fetch program only within current tenant scope."""
+    program = get_scoped_or_none(Program, program_id, tenant_id=tenant_id)
+    if not program:
+        return None, (jsonify({"error": "Program not found"}), 404)
+    return program, None
+
+
+def _get_scoped_project_or_404(project_id: int, tenant_id: int):
+    """Fetch project only within current tenant scope."""
+    project = get_scoped_or_none(Project, project_id, tenant_id=tenant_id)
+    if not project:
+        return None, (jsonify({"error": "Project not found"}), 404)
+    return project, None
+
+
+def _get_entity_with_tenant_check(model_cls, entity_id: int):
+    """Fetch a sub-entity and verify tenant ownership via scoped lookup.
+
+    Uses tenant_id from JWT context when available. For entities that have
+    a direct tenant_id column (Phase, Gate, Workstream, TeamMember, Committee),
+    uses get_scoped_or_none for a single-query tenant-scoped fetch.
+
+    Returns (entity, error_response).
+    """
+    jwt_tid = getattr(g, "jwt_tenant_id", None)
+    if jwt_tid is not None and hasattr(model_cls, "tenant_id"):
+        entity = get_scoped_or_none(model_cls, entity_id, tenant_id=jwt_tid)
+    else:
+        entity = db.session.get(model_cls, entity_id)
+    if not entity:
+        return None, (jsonify({"error": "Not found"}), 404)
+    return entity, None
+
+
+def _require_project_permission(codename: str, *, tenant_id: int):
+    """Enforce project permission with security telemetry on deny."""
+    user_id = getattr(g, "jwt_user_id", None)
+    if not user_id:
+        return jsonify({"error": "Authentication required (JWT)"}), 401
+
+    if has_permission(user_id, codename, tenant_id=tenant_id):
+        return None
+
+    request_id = getattr(g, "request_id", None)
+    endpoint = getattr(request, "endpoint", None)
+    record_security_event(
+        event_type="cross_scope_access_attempt",
+        reason="project_permission_required",
+        severity="warning",
+        tenant_id=tenant_id,
+        request_id=request_id,
+        details={
+            "required_permission": codename,
+            "endpoint": endpoint,
+        },
+    )
+    logger.warning(
+        "Project permission denied: user=%d tenant=%s required=%s endpoint=%s",
+        user_id,
+        tenant_id,
+        codename,
+        endpoint,
+        extra={
+            "tenant_id": tenant_id,
+            "request_id": request_id,
+            "event_type": "cross_scope_access_attempt",
+            "security_code": "SEC-CROSS-SCOPE-001",
+        },
+    )
+    return jsonify({"error": "Permission denied", "required": codename}), 403
+
+
+def _get_tenant_id_or_none() -> int | None:
+    """Return JWT tenant_id if present, else None."""
+    return getattr(g, "jwt_tenant_id", None)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -70,12 +173,8 @@ program_bp = Blueprint("program", __name__, url_prefix="/api/v1")
 def list_programs():
     """Return all programs, optionally filtered by status."""
     status = request.args.get("status")
-    query = Program.query.order_by(Program.created_at.desc())
-
-    if status:
-        query = query.filter_by(status=status)
-
-    programs = query.all()
+    tenant_id = _get_tenant_id_or_none()
+    programs = program_service.list_programs(tenant_id=tenant_id, status=status)
     return jsonify([p.to_dict() for p in programs]), 200
 
 
@@ -83,58 +182,232 @@ def list_programs():
 def create_program():
     """Create a new program."""
     data = request.get_json(silent=True) or {}
+    tenant_id = _get_tenant_id_or_none()
 
-    program, svc_err = program_service.create_program(data)
+    if tenant_id is not None:
+        if data.get("tenant_id") is not None and int(data.get("tenant_id")) != int(tenant_id):
+            return jsonify({"error": "tenant_id mismatch"}), 403
+    else:
+        tenant_id = data.get("tenant_id")
+
+    if tenant_id is None:
+        # Legacy/API-key mode: auto-resolve or create default tenant.
+        from app.models.auth import Tenant
+        default_tenant = Tenant.query.first()
+        if not default_tenant:
+            default_tenant = Tenant(name="Default", slug="default")
+            db.session.add(default_tenant)
+            db.session.flush()
+        tenant_id = default_tenant.id
+
+    program, svc_err = program_service.create_program(data, tenant_id=int(tenant_id))
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
-
-    err = db_commit_or_error()
-    if err:
-        return err
 
     return jsonify(program.to_dict(include_children=True)), 201
 
 
 @program_bp.route("/programs/<int:program_id>", methods=["GET"])
 def get_program(program_id):
-    """Return a single program with all children."""
-    program, err = _get_or_404(Program, program_id)
-    if err:
-        return err
+    """Return a single program with all children (eagerly loaded)."""
+    tenant_id = _get_tenant_id_or_none()
+    program = program_service.get_program_detail(program_id, tenant_id=tenant_id)
+    if not program:
+        return jsonify({"error": "Program not found"}), 404
     return jsonify(program.to_dict(include_children=True)), 200
 
 
 @program_bp.route("/programs/<int:program_id>", methods=["PUT"])
 def update_program(program_id):
     """Update an existing program."""
-    program, err = _get_or_404(Program, program_id)
-    if err:
-        return err
+    tenant_id = _get_tenant_id_or_none()
+    if tenant_id is not None:
+        program, err = _get_scoped_program_or_404(program_id, tenant_id)
+        if err:
+            return err
+    else:
+        program = db.session.get(Program, program_id)
+        if not program:
+            return jsonify({"error": "Program not found"}), 404
+        tenant_id = program.tenant_id
 
     data = request.get_json(silent=True) or {}
+    if data.get("tenant_id") is not None and int(data.get("tenant_id")) != int(tenant_id):
+        return jsonify({"error": "tenant_id cannot be changed"}), 403
 
-    program, svc_err = program_service.update_program(program, data)
+    program, svc_err = program_service.update_program(program, data, tenant_id=tenant_id)
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
-
-    err = db_commit_or_error()
-    if err:
-        return err
     return jsonify(program.to_dict()), 200
 
 
 @program_bp.route("/programs/<int:program_id>", methods=["DELETE"])
 def delete_program(program_id):
     """Delete a program and all children (cascade)."""
-    program, err = _get_or_404(Program, program_id)
-    if err:
-        return err
+    tenant_id = _get_tenant_id_or_none()
+    if tenant_id is not None:
+        program, err = _get_scoped_program_or_404(program_id, tenant_id)
+        if err:
+            return err
+    else:
+        program = db.session.get(Program, program_id)
+        if not program:
+            return jsonify({"error": "Program not found"}), 404
+        tenant_id = program.tenant_id
 
-    db.session.delete(program)
-    err = db_commit_or_error()
+    program_name = program.name
+    program_service.delete_program(program, tenant_id=tenant_id)
+    return jsonify({"message": f"Program '{program_name}' deleted"}), 200
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PROJECTS
+# ═════════════════════════════════════════════════════════════════════════════
+
+@program_bp.route("/programs/<int:program_id>/projects", methods=["GET"])
+def list_projects(program_id):
+    """List projects for a tenant-scoped program."""
+    err = _require_jwt_tenant()
     if err:
         return err
-    return jsonify({"message": f"Program '{program.name}' deleted"}), 200
+    tenant_id = g.jwt_tenant_id
+    perr = _require_project_permission("projects.view", tenant_id=tenant_id)
+    if perr:
+        return perr
+
+    _program, perr = _get_scoped_program_or_404(program_id, tenant_id)
+    if perr:
+        return perr
+
+    allowed_project_ids = get_accessible_project_ids(g.jwt_user_id)
+    projects = project_service.list_projects(
+        tenant_id=tenant_id,
+        program_id=program_id,
+        allowed_project_ids=allowed_project_ids,
+    )
+    return jsonify([p.to_dict() for p in projects]), 200
+
+
+@program_bp.route("/me/projects", methods=["GET"])
+def list_my_projects():
+    """List projects the current user is authorized to access."""
+    err = _require_jwt_tenant()
+    if err:
+        return err
+    tenant_id = g.jwt_tenant_id
+
+    perr = _require_project_permission("projects.view", tenant_id=tenant_id)
+    if perr:
+        return perr
+
+    allowed_project_ids = get_accessible_project_ids(g.jwt_user_id)
+    rows = project_service.list_authorized_projects(
+        tenant_id=tenant_id,
+        allowed_project_ids=allowed_project_ids,
+    )
+    return jsonify({"items": rows, "total": len(rows)}), 200
+
+
+@program_bp.route("/programs/<int:program_id>/projects", methods=["POST"])
+def create_project(program_id):
+    """Create a project under a tenant-scoped program."""
+    err = _require_jwt_tenant()
+    if err:
+        return err
+    tenant_id = g.jwt_tenant_id
+    perr = _require_project_permission("projects.create", tenant_id=tenant_id)
+    if perr:
+        return perr
+
+    _program, perr = _get_scoped_program_or_404(program_id, tenant_id)
+    if perr:
+        return perr
+
+    data = request.get_json(silent=True) or {}
+    project, svc_err = project_service.create_project(
+        tenant_id=tenant_id,
+        program_id=program_id,
+        data=data,
+    )
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
+
+    cerr = db_commit_or_error()
+    if cerr:
+        return cerr
+    return jsonify(project.to_dict()), 201
+
+
+@program_bp.route("/projects/<int:project_id>", methods=["GET"])
+def get_project(project_id):
+    """Get one tenant-scoped project by id."""
+    err = _require_jwt_tenant()
+    if err:
+        return err
+    tenant_id = g.jwt_tenant_id
+    perr = _require_project_permission("projects.view", tenant_id=tenant_id)
+    if perr:
+        return perr
+
+    project, perr = _get_scoped_project_or_404(project_id, tenant_id)
+    if perr:
+        return perr
+    return jsonify(project.to_dict()), 200
+
+
+@program_bp.route("/projects/<int:project_id>", methods=["PUT"])
+def update_project(project_id):
+    """Update a tenant-scoped project."""
+    err = _require_jwt_tenant()
+    if err:
+        return err
+    tenant_id = g.jwt_tenant_id
+    perr = _require_project_permission("projects.edit", tenant_id=tenant_id)
+    if perr:
+        return perr
+
+    project, perr = _get_scoped_project_or_404(project_id, tenant_id)
+    if perr:
+        return perr
+
+    data = request.get_json(silent=True) or {}
+    project, svc_err = project_service.update_project(
+        project=project,
+        tenant_id=tenant_id,
+        data=data,
+    )
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
+
+    cerr = db_commit_or_error()
+    if cerr:
+        return cerr
+    return jsonify(project.to_dict()), 200
+
+
+@program_bp.route("/projects/<int:project_id>", methods=["DELETE"])
+def delete_project(project_id):
+    """Delete a tenant-scoped project."""
+    err = _require_jwt_tenant()
+    if err:
+        return err
+    tenant_id = g.jwt_tenant_id
+    perr = _require_project_permission("projects.delete", tenant_id=tenant_id)
+    if perr:
+        return perr
+
+    project, perr = _get_scoped_project_or_404(project_id, tenant_id)
+    if perr:
+        return perr
+
+    if project.is_default:
+        return jsonify({"error": "Cannot delete default project. Set another project as default first."}), 422
+
+    db.session.delete(project)
+    cerr = db_commit_or_error()
+    if cerr:
+        return cerr
+    return jsonify({"message": f"Project '{project.name}' deleted"}), 200
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -144,59 +417,65 @@ def delete_program(program_id):
 @program_bp.route("/programs/<int:program_id>/phases", methods=["GET"])
 def list_phases(program_id):
     """List phases for a program."""
-    program, err = _get_or_404(Program, program_id)
-    if err:
-        return err
-    phases = Phase.query.filter_by(program_id=program_id).order_by(Phase.order).all()
+    tenant_id = _get_tenant_id_or_none()
+    if tenant_id is not None:
+        _program, err = _get_scoped_program_or_404(program_id, tenant_id)
+        if err:
+            return err
+    else:
+        if not db.session.get(Program, program_id):
+            return jsonify({"error": "Program not found"}), 404
+    phases = program_service.list_phases(program_id=program_id, tenant_id=tenant_id)
     return jsonify([p.to_dict() for p in phases]), 200
 
 
 @program_bp.route("/programs/<int:program_id>/phases", methods=["POST"])
 def create_phase(program_id):
     """Create a phase under a program."""
-    program, err = _get_or_404(Program, program_id)
-    if err:
-        return err
+    tenant_id = _get_tenant_id_or_none()
+    if tenant_id is not None:
+        _program, err = _get_scoped_program_or_404(program_id, tenant_id)
+        if err:
+            return err
+    else:
+        program = db.session.get(Program, program_id)
+        if not program:
+            return jsonify({"error": "Program not found"}), 404
+        tenant_id = program.tenant_id
 
     data = request.get_json(silent=True) or {}
-    name = data.get("name", "").strip()
-    if not name:
-        return jsonify({"error": "Phase name is required"}), 400
-
-    phase, _ = program_service.create_phase(program_id, data)
-    err = db_commit_or_error()
-    if err:
-        return err
+    phase, svc_err = program_service.create_phase(program_id, data, tenant_id=tenant_id)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
     return jsonify(phase.to_dict()), 201
 
 
 @program_bp.route("/phases/<int:phase_id>", methods=["PUT"])
 def update_phase(phase_id):
     """Update a phase."""
-    phase, err = _get_or_404(Phase, phase_id)
+    phase, err = _get_entity_with_tenant_check(Phase, phase_id)
     if err:
         return err
+    tenant_id = _get_tenant_id_or_none() or phase.tenant_id
 
     data = request.get_json(silent=True) or {}
-
-    program_service.update_phase(phase, data)
-    err = db_commit_or_error()
-    if err:
-        return err
+    try:
+        program_service.update_phase(phase, data, tenant_id=tenant_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     return jsonify(phase.to_dict()), 200
 
 
 @program_bp.route("/phases/<int:phase_id>", methods=["DELETE"])
 def delete_phase(phase_id):
     """Delete a phase and its gates."""
-    phase, err = _get_or_404(Phase, phase_id)
+    phase, err = _get_entity_with_tenant_check(Phase, phase_id)
     if err:
         return err
-    db.session.delete(phase)
-    err = db_commit_or_error()
-    if err:
-        return err
-    return jsonify({"message": f"Phase '{phase.name}' deleted"}), 200
+    tenant_id = _get_tenant_id_or_none() or phase.tenant_id
+    phase_name = phase.name
+    program_service.delete_phase(phase, tenant_id=tenant_id)
+    return jsonify({"message": f"Phase '{phase_name}' deleted"}), 200
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -206,59 +485,56 @@ def delete_phase(phase_id):
 @program_bp.route("/phases/<int:phase_id>/gates", methods=["GET"])
 def list_gates(phase_id):
     """List all gates for a phase."""
-    phase, err = _get_or_404(Phase, phase_id)
-    if err:
-        return err
-    gates = Gate.query.filter_by(phase_id=phase_id).order_by(Gate.id).all()
+    tenant_id = _get_tenant_id_or_none()
+    if tenant_id is not None:
+        _phase, err = _get_entity_with_tenant_check(Phase, phase_id)
+        if err:
+            return err
+    gates = program_service.list_gates(phase_id=phase_id, tenant_id=tenant_id)
     return jsonify([g.to_dict() for g in gates]), 200
 
 
 @program_bp.route("/phases/<int:phase_id>/gates", methods=["POST"])
 def create_gate(phase_id):
     """Create a gate under a phase."""
-    phase, err = _get_or_404(Phase, phase_id)
+    phase, err = _get_entity_with_tenant_check(Phase, phase_id)
     if err:
         return err
+    tenant_id = _get_tenant_id_or_none() or phase.tenant_id
 
     data = request.get_json(silent=True) or {}
-    name = data.get("name", "").strip()
-    if not name:
-        return jsonify({"error": "Gate name is required"}), 400
-
-    gate, _ = program_service.create_gate(phase_id, data)
-    err = db_commit_or_error()
-    if err:
-        return err
+    gate, svc_err = program_service.create_gate(phase_id, data, tenant_id=tenant_id)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
     return jsonify(gate.to_dict()), 201
 
 
 @program_bp.route("/gates/<int:gate_id>", methods=["PUT"])
 def update_gate(gate_id):
     """Update a gate."""
-    gate, err = _get_or_404(Gate, gate_id)
+    gate, err = _get_entity_with_tenant_check(Gate, gate_id)
     if err:
         return err
+    tenant_id = _get_tenant_id_or_none() or gate.tenant_id
 
     data = request.get_json(silent=True) or {}
-
-    program_service.update_gate(gate, data)
-    err = db_commit_or_error()
-    if err:
-        return err
+    try:
+        program_service.update_gate(gate, data, tenant_id=tenant_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     return jsonify(gate.to_dict()), 200
 
 
 @program_bp.route("/gates/<int:gate_id>", methods=["DELETE"])
 def delete_gate(gate_id):
     """Delete a gate."""
-    gate, err = _get_or_404(Gate, gate_id)
+    gate, err = _get_entity_with_tenant_check(Gate, gate_id)
     if err:
         return err
-    db.session.delete(gate)
-    err = db_commit_or_error()
-    if err:
-        return err
-    return jsonify({"message": f"Gate '{gate.name}' deleted"}), 200
+    tenant_id = _get_tenant_id_or_none() or gate.tenant_id
+    gate_name = gate.name
+    program_service.delete_gate(gate, tenant_id=tenant_id)
+    return jsonify({"message": f"Gate '{gate_name}' deleted"}), 200
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -268,58 +544,65 @@ def delete_gate(gate_id):
 @program_bp.route("/programs/<int:program_id>/workstreams", methods=["GET"])
 def list_workstreams(program_id):
     """List workstreams for a program."""
-    program, err = _get_or_404(Program, program_id)
-    if err:
-        return err
-    ws = Workstream.query.filter_by(program_id=program_id).order_by(Workstream.name).all()
+    tenant_id = _get_tenant_id_or_none()
+    if tenant_id is not None:
+        _program, err = _get_scoped_program_or_404(program_id, tenant_id)
+        if err:
+            return err
+    else:
+        if not db.session.get(Program, program_id):
+            return jsonify({"error": "Program not found"}), 404
+    ws = program_service.list_workstreams(program_id=program_id, tenant_id=tenant_id)
     return jsonify([w.to_dict() for w in ws]), 200
 
 
 @program_bp.route("/programs/<int:program_id>/workstreams", methods=["POST"])
 def create_workstream(program_id):
     """Create a workstream."""
-    program, err = _get_or_404(Program, program_id)
-    if err:
-        return err
+    tenant_id = _get_tenant_id_or_none()
+    if tenant_id is not None:
+        _program, err = _get_scoped_program_or_404(program_id, tenant_id)
+        if err:
+            return err
+    else:
+        program = db.session.get(Program, program_id)
+        if not program:
+            return jsonify({"error": "Program not found"}), 404
+        tenant_id = program.tenant_id
 
     data = request.get_json(silent=True) or {}
-    name = data.get("name", "").strip()
-    if not name:
-        return jsonify({"error": "Workstream name is required"}), 400
-
-    ws, _ = program_service.create_workstream(program_id, data)
-    err = db_commit_or_error()
-    if err:
-        return err
+    ws, svc_err = program_service.create_workstream(program_id, data, tenant_id=tenant_id)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
     return jsonify(ws.to_dict()), 201
 
 
 @program_bp.route("/workstreams/<int:ws_id>", methods=["PUT"])
 def update_workstream(ws_id):
     """Update a workstream."""
-    ws, err = _get_or_404(Workstream, ws_id)
+    ws, err = _get_entity_with_tenant_check(Workstream, ws_id)
     if err:
         return err
+    tenant_id = _get_tenant_id_or_none() or ws.tenant_id
 
     data = request.get_json(silent=True) or {}
-    program_service.update_workstream(ws, data)
-    err = db_commit_or_error()
-    if err:
-        return err
+    try:
+        program_service.update_workstream(ws, data, tenant_id=tenant_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     return jsonify(ws.to_dict()), 200
 
 
 @program_bp.route("/workstreams/<int:ws_id>", methods=["DELETE"])
 def delete_workstream(ws_id):
     """Delete a workstream."""
-    ws, err = _get_or_404(Workstream, ws_id)
+    ws, err = _get_entity_with_tenant_check(Workstream, ws_id)
     if err:
         return err
-    db.session.delete(ws)
-    err = db_commit_or_error()
-    if err:
-        return err
-    return jsonify({"message": f"Workstream '{ws.name}' deleted"}), 200
+    tenant_id = _get_tenant_id_or_none() or ws.tenant_id
+    ws_name = ws.name
+    program_service.delete_workstream(ws, tenant_id=tenant_id)
+    return jsonify({"message": f"Workstream '{ws_name}' deleted"}), 200
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -329,58 +612,65 @@ def delete_workstream(ws_id):
 @program_bp.route("/programs/<int:program_id>/team", methods=["GET"])
 def list_team(program_id):
     """List team members for a program."""
-    program, err = _get_or_404(Program, program_id)
-    if err:
-        return err
-    members = TeamMember.query.filter_by(program_id=program_id).all()
+    tenant_id = _get_tenant_id_or_none()
+    if tenant_id is not None:
+        _program, err = _get_scoped_program_or_404(program_id, tenant_id)
+        if err:
+            return err
+    else:
+        if not db.session.get(Program, program_id):
+            return jsonify({"error": "Program not found"}), 404
+    members = program_service.list_team_members(program_id=program_id, tenant_id=tenant_id)
     return jsonify([m.to_dict() for m in members]), 200
 
 
 @program_bp.route("/programs/<int:program_id>/team", methods=["POST"])
 def create_team_member(program_id):
     """Add a team member to a program."""
-    program, err = _get_or_404(Program, program_id)
-    if err:
-        return err
+    tenant_id = _get_tenant_id_or_none()
+    if tenant_id is not None:
+        _program, err = _get_scoped_program_or_404(program_id, tenant_id)
+        if err:
+            return err
+    else:
+        program = db.session.get(Program, program_id)
+        if not program:
+            return jsonify({"error": "Program not found"}), 404
+        tenant_id = program.tenant_id
 
     data = request.get_json(silent=True) or {}
-    name = data.get("name", "").strip()
-    if not name:
-        return jsonify({"error": "Team member name is required"}), 400
-
-    member, _ = program_service.create_team_member(program_id, data)
-    err = db_commit_or_error()
-    if err:
-        return err
+    member, svc_err = program_service.create_team_member(program_id, data, tenant_id=tenant_id)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
     return jsonify(member.to_dict()), 201
 
 
 @program_bp.route("/team/<int:member_id>", methods=["PUT"])
 def update_team_member(member_id):
     """Update a team member."""
-    member, err = _get_or_404(TeamMember, member_id)
+    member, err = _get_entity_with_tenant_check(TeamMember, member_id)
     if err:
         return err
+    tenant_id = _get_tenant_id_or_none() or member.tenant_id
 
     data = request.get_json(silent=True) or {}
-    program_service.update_team_member(member, data)
-    err = db_commit_or_error()
-    if err:
-        return err
+    try:
+        program_service.update_team_member(member, data, tenant_id=tenant_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     return jsonify(member.to_dict()), 200
 
 
 @program_bp.route("/team/<int:member_id>", methods=["DELETE"])
 def delete_team_member(member_id):
     """Remove a team member."""
-    member, err = _get_or_404(TeamMember, member_id)
+    member, err = _get_entity_with_tenant_check(TeamMember, member_id)
     if err:
         return err
-    db.session.delete(member)
-    err = db_commit_or_error()
-    if err:
-        return err
-    return jsonify({"message": f"Team member '{member.name}' removed"}), 200
+    tenant_id = _get_tenant_id_or_none() or member.tenant_id
+    member_name = member.name
+    program_service.delete_team_member(member, tenant_id=tenant_id)
+    return jsonify({"message": f"Team member '{member_name}' removed"}), 200
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -390,58 +680,65 @@ def delete_team_member(member_id):
 @program_bp.route("/programs/<int:program_id>/committees", methods=["GET"])
 def list_committees(program_id):
     """List committees for a program."""
-    program, err = _get_or_404(Program, program_id)
-    if err:
-        return err
-    comms = Committee.query.filter_by(program_id=program_id).all()
+    tenant_id = _get_tenant_id_or_none()
+    if tenant_id is not None:
+        _program, err = _get_scoped_program_or_404(program_id, tenant_id)
+        if err:
+            return err
+    else:
+        if not db.session.get(Program, program_id):
+            return jsonify({"error": "Program not found"}), 404
+    comms = program_service.list_committees(program_id=program_id, tenant_id=tenant_id)
     return jsonify([c.to_dict() for c in comms]), 200
 
 
 @program_bp.route("/programs/<int:program_id>/committees", methods=["POST"])
 def create_committee(program_id):
     """Create a committee under a program."""
-    program, err = _get_or_404(Program, program_id)
-    if err:
-        return err
+    tenant_id = _get_tenant_id_or_none()
+    if tenant_id is not None:
+        _program, err = _get_scoped_program_or_404(program_id, tenant_id)
+        if err:
+            return err
+    else:
+        program = db.session.get(Program, program_id)
+        if not program:
+            return jsonify({"error": "Program not found"}), 404
+        tenant_id = program.tenant_id
 
     data = request.get_json(silent=True) or {}
-    name = data.get("name", "").strip()
-    if not name:
-        return jsonify({"error": "Committee name is required"}), 400
-
-    comm, _ = program_service.create_committee(program_id, data)
-    err = db_commit_or_error()
-    if err:
-        return err
+    comm, svc_err = program_service.create_committee(program_id, data, tenant_id=tenant_id)
+    if svc_err:
+        return jsonify({"error": svc_err["error"]}), svc_err["status"]
     return jsonify(comm.to_dict()), 201
 
 
 @program_bp.route("/committees/<int:comm_id>", methods=["PUT"])
 def update_committee(comm_id):
     """Update a committee."""
-    comm, err = _get_or_404(Committee, comm_id)
+    comm, err = _get_entity_with_tenant_check(Committee, comm_id)
     if err:
         return err
+    tenant_id = _get_tenant_id_or_none() or comm.tenant_id
 
     data = request.get_json(silent=True) or {}
-    program_service.update_committee(comm, data)
-    err = db_commit_or_error()
-    if err:
-        return err
+    try:
+        program_service.update_committee(comm, data, tenant_id=tenant_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     return jsonify(comm.to_dict()), 200
 
 
 @program_bp.route("/committees/<int:comm_id>", methods=["DELETE"])
 def delete_committee(comm_id):
     """Delete a committee."""
-    comm, err = _get_or_404(Committee, comm_id)
+    comm, err = _get_entity_with_tenant_check(Committee, comm_id)
     if err:
         return err
-    db.session.delete(comm)
-    err = db_commit_or_error()
-    if err:
-        return err
-    return jsonify({"message": f"Committee '{comm.name}' deleted"}), 200
+    tenant_id = _get_tenant_id_or_none() or comm.tenant_id
+    comm_name = comm.name
+    program_service.delete_committee(comm, tenant_id=tenant_id)
+    return jsonify({"message": f"Committee '{comm_name}' deleted"}), 200
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -461,7 +758,7 @@ _PHASE_COLORS: dict[str, str] = {
 }
 
 
-def _phase_color(phase: Phase, today: "date") -> str:
+def _phase_color(phase, today) -> str:
     """Return the display color for a phase bar.
 
     Priority order:
@@ -489,9 +786,6 @@ def get_timeline(program_id: int):
     so the frontend can render a complete timeline view without additional
     round-trips.
 
-    Phases are colored by SAP Activate phase type; delayed phases render
-    red. Gates are lifted into a flat milestones list for diamond markers.
-
     Args:
         program_id: Target program primary key.
 
@@ -499,14 +793,22 @@ def get_timeline(program_id: int):
         200 with {program, phases, sprints, milestones, today}
         404 if program not found.
     """
-    from datetime import date
     from collections import defaultdict
+    from datetime import date
+
     from sqlalchemy import select
+
     from app.models.backlog import Sprint
 
-    prog, err = _get_or_404(Program, program_id)
-    if err:
-        return err
+    tenant_id = _get_tenant_id_or_none()
+    if tenant_id is not None:
+        prog, err = _get_scoped_program_or_404(program_id, tenant_id)
+        if err:
+            return err
+    else:
+        prog = db.session.get(Program, program_id)
+        if not prog:
+            return jsonify({"error": "Program not found"}), 404
 
     today = date.today()
 
@@ -516,10 +818,11 @@ def get_timeline(program_id: int):
         .where(Phase.program_id == program_id)
         .order_by(Phase.order, Phase.id)
     )
+    if tenant_id is not None:
+        stmt = stmt.where(Phase.tenant_id == tenant_id)
     phases: list[Phase] = db.session.execute(stmt).scalars().all()
 
-    # Bulk-load all gates for these phases in one query (avoids N+1 and
-    # bypasses the lazy="dynamic" restriction on selectinload).
+    # Bulk-load all gates for these phases in one query (avoids N+1).
     phase_ids = [ph.id for ph in phases]
     gates_by_phase: dict[int, list[Gate]] = defaultdict(list)
     if phase_ids:
@@ -528,8 +831,8 @@ def get_timeline(program_id: int):
             .where(Gate.phase_id.in_(phase_ids))
             .order_by(Gate.planned_date, Gate.id)
         )
-        for g in db.session.execute(gates_stmt).scalars().all():
-            gates_by_phase[g.phase_id].append(g)
+        for gt in db.session.execute(gates_stmt).scalars().all():
+            gates_by_phase[gt.phase_id].append(gt)
 
     phases_data = []
     milestones = []
@@ -542,35 +845,32 @@ def get_timeline(program_id: int):
         ph_gates = gates_by_phase[ph.id]
         sorted_gates = sorted(
             ph_gates,
-            key=lambda g: g.planned_date or date.max,
+            key=lambda gt: gt.planned_date or date.max,
         )
         gates_data = [
             {
-                "id": g.id,
-                "name": g.name,
-                "gate_type": g.gate_type,
-                "planned_date": g.planned_date.isoformat() if g.planned_date else None,
-                "actual_date": g.actual_date.isoformat() if g.actual_date else None,
-                "status": g.status,
+                "id": gt.id,
+                "name": gt.name,
+                "gate_type": gt.gate_type,
+                "planned_date": gt.planned_date.isoformat() if gt.planned_date else None,
+                "actual_date": gt.actual_date.isoformat() if gt.actual_date else None,
+                "status": gt.status,
             }
-            for g in sorted_gates
+            for gt in sorted_gates
         ]
 
-        # Lift gates into the flat milestones list for frontend diamond markers.
-        for g in sorted_gates:
-            if g.planned_date:
+        for gt in sorted_gates:
+            if gt.planned_date:
                 milestones.append(
                     {
-                        "id": f"g{g.id}",
-                        "name": g.name,
-                        "date": g.planned_date.isoformat(),
+                        "id": f"g{gt.id}",
+                        "name": gt.name,
+                        "date": gt.planned_date.isoformat(),
                         "type": "gate",
-                        "status": g.status,
+                        "status": gt.status,
                     }
                 )
 
-        # Derive SAP Activate phase keyword from the phase name so the
-        # frontend can apply icons without a dedicated DB column.
         name_lower = (ph.name or "").lower()
         sap_phase_keyword = next(
             (kw for kw in _PHASE_COLORS if kw in name_lower), "unknown"
@@ -647,29 +947,34 @@ def get_critical_path(program_id: int):
         200 with {delayed_items, at_risk_gates, total_delayed, total_at_risk}
         404 if program not found.
     """
-    from datetime import date
     from collections import defaultdict
+    from datetime import date
+
     from sqlalchemy import select
 
-    prog, err = _get_or_404(Program, program_id)
-    if err:
-        return err
+    tenant_id = _get_tenant_id_or_none()
+    if tenant_id is not None:
+        prog, err = _get_scoped_program_or_404(program_id, tenant_id)
+        if err:
+            return err
+    else:
+        prog = db.session.get(Program, program_id)
+        if not prog:
+            return jsonify({"error": "Program not found"}), 404
 
     today = date.today()
 
-    stmt = (
-        select(Phase)
-        .where(Phase.program_id == program_id)
-    )
+    stmt = select(Phase).where(Phase.program_id == program_id)
+    if tenant_id is not None:
+        stmt = stmt.where(Phase.tenant_id == tenant_id)
     phases: list[Phase] = db.session.execute(stmt).scalars().all()
 
-    # Bulk-load gates by phase_id (same pattern as get_timeline).
     phase_ids = [ph.id for ph in phases]
     gates_by_phase: dict[int, list[Gate]] = defaultdict(list)
     if phase_ids:
         gates_stmt = select(Gate).where(Gate.phase_id.in_(phase_ids))
-        for g in db.session.execute(gates_stmt).scalars().all():
-            gates_by_phase[g.phase_id].append(g)
+        for gt in db.session.execute(gates_stmt).scalars().all():
+            gates_by_phase[gt.phase_id].append(gt)
 
     delayed_items = []
     at_risk_gates = []

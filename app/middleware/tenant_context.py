@@ -22,6 +22,7 @@ from flask import g, jsonify, request
 
 from app.models import db
 from app.models.auth import Tenant
+from app.services.security_observability import record_security_event
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,13 @@ def init_tenant_context(app):
         # Look up and validate tenant
         tenant = db.session.get(Tenant, tenant_id)
         if tenant is None:
+            record_security_event(
+                event_type="scope_mismatch_error",
+                reason="jwt_tenant_not_found",
+                severity="high",
+                tenant_id=tenant_id,
+                request_id=getattr(g, "request_id", None),
+            )
             logger.warning("JWT tenant_id %d not found in DB", tenant_id)
             return jsonify({"error": "Tenant not found"}), 403
 
@@ -70,6 +78,13 @@ def init_tenant_context(app):
             # Platform admins can still operate even if their tenant is frozen
             roles = getattr(g, "jwt_roles", [])
             if "platform_admin" not in roles:
+                record_security_event(
+                    event_type="scope_mismatch_error",
+                    reason="jwt_tenant_deactivated",
+                    severity="high",
+                    tenant_id=tenant_id,
+                    request_id=getattr(g, "request_id", None),
+                )
                 logger.warning("JWT tenant_id %d is deactivated", tenant_id)
                 return jsonify({"error": "Tenant account is deactivated"}), 403
             logger.info("Frozen tenant %d — allowing platform_admin bypass", tenant_id)

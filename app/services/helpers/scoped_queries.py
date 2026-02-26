@@ -40,6 +40,7 @@ from sqlalchemy import select
 
 from app.core.exceptions import NotFoundError
 from app.models import db
+from app.services.security_observability import record_security_event
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,12 @@ def get_scoped(
     provided_scopes = {k: v for k, v in provided_scopes.items() if v is not None}
 
     if not provided_scopes:
+        record_security_event(
+            event_type="scope_mismatch_error",
+            reason="get_scoped_called_without_scope",
+            severity="high",
+            details={"model": model.__name__, "pk": pk},
+        )
         raise ValueError(
             f"{model.__name__} id={pk} requires at least one scope filter "
             "(project_id, program_id, tenant_id, cutover_plan_id, or scenario_id). "
@@ -118,6 +125,16 @@ def get_scoped(
 
     missing_fields = set(provided_scopes) - set(applicable_scopes)
     if missing_fields:
+        record_security_event(
+            event_type="scope_mismatch_error",
+            reason="get_scoped_missing_model_scope_field",
+            severity="warning",
+            details={
+                "model": model.__name__,
+                "pk": pk,
+                "missing_fields": sorted(missing_fields),
+            },
+        )
         logger.warning(
             "get_scoped(%s, %s): scope field(s) %s not found on model — "
             "those filters were NOT applied.",
@@ -127,6 +144,12 @@ def get_scoped(
         )
 
     if not applicable_scopes:
+        record_security_event(
+            event_type="scope_mismatch_error",
+            reason="get_scoped_no_applicable_scope",
+            severity="high",
+            details={"model": model.__name__, "pk": pk, "provided_scopes": provided_scopes},
+        )
         raise ValueError(
             f"{model.__name__} id={pk}: no applicable scope — "
             f"none of the provided scope fields {sorted(provided_scopes)} "

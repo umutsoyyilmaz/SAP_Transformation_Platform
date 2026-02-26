@@ -7,9 +7,19 @@ Models:
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.models import db
+
+# ── Local coercion ───────────────────────────────────────────────────────────
+
+def _as_int(value):
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -64,6 +74,7 @@ class AuditLog(db.Model):
     __table_args__ = (
         db.Index("idx_audit_entity", "entity_type", "entity_id"),
         db.Index("idx_audit_program", "program_id"),
+        db.Index("idx_audit_project", "project_id"),
         db.Index("idx_audit_actor", "actor"),
         db.Index("idx_audit_action", "action"),
         db.Index("idx_audit_ts", "timestamp"),
@@ -79,6 +90,12 @@ class AuditLog(db.Model):
     program_id = db.Column(
         db.Integer,
         db.ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -119,7 +136,7 @@ class AuditLog(db.Model):
     # Timestamp (immutable)
     timestamp = db.Column(
         db.DateTime(timezone=True), nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
 
     # ── Helpers ──────────────────────────────────────────────────────────
@@ -137,6 +154,7 @@ class AuditLog(db.Model):
             "id": self.id,
             "tenant_id": self.tenant_id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "entity_type": self.entity_type,
             "entity_id": self.entity_id,
             "action": self.action,
@@ -159,6 +177,7 @@ def write_audit(
     action: str,
     actor: str = "system",
     program_id: int | None = None,
+    project_id: int | None = None,
     tenant_id: int | None = None,
     actor_user_id: int | None = None,
     diff: dict | None = None,
@@ -169,9 +188,33 @@ def write_audit(
 
     Returns the (flushed) AuditLog instance.
     """
+    if tenant_id is None or program_id is None:
+        try:
+            from flask import g, has_request_context, request
+            if has_request_context():
+                if tenant_id is None:
+                    tenant_id = getattr(g, "jwt_tenant_id", None) or getattr(g, "tenant_id", None)
+                if program_id is None:
+                    program_id = (
+                        (request.view_args or {}).get("program_id")
+                        or request.args.get("program_id", type=int)
+                    )
+                # Note: project_id is NOT auto-populated from request args
+                # because explore endpoints use "project_id" to reference
+                # programs.id (legacy naming), while audit_logs.project_id
+                # FK → projects.id. Callers must pass project_id explicitly.
+        except Exception:
+            # Never block business flow on audit context enrichment.
+            pass
+
+    tenant_id = _as_int(tenant_id)
+    program_id = _as_int(program_id)
+    project_id = _as_int(project_id)
+
     log = AuditLog(
         tenant_id=tenant_id,
         program_id=program_id,
+        project_id=project_id,
         entity_type=entity_type,
         entity_id=str(entity_id),
         action=action,

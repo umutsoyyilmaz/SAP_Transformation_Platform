@@ -15,7 +15,6 @@ from datetime import datetime, timezone
 
 from app.models import db
 
-
 # ── Program ──────────────────────────────────────────────────────────────────
 
 
@@ -30,8 +29,8 @@ class Program(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(
         db.Integer,
-        db.ForeignKey("tenants.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
         index=True,
     )
     name = db.Column(db.String(200), nullable=False)
@@ -120,11 +119,19 @@ class Program(db.Model):
         "Sprint", backref="program", lazy="dynamic",
         cascade="all, delete-orphan", order_by="Sprint.order",
     )
+    projects = db.relationship(
+        "Project", backref="program", lazy="dynamic",
+        cascade="all, delete-orphan",
+        order_by="Project.is_default.desc(), Project.name",
+    )
+
+    SENSITIVE_FIELDS: set[str] = set()
 
     def to_dict(self, include_children=False):
         """Serialize program to dictionary."""
         result = {
             "id": self.id,
+            "tenant_id": self.tenant_id,
             "name": self.name,
             "description": self.description,
             "project_type": self.project_type,
@@ -146,6 +153,7 @@ class Program(db.Model):
             result["workstreams"] = [w.to_dict() for w in self.workstreams]
             result["team_members"] = [t.to_dict() for t in self.team_members]
             result["committees"] = [c.to_dict() for c in self.committees]
+            result["projects"] = [proj.to_dict() for proj in self.projects]
         return result
 
     def __repr__(self):
@@ -166,8 +174,8 @@ class Phase(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(
         db.Integer,
-        db.ForeignKey("tenants.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
         index=True,
     )
     program_id = db.Column(
@@ -238,8 +246,8 @@ class Gate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(
         db.Integer,
-        db.ForeignKey("tenants.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
         index=True,
     )
     phase_id = db.Column(
@@ -304,8 +312,8 @@ class Workstream(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(
         db.Integer,
-        db.ForeignKey("tenants.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
         index=True,
     )
     program_id = db.Column(
@@ -365,8 +373,8 @@ class TeamMember(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(
         db.Integer,
-        db.ForeignKey("tenants.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
         index=True,
     )
     program_id = db.Column(
@@ -436,8 +444,8 @@ class Committee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(
         db.Integer,
-        db.ForeignKey("tenants.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
         index=True,
     )
     program_id = db.Column(
@@ -484,14 +492,14 @@ class Committee(db.Model):
         return f"<Committee {self.id}: {self.name}>"
 
 
-# ── Discover Fazı Modelleri (S3-01 / FDD-B02) ────────────────────────────────
+# ── Discover Phase Models (S3-01 / FDD-B02) ──────────────────────────────────
 
 
 class ProjectCharter(db.Model):
-    """SAP Activate Discover fazı çıktısı: proje gerekçesi ve temel kararlar.
+    """SAP Activate Discover phase output: project justification and key decisions.
 
-    Her Program için en fazla bir charter oluşturulur. Discover Gate'i
-    geçebilmek için charter'ın status='approved' olması zorunludur.
+    At most one charter is created per Program. The charter must have
+    status='approved' to pass the Discover Gate.
 
     Lifecycle: draft → in_review → approved | rejected
     """
@@ -504,7 +512,7 @@ class ProjectCharter(db.Model):
         db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
-        comment="Her program için en fazla bir charter — unique constraint",
+        comment="At most one charter per program — unique constraint",
     )
     tenant_id = db.Column(
         db.Integer,
@@ -513,19 +521,19 @@ class ProjectCharter(db.Model):
         index=True,
     )
 
-    # Proje gerekçesi
-    project_objective = db.Column(db.Text, nullable=True, comment="Projenin iş hedefi")
-    business_drivers = db.Column(db.Text, nullable=True, comment="Neden şimdi? Tetikleyici faktörler")
-    expected_benefits = db.Column(db.Text, nullable=True, comment="Beklenen iş faydaları")
-    key_risks = db.Column(db.Text, nullable=True, comment="Bilinen başlangıç riskleri")
+    # Project justification
+    project_objective = db.Column(db.Text, nullable=True, comment="Project business objective")
+    business_drivers = db.Column(db.Text, nullable=True, comment="Why now? Triggering factors")
+    expected_benefits = db.Column(db.Text, nullable=True, comment="Expected business benefits")
+    key_risks = db.Column(db.Text, nullable=True, comment="Known initial risks")
 
-    # Kapsam özeti
-    in_scope_summary = db.Column(db.Text, nullable=True, comment="Kapsama dahil alanlar")
-    out_of_scope_summary = db.Column(db.Text, nullable=True, comment="Kapsam dışı alanlar")
-    affected_countries = db.Column(db.String(500), nullable=True, comment="CSV ülke kodları: TR,DE,NL")
-    affected_sap_modules = db.Column(db.String(500), nullable=True, comment="CSV modül kodları: FI,MM,SD")
+    # Scope summary
+    in_scope_summary = db.Column(db.Text, nullable=True, comment="Areas included in scope")
+    out_of_scope_summary = db.Column(db.Text, nullable=True, comment="Areas excluded from scope")
+    affected_countries = db.Column(db.String(500), nullable=True, comment="CSV country codes: TR,DE,NL")
+    affected_sap_modules = db.Column(db.String(500), nullable=True, comment="CSV module codes: FI,MM,SD")
 
-    # Proje tipi ve takvim
+    # Project type and timeline
     project_type = db.Column(
         db.String(30),
         nullable=False,
@@ -535,7 +543,7 @@ class ProjectCharter(db.Model):
     target_go_live_date = db.Column(db.Date, nullable=True)
     estimated_duration_months = db.Column(db.Integer, nullable=True)
 
-    # Onay durumu
+    # Approval status
     status = db.Column(
         db.String(20),
         nullable=False,
@@ -592,12 +600,12 @@ class ProjectCharter(db.Model):
 
 
 class SystemLandscape(db.Model):
-    """AS-IS sistem peyzajı kaydı.
+    """AS-IS system landscape record.
 
-    Her program için birden fazla sistem kaydedilebilir. Hangi SAP/non-SAP
-    sistemler mevcut, go-live sonrası hangisi emekli olacak veya entegre kalacak?
+    Multiple systems can be registered per program. Which SAP/non-SAP
+    systems exist, which will be decommissioned or remain integrated after go-live?
 
-    tenant_id ile scoped — tüm sorgularda WHERE tenant_id = :tid zorunludur.
+    Scoped by tenant_id — WHERE tenant_id = :tid is required in all queries.
     """
 
     __tablename__ = "system_landscapes"
@@ -674,13 +682,13 @@ class SystemLandscape(db.Model):
 
 
 class ScopeAssessment(db.Model):
-    """SAP modül bazında ilk scope değerlendirmesi (Discover fazı).
+    """Initial scope assessment per SAP module (Discover phase).
 
-    Hangi modüller kapsama dahil, kompleksite ve tahmini iş büyüklüğü nedir?
-    Bir program + modül kombinasyonu için en fazla bir kayıt — upsert mantığı
-    discover_service.save_scope_assessment() içinde uygulanır.
+    Which modules are in scope, what is the complexity and estimated effort?
+    At most one record per program + module combination — upsert logic
+    is implemented in discover_service.save_scope_assessment().
 
-    tenant_id ile scoped — tüm sorgularda WHERE tenant_id = :tid zorunludur.
+    Scoped by tenant_id — WHERE tenant_id = :tid is required in all queries.
     """
 
     __tablename__ = "scope_assessments"
@@ -706,8 +714,8 @@ class ScopeAssessment(db.Model):
         nullable=True,
         comment="low | medium | high | very_high",
     )
-    estimated_requirements = db.Column(db.Integer, nullable=True, comment="Tahmini requirement sayısı")
-    estimated_gaps = db.Column(db.Integer, nullable=True, comment="Tahmini gap sayısı (WRICEF)")
+    estimated_requirements = db.Column(db.Integer, nullable=True, comment="Estimated number of requirements")
+    estimated_gaps = db.Column(db.Integer, nullable=True, comment="Estimated number of gaps (WRICEF)")
     notes = db.Column(db.Text, nullable=True)
     assessment_basis = db.Column(
         db.String(30),
@@ -882,7 +890,10 @@ class RaciEntry(db.Model):
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}
 
     def __repr__(self) -> str:
-        return f"<RaciEntry id={self.id} activity={self.activity_id} member={self.team_member_id} role={self.raci_role}>"
+        return (
+            f"<RaciEntry id={self.id} activity={self.activity_id}"
+            f" member={self.team_member_id} role={self.raci_role}>"
+        )
 
 
 # ═════════════════════════════════════════════════════════════════════════════

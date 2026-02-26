@@ -27,6 +27,20 @@ class UserServiceError(Exception):
         super().__init__(message)
 
 
+def _parse_dt(value, field_name: str):
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise UserServiceError(f"{field_name} must be ISO datetime") from exc
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    raise UserServiceError(f"{field_name} must be datetime or ISO string")
+
+
 # ═══════════════════════════════════════════════════════════════
 # User CRUD
 # ═══════════════════════════════════════════════════════════════
@@ -85,7 +99,7 @@ def create_user(
                 & ((Role.tenant_id == tenant_id) | (Role.tenant_id.is_(None)))
             ).first()
             if role:
-                db.session.add(UserRole(user_id=user.id, role_id=role.id))
+                db.session.add(UserRole(user_id=user.id, role_id=role.id, tenant_id=tenant_id))
 
     db.session.commit()
     return user
@@ -191,7 +205,14 @@ def invite_user(tenant_id: int, email: str, role_names: list[str] = None, invite
                 & ((Role.tenant_id == tenant_id) | (Role.tenant_id.is_(None)))
             ).first()
             if role:
-                db.session.add(UserRole(user_id=user.id, role_id=role.id, assigned_by=invited_by))
+                db.session.add(
+                    UserRole(
+                        user_id=user.id,
+                        role_id=role.id,
+                        tenant_id=tenant_id,
+                        assigned_by=invited_by,
+                    )
+                )
 
     db.session.commit()
     return user
@@ -219,11 +240,46 @@ def accept_invite(invite_token: str, password: str, full_name: str = None) -> Us
 # ═══════════════════════════════════════════════════════════════
 # Role Management
 # ═══════════════════════════════════════════════════════════════
-def assign_role(user_id: int, role_name: str, assigned_by: int = None) -> UserRole:
+def assign_role(
+    user_id: int,
+    role_name: str,
+    assigned_by: int = None,
+    tenant_id: int = None,
+    program_id: int = None,
+    project_id: int = None,
+    starts_at: datetime | str | None = None,
+    ends_at: datetime | str | None = None,
+) -> UserRole:
     """Assign a role to a user."""
     user = db.session.get(User, user_id)
     if not user:
         raise UserServiceError("User not found", 404)
+    starts_at_dt = _parse_dt(starts_at, "starts_at")
+    ends_at_dt = _parse_dt(ends_at, "ends_at")
+    if starts_at_dt and ends_at_dt and ends_at_dt < starts_at_dt:
+        raise UserServiceError("ends_at must be greater than or equal to starts_at", 400)
+
+    scope_tenant_id = tenant_id if tenant_id is not None else user.tenant_id
+    if user.tenant_id is not None and scope_tenant_id != user.tenant_id:
+        raise UserServiceError("Role scope tenant mismatch", 403)
+    if program_id is not None:
+        from app.models.program import Program
+        prog = db.session.get(Program, program_id)
+        if not prog or prog.tenant_id != user.tenant_id:
+            raise UserServiceError("Program scope not found in user's tenant", 404)
+        if scope_tenant_id is None:
+            scope_tenant_id = prog.tenant_id
+
+    if project_id is not None:
+        from app.models.project import Project
+        proj = db.session.get(Project, project_id)
+        if not proj or proj.tenant_id != user.tenant_id:
+            raise UserServiceError("Project scope not found in user's tenant", 404)
+        if program_id is not None and proj.program_id != program_id:
+            raise UserServiceError("project_id does not belong to program_id", 400)
+        program_id = proj.program_id
+        if scope_tenant_id is None:
+            scope_tenant_id = proj.tenant_id
 
     role = Role.query.filter(
         (Role.name == role_name)
@@ -233,13 +289,49 @@ def assign_role(user_id: int, role_name: str, assigned_by: int = None) -> UserRo
         raise UserServiceError(f"Role '{role_name}' not found")
 
     # Check if already assigned
-    existing = UserRole.query.filter_by(user_id=user_id, role_id=role.id).first()
+    existing = UserRole.query.filter_by(
+        user_id=user_id,
+        role_id=role.id,
+        tenant_id=scope_tenant_id,
+        program_id=program_id,
+        project_id=project_id,
+    ).first()
     if existing:
         raise UserServiceError("Role already assigned")
 
-    ur = UserRole(user_id=user_id, role_id=role.id, assigned_by=assigned_by)
+    ur = UserRole(
+        user_id=user_id,
+        role_id=role.id,
+        tenant_id=scope_tenant_id,
+        program_id=program_id,
+        project_id=project_id,
+        starts_at=starts_at_dt,
+        ends_at=ends_at_dt,
+        assigned_by=assigned_by,
+    )
     db.session.add(ur)
     db.session.commit()
+    from app.models.audit import write_audit
+    from app.services.permission_service import invalidate_cache
+    write_audit(
+        entity_type="user_role",
+        entity_id=str(ur.id),
+        action="user_role.assigned",
+        actor=str(assigned_by or "system"),
+        actor_user_id=assigned_by,
+        tenant_id=scope_tenant_id,
+        program_id=program_id,
+        diff={
+            "user_id": user_id,
+            "role_id": role.id,
+            "role_name": role_name,
+            "project_id": project_id,
+            "starts_at": starts_at_dt.isoformat() if starts_at_dt else None,
+            "ends_at": ends_at_dt.isoformat() if ends_at_dt else None,
+        },
+    )
+    db.session.commit()
+    invalidate_cache(user_id)
     return ur
 
 
@@ -262,6 +354,25 @@ def remove_role(user_id: int, role_name: str) -> bool:
 
     db.session.delete(ur)
     db.session.commit()
+    from app.models.audit import write_audit
+    from app.services.permission_service import invalidate_cache
+    write_audit(
+        entity_type="user_role",
+        entity_id=str(ur.id),
+        action="user_role.removed",
+        actor="system",
+        actor_user_id=None,
+        tenant_id=user.tenant_id,
+        program_id=ur.program_id,
+        diff={
+            "user_id": user_id,
+            "role_id": role.id,
+            "role_name": role_name,
+            "project_id": ur.project_id,
+        },
+    )
+    db.session.commit()
+    invalidate_cache(user_id)
     return True
 
 
@@ -270,6 +381,17 @@ def remove_role(user_id: int, role_name: str) -> bool:
 # ═══════════════════════════════════════════════════════════════
 def assign_to_project(user_id: int, project_id: int, role_in_project: str = None, assigned_by: int = None) -> ProjectMember:
     """Assign a user to a project."""
+    from app.models.project import Project
+
+    user = db.session.get(User, user_id)
+    if not user:
+        raise UserServiceError("User not found", 404)
+    project = db.session.get(Project, project_id)
+    if not project:
+        raise UserServiceError("Project not found", 404)
+    if user.tenant_id != project.tenant_id:
+        raise UserServiceError("Cross-tenant project assignment is not allowed", 403)
+
     existing = ProjectMember.query.filter_by(user_id=user_id, project_id=project_id).first()
     if existing:
         raise UserServiceError("User already assigned to this project")
@@ -282,15 +404,44 @@ def assign_to_project(user_id: int, project_id: int, role_in_project: str = None
     )
     db.session.add(pm)
     db.session.commit()
+    from app.models.audit import write_audit
+    write_audit(
+        entity_type="project_member",
+        entity_id=str(pm.id),
+        action="project_member.assigned",
+        actor=str(assigned_by or "system"),
+        actor_user_id=assigned_by,
+        tenant_id=user.tenant_id,
+        program_id=project.program_id,
+        diff={
+            "user_id": user_id,
+            "project_id": project_id,
+            "role_in_project": role_in_project,
+        },
+    )
+    db.session.commit()
     return pm
 
 
 def remove_from_project(user_id: int, project_id: int) -> bool:
     """Remove a user from a project."""
+    user = db.session.get(User, user_id)
     pm = ProjectMember.query.filter_by(user_id=user_id, project_id=project_id).first()
     if not pm:
         raise UserServiceError("User not assigned to this project", 404)
     db.session.delete(pm)
+    db.session.commit()
+    from app.models.audit import write_audit
+    write_audit(
+        entity_type="project_member",
+        entity_id=str(pm.id),
+        action="project_member.removed",
+        actor="system",
+        actor_user_id=None,
+        tenant_id=user.tenant_id if user else None,
+        program_id=None,
+        diff={"user_id": user_id, "project_id": project_id},
+    )
     db.session.commit()
     return True
 

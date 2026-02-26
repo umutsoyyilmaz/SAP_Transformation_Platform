@@ -64,27 +64,37 @@ def _auto_add_missing_columns(app, db):
     import sqlalchemy as sa
 
     db_uri = str(db.engine.url)
-    if "postgresql" not in db_uri:
-        return  # SQLite doesn't support ADD COLUMN IF NOT EXISTS
+    is_postgres = "postgresql" in db_uri
+    is_sqlite = "sqlite" in db_uri
+    if not (is_postgres or is_sqlite):
+        return
 
     # Use a raw connection with a short timeout to avoid blocking startup
     try:
         with db.engine.connect() as conn:
-            # Set a 15-second timeout for this connection
-            conn.execute(sa.text("SET statement_timeout = '15s'"))
-            conn.execute(sa.text("SET lock_timeout = '5s'"))
-
-            # Get ALL columns from information_schema in one fast query
-            # (avoids sa.inspect which can hang on table locks)
-            rows = conn.execute(sa.text(
-                "SELECT table_name, column_name "
-                "FROM information_schema.columns "
-                "WHERE table_schema = 'public'"
-            )).fetchall()
-
             db_columns_map = {}
-            for row in rows:
-                db_columns_map.setdefault(row[0], set()).add(row[1])
+            if is_postgres:
+                # Set short timeouts to avoid blocking startup.
+                conn.execute(sa.text("SET statement_timeout = '15s'"))
+                conn.execute(sa.text("SET lock_timeout = '5s'"))
+
+                # Get ALL columns from information_schema in one fast query.
+                rows = conn.execute(sa.text(
+                    "SELECT table_name, column_name "
+                    "FROM information_schema.columns "
+                    "WHERE table_schema = 'public'"
+                )).fetchall()
+                for row in rows:
+                    db_columns_map.setdefault(row[0], set()).add(row[1])
+            else:
+                # SQLite: introspect each table via PRAGMA.
+                rows = conn.execute(sa.text(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )).fetchall()
+                table_names = [r[0] for r in rows if r and r[0] and not r[0].startswith("sqlite_")]
+                for table_name in table_names:
+                    col_rows = conn.execute(sa.text(f'PRAGMA table_info("{table_name}")')).fetchall()
+                    db_columns_map[table_name] = {r[1] for r in col_rows}
 
             added = []
 
@@ -111,10 +121,16 @@ def _auto_add_missing_columns(app, db):
                     elif col.default is not None and col.default.is_scalar:
                         default = f" DEFAULT '{col.default.arg}'"
 
-                    sql = (
-                        f'ALTER TABLE "{table_name}" '
-                        f'ADD COLUMN IF NOT EXISTS "{col.name}" {col_type}{nullable}{default}'
-                    )
+                    if is_postgres:
+                        sql = (
+                            f'ALTER TABLE "{table_name}" '
+                            f'ADD COLUMN IF NOT EXISTS "{col.name}" {col_type}{nullable}{default}'
+                        )
+                    else:
+                        sql = (
+                            f'ALTER TABLE "{table_name}" '
+                            f'ADD COLUMN "{col.name}" {col_type}{nullable}{default}'
+                        )
                     try:
                         conn.execute(sa.text(sql))
                         added.append(f"{table_name}.{col.name}")
@@ -122,7 +138,7 @@ def _auto_add_missing_columns(app, db):
                         # If NOT NULL without default fails, retry as nullable
                         sql_nullable = (
                             f'ALTER TABLE "{table_name}" '
-                            f'ADD COLUMN IF NOT EXISTS "{col.name}" {col_type}{default}'
+                            f'ADD COLUMN "{col.name}" {col_type}{default}'
                         )
                         try:
                             conn.execute(sa.text(sql_nullable))
@@ -248,6 +264,7 @@ def create_app(config_name=None):
     from app.models import signoff as _signoff_models               # noqa: F401
     from app.models import sap_auth as _sap_auth_models              # noqa: F401
     from app.models import process_mining as _process_mining_models  # noqa: F401  # S8-01
+    from app.models import project as _project_models              # noqa: F401
 
     # ── Auto-create tables (safe for production — CREATE IF NOT EXISTS) ──
     with app.app_context():
