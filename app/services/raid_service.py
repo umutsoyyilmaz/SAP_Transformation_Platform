@@ -42,6 +42,7 @@ def create_risk(program_id, data):
 
     risk = Risk(
         program_id=program_id,
+        project_id=data.get("project_id"),
         code=next_risk_code(),
         title=data["title"],
         description=data.get("description", ""),
@@ -141,6 +142,7 @@ def create_action(program_id, data):
     """
     action = Action(
         program_id=program_id,
+        project_id=data.get("project_id"),
         code=next_action_code(),
         title=data["title"],
         description=data.get("description", ""),
@@ -211,6 +213,7 @@ def create_issue(program_id, data):
     """
     issue = Issue(
         program_id=program_id,
+        project_id=data.get("project_id"),
         code=next_issue_code(),
         title=data["title"],
         description=data.get("description", ""),
@@ -291,6 +294,7 @@ def create_decision(program_id, data):
     """
     decision = Decision(
         program_id=program_id,
+        project_id=data.get("project_id"),
         code=next_decision_code(),
         title=data["title"],
         description=data.get("description", ""),
@@ -364,37 +368,53 @@ def patch_decision_status(decision, new_status):
 # ── Aggregate ────────────────────────────────────────────────────────────
 
 
-def compute_raid_stats(program_id):
+def compute_raid_stats(program_id, project_id=None):
     """Compute aggregate RAID statistics for a programme.
+
+    Args:
+        program_id: Programme primary key.
+        project_id: Optional project scope filter.
 
     Returns:
         dict with risk, action, issue, decision counts and summary.
     """
-    risk_count = Risk.query.filter_by(program_id=program_id).count()
-    open_risks = Risk.query.filter_by(program_id=program_id).filter(
+    risk_q = Risk.query.filter_by(program_id=program_id)
+    if project_id is not None:
+        risk_q = risk_q.filter(Risk.project_id == project_id)
+    risk_count = risk_q.count()
+    open_risks = risk_q.filter(
         Risk.status.notin_(["closed", "expired"])
     ).count()
-    critical_risks = Risk.query.filter_by(program_id=program_id, rag_status="red").count()
+    critical_risks = risk_q.filter_by(rag_status="red").count()
 
-    action_count = Action.query.filter_by(program_id=program_id).count()
-    open_actions = Action.query.filter_by(program_id=program_id).filter(
+    action_q = Action.query.filter_by(program_id=program_id)
+    if project_id is not None:
+        action_q = action_q.filter(Action.project_id == project_id)
+    action_count = action_q.count()
+    open_actions = action_q.filter(
         Action.status.in_(["open", "in_progress"])
     ).count()
-    overdue_actions = Action.query.filter_by(program_id=program_id).filter(
+    overdue_actions = action_q.filter(
         Action.status.in_(["open", "in_progress"]),
         Action.due_date < date.today(),
     ).count()
 
-    issue_count = Issue.query.filter_by(program_id=program_id).count()
-    open_issues = Issue.query.filter_by(program_id=program_id).filter(
+    issue_q = Issue.query.filter_by(program_id=program_id)
+    if project_id is not None:
+        issue_q = issue_q.filter(Issue.project_id == project_id)
+    issue_count = issue_q.count()
+    open_issues = issue_q.filter(
         Issue.status.notin_(["resolved", "closed"])
     ).count()
-    critical_issues = Issue.query.filter_by(
-        program_id=program_id, severity="critical",
+    critical_issues = issue_q.filter_by(
+        severity="critical",
     ).filter(Issue.status.notin_(["resolved", "closed"])).count()
 
-    decision_count = Decision.query.filter_by(program_id=program_id).count()
-    pending_decisions = Decision.query.filter_by(program_id=program_id).filter(
+    decision_q = Decision.query.filter_by(program_id=program_id)
+    if project_id is not None:
+        decision_q = decision_q.filter(Decision.project_id == project_id)
+    decision_count = decision_q.count()
+    pending_decisions = decision_q.filter(
         Decision.status.in_(["proposed", "pending_approval"])
     ).count()
 
@@ -411,13 +431,20 @@ def compute_raid_stats(program_id):
     }
 
 
-def compute_heatmap(program_id):
-    """Compute 5×5 risk heatmap (probability × impact) with risk entries.
+def compute_heatmap(program_id, project_id=None):
+    """Compute 5x5 risk heatmap (probability x impact) with risk entries.
+
+    Args:
+        program_id: Programme primary key.
+        project_id: Optional project scope filter.
 
     Returns:
         dict with 'program_id', 'matrix', and 'labels' keys.
     """
-    risks = Risk.query.filter_by(program_id=program_id).filter(
+    q = Risk.query.filter_by(program_id=program_id)
+    if project_id is not None:
+        q = q.filter(Risk.project_id == project_id)
+    risks = q.filter(
         Risk.status.notin_(["closed", "expired"])
     ).all()
 

@@ -521,6 +521,7 @@ def seed_project_from_catalog(
         pl = ProcessLevel(
             id=_uuid(),
             tenant_id=tenant_id,
+            program_id=project_id,
             project_id=project_id,
             parent_id=None,
             level=1,
@@ -548,6 +549,7 @@ def seed_project_from_catalog(
         pl = ProcessLevel(
             id=_uuid(),
             tenant_id=tenant_id,
+            program_id=project_id,
             project_id=project_id,
             parent_id=created_pl_id.get(l1.code),
             level=2,
@@ -585,6 +587,7 @@ def seed_project_from_catalog(
         pl = ProcessLevel(
             id=_uuid(),
             tenant_id=tenant_id,
+            program_id=project_id,
             project_id=project_id,
             parent_id=created_pl_id.get(l2.code),
             level=3,
@@ -621,6 +624,7 @@ def seed_project_from_catalog(
         pl = ProcessLevel(
             id=_uuid(),
             tenant_id=tenant_id,
+            program_id=project_id,
             project_id=project_id,
             parent_id=created_pl_id.get(l3.code),
             level=4,

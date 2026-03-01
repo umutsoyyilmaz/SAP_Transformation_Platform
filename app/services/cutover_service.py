@@ -627,8 +627,12 @@ def _fallback_tenant_id() -> int | None:
 # ── CutoverPlan CRUD ─────────────────────────────────────────────────────────
 
 
-def list_plans(program_id: int | None = None, status: str | None = None) -> list[CutoverPlan]:
-    """Return cutover plans with optional program/status filters.
+def list_plans(
+    program_id: int | None = None,
+    status: str | None = None,
+    project_id: int | None = None,
+) -> list[CutoverPlan]:
+    """Return cutover plans with optional program/status/project filters.
 
     Provides the service-layer query so blueprints never touch ORM
     directly.  Results are ordered by plan code for stable pagination.
@@ -636,6 +640,7 @@ def list_plans(program_id: int | None = None, status: str | None = None) -> list
     Args:
         program_id: Optional program filter.
         status: Optional status filter (e.g. "draft", "ready").
+        project_id: Optional project scope filter.
 
     Returns:
         List of matching CutoverPlan model instances.
@@ -645,6 +650,8 @@ def list_plans(program_id: int | None = None, status: str | None = None) -> list
         q = q.filter_by(program_id=program_id)
     if status:
         q = q.filter_by(status=status)
+    if project_id is not None:
+        q = q.filter(CutoverPlan.project_id == project_id)
     q = q.order_by(CutoverPlan.code)
     return q.all()
 
@@ -666,6 +673,7 @@ def create_plan(data: dict) -> CutoverPlan:
     plan = CutoverPlan(
         tenant_id=_tenant_id_for_program(data["program_id"]),
         program_id=data["program_id"],
+        project_id=data.get("project_id"),
         code=code,
         name=data["name"],
         description=data.get("description", ""),

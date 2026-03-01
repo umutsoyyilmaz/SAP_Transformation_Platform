@@ -91,6 +91,7 @@ def create_backlog_item(program_id, data):
 
     item = BacklogItem(
         program_id=program_id,
+        project_id=data.get("project_id"),
         sprint_id=sprint_id,
         requirement_id=data.get("requirement_id"),
         code=data.get("code", ""),
@@ -583,17 +584,19 @@ def on_spec_status_change(spec, old_status, new_status):
     return side_effects
 
 
-def compute_board(program_id):
+def compute_board(program_id, project_id=None):
     """Compute kanban board view — items grouped by status with summary.
 
     Returns:
         dict with 'columns' and 'summary' keys.
     """
-    items = (
+    query = (
         BacklogItem.query.filter_by(program_id=program_id)
         .order_by(BacklogItem.board_order, BacklogItem.priority.desc(), BacklogItem.id)
-        .all()
     )
+    if project_id is not None:
+        query = query.filter(BacklogItem.project_id == project_id)
+    items = query.all()
 
     columns = {s: [] for s in ["new", "design", "build", "test", "deploy", "closed", "blocked", "cancelled"]}
     total_points = 0
@@ -616,13 +619,16 @@ def compute_board(program_id):
     }
 
 
-def compute_stats(program_id):
+def compute_stats(program_id, project_id=None):
     """Compute aggregated backlog statistics for a program.
 
     Returns:
         dict with breakdown by type, status, module, priority + totals.
     """
-    items = BacklogItem.query.filter_by(program_id=program_id).all()
+    query = BacklogItem.query.filter_by(program_id=program_id)
+    if project_id is not None:
+        query = query.filter(BacklogItem.project_id == project_id)
+    items = query.all()
 
     by_type = {}
     by_status = {}
@@ -670,6 +676,7 @@ def create_sprint(program_id, data):
 
     sprint = Sprint(
         program_id=program_id,
+        project_id=data.get("project_id"),
         name=name,
         goal=data.get("goal", ""),
         status=data.get("status", "planning"),
@@ -738,6 +745,7 @@ def create_config_item(program_id, data):
 
     item = ConfigItem(
         program_id=program_id,
+        project_id=data.get("project_id"),
         requirement_id=data.get("requirement_id"),
         code=data.get("code", ""),
         title=title,

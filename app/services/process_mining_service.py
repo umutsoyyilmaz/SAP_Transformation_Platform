@@ -350,6 +350,7 @@ def import_variants(
 
         imp = ProcessVariantImport(
             tenant_id=tenant_id,
+            program_id=project_id,
             project_id=project_id,
             connection_id=conn.id,
             variant_id=variant_id,
@@ -500,6 +501,7 @@ def promote_variant_to_process_level(
     new_level = ProcessLevel(
         id=str(_uuid.uuid4()),
         tenant_id=tenant_id,
+        program_id=project_id,
         project_id=project_id,
         parent_id=parent_process_level_id,
         level=4,

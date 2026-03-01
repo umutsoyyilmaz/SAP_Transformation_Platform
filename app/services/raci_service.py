@@ -183,6 +183,7 @@ def create_activity(
     sap_activate_phase: str | None = None,
     workstream_id: int | None = None,
     sort_order: int | None = None,
+    project_id: int | None = None,
 ) -> dict:
     """Create a new activity (row) in the RACI matrix for a program.
 
@@ -206,6 +207,7 @@ def create_activity(
     activity = RaciActivity(
         tenant_id=tenant_id,
         program_id=program_id,
+        project_id=project_id,
         name=name.strip(),
         category=category,
         sap_activate_phase=sap_activate_phase,
@@ -229,6 +231,7 @@ def upsert_raci_entry(
     activity_id: int,
     team_member_id: int,
     raci_role: str | None,
+    project_id: int | None = None,
 ) -> dict | None:
     """Set or clear one cell in the RACI matrix.
 
@@ -313,6 +316,7 @@ def upsert_raci_entry(
     entry = RaciEntry(
         tenant_id=tenant_id,
         program_id=program_id,
+        project_id=project_id,
         activity_id=activity_id,
         team_member_id=team_member_id,
         raci_role=raci_role,

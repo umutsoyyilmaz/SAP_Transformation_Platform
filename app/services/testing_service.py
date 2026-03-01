@@ -117,6 +117,7 @@ def create_defect(program_id, data):
 
     defect = Defect(
         program_id=program_id,
+        project_id=data.get("project_id"),
         code=code,
         title=data["title"],
         description=data.get("description", ""),
