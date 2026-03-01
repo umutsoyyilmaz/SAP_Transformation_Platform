@@ -60,6 +60,13 @@ class Sprint(db.Model):
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     name = db.Column(db.String(100), nullable=False, comment="e.g. Sprint 1, Iteration 2.3")
     goal = db.Column(db.Text, default="", comment="Sprint goal / objective")
     status = db.Column(
@@ -99,6 +106,7 @@ class Sprint(db.Model):
         result = {
             "id": self.id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "name": self.name,
             "goal": self.goal,
             "status": self.status,
@@ -144,6 +152,13 @@ class BacklogItem(db.Model):
     )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
     )
     sprint_id = db.Column(
         db.Integer, db.ForeignKey("sprints.id", ondelete="SET NULL"), nullable=True
@@ -257,6 +272,7 @@ class BacklogItem(db.Model):
         result = {
             "id": self.id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "sprint_id": self.sprint_id,
             "requirement_id": self.requirement_id,
             "explore_requirement_id": self.explore_requirement_id,
@@ -315,6 +331,13 @@ class ConfigItem(db.Model):
     )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
     )
     requirement_id = db.Column(
         db.Integer, db.ForeignKey("requirements.id", ondelete="SET NULL"),
@@ -403,6 +426,7 @@ class ConfigItem(db.Model):
         result = {
             "id": self.id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "requirement_id": self.requirement_id,
             "explore_requirement_id": self.explore_requirement_id,
             "code": self.code,

@@ -182,6 +182,13 @@ class TestPlan(db.Model):
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True,
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     name = db.Column(db.String(200), nullable=False, comment="e.g. SIT Master Plan, UAT Plan v2")
     description = db.Column(db.Text, default="")
     status = db.Column(
@@ -233,6 +240,7 @@ class TestPlan(db.Model):
         result = {
             "id": self.id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "name": self.name,
             "description": self.description,
             "status": self.status,
@@ -380,6 +388,13 @@ class TestCase(db.Model):
     )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
     )
     requirement_id = db.Column(
         db.Integer, db.ForeignKey("requirements.id", ondelete="SET NULL"),
@@ -537,6 +552,7 @@ class TestCase(db.Model):
         result = {
             "id": self.id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "requirement_id": self.requirement_id,
             "explore_requirement_id": self.explore_requirement_id,
             "backlog_item_id": self.backlog_item_id,
@@ -858,6 +874,13 @@ class Defect(db.Model):
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False,
         index=True,
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     test_case_id = db.Column(
         db.Integer, db.ForeignKey("test_cases.id", ondelete="SET NULL"),
         nullable=True, comment="Test case that found this defect",
@@ -1012,6 +1035,7 @@ class Defect(db.Model):
         d = {
             "id": self.id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "test_case_id": self.test_case_id,
             "backlog_item_id": self.backlog_item_id,
             "config_item_id": self.config_item_id,
@@ -1082,6 +1106,13 @@ class TestSuite(db.Model):
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
     )
 
     # ── F6: Hierarchical Folders ──
@@ -1164,6 +1195,7 @@ class TestSuite(db.Model):
         result = {
             "id": self.id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "parent_id": self.parent_id,
             "sort_order": self.sort_order,
             "path": self.path,
@@ -1949,6 +1981,13 @@ class TestDailySnapshot(db.Model):
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     wave = db.Column(db.String(50), default="", comment="Implementation wave label")
 
     # ── Test execution counts
@@ -1983,6 +2022,7 @@ class TestDailySnapshot(db.Model):
             "snapshot_date": self.snapshot_date.isoformat() if self.snapshot_date else None,
             "test_cycle_id": self.test_cycle_id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "wave": self.wave,
             "total_cases": self.total_cases,
             "passed": self.passed,
@@ -2304,6 +2344,13 @@ class ApprovalWorkflow(db.Model):
 
     id          = db.Column(db.Integer, primary_key=True)
     program_id  = db.Column(db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     entity_type = db.Column(db.String(30), nullable=False)   # test_case | test_plan | test_cycle
     name        = db.Column(db.String(120), nullable=False)
     stages      = db.Column(db.JSON, nullable=False, default=list)  # [{stage:1, role:"QA Lead", required:true}, ...]
@@ -2318,6 +2365,7 @@ class ApprovalWorkflow(db.Model):
         return {
             "id": self.id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "entity_type": self.entity_type,
             "name": self.name,
             "stages": self.stages or [],

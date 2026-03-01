@@ -72,6 +72,13 @@ class Scenario(db.Model):
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, default="")
 
@@ -145,6 +152,7 @@ class Scenario(db.Model):
         result = {
             "id": self.id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "name": self.name,
             "description": self.description,
             "sap_module": self.sap_module,

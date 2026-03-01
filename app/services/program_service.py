@@ -277,6 +277,16 @@ def create_program(data: dict[str, Any], *, tenant_id: int) -> tuple[Program | N
         diff={"name": {"old": None, "new": name}},
     )
 
+    # Faz 3: Auto-create default project so operational entities have a target
+    from app.services.project_service import create_project
+    _proj, _proj_err = create_project(
+        tenant_id=tenant_id,
+        program_id=program.id,
+        data={"code": "DEFAULT", "name": f"{name} - Default", "is_default": True},
+    )
+    if _proj:
+        logger.info("Default project auto-created id=%s program=%s", _proj.id, program.id)
+
     db.session.commit()
     logger.info("Program created id=%s tenant=%s", program.id, tenant_id)
     return program, None

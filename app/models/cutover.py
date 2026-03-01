@@ -216,6 +216,13 @@ class CutoverPlan(db.Model):
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
 
     code = db.Column(
         db.String(30), unique=True, nullable=True,
@@ -331,6 +338,7 @@ class CutoverPlan(db.Model):
             "id": self.id,
             "tenant_id": self.tenant_id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "code": self.code,
             "name": self.name,
             "description": self.description,
@@ -1683,6 +1691,13 @@ class PostGoliveChangeRequest(db.Model):
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     tenant_id = db.Column(
         db.Integer, db.ForeignKey("tenants.id", ondelete="SET NULL"),
         nullable=False, index=True,
@@ -1734,6 +1749,7 @@ class PostGoliveChangeRequest(db.Model):
 
     __table_args__ = (
         db.Index("ix_pgcr_tenant_program", "tenant_id", "program_id"),
+        db.Index("ix_pgcr_tenant_project", "tenant_id", "project_id"),
         db.CheckConstraint(
             "priority IN ('P1','P2','P3','P4')",
             name="ck_pgcr_priority",

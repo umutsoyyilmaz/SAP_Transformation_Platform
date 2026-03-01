@@ -71,6 +71,31 @@ class Program(db.Model):
         comment="on_premise | cloud | hybrid",
     )
 
+    # ── Governance fields (Faz 2.1 — Program = strategic governance layer) ──
+    code = db.Column(
+        db.String(20), nullable=True, unique=True,
+        comment="Short program code, e.g. PGM-001",
+    )
+    customer_name = db.Column(db.String(255), nullable=True)
+    customer_industry = db.Column(db.String(100), nullable=True)
+    customer_country = db.Column(db.String(100), nullable=True)
+    sponsor_name = db.Column(db.String(255), nullable=True)
+    sponsor_title = db.Column(db.String(200), nullable=True)
+    program_director = db.Column(db.String(255), nullable=True)
+    steerco_frequency = db.Column(
+        db.String(20), nullable=True, default="monthly",
+        comment="weekly | biweekly | monthly | quarterly",
+    )
+    total_budget = db.Column(db.Numeric(15, 2), nullable=True)
+    currency = db.Column(db.String(3), nullable=True, default="EUR")
+    overall_rag = db.Column(
+        db.String(10), nullable=True,
+        comment="Green | Amber | Red — program-level status",
+    )
+    strategic_objectives = db.Column(db.Text, nullable=True)
+    success_criteria = db.Column(db.Text, nullable=True)
+    key_assumptions = db.Column(db.Text, nullable=True)
+
     # Metadata
     created_at = db.Column(
         db.DateTime(timezone=True),
@@ -125,6 +150,32 @@ class Program(db.Model):
         order_by="Project.is_default.desc(), Project.name",
     )
 
+    # ── Governance relationships (Faz 2.3) ──
+    program_reports = db.relationship(
+        "ProgramReport", backref="program", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    program_decisions = db.relationship(
+        "ProgramDecision", backref="program", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    program_risks = db.relationship(
+        "ProgramRisk", backref="program", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    program_milestones = db.relationship(
+        "ProgramMilestone", backref="program", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    program_budgets = db.relationship(
+        "ProgramBudget", backref="program", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    project_dependencies = db.relationship(
+        "ProjectDependency", backref="program", lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+
     SENSITIVE_FIELDS: set[str] = set()
 
     def to_dict(self, include_children=False):
@@ -145,6 +196,21 @@ class Program(db.Model):
             ),
             "sap_product": self.sap_product,
             "deployment_option": self.deployment_option,
+            # Governance fields (Faz 2.1)
+            "code": self.code,
+            "customer_name": self.customer_name,
+            "customer_industry": self.customer_industry,
+            "customer_country": self.customer_country,
+            "sponsor_name": self.sponsor_name,
+            "sponsor_title": self.sponsor_title,
+            "program_director": self.program_director,
+            "steerco_frequency": self.steerco_frequency,
+            "total_budget": float(self.total_budget) if self.total_budget is not None else None,
+            "currency": self.currency,
+            "overall_rag": self.overall_rag,
+            "strategic_objectives": self.strategic_objectives,
+            "success_criteria": self.success_criteria,
+            "key_assumptions": self.key_assumptions,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -181,6 +247,13 @@ class Phase(db.Model):
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, default="")
     order = db.Column(db.Integer, default=0, comment="Sort order within program")
@@ -215,6 +288,7 @@ class Phase(db.Model):
         return {
             "id": self.id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "name": self.name,
             "description": self.description,
             "order": self.order,
@@ -319,6 +393,13 @@ class Workstream(db.Model):
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, default="")
     ws_type = db.Column(
@@ -347,6 +428,7 @@ class Workstream(db.Model):
         return {
             "id": self.id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "name": self.name,
             "description": self.description,
             "ws_type": self.ws_type,
@@ -379,6 +461,13 @@ class TeamMember(db.Model):
     )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
     )
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(200), default="")
@@ -415,6 +504,7 @@ class TeamMember(db.Model):
         return {
             "id": self.id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "name": self.name,
             "email": self.email,
             "role": self.role,
@@ -451,6 +541,13 @@ class Committee(db.Model):
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, default="")
     committee_type = db.Column(
@@ -479,6 +576,7 @@ class Committee(db.Model):
         return {
             "id": self.id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "name": self.name,
             "description": self.description,
             "committee_type": self.committee_type,
@@ -778,6 +876,13 @@ class RaciActivity(db.Model):
         nullable=False,
         index=True,
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     tenant_id = db.Column(
         db.Integer,
         db.ForeignKey("tenants.id", ondelete="CASCADE"),
@@ -810,6 +915,7 @@ class RaciActivity(db.Model):
 
     __table_args__ = (
         db.Index("ix_raci_activity_tenant_program", "tenant_id", "program_id"),
+        db.Index("ix_raci_activity_tenant_project", "tenant_id", "project_id"),
     )
 
     def to_dict(self) -> dict:
@@ -846,6 +952,13 @@ class RaciEntry(db.Model):
         nullable=False,
         index=True,
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     tenant_id = db.Column(
         db.Integer,
         db.ForeignKey("tenants.id", ondelete="CASCADE"),
@@ -878,6 +991,8 @@ class RaciEntry(db.Model):
     __table_args__ = (
         db.Index("ix_raci_entry_program_activity", "program_id", "activity_id"),
         db.Index("ix_raci_entry_tenant_program", "tenant_id", "program_id"),
+        db.Index("ix_raci_entry_project_activity", "project_id", "activity_id"),
+        db.Index("ix_raci_entry_tenant_project", "tenant_id", "project_id"),
         # Unique constraint: one entry per (activity, team_member) pair
         db.UniqueConstraint(
             "activity_id",

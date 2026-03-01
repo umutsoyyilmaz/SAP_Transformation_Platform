@@ -87,6 +87,13 @@ class Risk(db.Model):
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True,
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     code = db.Column(db.String(30), unique=True, nullable=False, comment="Auto-generated: RSK-001")
     title = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text, default="")
@@ -143,6 +150,7 @@ class Risk(db.Model):
             "id": self.id,
             "raid_type": "risk",
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "code": self.code,
             "title": self.title,
             "description": self.description,
@@ -194,6 +202,13 @@ class Action(db.Model):
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True,
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     code = db.Column(db.String(30), unique=True, nullable=False, comment="Auto-generated: ACT-001")
     title = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text, default="")
@@ -228,6 +243,7 @@ class Action(db.Model):
             "id": self.id,
             "raid_type": "action",
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "code": self.code,
             "title": self.title,
             "description": self.description,
@@ -271,6 +287,13 @@ class Issue(db.Model):
     )
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
     )
     code = db.Column(db.String(30), unique=True, nullable=False, comment="Auto-generated: ISS-001")
     title = db.Column(db.String(300), nullable=False)
@@ -318,6 +341,7 @@ class Issue(db.Model):
             "id": self.id,
             "raid_type": "issue",
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "code": self.code,
             "title": self.title,
             "description": self.description,
@@ -364,6 +388,13 @@ class Decision(db.Model):
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True,
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     code = db.Column(db.String(30), unique=True, nullable=False, comment="Auto-generated: DEC-001")
     title = db.Column(db.String(300), nullable=False)
     description = db.Column(db.Text, default="")
@@ -402,6 +433,7 @@ class Decision(db.Model):
             "id": self.id,
             "raid_type": "decision",
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "code": self.code,
             "title": self.title,
             "description": self.description,

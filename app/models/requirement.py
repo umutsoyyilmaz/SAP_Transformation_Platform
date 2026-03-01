@@ -66,6 +66,13 @@ class Requirement(db.Model):
     program_id = db.Column(
         db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False,
     )
+    project_id = db.Column(
+        db.Integer,
+        db.ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Faz 3: project scope (nullable during transition)",
+    )
     process_id = db.Column(
         db.Integer, db.ForeignKey("processes.id", ondelete="SET NULL"),
         nullable=True,
@@ -147,6 +154,7 @@ class Requirement(db.Model):
         result = {
             "id": self.id,
             "program_id": self.program_id,
+            "project_id": self.project_id,
             "process_id": self.process_id,
             "workshop_id": self.workshop_id,
             "req_parent_id": self.req_parent_id,
