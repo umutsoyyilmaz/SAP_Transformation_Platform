@@ -150,6 +150,14 @@ BLUEPRINT_PERMISSIONS = {
         "PUT":    "integration.edit",
         "DELETE": "integration.edit",
     },
+    # ── Faz 2: Program Governance (reports, decisions, risks, milestones, budget)
+    "program_governance": {
+        "GET":    "programs.view",
+        "POST":   "programs.edit",
+        "PUT":    "programs.edit",
+        "PATCH":  "programs.edit",
+        "DELETE": "programs.delete",
+    },
 }
 
 # Blueprints that are explicitly skipped:

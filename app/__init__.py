@@ -273,6 +273,10 @@ def create_app(config_name=None):
     from app.models import project as _project_models              # noqa: F401
     from app.models import program_governance as _program_governance_models  # noqa: F401
 
+    # Faz 3: Auto-sync program_id → project_id on operational models
+    from app.models._project_id_sync import register_all as _register_project_id_sync
+    _register_project_id_sync()
+
     # ── Auto-create tables (safe for production — CREATE IF NOT EXISTS) ──
     with app.app_context():
         try:
