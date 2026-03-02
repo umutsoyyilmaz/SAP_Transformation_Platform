@@ -68,6 +68,13 @@ const API = (() => {
             }
         }
 
+        // ── Faz 4: Project scope header (all methods) ────────────────
+        const _project = (typeof App !== 'undefined' && App.getActiveProject)
+            ? App.getActiveProject() : null;
+        if (_project && _project.id) {
+            opts.headers['X-Project-Id'] = String(_project.id);
+        }
+
         // ── Context Middleware (POST/PUT/PATCH only) ────────────────
         if (body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
             body = _injectProjectContext(body);
