@@ -17,9 +17,10 @@ from app import create_app
 from app.models import db as _db
 from app.services.permission_service import invalidate_all_cache
 
-# Faz 1.4 transitional: Disable SQLite FK enforcement during tests.
-# project_id FK → projects.id but test fixtures pass program IDs as project_id.
-# Will be removed in Faz 6 (cleanup) when all tests create proper project rows.
+# Faz 6 partial: FK enforcement deferred — explore module tests still use
+# legacy project_id=program_id pattern.  Auto-sync upgraded to real Project
+# lookup, but full enforcement requires updating all explore test fixtures.
+# TODO(Faz 6.5): Enable after explore fixture migration.
 _app_module._SQLITE_FK_ENFORCEMENT = False
 
 
@@ -98,7 +99,10 @@ def default_tenant():
 
 @pytest.fixture()
 def program(client):
-    """Create and return a test Program via the API."""
+    """Create and return a test Program via the API.
+
+    Faz 3.0: create_program auto-creates a DEFAULT project for the program.
+    """
     from app.models.auth import Tenant
     t = Tenant.query.filter_by(slug="test-default").first()
     res = client.post(
@@ -107,3 +111,14 @@ def program(client):
     )
     assert res.status_code == 201
     return res.get_json()
+
+
+@pytest.fixture()
+def project(program):
+    """Return the default Project auto-created with the program (Faz 6)."""
+    from app.models.project import Project
+    proj = Project.query.filter_by(
+        program_id=program["id"], is_default=True,
+    ).first()
+    assert proj is not None, "Default project should have been auto-created by create_program"
+    return proj

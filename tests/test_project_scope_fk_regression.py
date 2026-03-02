@@ -301,88 +301,160 @@ class TestProgramScopedModels:
 # ── Tests: Operational models needing project_id (Faz 3) ───────────────────
 
 
-class TestOperationalModelsNeedProjectId:
-    """Models that should gain project_id -> projects.id in Faz 3.
+class TestOperationalModelsHaveProjectId:
+    """Models that gained project_id -> projects.id in Faz 3."""
 
-    xfail until the project_id column is added via Faz 3 migration.
-    """
+    # ── Grup A: program.py models ──
 
-    @pytest.mark.xfail(reason="Faz 3: project_id not yet added", strict=True)
     def test_phase_has_project_id(self, app):
         from app.models.program import Phase
         with app.app_context():
             assert _has_column(Phase, "project_id")
             assert _get_fk_target(Phase, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 3: project_id not yet added", strict=True)
     def test_workstream_has_project_id(self, app):
         from app.models.program import Workstream
         with app.app_context():
             assert _has_column(Workstream, "project_id")
             assert _get_fk_target(Workstream, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 3: project_id not yet added", strict=True)
     def test_team_member_has_project_id(self, app):
         from app.models.program import TeamMember
         with app.app_context():
             assert _has_column(TeamMember, "project_id")
             assert _get_fk_target(TeamMember, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 3: project_id not yet added", strict=True)
     def test_committee_has_project_id(self, app):
         from app.models.program import Committee
         with app.app_context():
             assert _has_column(Committee, "project_id")
             assert _get_fk_target(Committee, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 3: project_id not yet added", strict=True)
+    def test_raci_activity_has_project_id(self, app):
+        from app.models.program import RaciActivity
+        with app.app_context():
+            assert _has_column(RaciActivity, "project_id")
+            assert _get_fk_target(RaciActivity, "project_id") == "projects.id"
+
+    def test_raci_entry_has_project_id(self, app):
+        from app.models.program import RaciEntry
+        with app.app_context():
+            assert _has_column(RaciEntry, "project_id")
+            assert _get_fk_target(RaciEntry, "project_id") == "projects.id"
+
+    # ── Grup B: scenario.py ──
+
+    def test_scenario_has_project_id(self, app):
+        from app.models.scenario import Scenario
+        with app.app_context():
+            assert _has_column(Scenario, "project_id")
+            assert _get_fk_target(Scenario, "project_id") == "projects.id"
+
+    # ── Grup C: backlog.py ──
+
     def test_sprint_has_project_id(self, app):
         from app.models.backlog import Sprint
         with app.app_context():
             assert _has_column(Sprint, "project_id")
             assert _get_fk_target(Sprint, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 3: project_id not yet added", strict=True)
     def test_backlog_item_has_project_id(self, app):
         from app.models.backlog import BacklogItem
         with app.app_context():
             assert _has_column(BacklogItem, "project_id")
             assert _get_fk_target(BacklogItem, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 3: project_id not yet added", strict=True)
     def test_config_item_has_project_id(self, app):
         from app.models.backlog import ConfigItem
         with app.app_context():
             assert _has_column(ConfigItem, "project_id")
             assert _get_fk_target(ConfigItem, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 3: project_id not yet added", strict=True)
+    # ── Grup D: testing.py ──
+
     def test_test_plan_has_project_id(self, app):
         from app.models.testing import TestPlan
         with app.app_context():
             assert _has_column(TestPlan, "project_id")
             assert _get_fk_target(TestPlan, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 3: project_id not yet added", strict=True)
     def test_test_case_has_project_id(self, app):
         from app.models.testing import TestCase
         with app.app_context():
             assert _has_column(TestCase, "project_id")
             assert _get_fk_target(TestCase, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 3: project_id not yet added", strict=True)
+    def test_test_suite_has_project_id(self, app):
+        from app.models.testing import TestSuite
+        with app.app_context():
+            assert _has_column(TestSuite, "project_id")
+            assert _get_fk_target(TestSuite, "project_id") == "projects.id"
+
     def test_defect_has_project_id(self, app):
         from app.models.testing import Defect
         with app.app_context():
             assert _has_column(Defect, "project_id")
             assert _get_fk_target(Defect, "project_id") == "projects.id"
 
-    @pytest.mark.xfail(reason="Faz 3: project_id not yet added", strict=True)
+    def test_approval_workflow_has_project_id(self, app):
+        from app.models.testing import ApprovalWorkflow
+        with app.app_context():
+            assert _has_column(ApprovalWorkflow, "project_id")
+            assert _get_fk_target(ApprovalWorkflow, "project_id") == "projects.id"
+
+    def test_test_daily_snapshot_has_project_id(self, app):
+        from app.models.testing import TestDailySnapshot
+        with app.app_context():
+            assert _has_column(TestDailySnapshot, "project_id")
+            assert _get_fk_target(TestDailySnapshot, "project_id") == "projects.id"
+
+    # ── Grup E: cutover.py ──
+
     def test_cutover_plan_has_project_id(self, app):
         from app.models.cutover import CutoverPlan
         with app.app_context():
             assert _has_column(CutoverPlan, "project_id")
             assert _get_fk_target(CutoverPlan, "project_id") == "projects.id"
+
+    def test_post_golive_change_request_has_project_id(self, app):
+        from app.models.cutover import PostGoliveChangeRequest
+        with app.app_context():
+            assert _has_column(PostGoliveChangeRequest, "project_id")
+            assert _get_fk_target(PostGoliveChangeRequest, "project_id") == "projects.id"
+
+    # ── Grup F: raid.py ──
+
+    def test_risk_has_project_id(self, app):
+        from app.models.raid import Risk
+        with app.app_context():
+            assert _has_column(Risk, "project_id")
+            assert _get_fk_target(Risk, "project_id") == "projects.id"
+
+    def test_action_has_project_id(self, app):
+        from app.models.raid import Action
+        with app.app_context():
+            assert _has_column(Action, "project_id")
+            assert _get_fk_target(Action, "project_id") == "projects.id"
+
+    def test_issue_has_project_id(self, app):
+        from app.models.raid import Issue
+        with app.app_context():
+            assert _has_column(Issue, "project_id")
+            assert _get_fk_target(Issue, "project_id") == "projects.id"
+
+    def test_decision_has_project_id(self, app):
+        from app.models.raid import Decision
+        with app.app_context():
+            assert _has_column(Decision, "project_id")
+            assert _get_fk_target(Decision, "project_id") == "projects.id"
+
+    # ── Grup G: requirement.py ──
+
+    def test_requirement_has_project_id(self, app):
+        from app.models.requirement import Requirement
+        with app.app_context():
+            assert _has_column(Requirement, "project_id")
+            assert _get_fk_target(Requirement, "project_id") == "projects.id"
 
 
 # ── Tests: Project model relationships (Faz 3) ─────────────────────────────
@@ -400,3 +472,83 @@ class TestProjectRelationships:
         from app.models.project import Project
         with app.app_context():
             assert _get_fk_target(Project, "tenant_id") == "tenants.id"
+
+    def test_project_has_phases_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "phases")
+
+    def test_project_has_workstreams_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "workstreams")
+
+    def test_project_has_team_members_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "team_members")
+
+    def test_project_has_committees_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "committees")
+
+    def test_project_has_scenarios_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "scenarios")
+
+    def test_project_has_sprints_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "sprints")
+
+    def test_project_has_backlog_items_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "backlog_items")
+
+    def test_project_has_config_items_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "config_items")
+
+    def test_project_has_test_plans_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "test_plans")
+
+    def test_project_has_test_cases_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "test_cases")
+
+    def test_project_has_test_suites_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "test_suites")
+
+    def test_project_has_defects_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "defects")
+
+    def test_project_has_cutover_plans_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "cutover_plans")
+
+    def test_project_has_requirements_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "requirements")
+
+    def test_project_has_risks_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "risks")
+
+    def test_project_has_raid_decisions_relationship(self, app):
+        from app.models.project import Project
+        with app.app_context():
+            assert hasattr(Project, "raid_decisions")
