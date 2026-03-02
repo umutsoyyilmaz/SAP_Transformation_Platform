@@ -19,7 +19,7 @@ ALM sync, stats, coverage matrix, conversion, workshop documents.
   - POST               /workshops/<id>/documents/generate
 """
 
-from flask import current_app, jsonify, request
+from flask import current_app, g, jsonify, request
 from sqlalchemy import func, or_, exists, select
 
 from app.models import db
@@ -57,7 +57,7 @@ from app.utils.errors import api_error, E
 
 def list_requirements():
     """List requirements with filters, grouping, pagination."""
-    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
@@ -397,7 +397,7 @@ def bulk_sync_alm():
 
 def requirement_stats():
     """Requirement KPI aggregation."""
-    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
@@ -523,7 +523,7 @@ def requirement_coverage_matrix():
     Returns breakdown by process_area (or sap_module) and status,
     plus conversion counts per area.
     """
-    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
@@ -800,7 +800,7 @@ def unconvert_requirement_endpoint(req_id):
     Query: ?force=true|false
     """
     data = request.get_json(silent=True) or {}
-    project_id = data.get("program_id") or data.get("project_id") or request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    project_id = data.get("program_id") or data.get("project_id") or request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     user_id = data.get("user_id", "system")
     force = request.args.get("force", "false").lower() == "true"
 

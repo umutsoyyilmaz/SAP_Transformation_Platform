@@ -99,10 +99,11 @@ def _handle_sqlalchemy_error(exc):
 
 @cutover_bp.route("/plans", methods=["GET"])
 def list_plans():
-    """List cutover plans, optionally filtered by program_id and status."""
+    """List cutover plans, optionally filtered by program_id, status, and project_id."""
     pid = request.args.get("program_id", type=int)
     status = request.args.get("status")
-    items = cutover_service.list_plans(program_id=pid, status=status)
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    items = cutover_service.list_plans(program_id=pid, status=status, project_id=project_id)
     items = [p for p in items if _plan_in_scope(p, program_id=pid)]
     return jsonify({"items": [p.to_dict() for p in items], "total": len(items)})
 

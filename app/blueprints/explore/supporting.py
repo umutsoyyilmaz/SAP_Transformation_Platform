@@ -18,7 +18,7 @@ reports, snapshots.
   - GET               /snapshots
 """
 
-from flask import current_app, jsonify, request
+from flask import current_app, g, jsonify, request
 
 from app.services import explore_service
 
@@ -112,7 +112,7 @@ def create_attachment():
 def list_attachments():
     """List attachments with filters."""
     filters = {
-        "project_id": request.args.get("program_id", type=int) or request.args.get("project_id", type=int),
+        "project_id": request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None),
         "entity_type": request.args.get("entity_type"),
         "entity_id": request.args.get("entity_id"),
         "category": request.args.get("category"),
@@ -167,7 +167,7 @@ def create_scope_change_request():
 def list_scope_change_requests():
     """List scope change requests with optional filters."""
     filters = {
-        "project_id": request.args.get("program_id", type=int) or request.args.get("project_id", type=int),
+        "project_id": request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None),
         "status": request.args.get("status"),
         "change_type": request.args.get("change_type"),
     }
@@ -356,7 +356,7 @@ def get_user_permissions_endpoint():
         project_id  — required
         user_id     — required
     """
-    pid = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    pid = request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     uid = request.args.get("user_id")
     if not pid or not uid:
         return api_error(E.VALIDATION_REQUIRED, "program_id and user_id are required")

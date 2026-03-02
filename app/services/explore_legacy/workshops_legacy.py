@@ -16,7 +16,7 @@ Explore — Workshop endpoints: CRUD, lifecycle, attendees, agenda, decisions, s
 import json
 from datetime import datetime, date, timezone
 
-from flask import jsonify, request
+from flask import g, jsonify, request
 from sqlalchemy import func, or_
 
 from app.models import db
@@ -50,7 +50,7 @@ from app.utils.helpers import parse_date_input as _parse_date_input
 
 def list_workshops():
     """List workshops with filters, sorting, pagination."""
-    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
@@ -719,7 +719,7 @@ def create_delta_workshop(workshop_id):
 
 def workshop_capacity():
     """Facilitator capacity — weekly load per facilitator."""
-    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
@@ -758,7 +758,7 @@ def workshop_capacity():
 
 def workshop_stats():
     """Workshop KPI aggregation — totals, by_status, by_wave."""
-    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 

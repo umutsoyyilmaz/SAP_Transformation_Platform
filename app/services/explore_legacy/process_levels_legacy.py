@@ -24,7 +24,7 @@ sign-off, readiness, milestones, BPMN, fit propagation.
 
 from datetime import datetime, timezone
 
-from flask import current_app, jsonify, request
+from flask import current_app, g, jsonify, request
 from sqlalchemy import func
 
 from app.models import db
@@ -89,7 +89,7 @@ def list_process_levels():
     Query params: project_id (required), level, scope_status, fit_status,
                   process_area, wave, flat (bool), include_stats (bool)
     """
-    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
@@ -550,7 +550,7 @@ def update_process_level(pl_id):
 
 def get_scope_matrix():
     """L3 flat table with workshop/req/OI stats per row."""
-    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
@@ -704,7 +704,7 @@ def consolidate_fit(l3_id):
 
 def get_consolidated_view_endpoint(l3_id):
     """L4 breakdown + blocking items + sign-off status + signoff_ready flag."""
-    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     try:
         view = get_consolidated_view(l3_id, project_id=project_id)
         return jsonify(view)
@@ -715,7 +715,7 @@ def get_consolidated_view_endpoint(l3_id):
 def override_fit_endpoint(l3_id):
     """Override L3 consolidated fit status with business rationale."""
     data = request.get_json(silent=True) or {}
-    project_id = data.get("program_id") or data.get("project_id") or request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    project_id = data.get("program_id") or data.get("project_id") or request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     user_id = data.get("user_id", "system")
     new_fit = data.get("fit_decision")
     rationale = data.get("rationale")
@@ -734,7 +734,7 @@ def override_fit_endpoint(l3_id):
 def signoff_endpoint(l3_id):
     """Execute L3 sign-off."""
     data = request.get_json(silent=True) or {}
-    project_id = data.get("program_id") or data.get("project_id") or request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    project_id = data.get("program_id") or data.get("project_id") or request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     user_id = data.get("user_id", "system")
     fit_decision = data.get("fit_decision")
     rationale = data.get("rationale")
@@ -753,7 +753,7 @@ def signoff_endpoint(l3_id):
 
 def l2_readiness():
     """L2 readiness status for all L2 nodes in a project."""
-    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
@@ -820,7 +820,7 @@ def confirm_l2(l2_id):
 
 def area_milestones():
     """Process area milestone tracker data."""
-    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    project_id = request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
 
@@ -906,7 +906,7 @@ def create_bpmn(level_id):
 def run_fit_propagation():
     """Trigger full project hierarchy recalculation."""
     data = request.get_json(silent=True) or {}
-    project_id = data.get("program_id") or data.get("project_id") or request.args.get("program_id", type=int) or request.args.get("project_id", type=int)
+    project_id = data.get("program_id") or data.get("project_id") or request.args.get("program_id", type=int) or request.args.get("project_id", type=int) or getattr(g, "explore_program_id", None)
     if not project_id:
         return api_error(E.VALIDATION_REQUIRED, "project_id is required")
     try:

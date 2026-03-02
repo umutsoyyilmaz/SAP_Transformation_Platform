@@ -123,39 +123,22 @@ def test_resolve_project_scope_rejects_unscoped_project_lookup(app):
         assert "requires tenant_id or program_id scope" in exc.message
 
 
-def test_resolve_project_scope_fallback_flag_on_and_off(app, caplog):
-    tenant, program, project = _seed_program_with_default_project("Flag Program")
-
+def test_resolve_project_scope_without_project_id_raises_400(app):
+    """Faz 6: Fallback removed — project_id is always required."""
+    tenant, program, _project = _seed_program_with_default_project("Flag Program")
     _set_flag(default_enabled=True)
-    caplog.set_level(logging.WARNING)
-    resolved = resolve_project_scope(
-        tenant_id=tenant.id,
-        program_id=program.id,
-        project_id=None,
-        source="test.fallback_on",
-        allow_fallback=True,
-    )
-    assert resolved.project_id == project.id
-    assert resolved.program_id == program.id
-    assert resolved.used_fallback is True
-    assert "project_scope_fallback_used" in caplog.text
-
-    _db.session.query(FeatureFlag).delete()
-    _db.session.flush()
-    _set_flag(default_enabled=False)
 
     try:
         resolve_project_scope(
             tenant_id=tenant.id,
             program_id=program.id,
             project_id=None,
-            source="test.fallback_off",
-            allow_fallback=True,
+            source="test.no_project",
         )
         assert False, "Expected ProjectScopeResolutionError"
     except ProjectScopeResolutionError as exc:
         assert exc.status == 400
-        assert "fallback is disabled" in exc.message
+        assert "project_id is required" in exc.message
 
 
 def test_open_items_list_accepts_program_id_alone(client):
@@ -165,7 +148,7 @@ def test_open_items_list_accepts_program_id_alone(client):
     user = _seed_tenant_admin_user(tenant.id)
 
     oi = ExploreOpenItem(
-        project_id=program.id,
+        project_id=_project.id,
         program_id=program.id,
         code="OI-001",
         title="Legacy Scoped OI",

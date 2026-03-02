@@ -92,6 +92,16 @@ def init_tenant_context(app):
         # Set tenant in request context
         g.tenant = tenant
 
+        # Faz 4: Extract optional project_id from request for downstream use.
+        # Blueprints may also extract project_id from URL params or request body;
+        # this provides a fallback from query params / headers.
+        _pid = request.args.get("project_id", type=int)
+        if _pid is None:
+            _hdr = request.headers.get("X-Project-Id")
+            if _hdr and _hdr.isdigit():
+                _pid = int(_hdr)
+        g.project_id = _pid
+
         return None
 
     logger.info("Tenant context middleware installed")

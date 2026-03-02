@@ -70,7 +70,7 @@ import warnings
 
 from datetime import date, datetime, timedelta, timezone
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from app.models import db
 from app.models.testing import (
@@ -365,6 +365,10 @@ def list_test_plans(pid):
 
     q = TestPlan.query.filter_by(program_id=pid)
 
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    if project_id is not None:
+        q = q.filter(TestPlan.project_id == project_id)
+
     status = request.args.get("status")
     if status:
         q = q.filter(TestPlan.status == status)
@@ -389,6 +393,7 @@ def create_test_plan(pid):
 
     plan = TestPlan(
         program_id=pid,
+        project_id=data.get("project_id"),
         name=data["name"],
         description=data.get("description", ""),
         status=data.get("status", "draft"),
@@ -562,6 +567,10 @@ def list_test_cases(pid):
         return err
 
     q = TestCase.query.filter_by(program_id=pid)
+
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    if project_id is not None:
+        q = q.filter(TestCase.project_id == project_id)
 
     # Filters
     test_layer = request.args.get("test_layer")
@@ -1290,6 +1299,10 @@ def list_defects(pid):
 
     q = Defect.query.filter_by(program_id=pid)
 
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    if project_id is not None:
+        q = q.filter(Defect.project_id == project_id)
+
     severity = request.args.get("severity")
     if severity:
         q = q.filter(Defect.severity == severity)
@@ -1409,8 +1422,13 @@ def regression_sets(pid):
     if err:
         return err
 
-    cases = TestCase.query.filter_by(program_id=pid, is_regression=True)\
-        .order_by(TestCase.module, TestCase.code).all()
+    q = TestCase.query.filter_by(program_id=pid, is_regression=True)
+
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    if project_id is not None:
+        q = q.filter(TestCase.project_id == project_id)
+
+    cases = q.order_by(TestCase.module, TestCase.code).all()
 
     return jsonify({
         "program_id": pid,
@@ -1447,6 +1465,10 @@ def list_test_suites(pid):
         return err
 
     q = TestSuite.query.filter_by(program_id=pid)
+
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    if project_id is not None:
+        q = q.filter(TestSuite.project_id == project_id)
 
     suite_type = request.args.get("suite_type")
     if suite_type:
@@ -2295,6 +2317,11 @@ def list_snapshots(pid):
     if err:
         return err
     q = TestDailySnapshot.query.filter_by(program_id=pid)
+
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    if project_id is not None:
+        q = q.filter(TestDailySnapshot.project_id == project_id)
+
     cycle_id = request.args.get("cycle_id")
     if cycle_id:
         q = q.filter_by(test_cycle_id=int(cycle_id))

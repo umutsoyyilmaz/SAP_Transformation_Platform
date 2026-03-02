@@ -89,6 +89,11 @@ def list_risks(pid):
 
     q = Risk.query.filter_by(program_id=pid)
 
+    # Project scope filter
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    if project_id is not None:
+        q = q.filter(Risk.project_id == project_id)
+
     # Filters
     status = request.args.get("status")
     if status:
@@ -186,6 +191,12 @@ def list_actions(pid):
         return err
 
     q = Action.query.filter_by(program_id=pid)
+
+    # Project scope filter
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    if project_id is not None:
+        q = q.filter(Action.project_id == project_id)
+
     status = request.args.get("status")
     if status:
         q = q.filter_by(status=status)
@@ -280,6 +291,12 @@ def list_issues(pid):
         return err
 
     q = Issue.query.filter_by(program_id=pid)
+
+    # Project scope filter
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    if project_id is not None:
+        q = q.filter(Issue.project_id == project_id)
+
     status = request.args.get("status")
     if status:
         q = q.filter_by(status=status)
@@ -375,6 +392,12 @@ def list_decisions(pid):
         return err
 
     q = Decision.query.filter_by(program_id=pid)
+
+    # Project scope filter
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    if project_id is not None:
+        q = q.filter(Decision.project_id == project_id)
+
     status = request.args.get("status")
     if status:
         q = q.filter_by(status=status)
@@ -466,7 +489,8 @@ def raid_stats(pid):
     prog, err = _get_program_or_404(pid)
     if err:
         return err
-    return jsonify(raid_service.compute_raid_stats(pid))
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    return jsonify(raid_service.compute_raid_stats(pid, project_id=project_id))
 
 
 @raid_bp.route("/programs/<int:pid>/raid/heatmap", methods=["GET"])
@@ -475,7 +499,8 @@ def raid_heatmap(pid):
     prog, err = _get_program_or_404(pid)
     if err:
         return err
-    return jsonify(raid_service.compute_heatmap(pid))
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    return jsonify(raid_service.compute_heatmap(pid, project_id=project_id))
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -98,6 +98,10 @@ def list_backlog(program_id):
 
     query = BacklogItem.query.filter_by(program_id=program_id)
 
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    if project_id is not None:
+        query = query.filter(BacklogItem.project_id == project_id)
+
     for param in ["wricef_type", "status", "module", "priority", "assigned_to"]:
         val = request.args.get(param)
         if val:
@@ -204,7 +208,8 @@ def backlog_board(program_id):
     program, err = _get_program_or_404(program_id)
     if err:
         return err
-    return jsonify(backlog_service.compute_board(program_id)), 200
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    return jsonify(backlog_service.compute_board(program_id, project_id=project_id)), 200
 
 
 @backlog_bp.route("/programs/<int:program_id>/backlog/stats", methods=["GET"])
@@ -213,7 +218,8 @@ def backlog_stats(program_id):
     program, err = _get_program_or_404(program_id)
     if err:
         return err
-    return jsonify(backlog_service.compute_stats(program_id)), 200
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    return jsonify(backlog_service.compute_stats(program_id, project_id=project_id)), 200
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -331,8 +337,11 @@ def list_sprints(program_id):
     program, err = _get_program_or_404(program_id)
     if err:
         return err
-    sprints = Sprint.query.filter_by(program_id=program_id)\
-        .order_by(Sprint.order, Sprint.id).all()
+    query = Sprint.query.filter_by(program_id=program_id)
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    if project_id is not None:
+        query = query.filter(Sprint.project_id == project_id)
+    sprints = query.order_by(Sprint.order, Sprint.id).all()
     return jsonify([s.to_dict() for s in sprints]), 200
 
 
@@ -407,6 +416,9 @@ def list_config_items(program_id):
         return err
 
     query = ConfigItem.query.filter_by(program_id=program_id)
+    project_id = request.args.get("project_id", type=int) or getattr(g, "project_id", None)
+    if project_id is not None:
+        query = query.filter(ConfigItem.project_id == project_id)
     for param in ["status", "module", "priority", "assigned_to"]:
         val = request.args.get(param)
         if val:
