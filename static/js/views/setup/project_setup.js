@@ -38,6 +38,24 @@ const ProjectSetupView = (() => {
     let _workstreamEditingId = null;
     let _committeeEditingId = null;
     let _pendingConfirmAction = null;
+    let _renderToken = 0;
+
+    function _safeSetInnerHTML(element, html) {
+        if (!element) return false;
+        element.innerHTML = html;
+        return true;
+    }
+
+    function _renderSetupFallback(message) {
+        const content = document.getElementById('setupContent');
+        if (!content) return;
+        content.innerHTML = PGEmptyState.html({
+            icon: 'warning',
+            title: 'Project Setup could not finish rendering',
+            description: message || 'Please refresh the page and try again.',
+            action: { label: 'Go to Programs', onclick: "App.navigate('programs')" },
+        });
+    }
 
     const MODULES = ['FI', 'CO', 'MM', 'SD', 'PP', 'QM', 'EWM', 'HR', 'BC'];
 
@@ -90,6 +108,7 @@ const ProjectSetupView = (() => {
     const HIERARCHY_MUTATION_CONTEXT = 'project_setup';
 
     function render() {
+        const renderToken = ++_renderToken;
         _activeProgram = App.getActiveProgram();
         _activeProject = App.getActiveProject();
         _pid = _activeProgram ? _activeProgram.id : null;
@@ -135,8 +154,18 @@ const ProjectSetupView = (() => {
             </div>`;
 
         _loadProgramContext().then(() => {
-            _renderContextCard();
-            loadCurrentTab();
+            if (renderToken !== _renderToken) return;
+            try {
+                _renderContextCard();
+                loadCurrentTab();
+            } catch (err) {
+                console.error('[ProjectSetupView] initial render failed', err);
+                _renderSetupFallback(err?.message || 'Unexpected render error');
+            }
+        }).catch((err) => {
+            if (renderToken !== _renderToken) return;
+            console.error('[ProjectSetupView] context load failed', err);
+            _renderSetupFallback(err?.message || 'Unable to load project setup context');
         });
     }
 
@@ -174,26 +203,26 @@ const ProjectSetupView = (() => {
         const profile = document.getElementById('projectSetupProfile');
         if (!select || !meta) return;
 
-        select.innerHTML = [
+        _safeSetInnerHTML(select, [
             '<option value="">Select project...</option>',
             ..._programProjects.map((p) =>
                 `<option value="${p.id}" ${_activeProject && Number(_activeProject.id) === Number(p.id) ? 'selected' : ''}>${esc(p.name)} (${esc(p.code || 'PRJ')})</option>`
             ),
-        ].join('');
+        ].join(''));
 
         if (_activeProject) {
             const full = _programProjects.find((p) => Number(p.id) === Number(_activeProject.id));
-            meta.innerHTML = full
+            _safeSetInnerHTML(meta, full
                 ? `Selected project: <strong>${esc(full.name)}</strong> · Status: ${esc(full.status || 'active')} · Type: ${esc(full.type || 'n/a')}`
-                : `Selected project id: ${esc(String(_activeProject.id))}`;
+                : `Selected project id: ${esc(String(_activeProject.id))}`);
         } else {
-            meta.innerHTML = 'No project selected yet. Choose one to access project setup tabs.';
+            _safeSetInnerHTML(meta, 'No project selected yet. Choose one to access project setup tabs.');
         }
         if (profile) {
             const full = _activeProject
                 ? _programProjects.find((p) => Number(p.id) === Number(_activeProject.id))
                 : null;
-            profile.innerHTML = _shell() ? _shell().renderProfileStrip(full) : '';
+            _safeSetInnerHTML(profile, _shell() ? _shell().renderProfileStrip(full) : '');
         }
     }
 

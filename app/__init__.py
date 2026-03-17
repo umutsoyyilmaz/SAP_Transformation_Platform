@@ -10,8 +10,9 @@ Usage:
 
 import logging
 import os
+import time
 
-from flask import Flask, render_template, send_from_directory
+from flask import Flask, render_template, send_from_directory, url_for
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -425,10 +426,34 @@ def create_app(config_name=None):
         logger.info("Seeded %s new spec templates.", count)
 
     # ── SPA catch-all ────────────────────────────────────────────────────
+    def _resolve_asset_version() -> str:
+        """Return a deploy-scoped static asset version to bust stale browser and SW caches."""
+        return (
+            os.getenv("RAILWAY_GIT_COMMIT_SHA")
+            or os.getenv("SOURCE_VERSION")
+            or os.getenv("RELEASE_VERSION")
+            or str(int(time.time()))
+        )
+
+    app.config["ASSET_VERSION"] = _resolve_asset_version()
+
+    @app.context_processor
+    def inject_asset_helpers():
+        asset_version = app.config["ASSET_VERSION"]
+
+        def asset_url(filename: str) -> str:
+            return url_for("static", filename=filename, v=asset_version)
+
+        return {
+            "asset_url": asset_url,
+            "asset_version": asset_version,
+        }
+
     def _spa_shell_context():
         auth_enabled = str(app.config.get("API_AUTH_ENABLED", "true")).lower() not in ("false", "0", "no", "off")
         return {
             "api_auth_enabled": auth_enabled,
+            "asset_version": app.config["ASSET_VERSION"],
         }
 
     @app.route("/")
@@ -437,7 +462,7 @@ def create_app(config_name=None):
 
     @app.route("/login")
     def login_page():
-        return send_from_directory(app.template_folder, "login.html")
+        return render_template("login.html", **_spa_shell_context())
 
     # ── Health check (kept for backward compat — detailed version at /health/live) ──
     @app.route("/api/v1/health")

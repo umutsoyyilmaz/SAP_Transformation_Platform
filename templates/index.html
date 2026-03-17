@@ -8,35 +8,35 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <!-- pg-tokens MUST load first — source of truth for --pg-* variables -->
-    <link rel="stylesheet" href="/static/css/pg-tokens.css">
-    <link rel="stylesheet" href="/static/css/design-tokens.css">
+    <link rel="stylesheet" href="{{ asset_url('css/pg-tokens.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/design-tokens.css') }}">
     <!-- D2: main.css is now the single compatibility entrypoint for split domain CSS -->
-    <link rel="stylesheet" href="/static/css/main.css">
-    <link rel="stylesheet" href="/static/css/pg-button.css">
-    <link rel="stylesheet" href="/static/css/pg-layout.css">
-    <link rel="stylesheet" href="/static/css/pg-form.css">
-    <link rel="stylesheet" href="/static/css/pg-empty-state.css">
-    <link rel="stylesheet" href="/static/css/pg-skeleton.css">
-    <link rel="stylesheet" href="/static/css/pg-breadcrumb.css">
-    <link rel="stylesheet" href="/static/css/test-management-f1.css">
-    <link rel="stylesheet" href="/static/css/explore-tokens.css">
-    <link rel="stylesheet" href="/static/css/pg-dashboard.css">
-    <link rel="stylesheet" href="/static/css/pg-filter.css">
-    <link rel="stylesheet" href="/static/css/pg-panel.css">
-    <link rel="stylesheet" href="/static/css/pg-progress.css">
-    <link rel="stylesheet" href="/static/css/pg-command-palette.css">
-    <link rel="stylesheet" href="/static/css/pg-steps.css">
-    <link rel="stylesheet" href="/static/css/pg-animations.css">
-    <link rel="stylesheet" href="/static/css/mobile.css">
-    <link rel="stylesheet" href="/static/css/discover.css">
-    <link rel="stylesheet" href="/static/css/chatbot-widget.css">
+    <link rel="stylesheet" href="{{ asset_url('css/main.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/pg-button.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/pg-layout.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/pg-form.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/pg-empty-state.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/pg-skeleton.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/pg-breadcrumb.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/test-management-f1.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/explore-tokens.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/pg-dashboard.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/pg-filter.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/pg-panel.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/pg-progress.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/pg-command-palette.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/pg-steps.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/pg-animations.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/mobile.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/discover.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('css/chatbot-widget.css') }}">
 
     <!-- PWA -->
-    <link rel="manifest" href="/static/manifest.json">
+    <link rel="manifest" href="{{ asset_url('manifest.json') }}">
     <meta name="theme-color" content="#354a5f">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="{{ asset_url('icons/icon-192.png') }}">
     <!-- frappe-gantt (MIT) — timeline Gantt chart -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.css">
 </head>
@@ -237,116 +237,116 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <!-- ── JavaScript ──────────────────────────────────────────────────── -->
-    <script src="/static/js/error-handler.js"></script>
-    <script src="/static/js/constants.js"></script>
-    <script src="/static/vendor/chart.umd.min.js" defer></script>
+    <script src="{{ asset_url('js/error-handler.js') }}"></script>
+    <script src="{{ asset_url('js/constants.js') }}"></script>
+    <script src="{{ asset_url('vendor/chart.umd.min.js') }}" defer></script>
     <!-- frappe-gantt (MIT) — program timeline view -->
-    <script src="/static/vendor/frappe-gantt.min.js" defer></script>
+    <script src="{{ asset_url('vendor/frappe-gantt.min.js') }}" defer></script>
     <script>
         window.__APP_CONFIG = {
             apiAuthEnabled: {{ 'true' if api_auth_enabled else 'false' }},
         };
     </script>
-    <script src="/static/js/auth.js"></script>
-    <script src="/static/js/api.js"></script>
+    <script src="{{ asset_url('js/auth.js') }}"></script>
+    <script src="{{ asset_url('js/api.js') }}"></script>
     <!-- pg-* components load before views so all views can use them -->
-    <script src="/static/js/components/design-system/pg_status_registry.js"></script>
-    <script src="/static/js/components/design-system/pg_button.js"></script>
-    <script src="/static/js/components/design-system/pg_icon.js"></script>
-    <script src="/static/js/components/design-system/pg_form.js"></script>
-    <script src="/static/js/components/design-system/pg_empty_state.js"></script>
-    <script src="/static/js/components/design-system/pg_skeleton.js"></script>
-    <script src="/static/js/components/design-system/pg_breadcrumb.js"></script>
-    <script src="/static/js/components/design-system/pg_panel.js"></script>
-    <script src="/static/js/components/design-system/pg_command_palette.js"></script>
-    <script src="/static/js/components/design-system/pg_shortcuts.js"></script>
-    <script src="/static/js/components/design-system/pg_shortcut_help.js"></script>
-    <script src="/static/js/components/design-system/pg_a11y.js"></script>
-    <script src="/static/js/components/shared/pg_markdown.js"></script>
-    <script src="/static/js/views/portfolio/program.js"></script>
-    <script src="/static/js/views/delivery/backlog_ai.js"></script>
-    <script src="/static/js/views/delivery/backlog.js"></script>
-    <script src="/static/js/views/testing/testing_shared.js"></script>
-    <script src="/static/js/views/testing/test_planning.js"></script>
-    <script src="/static/js/views/testing/test_case_detail.js"></script>
-    <script src="/static/js/views/testing/test_execution.js"></script>
-    <script src="/static/js/views/testing/test_plan_detail.js"></script>
-    <script src="/static/js/views/testing/defect_management.js"></script>
-    <script src="/static/js/views/governance/approvals.js"></script>
-    <script src="/static/js/views/governance/raid.js"></script>
-    <script src="/static/js/views/integration/integration.js"></script>
-    <script src="/static/js/views/testing/data_factory.js"></script>
-    <script src="/static/js/views/operations/cutover.js"></script>
-    <script src="/static/js/views/operations/knowledge_base.js"></script>
-    <script src="/static/js/components/shared/notification.js"></script>
-    <script src="/static/js/components/shared/suggestion-badge.js"></script>
-    <script src="/static/js/components/trace/trace-view.js"></script>
-    <script src="/static/js/components/trace/trace-chain.js"></script>
-    <script src="/static/js/components/shared/demo-flow.js"></script>
-    <script src="/static/js/components/shared/role-nav.js"></script>
-    <script src="/static/js/components/explore/explore-shared.js"></script>
-    <script src="/static/js/components/shared/delivery-hub-shared.js"></script>
-    <script src="/static/js/components/shared/workspace-shared.js"></script>
-    <script src="/static/js/components/governance/governance-shared.js"></script>
-    <script src="/static/js/components/hierarchy/hierarchy-shared.js"></script>
-    <script src="/static/js/components/hierarchy/hierarchy-widgets.js"></script>
-    <script src="/static/js/components/hierarchy/hierarchy-renderers.js"></script>
-    <script src="/static/js/components/shared/team-member-picker.js"></script>
-    <script src="/static/js/components/testing/tm_data_grid.js"></script>
-    <script src="/static/js/components/testing/tm_tree_panel.js"></script>
-    <script src="/static/js/components/testing/tm_split_pane.js"></script>
-    <script src="/static/js/components/testing/tm_tab_bar.js"></script>
-    <script src="/static/js/components/testing/tm_toolbar.js"></script>
-    <script src="/static/js/components/testing/tm_property_panel.js"></script>
-    <script src="/static/js/components/testing/tm_status_badge.js"></script>
-    <script src="/static/js/components/testing/tm_context_menu.js"></script>
-    <script src="/static/js/components/testing/tm_toast.js"></script>
-    <script src="/static/js/components/testing/tm_modal.js"></script>
-    <script src="/static/js/components/testing/tm_dropdown_select.js"></script>
-    <script src="/static/js/components/testing/tm_chart_widget.js"></script>
-    <script src="/static/js/components/testing/tm_step_editor.js"></script>
-    <script src="/static/js/components/testing/tm_rich_text_editor.js"></script>
-    <script src="/static/js/components/testing/tm_breadcrumb.js"></script>
-    <script src="/static/js/explore-api.js"></script>
-    <script src="/static/js/views/testing/test_overview.js"></script>
-    <script src="/static/js/views/explore/explore_hierarchy.js"></script>
-    <script src="/static/js/views/explore/explore_workshops.js"></script>
-    <script src="/static/js/views/explore/explore_workshop_detail.js"></script>
-    <script src="/static/js/views/explore/explore_requirements.js"></script>
-    <script src="/static/js/views/explore/explore_outcomes.js"></script>
-    <script src="/static/js/views/explore/explore_dashboard.js"></script>
-    <script src="/static/js/views/ai/ai_admin.js"></script>
-    <script src="/static/js/views/ai/ai_insights.js"></script>
-    <script src="/static/js/views/ai/ai_query.js"></script>
-    <script src="/static/js/views/governance/executive_cockpit.js"></script>
-    <script src="/static/js/views/governance/reports_ai.js"></script>
-    <script src="/static/js/views/governance/reports.js"></script>
-    <script src="/static/js/views/workspace/dashboard.js"></script>
-    <script src="/static/js/views/testing/suite_folders.js"></script>
-    <script src="/static/js/views/testing/env_matrix.js"></script>
-    <script src="/static/js/views/testing/bdd_editor.js"></script>
-    <script src="/static/js/views/testing/data_driven.js"></script>
-    <script src="/static/js/views/testing/exploratory.js"></script>
-    <script src="/static/js/views/testing/evidence_capture.js"></script>
-    <script src="/static/js/views/setup/custom_fields.js"></script>
-    <script src="/static/js/views/integration/integrations.js"></script>
-    <script src="/static/js/views/governance/process_mining.js"></script>  <!-- S8-01 FDD-I05 Phase B -->
-    <script src="/static/js/views/governance/observability.js"></script>
-    <script src="/static/js/views/governance/gate_criteria.js"></script>
-    <script src="/static/js/views/discover/discover_charter.js"></script>
-    <script src="/static/js/views/discover/discover.js"></script>
-    <script src="/static/js/views/portfolio/timeline.js"></script>
-    <script src="/static/js/views/governance/raci.js"></script>
-    <script src="/static/js/views/operations/hypercare.js"></script>
-    <script src="/static/js/views/governance/change_management.js"></script>
-    <script src="/static/js/views/setup/project_setup_shell.js"></script>
-    <script src="/static/js/views/setup/project_setup_info.js"></script>
-    <script src="/static/js/views/setup/project_setup.js"></script>
-    <script src="/static/js/views/workspace/my_projects.js"></script>
-    <script src="/static/js/app.js"></script>
-    <script src="/static/js/components/shared/chatbot-widget.js"></script>
-    <script src="/static/js/pwa.js"></script>
-    <script src="/static/js/mobile.js"></script>
+    <script src="{{ asset_url('js/components/design-system/pg_status_registry.js') }}"></script>
+    <script src="{{ asset_url('js/components/design-system/pg_button.js') }}"></script>
+    <script src="{{ asset_url('js/components/design-system/pg_icon.js') }}"></script>
+    <script src="{{ asset_url('js/components/design-system/pg_form.js') }}"></script>
+    <script src="{{ asset_url('js/components/design-system/pg_empty_state.js') }}"></script>
+    <script src="{{ asset_url('js/components/design-system/pg_skeleton.js') }}"></script>
+    <script src="{{ asset_url('js/components/design-system/pg_breadcrumb.js') }}"></script>
+    <script src="{{ asset_url('js/components/design-system/pg_panel.js') }}"></script>
+    <script src="{{ asset_url('js/components/design-system/pg_command_palette.js') }}"></script>
+    <script src="{{ asset_url('js/components/design-system/pg_shortcuts.js') }}"></script>
+    <script src="{{ asset_url('js/components/design-system/pg_shortcut_help.js') }}"></script>
+    <script src="{{ asset_url('js/components/design-system/pg_a11y.js') }}"></script>
+    <script src="{{ asset_url('js/components/shared/pg_markdown.js') }}"></script>
+    <script src="{{ asset_url('js/views/portfolio/program.js') }}"></script>
+    <script src="{{ asset_url('js/views/delivery/backlog_ai.js') }}"></script>
+    <script src="{{ asset_url('js/views/delivery/backlog.js') }}"></script>
+    <script src="{{ asset_url('js/views/testing/testing_shared.js') }}"></script>
+    <script src="{{ asset_url('js/views/testing/test_planning.js') }}"></script>
+    <script src="{{ asset_url('js/views/testing/test_case_detail.js') }}"></script>
+    <script src="{{ asset_url('js/views/testing/test_execution.js') }}"></script>
+    <script src="{{ asset_url('js/views/testing/test_plan_detail.js') }}"></script>
+    <script src="{{ asset_url('js/views/testing/defect_management.js') }}"></script>
+    <script src="{{ asset_url('js/views/governance/approvals.js') }}"></script>
+    <script src="{{ asset_url('js/views/governance/raid.js') }}"></script>
+    <script src="{{ asset_url('js/views/integration/integration.js') }}"></script>
+    <script src="{{ asset_url('js/views/testing/data_factory.js') }}"></script>
+    <script src="{{ asset_url('js/views/operations/cutover.js') }}"></script>
+    <script src="{{ asset_url('js/views/operations/knowledge_base.js') }}"></script>
+    <script src="{{ asset_url('js/components/shared/notification.js') }}"></script>
+    <script src="{{ asset_url('js/components/shared/suggestion-badge.js') }}"></script>
+    <script src="{{ asset_url('js/components/trace/trace-view.js') }}"></script>
+    <script src="{{ asset_url('js/components/trace/trace-chain.js') }}"></script>
+    <script src="{{ asset_url('js/components/shared/demo-flow.js') }}"></script>
+    <script src="{{ asset_url('js/components/shared/role-nav.js') }}"></script>
+    <script src="{{ asset_url('js/components/explore/explore-shared.js') }}"></script>
+    <script src="{{ asset_url('js/components/shared/delivery-hub-shared.js') }}"></script>
+    <script src="{{ asset_url('js/components/shared/workspace-shared.js') }}"></script>
+    <script src="{{ asset_url('js/components/governance/governance-shared.js') }}"></script>
+    <script src="{{ asset_url('js/components/hierarchy/hierarchy-shared.js') }}"></script>
+    <script src="{{ asset_url('js/components/hierarchy/hierarchy-widgets.js') }}"></script>
+    <script src="{{ asset_url('js/components/hierarchy/hierarchy-renderers.js') }}"></script>
+    <script src="{{ asset_url('js/components/shared/team-member-picker.js') }}"></script>
+    <script src="{{ asset_url('js/components/testing/tm_data_grid.js') }}"></script>
+    <script src="{{ asset_url('js/components/testing/tm_tree_panel.js') }}"></script>
+    <script src="{{ asset_url('js/components/testing/tm_split_pane.js') }}"></script>
+    <script src="{{ asset_url('js/components/testing/tm_tab_bar.js') }}"></script>
+    <script src="{{ asset_url('js/components/testing/tm_toolbar.js') }}"></script>
+    <script src="{{ asset_url('js/components/testing/tm_property_panel.js') }}"></script>
+    <script src="{{ asset_url('js/components/testing/tm_status_badge.js') }}"></script>
+    <script src="{{ asset_url('js/components/testing/tm_context_menu.js') }}"></script>
+    <script src="{{ asset_url('js/components/testing/tm_toast.js') }}"></script>
+    <script src="{{ asset_url('js/components/testing/tm_modal.js') }}"></script>
+    <script src="{{ asset_url('js/components/testing/tm_dropdown_select.js') }}"></script>
+    <script src="{{ asset_url('js/components/testing/tm_chart_widget.js') }}"></script>
+    <script src="{{ asset_url('js/components/testing/tm_step_editor.js') }}"></script>
+    <script src="{{ asset_url('js/components/testing/tm_rich_text_editor.js') }}"></script>
+    <script src="{{ asset_url('js/components/testing/tm_breadcrumb.js') }}"></script>
+    <script src="{{ asset_url('js/explore-api.js') }}"></script>
+    <script src="{{ asset_url('js/views/testing/test_overview.js') }}"></script>
+    <script src="{{ asset_url('js/views/explore/explore_hierarchy.js') }}"></script>
+    <script src="{{ asset_url('js/views/explore/explore_workshops.js') }}"></script>
+    <script src="{{ asset_url('js/views/explore/explore_workshop_detail.js') }}"></script>
+    <script src="{{ asset_url('js/views/explore/explore_requirements.js') }}"></script>
+    <script src="{{ asset_url('js/views/explore/explore_outcomes.js') }}"></script>
+    <script src="{{ asset_url('js/views/explore/explore_dashboard.js') }}"></script>
+    <script src="{{ asset_url('js/views/ai/ai_admin.js') }}"></script>
+    <script src="{{ asset_url('js/views/ai/ai_insights.js') }}"></script>
+    <script src="{{ asset_url('js/views/ai/ai_query.js') }}"></script>
+    <script src="{{ asset_url('js/views/governance/executive_cockpit.js') }}"></script>
+    <script src="{{ asset_url('js/views/governance/reports_ai.js') }}"></script>
+    <script src="{{ asset_url('js/views/governance/reports.js') }}"></script>
+    <script src="{{ asset_url('js/views/workspace/dashboard.js') }}"></script>
+    <script src="{{ asset_url('js/views/testing/suite_folders.js') }}"></script>
+    <script src="{{ asset_url('js/views/testing/env_matrix.js') }}"></script>
+    <script src="{{ asset_url('js/views/testing/bdd_editor.js') }}"></script>
+    <script src="{{ asset_url('js/views/testing/data_driven.js') }}"></script>
+    <script src="{{ asset_url('js/views/testing/exploratory.js') }}"></script>
+    <script src="{{ asset_url('js/views/testing/evidence_capture.js') }}"></script>
+    <script src="{{ asset_url('js/views/setup/custom_fields.js') }}"></script>
+    <script src="{{ asset_url('js/views/integration/integrations.js') }}"></script>
+    <script src="{{ asset_url('js/views/governance/process_mining.js') }}"></script>  <!-- S8-01 FDD-I05 Phase B -->
+    <script src="{{ asset_url('js/views/governance/observability.js') }}"></script>
+    <script src="{{ asset_url('js/views/governance/gate_criteria.js') }}"></script>
+    <script src="{{ asset_url('js/views/discover/discover_charter.js') }}"></script>
+    <script src="{{ asset_url('js/views/discover/discover.js') }}"></script>
+    <script src="{{ asset_url('js/views/portfolio/timeline.js') }}"></script>
+    <script src="{{ asset_url('js/views/governance/raci.js') }}"></script>
+    <script src="{{ asset_url('js/views/operations/hypercare.js') }}"></script>
+    <script src="{{ asset_url('js/views/governance/change_management.js') }}"></script>
+    <script src="{{ asset_url('js/views/setup/project_setup_shell.js') }}"></script>
+    <script src="{{ asset_url('js/views/setup/project_setup_info.js') }}"></script>
+    <script src="{{ asset_url('js/views/setup/project_setup.js') }}"></script>
+    <script src="{{ asset_url('js/views/workspace/my_projects.js') }}"></script>
+    <script src="{{ asset_url('js/app.js') }}"></script>
+    <script src="{{ asset_url('js/components/shared/chatbot-widget.js') }}"></script>
+    <script src="{{ asset_url('js/pwa.js') }}"></script>
+    <script src="{{ asset_url('js/mobile.js') }}"></script>
 
     <!-- UI-S01: Initialize PGIcon for sidebar + header icon slots -->
     <script>
