@@ -1,6 +1,9 @@
 """Sprint 23 — PWA Blueprint: offline fallback, Service Worker scope, PWA health."""
-from flask import Blueprint, jsonify, send_from_directory, render_template_string
-import os, json
+
+import json
+import os
+
+from flask import Blueprint, jsonify, make_response, render_template_string, send_from_directory
 
 pwa_bp = Blueprint("pwa", __name__)
 
@@ -43,6 +46,16 @@ OFFLINE_HTML = """<!DOCTYPE html>
 def offline():
     """Serve offline fallback page."""
     return render_template_string(OFFLINE_HTML), 200
+
+
+@pwa_bp.route("/sw.js")
+def service_worker():
+    """Serve the service worker from the app root so it can control the full site scope."""
+    static_dir = os.path.join(os.path.dirname(__file__), "..", "..", "static")
+    response = make_response(send_from_directory(static_dir, "sw.js", mimetype="application/javascript"))
+    response.headers["Service-Worker-Allowed"] = "/"
+    response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 # ── PWA status endpoint ────────────────────────────────────────────────

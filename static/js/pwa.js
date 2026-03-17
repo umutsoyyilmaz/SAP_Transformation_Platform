@@ -46,7 +46,7 @@ const PWA = (() => {
         }
 
         try {
-            _swRegistration = await navigator.serviceWorker.register('/static/sw.js', {
+            _swRegistration = await navigator.serviceWorker.register('/sw.js', {
                 scope: '/',
             });
             console.log('[PWA] Service worker registered:', _swRegistration.scope);
