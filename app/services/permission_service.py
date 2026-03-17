@@ -366,6 +366,7 @@ def expire_temporary_assignments(now: datetime | None = None) -> dict:
             actor_user_id=None,
             tenant_id=ur.tenant_id,
             program_id=ur.program_id,
+            project_id=ur.project_id,
             diff={
                 "user_id": ur.user_id,
                 "role_id": ur.role_id,

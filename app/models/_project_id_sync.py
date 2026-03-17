@@ -19,6 +19,8 @@ def _register_project_id_sync(model_cls):
     """Register a 'set' event on model.program_id to auto-populate project_id."""
     @event.listens_for(getattr(model_cls, "program_id"), "set")
     def _sync_project_id(target, value, oldvalue, initiator):
+        if getattr(target, "_skip_project_id_autosync", False):
+            return
         if getattr(target, "project_id", None) is not None:
             return
         if value is None:
@@ -33,10 +35,12 @@ def _register_project_id_sync(model_cls):
         if default_proj:
             target.project_id = default_proj.id
         else:
-            # Fallback: no default project found — set program_id value directly.
-            # This may produce invalid FK if enforcement is on, but avoids
-            # breaking legacy code paths that don't have a project yet.
-            target.project_id = value
+            # Fallback: no default project found — leave project_id as None.
+            # Callers must handle None project_id gracefully.
+            logger.warning(
+                "No default project for program_id=%s on %s — project_id left as None",
+                value, type(target).__name__,
+            )
 
 
 def register_all():
@@ -45,20 +49,31 @@ def register_all():
         Phase, Workstream, TeamMember, Committee, RaciActivity, RaciEntry,
     )
     from app.models.scenario import Scenario
+    from app.models.explore.process import ProcessLevel, ProcessStep
+    from app.models.explore.workshop import (
+        ExploreWorkshop,
+        WorkshopScopeItem,
+        WorkshopAttendee,
+        WorkshopAgendaItem,
+    )
     from app.models.backlog import Sprint, BacklogItem, ConfigItem
     from app.models.testing import (
         TestPlan, TestCase, TestSuite, Defect, ApprovalWorkflow, TestDailySnapshot,
     )
     from app.models.cutover import CutoverPlan, PostGoliveChangeRequest
+    from app.models.interface_factory import Interface, Wave
     from app.models.raid import Risk, Action, Issue, Decision
     from app.models.requirement import Requirement
 
     _OPERATIONAL_MODELS = [
         Phase, Workstream, TeamMember, Committee, RaciActivity, RaciEntry,
+        ProcessLevel, ProcessStep,
+        ExploreWorkshop, WorkshopScopeItem, WorkshopAttendee, WorkshopAgendaItem,
         Scenario,
         Sprint, BacklogItem, ConfigItem,
         TestPlan, TestCase, TestSuite, Defect, ApprovalWorkflow, TestDailySnapshot,
         CutoverPlan, PostGoliveChangeRequest,
+        Interface, Wave,
         Risk, Action, Issue, Decision,
         Requirement,
     ]

@@ -74,11 +74,14 @@ def upgrade():
 
     # 4) Backfill existing test_cases.suite_id into junction (idempotent)
     if _table_exists(inspector, "test_case_suite_links") and _table_exists(inspector, "test_cases") and _column_exists(inspector, "test_cases", "suite_id"):
+        tenant_select = "tc.tenant_id"
+        if not _column_exists(inspector, "test_cases", "tenant_id"):
+            tenant_select = "NULL"
         op.execute(
             sa.text(
-                """
+                f"""
                 INSERT INTO test_case_suite_links (tenant_id, test_case_id, suite_id, added_method, notes)
-                SELECT tc.tenant_id, tc.id, tc.suite_id, 'migration', ''
+                SELECT {tenant_select}, tc.id, tc.suite_id, 'migration', ''
                 FROM test_cases tc
                 LEFT JOIN test_case_suite_links l
                   ON l.test_case_id = tc.id AND l.suite_id = tc.suite_id

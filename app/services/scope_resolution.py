@@ -165,8 +165,13 @@ def _resolve_from_backlog_item(
     from app.models.backlog import BacklogItem
 
     bi = (
-        get_scoped_or_none(BacklogItem, backlog_item_id, program_id=program_id)
-        if program_id is not None
+        get_scoped_or_none(
+            BacklogItem,
+            backlog_item_id,
+            project_id=project_id,
+            program_id=program_id,
+        )
+        if project_id is not None or program_id is not None
         else db.session.get(BacklogItem, backlog_item_id)
     )
     if not bi:
@@ -194,8 +199,13 @@ def _resolve_from_config_item(
     from app.models.backlog import ConfigItem
 
     ci = (
-        get_scoped_or_none(ConfigItem, config_item_id, program_id=program_id)
-        if program_id is not None
+        get_scoped_or_none(
+            ConfigItem,
+            config_item_id,
+            project_id=project_id,
+            program_id=program_id,
+        )
+        if project_id is not None or program_id is not None
         else db.session.get(ConfigItem, config_item_id)
     )
     if not ci:
@@ -250,9 +260,8 @@ def _resolve_from_process_step(
 ) -> str | None:
     """ProcessStep → process_level_id (L4) → parent_id → L3.
 
-    ProcessStep has no direct project_id; project_id is available via
-    the workshop relationship. We pass it to _ensure_l3 for downstream
-    L4 → L3 traversal.
+    ProcessStep is project-owned, so we can enforce direct project scope
+    when the caller provides one.
 
     Args:
         process_step_id: ProcessStep PK (string UUID).
@@ -260,10 +269,11 @@ def _resolve_from_process_step(
     """
     from app.models.explore.process import ProcessStep
 
-    # ProcessStep has no project_id column; use scoped lookup via workshop
-    # join if project_id available — for now use unscoped (ProcessStep is
-    # reached only via FK nav from verified ExploreRequirement)
-    ps = db.session.get(ProcessStep, str(process_step_id))
+    ps = (
+        get_scoped_or_none(ProcessStep, str(process_step_id), project_id=project_id)
+        if project_id is not None
+        else db.session.get(ProcessStep, str(process_step_id))
+    )
     if not ps or not ps.process_level_id:
         return None
 

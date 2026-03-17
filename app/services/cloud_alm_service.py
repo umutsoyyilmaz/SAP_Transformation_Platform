@@ -29,7 +29,7 @@ from sqlalchemy import select
 from app.models import db
 from app.models.explore.infrastructure import CloudALMSyncLog
 from app.models.explore.requirement import ExploreRequirement
-from app.models.integrations import CloudALMConfig
+from app.models.external_integrations import CloudALMConfig
 from app.utils.crypto import decrypt_secret, encrypt_secret
 from app.integrations.alm_gateway import alm_gateway, GatewayResult
 

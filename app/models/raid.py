@@ -89,10 +89,10 @@ class Risk(db.Model):
     )
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
-        comment="Faz 3: project scope (nullable during transition)",
+        comment="Sprint 7: project scope (required)",
     )
     code = db.Column(db.String(30), unique=True, nullable=False, comment="Auto-generated: RSK-001")
     title = db.Column(db.String(300), nullable=False)
@@ -204,10 +204,10 @@ class Action(db.Model):
     )
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
-        comment="Faz 3: project scope (nullable during transition)",
+        comment="Sprint 7: project scope (required)",
     )
     code = db.Column(db.String(30), unique=True, nullable=False, comment="Auto-generated: ACT-001")
     title = db.Column(db.String(300), nullable=False)
@@ -290,10 +290,10 @@ class Issue(db.Model):
     )
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
-        comment="Faz 3: project scope (nullable during transition)",
+        comment="Sprint 7: project scope (required)",
     )
     code = db.Column(db.String(30), unique=True, nullable=False, comment="Auto-generated: ISS-001")
     title = db.Column(db.String(300), nullable=False)
@@ -390,10 +390,10 @@ class Decision(db.Model):
     )
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
-        comment="Faz 3: project scope (nullable during transition)",
+        comment="Sprint 7: project scope (required)",
     )
     code = db.Column(db.String(30), unique=True, nullable=False, comment="Auto-generated: DEC-001")
     title = db.Column(db.String(300), nullable=False)

@@ -17,15 +17,28 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, case, and_
+from sqlalchemy import func, case, and_, or_
 
 from app.models import db
+from app.models.explore.requirement import ExploreRequirement
 from app.models.testing import (
     TestCase, TestExecution, TestCycle, TestPlan, TestSuite,
+    TestCaseSuiteLink,
     Defect,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _canonical_requirement_query(program_id: int):
+    """Return canonical explore requirements for reporting."""
+    return ExploreRequirement.query.filter(
+        ExploreRequirement.program_id == program_id,
+        or_(
+            ExploreRequirement.trigger_reason.is_(None),
+            ExploreRequirement.trigger_reason != "standard_observation",
+        ),
+    )
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -198,10 +211,11 @@ def _coverage_by_suite(pid, **kw):
     rows = (
         db.session.query(
             TestSuite.name,
-            func.count(TestCase.id).label("total"),
+            func.count(func.distinct(TestCaseSuiteLink.test_case_id)).label("total"),
         )
-        .join(TestCase, TestCase.suite_id == TestSuite.id)
-        .filter(TestSuite.program_id == pid)
+        .join(TestCaseSuiteLink, TestCaseSuiteLink.suite_id == TestSuite.id)
+        .join(TestCase, TestCase.id == TestCaseSuiteLink.test_case_id)
+        .filter(TestSuite.program_id == pid, TestCase.program_id == pid)
         .group_by(TestSuite.name)
         .all()
     )
@@ -239,10 +253,16 @@ def _coverage_by_priority(pid, **kw):
 @ReportEngine.register("requirement_coverage")
 def _requirement_coverage(pid, **kw):
     total_tc = TestCase.query.filter_by(program_id=pid).count()
-    linked = TestCase.query.filter(
-        TestCase.program_id == pid,
-        TestCase.requirement_id.isnot(None),
-    ).count()
+    requirement_ids_sq = _canonical_requirement_query(pid).with_entities(ExploreRequirement.id).subquery()
+    linked = (
+        db.session.query(func.count(TestCase.id))
+        .filter(
+            TestCase.program_id == pid,
+            TestCase.explore_requirement_id.isnot(None),
+            TestCase.explore_requirement_id.in_(db.session.query(requirement_ids_sq.c.id)),
+        )
+        .scalar()
+    ) or 0
     pct = round(linked / total_tc * 100, 1) if total_tc else 0
     return {
         "title": "Requirement Coverage",
@@ -861,20 +881,35 @@ def _top_defect_areas(pid, **kw):
 
 @ReportEngine.register("req_tc_matrix")
 def _req_tc_matrix(pid, **kw):
+    requirement_ids_sq = _canonical_requirement_query(pid).with_entities(ExploreRequirement.id).subquery()
     rows = (
         db.session.query(
-            TestCase.requirement_id,
+            ExploreRequirement.id,
+            ExploreRequirement.code,
+            ExploreRequirement.title,
             func.count(TestCase.id).label("tc_count"),
         )
-        .filter(TestCase.program_id == pid, TestCase.requirement_id.isnot(None))
-        .group_by(TestCase.requirement_id)
+        .join(ExploreRequirement, ExploreRequirement.id == TestCase.explore_requirement_id)
+        .filter(
+            TestCase.program_id == pid,
+            TestCase.explore_requirement_id.in_(db.session.query(requirement_ids_sq.c.id)),
+        )
+        .group_by(ExploreRequirement.id, ExploreRequirement.code, ExploreRequirement.title)
         .all()
     )
-    data = [{"requirement_id": r[0], "tc_count": r[1]} for r in rows]
+    data = [
+        {
+            "explore_requirement_id": r[0],
+            "requirement_code": r[1],
+            "requirement_title": r[2],
+            "tc_count": r[3],
+        }
+        for r in rows
+    ]
     return {
         "title": "Requirement → TC Matrix",
         "chart_type": "table",
-        "columns": ["requirement_id", "tc_count"],
+        "columns": ["requirement_code", "requirement_title", "tc_count"],
         "data": data,
     }
 
@@ -883,9 +918,9 @@ def _req_tc_matrix(pid, **kw):
 def _orphan_test_cases(pid, **kw):
     rows = TestCase.query.filter(
         TestCase.program_id == pid,
-        TestCase.requirement_id.is_(None),
         TestCase.explore_requirement_id.is_(None),
         TestCase.backlog_item_id.is_(None),
+        TestCase.config_item_id.is_(None),
     ).all()
     data = [{"code": tc.code, "title": tc.title, "module": tc.module, "layer": tc.test_layer}
             for tc in rows]
@@ -900,23 +935,42 @@ def _orphan_test_cases(pid, **kw):
 
 @ReportEngine.register("untested_requirements")
 def _untested_requirements(pid, **kw):
-    # Requirements linked to TCs but those TCs have no executions
+    # Canonical explore requirements linked to TCs but those TCs have no executions.
     sub = db.session.query(TestExecution.test_case_id).distinct()
     rows = (
-        TestCase.query
+        db.session.query(
+            ExploreRequirement.id,
+            ExploreRequirement.code,
+            ExploreRequirement.title,
+            TestCase.code,
+            TestCase.title,
+        )
+        .join(ExploreRequirement, ExploreRequirement.id == TestCase.explore_requirement_id)
         .filter(
             TestCase.program_id == pid,
-            TestCase.requirement_id.isnot(None),
+            TestCase.explore_requirement_id.isnot(None),
+            or_(
+                ExploreRequirement.trigger_reason.is_(None),
+                ExploreRequirement.trigger_reason != "standard_observation",
+            ),
             ~TestCase.id.in_(sub),
         )
         .all()
     )
-    data = [{"requirement_id": tc.requirement_id, "tc_code": tc.code, "tc_title": tc.title}
-            for tc in rows]
+    data = [
+        {
+            "explore_requirement_id": row[0],
+            "requirement_code": row[1],
+            "requirement_title": row[2],
+            "tc_code": row[3],
+            "tc_title": row[4],
+        }
+        for row in rows
+    ]
     return {
         "title": "Untested Requirements",
         "chart_type": "table",
-        "columns": ["requirement_id", "tc_code", "tc_title"],
+        "columns": ["requirement_code", "requirement_title", "tc_code", "tc_title"],
         "data": data,
         "summary": {"count": len(data)},
     }

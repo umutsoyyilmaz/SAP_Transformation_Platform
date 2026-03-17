@@ -20,6 +20,7 @@ from flask import Blueprint, jsonify, request
 
 from app.models.program import Program
 from app.services import raci_service
+from app.services.helpers.project_owned_scope import resolve_project_scope
 from app.utils.helpers import get_or_404 as _get_or_404
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,13 @@ def get_raci_matrix(program_id: int):
         return err
 
     workstream_id = request.args.get("workstream_id", type=int)
+    try:
+        project_id = resolve_project_scope(
+            program_id,
+            request.args.get("project_id", type=int),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     sap_phase = request.args.get("sap_phase", type=str)
 
     if sap_phase and sap_phase not in VALID_SAP_PHASES:
@@ -83,7 +91,13 @@ def get_raci_matrix(program_id: int):
             400,
         )
 
-    result = raci_service.get_raci_matrix(tenant_id, program_id, workstream_id, sap_phase)
+    result = raci_service.get_raci_matrix(
+        tenant_id,
+        program_id,
+        workstream_id=workstream_id,
+        sap_phase=sap_phase,
+        project_id=project_id,
+    )
     return jsonify(result), 200
 
 
@@ -123,6 +137,9 @@ def create_activity(program_id: int):
     workstream_id = data.get("workstream_id")
     if workstream_id is not None and not isinstance(workstream_id, int):
         errors["workstream_id"] = "Must be an integer."
+    project_id = data.get("project_id")
+    if project_id is not None and not isinstance(project_id, int):
+        errors["project_id"] = "Must be an integer."
 
     if errors:
         return jsonify({"error": "Validation failed", "details": errors}), 400
@@ -136,6 +153,7 @@ def create_activity(program_id: int):
             sap_activate_phase=sap_activate_phase,
             workstream_id=workstream_id,
             sort_order=data.get("sort_order"),
+            project_id=project_id,
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -176,6 +194,9 @@ def upsert_raci_entry(program_id: int):
     if raci_role is not None:
         if not isinstance(raci_role, str) or raci_role.upper() not in VALID_RACI_ROLES:
             errors["raci_role"] = "Must be one of R, A, C, I, or null."
+    project_id = data.get("project_id")
+    if project_id is not None and not isinstance(project_id, int):
+        errors["project_id"] = "Must be an integer."
 
     if errors:
         return jsonify({"error": "Validation failed", "details": errors}), 400
@@ -187,6 +208,7 @@ def upsert_raci_entry(program_id: int):
             activity_id=activity_id,
             team_member_id=team_member_id,
             raci_role=raci_role,
+            project_id=project_id,
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -208,9 +230,17 @@ def import_template(program_id: int):
     _prog, tenant_id, err = _resolve_program_and_tenant(program_id)
     if err:
         return err
+    data = request.get_json(silent=True) or {}
+    project_id = data.get("project_id")
+    if project_id is not None and not isinstance(project_id, int):
+        return jsonify({"error": "project_id must be an integer."}), 400
 
     try:
-        created_count = raci_service.bulk_import_sap_template_activities(tenant_id, program_id)
+        created_count = raci_service.bulk_import_sap_template_activities(
+            tenant_id,
+            program_id,
+            project_id=project_id,
+        )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -235,6 +265,15 @@ def validate_raci(program_id: int):
     _prog, tenant_id, err = _resolve_program_and_tenant(program_id)
     if err:
         return err
+    project_id = request.args.get("project_id", type=int)
 
-    result = raci_service.validate_raci_matrix(tenant_id, program_id)
+    try:
+        project_id = resolve_project_scope(
+            program_id,
+            request.args.get("project_id", type=int),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    result = raci_service.validate_raci_matrix(tenant_id, program_id, project_id=project_id)
     return jsonify(result), 200

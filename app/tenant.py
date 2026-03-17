@@ -24,7 +24,7 @@ Usage:
     a single DB that's resolved at app-init or per-request.
 
     # For CLI/scripts — set env var:
-    TENANT_ID=acme python scripts/seed_demo_data.py
+    TENANT_ID=acme python scripts/data/seed/seed_demo_data.py
 
 Tenant Registry (tenants.json):
     {

@@ -16,6 +16,7 @@ import logging
 import re
 
 from app.models import db
+from app.models.explore.requirement import ExploreRequirement
 from app.models.requirement import Requirement
 from app.models.explore import ProcessStep, ExploreWorkshop, ProcessLevel
 
@@ -33,7 +34,7 @@ class TestCaseGenerator:
 
     def generate(
         self,
-        requirement_id: int | None = None,
+        requirement_id: int | str | None = None,
         process_step: str | None = None,
         *,
         module: str = "FI",
@@ -59,18 +60,30 @@ class TestCaseGenerator:
         program_id = None
 
         if requirement_id:
-            req = db.session.get(Requirement, requirement_id)
-            if not req:
-                result["error"] = f"Requirement {requirement_id} not found"
-                return result
-            result["source_type"] = "requirement"
-            result["source_id"] = requirement_id
-            program_id = req.program_id
-            if not module:
-                module = req.module or "FI"
-            source_context = f"[{req.code or 'REQ'}] {req.title}\n{req.description or ''}"
-            if req.acceptance_criteria:
-                additional_context = f"Acceptance criteria: {req.acceptance_criteria}"
+            explore_req = db.session.get(ExploreRequirement, str(requirement_id))
+            if explore_req:
+                result["source_type"] = "explore_requirement"
+                result["source_id"] = explore_req.id
+                program_id = explore_req.program_id
+                if not module:
+                    module = getattr(explore_req, "process_area", None) or "FI"
+                source_context = f"[{explore_req.code or 'REQ'}] {explore_req.title}\n{explore_req.description or ''}"
+                acceptance_criteria = getattr(explore_req, "acceptance_criteria", None)
+                if acceptance_criteria:
+                    additional_context = f"Acceptance criteria: {acceptance_criteria}"
+            else:
+                req = db.session.get(Requirement, requirement_id)
+                if not req:
+                    result["error"] = f"Requirement {requirement_id} not found"
+                    return result
+                result["source_type"] = "requirement"
+                result["source_id"] = requirement_id
+                program_id = req.program_id
+                if not module:
+                    module = req.module or "FI"
+                source_context = f"[{req.code or 'REQ'}] {req.title}\n{req.description or ''}"
+                if req.acceptance_criteria:
+                    additional_context = f"Acceptance criteria: {req.acceptance_criteria}"
         elif process_step:
             step = db.session.get(ProcessStep, process_step)
             if not step:
@@ -92,7 +105,7 @@ class TestCaseGenerator:
                 f"Demo shown: {step.demo_shown}; BPMN reviewed: {step.bpmn_reviewed}"
             )
         else:
-            result["error"] = "requirement_id or process_step is required"
+            result["error"] = "requirement_id/explore_requirement_id or process_step is required"
             return result
 
         similar = []

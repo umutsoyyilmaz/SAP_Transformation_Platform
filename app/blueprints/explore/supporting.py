@@ -9,6 +9,7 @@ reports, snapshots.
   - GET/POST          /scope-change-requests  — list, create, get
   - POST              /scope-change-requests/<id>/transition
   - POST              /scope-change-requests/<id>/implement
+  - POST              /scope-change-requests/<id>/promote
   - GET/POST          /workshops/<id>/dependencies
   - PUT               /workshop-dependencies/<id>/resolve
   - POST              /workshops/<id>/generate-minutes
@@ -219,6 +220,22 @@ def implement_scope_change_request(scr_id):
     return jsonify(result)
 
 
+@explore_bp.route("/scope-change-requests/<scr_id>/promote", methods=["POST"])
+def promote_scope_change_request(scr_id):
+    """Promote a scope change request into canonical enterprise change management."""
+    data = request.get_json(silent=True) or {}
+    project_id, err = _get_program_id(data)
+    if err:
+        return err
+    result = explore_service.promote_scope_change_request_service(scr_id, data, project_id=project_id)
+    if isinstance(result, tuple):
+        payload, status = result
+        if isinstance(payload, dict):
+            return jsonify(payload), status
+        return result
+    return jsonify(result)
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Minutes & AI Summary (A-029, A-030)
 # ═════════════════════════════════════════════════════════════════════════════
@@ -372,4 +389,3 @@ def get_user_permissions_endpoint():
         "roles": [{"role": r.role, "process_area": r.process_area} for r in roles],
         "permissions": sorted(perms),
     })
-

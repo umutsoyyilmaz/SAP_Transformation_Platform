@@ -23,7 +23,7 @@ Models (TS-Sprint 2 — new):
     - DefectLink:         inter-defect linking (duplicate/related/blocks)
 
 Architecture ref:
-    Test Plan ──1:N──▶ Test Cycle ──N:M──▶ Test Suite ──1:N──▶ Test Case
+    Test Plan ──1:N──▶ Test Cycle ──N:M──▶ Test Suite ──N:M──▶ Test Case
     Test Case ──1:N──▶ Test Step
     Test Case ──N:M──▶ Test Case (dependencies)
     Test Cycle ──1:N──▶ Test Execution  (legacy, kept for backward compat)
@@ -62,6 +62,11 @@ DEFECT_STATUSES = {
     "closed", "rejected", "reopened", "deferred",
 }
 
+LEGACY_DEFECT_STATUS_ALIASES = {
+    "open": "assigned",
+    "fixed": "resolved",
+}
+
 # ── 9-status lifecycle transition guard ──────────────────────────────────
 VALID_TRANSITIONS = {
     "new":         ["assigned", "rejected", "deferred"],
@@ -78,8 +83,33 @@ VALID_TRANSITIONS = {
 
 def validate_defect_transition(old_status, new_status):
     """Return True if transition is valid, False otherwise."""
+    old_status = canonicalize_defect_status(old_status)
+    new_status = canonicalize_defect_status(new_status)
     allowed = VALID_TRANSITIONS.get(old_status, [])
     return new_status in allowed
+
+
+def canonicalize_defect_status(status):
+    """Return the canonical lifecycle value for a defect status."""
+    normalized = str(status or "").strip().lower()
+    return LEGACY_DEFECT_STATUS_ALIASES.get(normalized, normalized)
+
+
+def defect_status_filter_values(status):
+    """Return canonical + legacy values that should match this status filter."""
+    canonical = canonicalize_defect_status(status)
+    if not canonical:
+        return set()
+    values = {canonical}
+    for legacy, mapped in LEGACY_DEFECT_STATUS_ALIASES.items():
+        if mapped == canonical:
+            values.add(legacy)
+    return values
+
+
+def is_valid_defect_status(status):
+    """Return True when the provided lifecycle value maps to a supported state."""
+    return canonicalize_defect_status(status) in DEFECT_STATUSES
 
 
 # ── SLA Matrix ───────────────────────────────────────────────────────────
@@ -184,10 +214,10 @@ class TestPlan(db.Model):
     )
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
-        comment="Faz 3: project scope (nullable during transition)",
+        comment="Sprint 7 schema slice: project scope is mandatory",
     )
     name = db.Column(db.String(200), nullable=False, comment="e.g. SIT Master Plan, UAT Plan v2")
     description = db.Column(db.Text, default="")
@@ -202,7 +232,7 @@ class TestPlan(db.Model):
     end_date = db.Column(db.Date, nullable=True)
     plan_type = db.Column(
         db.String(30), default="sit",
-        comment="sit | uat | regression | e2e | cutover_rehearsal | performance",
+        comment="unit | sit | uat | regression | e2e | cutover_rehearsal | performance",
     )
     environment = db.Column(
         db.String(10), nullable=True,
@@ -307,6 +337,25 @@ class TestCycle(db.Model):
         db.String(50), default="",
         comment="Transport request or build label, e.g. TR-12345",
     )
+    transport_request = db.Column(
+        db.String(30), default="",
+        comment="SAP transport request for this cycle scope, e.g. DEVK900123",
+    )
+    deployment_batch = db.Column(
+        db.String(50), default="",
+        comment="Deployment batch / wave label, e.g. WAVE-1 / Batch-A",
+    )
+    release_train = db.Column(
+        db.String(50), default="",
+        comment="Release train label, e.g. 2026-Q2 / Train-1",
+    )
+    owner_id = db.Column(
+        db.Integer,
+        db.ForeignKey("team_members.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Operational owner for the cycle",
+    )
 
     # ── Entry/Exit Criteria (TS-Sprint 3)
     entry_criteria = db.Column(
@@ -338,6 +387,7 @@ class TestCycle(db.Model):
         "CycleDataSet", backref="cycle", lazy="dynamic",
         cascade="all, delete-orphan",
     )
+    owner_member = db.relationship("TeamMember", foreign_keys=[owner_id])
 
     def to_dict(self, include_executions=False):
         result = {
@@ -352,6 +402,11 @@ class TestCycle(db.Model):
             "order": self.order,
             "environment": self.environment,
             "build_tag": self.build_tag,
+            "transport_request": self.transport_request,
+            "deployment_batch": self.deployment_batch,
+            "release_train": self.release_train,
+            "owner_id": self.owner_id,
+            "owner_member": self.owner_member.to_dict() if self.owner_id and self.owner_member else None,
             "entry_criteria": self.entry_criteria,
             "exit_criteria": self.exit_criteria,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -391,14 +446,10 @@ class TestCase(db.Model):
     )
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
-        comment="Faz 3: project scope (nullable during transition)",
-    )
-    requirement_id = db.Column(
-        db.Integer, db.ForeignKey("requirements.id", ondelete="SET NULL"),
-        nullable=True, index=True, comment="Linked requirement for traceability",
+        comment="Sprint 7: project scope (required)",
     )
     explore_requirement_id = db.Column(
         db.String(36),
@@ -419,12 +470,6 @@ class TestCase(db.Model):
         nullable=True, index=True,
         comment="ADR-FINAL: Direct FK to L3/L4 process for scope tracing",
     )
-    suite_id = db.Column(
-        db.Integer, db.ForeignKey("test_suites.id", ondelete="SET NULL"),
-        nullable=True, index=True,
-        comment="DEPRECATED: Use test_case_suite_links. Kept for backward compat.",
-    )
-
     # ── Identification
     code = db.Column(
         db.String(50), default="",
@@ -553,12 +598,10 @@ class TestCase(db.Model):
             "id": self.id,
             "program_id": self.program_id,
             "project_id": self.project_id,
-            "requirement_id": self.requirement_id,
             "explore_requirement_id": self.explore_requirement_id,
             "backlog_item_id": self.backlog_item_id,
             "config_item_id": self.config_item_id,
             "process_level_id": self.process_level_id,
-            "suite_id": self.suite_id,
             "suite_ids": self.suite_ids,
             "suites": [
                 {"id": link.suite_id, "name": link.suite.name if link.suite else None}
@@ -857,8 +900,8 @@ class Defect(db.Model):
     (root cause / fix target).
 
     Severity: P1 (blocker) → P4 (cosmetic)
-    Lifecycle: new → open → in_progress → fixed → retest → closed
-                                                   └──▶ reopened ──▶ in_progress
+    Lifecycle: new → assigned → in_progress → resolved → retest → closed
+                                                      └──▶ reopened ──▶ assigned
     """
 
     __tablename__ = "defects"
@@ -876,14 +919,19 @@ class Defect(db.Model):
     )
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
-        comment="Faz 3: project scope (nullable during transition)",
+        comment="Sprint 7: project scope (required)",
     )
     test_case_id = db.Column(
         db.Integer, db.ForeignKey("test_cases.id", ondelete="SET NULL"),
         nullable=True, comment="Test case that found this defect",
+        index=True,
+    )
+    execution_id = db.Column(
+        db.Integer, db.ForeignKey("test_executions.id", ondelete="SET NULL"),
+        nullable=True, comment="Execution record that raised this defect",
         index=True,
     )
     backlog_item_id = db.Column(
@@ -893,11 +941,6 @@ class Defect(db.Model):
     config_item_id = db.Column(
         db.Integer, db.ForeignKey("config_items.id", ondelete="SET NULL"),
         nullable=True, comment="Linked config item (fix target)",
-    )
-    linked_requirement_id = db.Column(
-        db.Integer, db.ForeignKey("requirements.id", ondelete="SET NULL"),
-        nullable=True, comment="Linked requirement (TS-Sprint 2)",
-        index=True,
     )
     explore_requirement_id = db.Column(
         db.String(36),
@@ -1037,9 +1080,9 @@ class Defect(db.Model):
             "program_id": self.program_id,
             "project_id": self.project_id,
             "test_case_id": self.test_case_id,
+            "execution_id": self.execution_id,
             "backlog_item_id": self.backlog_item_id,
             "config_item_id": self.config_item_id,
-            "linked_requirement_id": self.linked_requirement_id,
             "explore_requirement_id": self.explore_requirement_id,
             "code": self.code,
             "title": self.title,
@@ -1047,7 +1090,7 @@ class Defect(db.Model):
             "steps_to_reproduce": self.steps_to_reproduce,
             "severity": self.severity,
             "priority": self.priority,
-            "status": self.status,
+            "status": canonicalize_defect_status(self.status),
             "module": self.module,
             "environment": self.environment,
             "reported_by": self.reported_by,
@@ -1109,10 +1152,10 @@ class TestSuite(db.Model):
     )
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
-        comment="Faz 3: project scope (nullable during transition)",
+        comment="Sprint 7: project scope (required)",
     )
 
     # ── F6: Hierarchical Folders ──
@@ -1129,10 +1172,6 @@ class TestSuite(db.Model):
 
     name = db.Column(db.String(200), nullable=False, comment="e.g. SIT Suite — Finance")
     description = db.Column(db.Text, default="")
-    suite_type = db.Column(
-        db.String(30), default="SIT",
-        comment="DEPRECATED: Use purpose. Kept for backward compatibility.",
-    )
     status = db.Column(
         db.String(30), default="draft",
         comment="draft | active | locked | archived",
@@ -1160,11 +1199,6 @@ class TestSuite(db.Model):
     )
 
     # ── Relationships
-    test_cases = db.relationship(
-        "TestCase", backref="suite", lazy="dynamic",
-        cascade="save-update, merge",
-        foreign_keys="TestCase.suite_id",
-    )
     cycle_suites = db.relationship(
         "TestCycleSuite", backref="suite", lazy="dynamic",
         cascade="all, delete-orphan",
@@ -1187,9 +1221,19 @@ class TestSuite(db.Model):
         return [link.test_case for link in self.case_links]
 
     @property
+    def test_cases(self):
+        """Backward-compatible alias for code that expects suite.test_cases."""
+        return self.test_cases_via_links
+
+    @property
     def case_count_via_links(self):
         """Count of TCs via junction (replaces old suite_id-based count)."""
         return self.case_links.count()
+
+    @property
+    def effective_purpose(self):
+        """Canonical suite label."""
+        return self.purpose or ""
 
     def to_dict(self, include_cases=False, include_children=False):
         result = {
@@ -1201,8 +1245,7 @@ class TestSuite(db.Model):
             "path": self.path,
             "name": self.name,
             "description": self.description,
-            "suite_type": self.suite_type,
-            "purpose": self.purpose,
+            "purpose": self.effective_purpose,
             "status": self.status,
             "module": self.module,
             "owner": self.owner,
@@ -1218,11 +1261,14 @@ class TestSuite(db.Model):
         if include_cases:
             result["test_cases"] = [tc.to_dict() for tc in self.test_cases_via_links if tc]
         if include_children:
-            result["children"] = [c.to_dict(include_children=True) for c in self.children.all()]
+            result["children"] = [
+                c.to_dict(include_children=True)
+                for c in self.children.all()
+            ]
         return result
 
     def __repr__(self):
-        label = self.purpose or self.suite_type
+        label = self.effective_purpose
         return f"<TestSuite {self.id}: [{label}] {self.name}>"
 
 
@@ -1446,10 +1492,12 @@ class TestCaseSuiteLink(db.Model):
 
     # Relationships
     test_case = db.relationship(
-        "TestCase", backref=db.backref("suite_links", lazy="dynamic"),
+        "TestCase", backref=db.backref("suite_links", lazy="dynamic",
+                                       cascade="all, delete-orphan"),
     )
     suite = db.relationship(
-        "TestSuite", backref=db.backref("case_links", lazy="dynamic"),
+        "TestSuite", backref=db.backref("case_links", lazy="dynamic",
+                                        cascade="all, delete-orphan"),
     )
 
     def to_dict(self):
@@ -1721,12 +1769,17 @@ class DefectHistory(db.Model):
     )
 
     def to_dict(self):
+        old_value = self.old_value
+        new_value = self.new_value
+        if self.field == "status":
+            old_value = canonicalize_defect_status(old_value)
+            new_value = canonicalize_defect_status(new_value)
         return {
             "id": self.id,
             "defect_id": self.defect_id,
             "field": self.field,
-            "old_value": self.old_value,
-            "new_value": self.new_value,
+            "old_value": old_value,
+            "new_value": new_value,
             "changed_by": self.changed_by,
             "changed_at": self.changed_at.isoformat() if self.changed_at else None,
         }
@@ -1983,10 +2036,10 @@ class TestDailySnapshot(db.Model):
     )
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
-        comment="Faz 3: project scope (nullable during transition)",
+        comment="Sprint 7 secondary slice: project scope is mandatory",
     )
     wave = db.Column(db.String(50), default="", comment="Implementation wave label")
 
@@ -2346,10 +2399,10 @@ class ApprovalWorkflow(db.Model):
     program_id  = db.Column(db.Integer, db.ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
-        comment="Faz 3: project scope (nullable during transition)",
+        comment="Sprint 7 secondary slice: project scope is mandatory",
     )
     entity_type = db.Column(db.String(30), nullable=False)   # test_case | test_plan | test_cycle
     name        = db.Column(db.String(120), nullable=False)
@@ -2423,4 +2476,3 @@ class ApprovalRecord(db.Model):
 
     def __repr__(self):
         return f"<ApprovalRecord {self.id} stage={self.stage} status={self.status}>"
-

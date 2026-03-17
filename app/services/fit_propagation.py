@@ -42,15 +42,21 @@ from app.services.helpers.scoped_queries import get_scoped_or_none
 
 # ── L4 Propagation ──────────────────────────────────────────────────────────
 
-def propagate_fit_from_step(process_step: ProcessStep, *, program_id: int | None = None, is_final_session: bool = True) -> dict:
+def propagate_fit_from_step(
+    process_step: ProcessStep,
+    *,
+    project_id: int | None = None,
+    program_id: int | None = None,
+    is_final_session: bool = True,
+) -> dict:
     """
     Propagate a process step's fit_decision to its L4 process level,
     then cascade upward to L3 → L2.
 
     Args:
         process_step: The ProcessStep whose fit_decision changed.
-        program_id: Program scope for tenant isolation. Scopes the ProcessLevel
-            lookups — prevents cross-program hierarchy pollution.
+        project_id: Project scope for hierarchy lookups.
+        program_id: Deprecated alias for project_id; kept for compatibility.
         is_final_session: If False (interim session), skip L3/L2 propagation (GAP-10).
 
     Returns:
@@ -63,9 +69,11 @@ def propagate_fit_from_step(process_step: ProcessStep, *, program_id: int | None
 
     # Update L4 process_level.fit_status
     # FK navigation from process_step; scope with program_id when available
+    project_scope = project_id if project_id is not None else program_id
+
     l4 = (
-        get_scoped_or_none(ProcessLevel, process_step.process_level_id, program_id=program_id)
-        if program_id
+        get_scoped_or_none(ProcessLevel, process_step.process_level_id, project_id=project_scope)
+        if project_scope is not None
         else db.session.get(ProcessLevel, process_step.process_level_id)
     )
     if not l4 or l4.level != 4:
@@ -79,13 +87,13 @@ def propagate_fit_from_step(process_step: ProcessStep, *, program_id: int | None
         return result
 
     # Find L3 parent and recalculate; use l4.program_id for scope
-    l3 = get_scoped_or_none(ProcessLevel, l4.parent_id, program_id=l4.program_id) if l4.parent_id else None
+    l3 = get_scoped_or_none(ProcessLevel, l4.parent_id, project_id=l4.project_id) if l4.parent_id else None
     if l3 and l3.level == 3:
         recalculate_l3_consolidated(l3)
         result["l3_recalculated"] = True
 
-        # Find L2 parent and recalculate readiness; use l3.program_id for scope
-        l2 = get_scoped_or_none(ProcessLevel, l3.parent_id, program_id=l3.program_id) if l3.parent_id else None
+        # Find L2 parent and recalculate readiness in the same project scope.
+        l2 = get_scoped_or_none(ProcessLevel, l3.parent_id, project_id=l3.project_id) if l3.parent_id else None
         if l2 and l2.level == 2:
             recalculate_l2_readiness(l2)
             result["l2_recalculated"] = True
@@ -111,7 +119,7 @@ def calculate_system_suggested_fit(l3: ProcessLevel) -> str | None:
     """
     children = (
         ProcessLevel.query
-        .filter_by(parent_id=l3.id, level=4)
+        .filter_by(project_id=l3.project_id, parent_id=l3.id, level=4)
         .filter(ProcessLevel.scope_status == "in_scope")
         .all()
     )
@@ -166,7 +174,7 @@ def recalculate_l2_readiness(l2: ProcessLevel) -> None:
     """
     in_scope_l3 = (
         ProcessLevel.query
-        .filter_by(parent_id=l2.id, level=3, scope_status="in_scope")
+        .filter_by(project_id=l2.project_id, parent_id=l2.id, level=3, scope_status="in_scope")
         .all()
     )
     total = len(in_scope_l3)
@@ -223,7 +231,7 @@ def get_fit_summary(process_level: ProcessLevel) -> dict:
     """
     children = (
         ProcessLevel.query
-        .filter_by(parent_id=process_level.id, scope_status="in_scope")
+        .filter_by(project_id=process_level.project_id, parent_id=process_level.id, scope_status="in_scope")
         .all()
     )
 
@@ -265,24 +273,30 @@ def workshop_completion_propagation(workshop: ExploreWorkshop) -> dict:
     is_final = workshop.session_number >= workshop.total_sessions
     stats = {"steps_propagated": 0, "l3_recalculated": set(), "l2_recalculated": set()}
 
-    steps = ProcessStep.query.filter_by(workshop_id=workshop.id).all()
+    steps = ProcessStep.query.filter_by(workshop_id=workshop.id, project_id=workshop.project_id).all()
 
     # Pre-load all referenced ProcessLevels to avoid N+1 queries
     level_ids = {s.process_level_id for s in steps if s.process_level_id}
     levels_cache: dict[int, ProcessLevel] = {
         pl.id: pl
-        for pl in ProcessLevel.query.filter(ProcessLevel.id.in_(level_ids)).all()
+        for pl in ProcessLevel.query.filter(
+            ProcessLevel.project_id == workshop.project_id,
+            ProcessLevel.id.in_(level_ids),
+        ).all()
     } if level_ids else {}
     # Also pre-fetch parent levels (L3)
     parent_ids = {pl.parent_id for pl in levels_cache.values() if pl.parent_id}
     parent_cache: dict[int, ProcessLevel] = {
         pl.id: pl
-        for pl in ProcessLevel.query.filter(ProcessLevel.id.in_(parent_ids)).all()
+        for pl in ProcessLevel.query.filter(
+            ProcessLevel.project_id == workshop.project_id,
+            ProcessLevel.id.in_(parent_ids),
+        ).all()
     } if parent_ids else {}
 
     for step in steps:
         if step.fit_decision:
-            result = propagate_fit_from_step(step, is_final_session=is_final)
+            result = propagate_fit_from_step(step, project_id=workshop.project_id, is_final_session=is_final)
             if result["l4_updated"]:
                 stats["steps_propagated"] += 1
             if result["l3_recalculated"]:

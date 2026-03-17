@@ -15,15 +15,99 @@ import logging
 from datetime import date
 
 from app.models import db
+from app.models.program import Phase, TeamMember, Workstream
+from app.models.project import Project
 from app.models.raid import (
     Risk, Action, Issue, Decision,
     calculate_risk_score, risk_rag_status,
     next_risk_code, next_action_code, next_issue_code, next_decision_code,
 )
+from app.services.helpers.project_owned_scope import resolve_project_scope
 from app.services.notification import NotificationService
 from app.utils.helpers import parse_date
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_optional_int(value, field_name):
+    if value in (None, "", "null"):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be an integer") from exc
+
+
+def _assert_project_scope(program_id, project_id):
+    project_id = _normalize_optional_int(project_id, "project_id")
+    if project_id is None:
+        return None
+
+    project = Project.query.filter_by(id=project_id, program_id=program_id).first()
+    if not project:
+        raise ValueError("project_id does not belong to this program")
+    return project_id
+
+
+def _assert_related_scope(model, field_name, entity_id, *, program_id, project_id):
+    entity_id = _normalize_optional_int(entity_id, field_name)
+    if entity_id is None:
+        return None
+
+    entity = model.query.filter_by(id=entity_id, program_id=program_id).first()
+    if not entity:
+        raise ValueError(f"{field_name} does not belong to this program")
+
+    entity_project_id = getattr(entity, "project_id", None)
+    if project_id is None and entity_project_id is not None:
+        raise ValueError(f"{field_name} requires project_id")
+    if project_id is not None and entity_project_id not in (None, project_id):
+        raise ValueError(f"{field_name} does not belong to the active project scope")
+
+    return entity_id
+
+
+def _normalize_create_scope(program_id, data):
+    scoped = dict(data)
+    scoped_project_id = resolve_project_scope(program_id, scoped.get("project_id"))
+    if scoped_project_id is None:
+        raise ValueError("project_id is required")
+    scoped["project_id"] = scoped_project_id
+    scoped["owner_id"] = _assert_related_scope(
+        TeamMember, "owner_id", scoped.get("owner_id"), program_id=program_id, project_id=scoped_project_id
+    )
+    scoped["decision_owner_id"] = _assert_related_scope(
+        TeamMember, "decision_owner_id", scoped.get("decision_owner_id"), program_id=program_id, project_id=scoped_project_id
+    )
+    scoped["workstream_id"] = _assert_related_scope(
+        Workstream, "workstream_id", scoped.get("workstream_id"), program_id=program_id, project_id=scoped_project_id
+    )
+    scoped["phase_id"] = _assert_related_scope(
+        Phase, "phase_id", scoped.get("phase_id"), program_id=program_id, project_id=scoped_project_id
+    )
+    return scoped
+
+
+def _normalize_update_scope(program_id, project_id, data):
+    scoped = dict(data)
+    scoped_project_id = _assert_project_scope(program_id, project_id)
+    if "owner_id" in scoped:
+        scoped["owner_id"] = _assert_related_scope(
+            TeamMember, "owner_id", scoped.get("owner_id"), program_id=program_id, project_id=scoped_project_id
+        )
+    if "decision_owner_id" in scoped:
+        scoped["decision_owner_id"] = _assert_related_scope(
+            TeamMember, "decision_owner_id", scoped.get("decision_owner_id"), program_id=program_id, project_id=scoped_project_id
+        )
+    if "workstream_id" in scoped:
+        scoped["workstream_id"] = _assert_related_scope(
+            Workstream, "workstream_id", scoped.get("workstream_id"), program_id=program_id, project_id=scoped_project_id
+        )
+    if "phase_id" in scoped:
+        scoped["phase_id"] = _assert_related_scope(
+            Phase, "phase_id", scoped.get("phase_id"), program_id=program_id, project_id=scoped_project_id
+        )
+    return scoped
 
 
 # ── Risk ─────────────────────────────────────────────────────────────────
@@ -35,6 +119,7 @@ def create_risk(program_id, data):
     Returns:
         Risk instance (already flushed).
     """
+    data = _normalize_create_scope(program_id, data)
     probability = int(data.get("probability", 3))
     impact = int(data.get("impact", 3))
     score = calculate_risk_score(probability, impact)
@@ -85,6 +170,7 @@ def update_risk(risk, data):
 
     Notifies on score change. Returns the updated Risk.
     """
+    data = _normalize_update_scope(risk.program_id, risk.project_id, data)
     old_score = risk.risk_score
 
     for field in ("title", "description", "status", "owner", "owner_id", "priority",
@@ -140,6 +226,7 @@ def create_action(program_id, data):
     Returns:
         Action instance (already flushed).
     """
+    data = _normalize_create_scope(program_id, data)
     action = Action(
         program_id=program_id,
         project_id=data.get("project_id"),
@@ -168,6 +255,7 @@ def update_action(action, data):
 
     Returns the updated Action.
     """
+    data = _normalize_update_scope(action.program_id, action.project_id, data)
     for field in ("title", "description", "status", "owner", "owner_id", "priority",
                   "action_type", "linked_entity_type", "linked_entity_id"):
         if field in data:
@@ -211,6 +299,7 @@ def create_issue(program_id, data):
     Returns:
         Issue instance (already flushed).
     """
+    data = _normalize_create_scope(program_id, data)
     issue = Issue(
         program_id=program_id,
         project_id=data.get("project_id"),
@@ -247,6 +336,7 @@ def update_issue(issue, data):
 
     Returns the updated Issue.
     """
+    data = _normalize_update_scope(issue.program_id, issue.project_id, data)
     for field in ("title", "description", "status", "owner", "owner_id", "priority",
                   "severity", "escalation_path", "root_cause", "resolution"):
         if field in data:
@@ -292,6 +382,7 @@ def create_decision(program_id, data):
     Returns:
         Decision instance (already flushed).
     """
+    data = _normalize_create_scope(program_id, data)
     decision = Decision(
         program_id=program_id,
         project_id=data.get("project_id"),
@@ -322,6 +413,7 @@ def update_decision(decision, data):
 
     Returns the updated Decision.
     """
+    data = _normalize_update_scope(decision.program_id, decision.project_id, data)
     old_status = decision.status
 
     for field in ("title", "description", "status", "owner", "owner_id", "priority",

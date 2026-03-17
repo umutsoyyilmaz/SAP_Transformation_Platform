@@ -39,7 +39,6 @@ const API = (() => {
      */
     function _injectProjectContext(body) {
         if (!body || typeof body !== 'object') return body;
-        if (body.project_id || body.program_id) return body;
 
         const prog = (typeof App !== 'undefined' && App.getActiveProgram)
             ? App.getActiveProgram()
@@ -48,8 +47,8 @@ const API = (() => {
             ? App.getActiveProject()
             : null;
 
-        if (prog && prog.id) body.program_id = prog.id;
-        if (project && project.id) body.project_id = project.id;
+        if (!('program_id' in body) && prog && prog.id) body.program_id = prog.id;
+        if (!('project_id' in body) && project && project.id) body.project_id = project.id;
 
         return body;
     }

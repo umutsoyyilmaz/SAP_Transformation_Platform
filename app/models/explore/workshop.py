@@ -49,10 +49,10 @@ class ExploreWorkshop(db.Model):
 
     __tablename__ = "explore_workshops"
     __table_args__ = (
-        db.UniqueConstraint("program_id", "code", name="uq_ews_program_code"),
-        db.Index("idx_ews_program_status", "program_id", "status"),
-        db.Index("idx_ews_program_date", "program_id", "date"),
-        db.Index("idx_ews_program_area", "program_id", "process_area"),
+        db.UniqueConstraint("project_id", "code", name="uq_ews_project_code"),
+        db.Index("idx_ews_project_status", "project_id", "status"),
+        db.Index("idx_ews_project_date", "project_id", "date"),
+        db.Index("idx_ews_project_area", "project_id", "process_area"),
         db.Index("idx_ews_facilitator", "facilitator_id", "date"),
     )
 
@@ -72,8 +72,8 @@ class ExploreWorkshop(db.Model):
     )
     # Faz 1.4: Re-pointed from programs.id → projects.id (was naming bug).
     project_id = db.Column(
-        db.Integer, db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True, index=True,
+        db.Integer, db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False, index=True,
     )
     code = db.Column(
         db.String(20), nullable=False,
@@ -224,8 +224,8 @@ class WorkshopScopeItem(db.Model):
     )
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
     )
     workshop_id = db.Column(

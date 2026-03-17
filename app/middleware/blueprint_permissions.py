@@ -158,6 +158,13 @@ BLUEPRINT_PERMISSIONS = {
         "PATCH":  "programs.edit",
         "DELETE": "programs.delete",
     },
+    "change_management": {
+        "GET": "change.view",
+        "POST": "change.create",
+        "PUT": "change.assess",
+        "PATCH": "change.execute",
+        "DELETE": "change.approve",
+    },
 }
 
 # Blueprints that are explicitly skipped:
@@ -214,6 +221,34 @@ EXPLORE_CATEGORY_MAP = {
 }
 
 
+def _resolve_program_permission(method: str, path: str) -> str | None:
+    """Resolve permission for mixed program/project routes on program blueprint."""
+    rel = path.split("?", 1)[0]
+    parts = [part for part in rel.split("/") if part]
+    if parts[:3] == ["api", "v1", "me"] and len(parts) >= 4 and parts[3] == "projects":
+        return {"GET": "projects.view"}.get(method)
+
+    if parts[:3] == ["api", "v1", "projects"]:
+        return {
+            "GET": "projects.view",
+            "PUT": "projects.edit",
+            "PATCH": "projects.edit",
+            "DELETE": "projects.delete",
+        }.get(method)
+
+    if (
+        len(parts) >= 5
+        and parts[:3] == ["api", "v1", "programs"]
+        and parts[4] == "projects"
+    ):
+        return {
+            "GET": "projects.view",
+            "POST": "projects.create",
+        }.get(method)
+
+    return BLUEPRINT_PERMISSIONS["program"].get(method)
+
+
 def _resolve_explore_permission(method: str, path: str) -> str | None:
     """Resolve the required permission for an explore blueprint request."""
     # Strip /api/v1/explore prefix
@@ -221,6 +256,10 @@ def _resolve_explore_permission(method: str, path: str) -> str | None:
     idx = path.find("/api/v1/explore")
     if idx != -1:
         rel = path[idx + len("/api/v1/explore"):]
+
+    if rel.endswith("/promote"):
+        # SCR → canonical RFC promotion requires change management create permission
+        return "change.create"
 
     if any(rel.startswith(p) for p in WORKSHOP_PATH_PREFIXES):
         category = "workshops"
@@ -230,6 +269,77 @@ def _resolve_explore_permission(method: str, path: str) -> str | None:
         category = "requirements"
 
     return EXPLORE_CATEGORY_MAP[category].get(method)
+
+
+def _resolve_change_management_permission(method: str, path: str) -> str | None:
+    """Resolve permission for enterprise change-management routes."""
+    rel = ""
+    idx = path.find("/api/v1/change-management")
+    if idx != -1:
+        rel = path[idx + len("/api/v1/change-management"):]
+
+    if rel.startswith("/analytics"):
+        return "change.audit"
+
+    if rel.startswith("/boards") or rel.startswith("/meetings") or rel.startswith("/decisions"):
+        if method == "GET":
+            return "change.view"
+        return "change.approve"
+
+    if rel.startswith("/templates"):
+        if method == "GET":
+            return "change.view"
+        return "change.create"
+
+    if rel.startswith("/policies") or rel.startswith("/windows"):
+        if method == "GET":
+            return "change.view"
+        return "change.schedule"
+
+    if rel.startswith("/exceptions"):
+        if method == "GET":
+            return "change.view"
+        if rel.endswith("/approve") or rel.endswith("/reject"):
+            return "change.approve"
+        return "change.schedule"
+
+    if rel.startswith("/implementations"):
+        if method == "GET":
+            return "change.view"
+        return "change.execute"
+
+    if rel.startswith("/pir"):
+        if method == "GET":
+            return "change.view"
+        return "change.audit"
+
+    if rel.startswith("/change-requests"):
+        if method == "GET":
+            return "change.view"
+        if rel.endswith("/submit"):
+            return "change.create"
+        if rel.endswith("/assess"):
+            return "change.assess"
+        if rel.endswith("/route") or rel.endswith("/decisions"):
+            return "change.approve"
+        if rel.endswith("/schedule"):
+            return "change.schedule"
+        if rel.endswith("/exceptions"):
+            return "change.view" if method == "GET" else "change.schedule"
+        if (
+            rel.endswith("/validate")
+            or rel.endswith("/close")
+        ):
+            return "change.execute"
+        if rel.endswith("/implementations"):
+            return "change.view" if method == "GET" else "change.execute"
+        if rel.endswith("/pir"):
+            return "change.view" if method == "GET" else "change.audit"
+        if rel.endswith("/links"):
+            return "change.create" if method != "GET" else "change.view"
+        return {"POST": "change.create", "PUT": "change.assess"}.get(method, "change.view")
+
+    return BLUEPRINT_PERMISSIONS["change_management"].get(method)
 
 
 def apply_all_blueprint_permissions(app: Flask):
@@ -278,6 +388,10 @@ def apply_all_blueprint_permissions(app: Flask):
             if fn_name in EXPLORE_OPEN_ENDPOINTS:
                 return None
             codename = _resolve_explore_permission(request.method, request.path)
+        elif bp_name == "program":
+            codename = _resolve_program_permission(request.method, request.path)
+        elif bp_name == "change_management":
+            codename = _resolve_change_management_permission(request.method, request.path)
         else:
             method_map = BLUEPRINT_PERMISSIONS.get(bp_name)
             if method_map is None:

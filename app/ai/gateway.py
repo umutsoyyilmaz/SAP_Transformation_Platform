@@ -62,6 +62,30 @@ class LLMProvider(ABC):
         """
         ...
 
+    def stream(self, messages: list, model: str, **kwargs):
+        """
+        Stream a chat completion, yielding SSE-compatible event dicts.
+
+        Default implementation falls back to a single chunk from chat().
+        Subclasses should override for native streaming support.
+
+        Yields:
+            {"type": "chunk", "content": str}
+            {"type": "done",  "usage": {prompt_tokens, completion_tokens,
+                                         cost_usd, latency_ms, model, provider}}
+            {"type": "error", "message": str}
+        """
+        result = self.chat(messages, model, **kwargs)
+        yield {"type": "chunk", "content": result["content"]}
+        yield {"type": "done", "usage": {
+            "prompt_tokens": result["prompt_tokens"],
+            "completion_tokens": result["completion_tokens"],
+            "cost_usd": 0.0,
+            "latency_ms": 0,
+            "model": result["model"],
+            "provider": "unknown",
+        }}
+
 
 # ── Anthropic Provider ────────────────────────────────────────────────────────
 
@@ -115,6 +139,53 @@ class AnthropicProvider(LLMProvider):
         # Anthropic doesn't have embeddings, delegate to OpenAI
         raise NotImplementedError("Use OpenAI provider for embeddings")
 
+    def stream(self, messages: list, model: str = "claude-3-5-haiku-20241022", **kwargs):
+        """
+        Stream a chat completion using Anthropic's native streaming API.
+
+        Yields:
+            {"type": "chunk", "content": str}  — one per text token
+            {"type": "done",  "usage": dict}    — after stream context exits
+        """
+        import anthropic as _anthropic
+        client = self._get_client()
+
+        system_msg = ""
+        chat_messages = []
+        for m in messages:
+            if m["role"] == "system":
+                system_msg = m["content"]
+            else:
+                chat_messages.append(m)
+
+        params = {
+            "model": model,
+            "messages": chat_messages,
+            "max_tokens": kwargs.get("max_tokens", 4096),
+            "temperature": kwargs.get("temperature", 0.7),
+        }
+        if system_msg:
+            params["system"] = system_msg
+
+        import time as _time
+        t0 = _time.time()
+        try:
+            with client.messages.stream(**params) as s:
+                for text in s.text_stream:
+                    yield {"type": "chunk", "content": text}
+                final = s.get_final_message()
+            latency_ms = int((_time.time() - t0) * 1000)
+            yield {"type": "done", "usage": {
+                "prompt_tokens": final.usage.input_tokens,
+                "completion_tokens": final.usage.output_tokens,
+                "cost_usd": 0.0,
+                "latency_ms": latency_ms,
+                "model": model,
+                "provider": "anthropic",
+            }}
+        except Exception as e:
+            yield {"type": "error", "message": str(e)}
+
 
 # ── OpenAI Provider ───────────────────────────────────────────────────────────
 
@@ -154,6 +225,43 @@ class OpenAIProvider(LLMProvider):
         client = self._get_client()
         response = client.embeddings.create(model=model, input=texts)
         return [item.embedding for item in response.data]
+
+    def stream(self, messages: list, model: str = "gpt-4o-mini", **kwargs):
+        """
+        Stream a chat completion using OpenAI's native streaming API.
+
+        Yields:
+            {"type": "chunk", "content": str}
+            {"type": "done",  "usage": dict}
+        """
+        import time as _time
+        client = self._get_client()
+        t0 = _time.time()
+        try:
+            usage_data = None
+            for chunk in client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=kwargs.get("max_tokens", 4096),
+                temperature=kwargs.get("temperature", 0.7),
+                stream=True,
+                stream_options={"include_usage": True},
+            ):
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield {"type": "chunk", "content": chunk.choices[0].delta.content}
+                if chunk.usage:
+                    usage_data = chunk.usage
+            latency_ms = int((_time.time() - t0) * 1000)
+            yield {"type": "done", "usage": {
+                "prompt_tokens": usage_data.prompt_tokens if usage_data else 0,
+                "completion_tokens": usage_data.completion_tokens if usage_data else 0,
+                "cost_usd": 0.0,
+                "latency_ms": latency_ms,
+                "model": model,
+                "provider": "openai",
+            }}
+        except Exception as e:
+            yield {"type": "error", "message": str(e)}
 
 
 # ── Google Gemini Provider (free-tier demo) ──────────────────────────────────
@@ -244,6 +352,63 @@ class GeminiProvider(LLMProvider):
         )
         return [e.values for e in result.embeddings]
 
+    def stream(self, messages: list, model: str = "gemini-2.5-flash", **kwargs):
+        """
+        Stream a chat completion using Gemini's native streaming API.
+
+        Yields:
+            {"type": "chunk", "content": str}
+            {"type": "done",  "usage": dict}
+        """
+        import time as _time
+        client = self._get_client()
+        from google.genai import types
+
+        system_parts = []
+        contents = []
+        for m in messages:
+            if m["role"] == "system":
+                system_parts.append(m["content"])
+            else:
+                role = "model" if m["role"] == "assistant" else "user"
+                contents.append(types.Content(
+                    role=role,
+                    parts=[types.Part(text=m["content"])],
+                ))
+
+        config = types.GenerateContentConfig(
+            temperature=kwargs.get("temperature", 0.7),
+            max_output_tokens=kwargs.get("max_tokens", 4096),
+        )
+        if system_parts:
+            config.system_instruction = "\n\n".join(system_parts)
+
+        t0 = _time.time()
+        try:
+            last_meta = None
+            for chunk in client.models.generate_content_stream(
+                model=model,
+                contents=contents,
+                config=config,
+            ):
+                if chunk.text:
+                    yield {"type": "chunk", "content": chunk.text}
+                if chunk.usage_metadata:
+                    last_meta = chunk.usage_metadata
+            latency_ms = int((_time.time() - t0) * 1000)
+            prompt_tokens = getattr(last_meta, "prompt_token_count", 0) or 0 if last_meta else 0
+            completion_tokens = getattr(last_meta, "candidates_token_count", 0) or 0 if last_meta else 0
+            yield {"type": "done", "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "cost_usd": 0.0,
+                "latency_ms": latency_ms,
+                "model": model,
+                "provider": "gemini",
+            }}
+        except Exception as e:
+            yield {"type": "error", "message": str(e)}
+
 
 # ── Local Stub Provider (for dev/test without API keys) ──────────────────────
 
@@ -285,6 +450,27 @@ class LocalStubProvider(LLMProvider):
                 vec.append((byte_val - 128) / 256.0)  # normalize to [-0.5, 0.5]
             embeddings.append(vec)
         return embeddings
+
+    def stream(self, messages: list, model: str = "local-stub", **kwargs):
+        """
+        Stream stub responses word-by-word for dev/testing without API keys.
+
+        Yields:
+            {"type": "chunk", "content": str}
+            {"type": "done",  "usage": dict}
+        """
+        result = self.chat(messages, model, **kwargs)
+        words = result["content"].split()
+        for i, word in enumerate(words):
+            yield {"type": "chunk", "content": word + (" " if i < len(words) - 1 else "")}
+        yield {"type": "done", "usage": {
+            "prompt_tokens": result["prompt_tokens"],
+            "completion_tokens": result["completion_tokens"],
+            "cost_usd": 0.0,
+            "latency_ms": 0,
+            "model": "local-stub",
+            "provider": "local",
+        }}
 
     @staticmethod
     def _generate_stub_response(user_msg: str) -> str:
@@ -889,6 +1075,94 @@ class LLMGateway:
             )
             raise
 
+    def stream(
+        self,
+        messages: list,
+        model: str | None = None,
+        *,
+        purpose: str = "",
+        user: str = "system",
+        program_id: int | None = None,
+        **kwargs,
+    ):
+        """
+        Stream a chat completion, yielding SSE-compatible event dicts.
+
+        Unlike chat(), streaming responses are never cached. Budget is checked
+        before starting. Usage is logged after the stream completes (on "done").
+
+        Args:
+            messages: Chat messages (role/content dicts).
+            model: Model identifier (auto-selected by purpose if None).
+            purpose: Routing hint for ModelSelector.
+            user: Who triggered the call (for logging).
+            program_id: Associated program (for budget + logging).
+            **kwargs: temperature, max_tokens passed to provider.
+
+        Yields:
+            {"type": "chunk", "content": str}  — one per LLM token
+            {"type": "done",  "usage": dict, "provider": str}
+            {"type": "error", "message": str}  — on failure
+        """
+        if model is None and self._model_selector:
+            model = self._model_selector.select(purpose=purpose)
+        if model is None:
+            model = self.DEFAULT_CHAT_MODEL
+
+        if self._budget_service:
+            budget_check = self._budget_service.check_budget(
+                program_id=program_id, user=user,
+            )
+            if not budget_check["allowed"]:
+                yield {"type": "error", "message": f"Budget exceeded: {budget_check['reason']}"}
+                return
+
+        provider, provider_name = self._get_provider(model)
+        prompt_hash = hashlib.sha256(json.dumps(messages).encode()).hexdigest()
+        prompt_summary = messages[-1]["content"][:500] if messages else ""
+
+        try:
+            for event in provider.stream(messages, model, **kwargs):
+                if event["type"] == "done":
+                    usage = event["usage"]
+                    cost = calculate_cost(model, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+                    usage["cost_usd"] = cost
+                    usage["provider"] = provider_name
+                    if self._budget_service:
+                        self._budget_service.record_usage(
+                            program_id=program_id, user=user,
+                            tokens=usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0),
+                            cost_usd=cost,
+                        )
+                    self._log_usage(
+                        provider=provider_name, model=model,
+                        prompt_tokens=usage.get("prompt_tokens", 0),
+                        completion_tokens=usage.get("completion_tokens", 0),
+                        cost_usd=cost, latency_ms=usage.get("latency_ms", 0),
+                        user=user, purpose=purpose, program_id=program_id,
+                        success=True, cache_hit=False,
+                    )
+                    self._log_audit(
+                        action="llm_stream", provider=provider_name, model=model,
+                        user=user, program_id=program_id,
+                        prompt_hash=prompt_hash, prompt_summary=prompt_summary,
+                        tokens_used=usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0),
+                        cost_usd=cost, latency_ms=usage.get("latency_ms", 0),
+                        response_summary="[streamed]",
+                        success=True, cache_hit=False,
+                    )
+                yield event
+        except Exception as e:
+            logger.exception("LLMGateway.stream failed model=%s", model)
+            self._log_usage(
+                provider=provider_name, model=model,
+                prompt_tokens=0, completion_tokens=0,
+                cost_usd=0.0, latency_ms=0,
+                user=user, purpose=purpose, program_id=program_id,
+                success=False, error_message=str(e),
+            )
+            yield {"type": "error", "message": str(e)}
+
     # ── Internal Logging ──────────────────────────────────────────────────
 
     @staticmethod
@@ -916,8 +1190,8 @@ class LLMGateway:
             logger.error("Failed to log AI usage: %s", e)
             try:
                 db.session.rollback()
-            except Exception:
-                pass
+            except Exception as rb_err:
+                logger.warning("Rollback after usage log failure also failed: %s", rb_err)
 
     @staticmethod
     def _log_audit(*, action, provider, model, user, program_id,
@@ -963,5 +1237,5 @@ class LLMGateway:
             logger.error("Failed to log AI audit: %s", e)
             try:
                 db.session.rollback()
-            except Exception:
-                pass
+            except Exception as rb_err:
+                logger.warning("Rollback after audit log failure also failed: %s", rb_err)

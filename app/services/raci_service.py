@@ -25,6 +25,8 @@ from sqlalchemy import select
 
 from app.models import db
 from app.models.program import Program, RaciActivity, RaciEntry, TeamMember
+from app.models.project import Project
+from app.services.helpers.project_owned_scope import resolve_project_scope
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +91,7 @@ def get_raci_matrix(
     program_id: int,
     workstream_id: int | None = None,
     sap_phase: str | None = None,
+    project_id: int | None = None,
 ) -> dict:
     """Return the RACI matrix as a pivot structure ready for the UI.
 
@@ -109,12 +112,16 @@ def get_raci_matrix(
           validation   — {activities_without_accountable, activities_without_responsible}
     """
     _assert_program_belongs_to_tenant(tenant_id, program_id)
+    if project_id is not None:
+        _assert_project_belongs_to_program(tenant_id, program_id, project_id)
 
     # activities query (tenant + program scoped)
     act_stmt = select(RaciActivity).where(
         RaciActivity.tenant_id == tenant_id,
         RaciActivity.program_id == program_id,
     )
+    if project_id is not None:
+        act_stmt = act_stmt.where(RaciActivity.project_id == project_id)
     if workstream_id is not None:
         act_stmt = act_stmt.where(RaciActivity.workstream_id == workstream_id)
     if sap_phase:
@@ -127,6 +134,8 @@ def get_raci_matrix(
         TeamMember.tenant_id == tenant_id,
         TeamMember.program_id == program_id,
     )
+    if project_id is not None:
+        mem_stmt = mem_stmt.where(TeamMember.project_id == project_id)
     members = db.session.execute(mem_stmt).scalars().all()
 
     activity_ids = [a.id for a in activities]
@@ -139,6 +148,8 @@ def get_raci_matrix(
             RaciEntry.program_id == program_id,
             RaciEntry.activity_id.in_(activity_ids),
         )
+        if project_id is not None:
+            ent_stmt = ent_stmt.where(RaciEntry.project_id == project_id)
         entries = db.session.execute(ent_stmt).scalars().all()
 
     # build pivot matrix: {activity_id_str: {member_id_str: role}}
@@ -203,6 +214,10 @@ def create_activity(
         ValueError: If name is empty or program doesn't belong to tenant.
     """
     _assert_program_belongs_to_tenant(tenant_id, program_id)
+    project_id = resolve_project_scope(program_id, project_id)
+    if project_id is None:
+        raise ValueError("project_id is required")
+    _assert_project_belongs_to_program(tenant_id, program_id, project_id)
 
     activity = RaciActivity(
         tenant_id=tenant_id,
@@ -255,8 +270,12 @@ def upsert_raci_entry(
         ValueError: If validation fails (bad role, duplicate A, wrong tenant).
     """
     _assert_program_belongs_to_tenant(tenant_id, program_id)
-    _assert_activity_belongs(tenant_id, program_id, activity_id)
-    _assert_member_belongs(tenant_id, program_id, team_member_id)
+    project_id = resolve_project_scope(program_id, project_id)
+    if project_id is None:
+        raise ValueError("project_id is required")
+    _assert_project_belongs_to_program(tenant_id, program_id, project_id)
+    _assert_activity_belongs(tenant_id, program_id, activity_id, project_id=project_id)
+    _assert_member_belongs(tenant_id, program_id, team_member_id, project_id=project_id)
 
     # Fetch existing entry for this (activity, member) pair
     existing_stmt = select(RaciEntry).where(
@@ -335,7 +354,11 @@ def upsert_raci_entry(
     return entry.to_dict()
 
 
-def bulk_import_sap_template_activities(tenant_id: int, program_id: int) -> int:
+def bulk_import_sap_template_activities(
+    tenant_id: int,
+    program_id: int,
+    project_id: int | None = None,
+) -> int:
     """Import the SAP Activate-inspired standard activity set for a program.
 
     Idempotent: activities that already exist (by name match) are skipped to
@@ -352,12 +375,18 @@ def bulk_import_sap_template_activities(tenant_id: int, program_id: int) -> int:
         ValueError: If program doesn't belong to tenant.
     """
     _assert_program_belongs_to_tenant(tenant_id, program_id)
+    project_id = resolve_project_scope(program_id, project_id)
+    if project_id is None:
+        raise ValueError("project_id is required")
+    _assert_project_belongs_to_program(tenant_id, program_id, project_id)
 
     # Fetch existing activity names for this program to skip duplicates
     existing_stmt = select(RaciActivity.name).where(
         RaciActivity.tenant_id == tenant_id,
         RaciActivity.program_id == program_id,
     )
+    if project_id is not None:
+        existing_stmt = existing_stmt.where(RaciActivity.project_id == project_id)
     existing_names: set[str] = {
         row for row in db.session.execute(existing_stmt).scalars().all()
     }
@@ -370,6 +399,7 @@ def bulk_import_sap_template_activities(tenant_id: int, program_id: int) -> int:
             RaciActivity(
                 tenant_id=tenant_id,
                 program_id=program_id,
+                project_id=project_id,
                 name=item["name"],
                 category=item["category"],
                 sap_activate_phase=item["phase"],
@@ -390,7 +420,11 @@ def bulk_import_sap_template_activities(tenant_id: int, program_id: int) -> int:
     return count
 
 
-def validate_raci_matrix(tenant_id: int, program_id: int) -> dict:
+def validate_raci_matrix(
+    tenant_id: int,
+    program_id: int,
+    project_id: int | None = None,
+) -> dict:
     """Return validation results for the RACI matrix of a program.
 
     Checks:
@@ -406,11 +440,17 @@ def validate_raci_matrix(tenant_id: int, program_id: int) -> dict:
         (lists of activity names).
     """
     _assert_program_belongs_to_tenant(tenant_id, program_id)
+    project_id = resolve_project_scope(program_id, project_id)
+    if project_id is None:
+        raise ValueError("project_id is required")
+    _assert_project_belongs_to_program(tenant_id, program_id, project_id)
 
     act_stmt = select(RaciActivity).where(
         RaciActivity.tenant_id == tenant_id,
         RaciActivity.program_id == program_id,
     )
+    if project_id is not None:
+        act_stmt = act_stmt.where(RaciActivity.project_id == project_id)
     activities = db.session.execute(act_stmt).scalars().all()
     activity_ids = [a.id for a in activities]
 
@@ -421,6 +461,8 @@ def validate_raci_matrix(tenant_id: int, program_id: int) -> dict:
             RaciEntry.program_id == program_id,
             RaciEntry.activity_id.in_(activity_ids),
         )
+        if project_id is not None:
+            ent_stmt = ent_stmt.where(RaciEntry.project_id == project_id)
         entries = db.session.execute(ent_stmt).scalars().all()
 
     # Build role sets per activity
@@ -456,13 +498,21 @@ def _assert_program_belongs_to_tenant(tenant_id: int, program_id: int) -> None:
         raise ValueError(f"Program {program_id} not found for tenant {tenant_id}.")
 
 
-def _assert_activity_belongs(tenant_id: int, program_id: int, activity_id: int) -> None:
+def _assert_activity_belongs(
+    tenant_id: int,
+    program_id: int,
+    activity_id: int,
+    *,
+    project_id: int | None = None,
+) -> None:
     """Raise ValueError if the activity doesn't belong to this tenant+program."""
     stmt = select(RaciActivity.id).where(
         RaciActivity.id == activity_id,
         RaciActivity.tenant_id == tenant_id,
         RaciActivity.program_id == program_id,
     )
+    if project_id is not None:
+        stmt = stmt.where(RaciActivity.project_id == project_id)
     result = db.session.execute(stmt).scalar_one_or_none()
     if result is None:
         raise ValueError(
@@ -470,15 +520,37 @@ def _assert_activity_belongs(tenant_id: int, program_id: int, activity_id: int) 
         )
 
 
-def _assert_member_belongs(tenant_id: int, program_id: int, member_id: int) -> None:
+def _assert_member_belongs(
+    tenant_id: int,
+    program_id: int,
+    member_id: int,
+    *,
+    project_id: int | None = None,
+) -> None:
     """Raise ValueError if the team member doesn't belong to this tenant+program."""
     stmt = select(TeamMember.id).where(
         TeamMember.id == member_id,
         TeamMember.tenant_id == tenant_id,
         TeamMember.program_id == program_id,
     )
+    if project_id is not None:
+        stmt = stmt.where(TeamMember.project_id == project_id)
     result = db.session.execute(stmt).scalar_one_or_none()
     if result is None:
         raise ValueError(
             f"TeamMember {member_id} not found in program {program_id} for tenant {tenant_id}."
+        )
+
+
+def _assert_project_belongs_to_program(tenant_id: int, program_id: int, project_id: int) -> None:
+    """Raise ValueError if the project doesn't belong to the tenant+program scope."""
+    stmt = select(Project.id).where(
+        Project.id == project_id,
+        Project.tenant_id == tenant_id,
+        Project.program_id == program_id,
+    )
+    result = db.session.execute(stmt).scalar_one_or_none()
+    if result is None:
+        raise ValueError(
+            f"Project {project_id} not found in program {program_id} for tenant {tenant_id}."
         )

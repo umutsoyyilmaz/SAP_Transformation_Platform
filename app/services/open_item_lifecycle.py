@@ -44,6 +44,8 @@ from app.services.permission import PermissionDenied, has_permission
 
 
 # Open Item transition rules
+# Aliases (resolve → close, block → mark_blocked, start_work → start_progress) are
+# normalised in validate_oi_transition so UI labels can differ from canonical names.
 OI_TRANSITIONS = {
     "start_progress": {"from": ["open"], "to": "in_progress"},
     "mark_blocked": {"from": ["open", "in_progress"], "to": "blocked"},
@@ -51,6 +53,14 @@ OI_TRANSITIONS = {
     "close": {"from": ["open", "in_progress"], "to": "closed"},
     "cancel": {"from": ["open", "in_progress", "blocked"], "to": "cancelled"},
     "reopen": {"from": ["closed", "cancelled"], "to": "open"},
+}
+
+# Friendly aliases sent by the UI → canonical action name expected by OI_TRANSITIONS.
+# Keeping aliases here (not scattered in blueprints) ensures a single source of truth.
+_OI_ACTION_ALIASES: dict[str, str] = {
+    "resolve": "close",
+    "block": "mark_blocked",
+    "start_work": "start_progress",
 }
 
 _ACTION_PERMISSION = {
@@ -77,8 +87,13 @@ class OITransitionError(Exception):
 
 
 def validate_oi_transition(oi: ExploreOpenItem, action: str) -> dict:
-    """Validate whether an action is valid for current OI state."""
-    rule = OI_TRANSITIONS.get(action)
+    """Validate whether an action is valid for current OI state.
+
+    Accepts both canonical action names (e.g. 'close', 'mark_blocked') and
+    UI-friendly aliases (e.g. 'resolve', 'block') defined in _OI_ACTION_ALIASES.
+    """
+    canonical = _OI_ACTION_ALIASES.get(action, action)
+    rule = OI_TRANSITIONS.get(canonical)
     if not rule:
         return {"valid": False, "from": oi.status, "to": None,
                 "reason": f"Unknown action: {action}"}
@@ -185,6 +200,10 @@ def transition_open_item(
     oi = get_scoped_or_none(ExploreOpenItem, open_item_id, project_id=project_id)
     if not oi:
         raise ValueError(f"Open item not found: {open_item_id}")
+
+    # Normalise UI-friendly aliases to canonical action names so the rest of
+    # the function can rely on a single set of known strings.
+    action = _OI_ACTION_ALIASES.get(action, action)
 
     # 1. Permission check
     if not skip_permission:

@@ -85,42 +85,81 @@ class Project(db.Model):
     )
 
     # ── Faz 3: Relationships to operational entities ──
+    # cascade="all, delete-orphan": ORM deletes children before the Project
+    # row, so project_id NOT NULL / RESTRICT constraints are never violated
+    # when a Project is removed as part of a Program cascade.
     phases = db.relationship("Phase", backref="project", lazy="dynamic",
-                             foreign_keys="Phase.project_id")
+                             foreign_keys="Phase.project_id",
+                             cascade="all, delete-orphan")
     workstreams = db.relationship("Workstream", backref="project", lazy="dynamic",
-                                  foreign_keys="Workstream.project_id")
+                                  foreign_keys="Workstream.project_id",
+                                  cascade="all, delete-orphan")
     team_members = db.relationship("TeamMember", backref="project", lazy="dynamic",
-                                   foreign_keys="TeamMember.project_id")
+                                   foreign_keys="TeamMember.project_id",
+                                   cascade="all, delete-orphan")
     committees = db.relationship("Committee", backref="project", lazy="dynamic",
-                                 foreign_keys="Committee.project_id")
+                                 foreign_keys="Committee.project_id",
+                                 cascade="all, delete-orphan")
     scenarios = db.relationship("Scenario", backref="project", lazy="dynamic",
-                                foreign_keys="Scenario.project_id")
+                                foreign_keys="Scenario.project_id",
+                                cascade="all, delete-orphan")
     sprints = db.relationship("Sprint", backref="project", lazy="dynamic",
-                              foreign_keys="Sprint.project_id")
+                              foreign_keys="Sprint.project_id",
+                              cascade="all, delete-orphan")
     backlog_items = db.relationship("BacklogItem", backref="project", lazy="dynamic",
-                                    foreign_keys="BacklogItem.project_id")
+                                    foreign_keys="BacklogItem.project_id",
+                                    cascade="all, delete-orphan")
     config_items = db.relationship("ConfigItem", backref="project", lazy="dynamic",
-                                   foreign_keys="ConfigItem.project_id")
+                                   foreign_keys="ConfigItem.project_id",
+                                   cascade="all, delete-orphan")
     test_plans = db.relationship("TestPlan", backref="project", lazy="dynamic",
-                                 foreign_keys="TestPlan.project_id")
+                                 foreign_keys="TestPlan.project_id",
+                                 cascade="all, delete-orphan")
     test_cases = db.relationship("TestCase", backref="project", lazy="dynamic",
-                                 foreign_keys="TestCase.project_id")
+                                 foreign_keys="TestCase.project_id",
+                                 cascade="all, delete-orphan")
     test_suites = db.relationship("TestSuite", backref="project", lazy="dynamic",
-                                  foreign_keys="TestSuite.project_id")
+                                  foreign_keys="TestSuite.project_id",
+                                  cascade="all, delete-orphan")
     defects = db.relationship("Defect", backref="project", lazy="dynamic",
-                              foreign_keys="Defect.project_id")
+                              foreign_keys="Defect.project_id",
+                              cascade="all, delete-orphan")
     cutover_plans = db.relationship("CutoverPlan", backref="project", lazy="dynamic",
-                                    foreign_keys="CutoverPlan.project_id")
+                                    foreign_keys="CutoverPlan.project_id",
+                                    cascade="all, delete-orphan")
     requirements = db.relationship("Requirement", backref="project", lazy="dynamic",
-                                   foreign_keys="Requirement.project_id")
+                                   foreign_keys="Requirement.project_id",
+                                   cascade="all, delete-orphan")
     risks = db.relationship("Risk", backref="project", lazy="dynamic",
-                            foreign_keys="Risk.project_id")
+                            foreign_keys="Risk.project_id",
+                            cascade="all, delete-orphan")
     actions = db.relationship("Action", backref="project", lazy="dynamic",
-                              foreign_keys="Action.project_id")
+                              foreign_keys="Action.project_id",
+                              cascade="all, delete-orphan")
     issues = db.relationship("Issue", backref="project", lazy="dynamic",
-                             foreign_keys="Issue.project_id")
+                             foreign_keys="Issue.project_id",
+                             cascade="all, delete-orphan")
     raid_decisions = db.relationship("Decision", backref="project", lazy="dynamic",
-                                     foreign_keys="Decision.project_id")
+                                     foreign_keys="Decision.project_id",
+                                     cascade="all, delete-orphan")
+    interfaces = db.relationship("Interface", backref="project", lazy="dynamic",
+                                 foreign_keys="Interface.project_id",
+                                 cascade="all, delete-orphan")
+    waves = db.relationship("Wave", backref="project", lazy="dynamic",
+                            foreign_keys="Wave.project_id",
+                            cascade="all, delete-orphan")
+    raci_activities = db.relationship("RaciActivity", backref="project", lazy="dynamic",
+                                      foreign_keys="RaciActivity.project_id",
+                                      cascade="all, delete-orphan")
+    raci_entries = db.relationship("RaciEntry", backref="project", lazy="dynamic",
+                                   foreign_keys="RaciEntry.project_id",
+                                   cascade="all, delete-orphan")
+    approval_workflows = db.relationship("ApprovalWorkflow", backref="project", lazy="dynamic",
+                                         foreign_keys="ApprovalWorkflow.project_id",
+                                         cascade="all, delete-orphan")
+    test_daily_snapshots = db.relationship("TestDailySnapshot", backref="project", lazy="dynamic",
+                                           foreign_keys="TestDailySnapshot.project_id",
+                                           cascade="all, delete-orphan")
 
     __table_args__ = (
         db.UniqueConstraint("program_id", "code", name="uq_projects_program_code"),

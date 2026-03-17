@@ -12,13 +12,15 @@ The engine builds a chain dict showing upstream (parents) and downstream
 
 import logging
 
+from sqlalchemy import func, select, distinct
+
 from app.models import db
 from app.models.backlog import BacklogItem, ConfigItem, FunctionalSpec, TechnicalSpec
 # ExploreRequirement is the canonical requirement model (ADR-001).
 # ExploreRequirement replaces the legacy Requirement table as the single source
 # of truth for all new requirement data.
 from app.models.explore import ExploreRequirement
-from app.models.integration import Interface, Wave, ConnectivityTest, SwitchPlan
+from app.models.interface_factory import Interface, Wave, ConnectivityTest, SwitchPlan
 # Legacy Requirement kept for backward-compatible read paths only (write-blocked).
 from app.models.requirement import Requirement
 from app.models.scenario import Scenario, Workshop
@@ -53,10 +55,39 @@ ENTITY_TYPES = {
 }
 
 
+def _scoped_get_or_none(model, entity_id, *, project_id: int | None = None, program_id: int | None = None):
+    if project_id is not None and hasattr(model, "project_id"):
+        return get_scoped_or_none(model, entity_id, project_id=project_id)
+    if program_id is not None and hasattr(model, "program_id"):
+        return get_scoped_or_none(model, entity_id, program_id=program_id)
+    return db.session.get(model, entity_id)
+
+
+def _scoped_query(model, *, project_id: int | None = None, program_id: int | None = None):
+    query = model.query
+    if project_id is not None and hasattr(model, "project_id"):
+        return query.filter_by(project_id=project_id)
+    if program_id is not None and hasattr(model, "program_id"):
+        return query.filter_by(program_id=program_id)
+    return query
+
+
+def _resolve_migrated_explore_requirement(
+    legacy_requirement_id: int,
+    *,
+    project_id: int | None = None,
+    program_id: int | None = None,
+):
+    """Return migrated ExploreRequirement for a legacy Requirement id when available."""
+    query = _scoped_query(ExploreRequirement, project_id=project_id, program_id=program_id)
+    return query.filter_by(legacy_requirement_id=legacy_requirement_id).first()
+
+
 def get_chain(
     entity_type: str,
     entity_id: int,
     *,
+    project_id: int | None = None,
     program_id: int | None = None,
 ) -> dict:
     """
@@ -80,6 +111,17 @@ def get_chain(
     Returns:
         dict with chain information, or None if entity not found.
     """
+    requested_entity_type = entity_type
+    canonical_requirement = None
+    if entity_type == "requirement":
+        canonical_requirement = _resolve_migrated_explore_requirement(
+            entity_id,
+            project_id=project_id,
+            program_id=program_id,
+        )
+        if canonical_requirement is not None:
+            entity_type = "explore_requirement"
+
     model = ENTITY_TYPES.get(entity_type)
     if not model:
         return None
@@ -87,10 +129,8 @@ def get_chain(
     # Scope the initial lookup by program_id when available on the model.
     # FK-nav helpers further in the chain traverse DB-stored FK values from
     # the verified entity, so only the entry point needs user-supplied scoping.
-    if program_id is not None and hasattr(model, "__table__") and "program_id" in model.__table__.c:
-        entity = get_scoped_or_none(model, entity_id, program_id=program_id)
-    else:
-        entity = db.session.get(model, entity_id)
+    lookup_id = canonical_requirement.id if canonical_requirement is not None else entity_id
+    entity = _scoped_get_or_none(model, lookup_id, project_id=project_id, program_id=program_id)
     if not entity:
         return None
 
@@ -146,36 +186,72 @@ def get_chain(
     return {
         "entity": {
             "type": entity_type,
-            "id": entity_id,
+            "id": lookup_id,
             "title": getattr(entity, "title", getattr(entity, "name", str(entity_id))),
         },
+        "requested_entity_type": requested_entity_type,
+        "canonical_entity_type": entity_type,
         "upstream": upstream,
         "downstream": downstream,
         "links_summary": links_summary,
     }
 
 
-def get_requirement_links(requirement_id: int, *, program_id: int | None = None) -> dict:
+def get_requirement_links(requirement_id: str | int, *, program_id: int | None = None) -> dict:
     """
     Get all WRICEF items and Config items linked to a requirement.
 
     Args:
-        requirement_id: Requirement primary key (user-supplied).
+        requirement_id: ExploreRequirement UUID or legacy Requirement PK.
         program_id: Scope for the Requirement lookup when provided.
 
     Returns:
         dict with backlog_items and config_items lists.
     """
-    req = (
-        get_scoped_or_none(Requirement, requirement_id, program_id=program_id)
+    req_id = str(requirement_id)
+    explore_req = (
+        get_scoped_or_none(ExploreRequirement, req_id, program_id=program_id)
         if program_id is not None
-        else db.session.get(Requirement, requirement_id)
+        else db.session.get(ExploreRequirement, req_id)
+    )
+    if explore_req:
+        backlog_items = BacklogItem.query.filter_by(explore_requirement_id=explore_req.id).all()
+        config_items = ConfigItem.query.filter_by(explore_requirement_id=explore_req.id).all()
+        return {
+            "requirement": {"id": explore_req.id, "code": explore_req.code, "title": explore_req.title},
+            "backlog_items": [
+                {"id": b.id, "code": b.code, "title": b.title,
+                 "wricef_type": b.wricef_type, "status": b.status}
+                for b in backlog_items
+            ],
+            "config_items": [
+                {"id": c.id, "code": c.code, "title": c.title,
+                 "module": c.module, "status": c.status}
+                for c in config_items
+            ],
+            "total_linked": len(backlog_items) + len(config_items),
+        }
+
+    try:
+        legacy_requirement_id = int(requirement_id)
+    except (TypeError, ValueError):
+        return None
+
+    req = (
+        get_scoped_or_none(Requirement, legacy_requirement_id, program_id=program_id)
+        if program_id is not None
+        else db.session.get(Requirement, legacy_requirement_id)
     )
     if not req:
         return None
 
-    backlog_items = BacklogItem.query.filter_by(requirement_id=requirement_id).all()
-    config_items = ConfigItem.query.filter_by(requirement_id=requirement_id).all()
+    migrated = _resolve_migrated_explore_requirement(legacy_requirement_id, program_id=program_id)
+    if migrated is None:
+        backlog_items = []
+        config_items = []
+    else:
+        backlog_items = BacklogItem.query.filter_by(explore_requirement_id=migrated.id).all()
+        config_items = ConfigItem.query.filter_by(explore_requirement_id=migrated.id).all()
 
     return {
         "requirement": {"id": req.id, "code": req.code, "title": req.title},
@@ -321,21 +397,55 @@ def _trace_fs_downstream(fs, chain):
 
 def _trace_backlog_upstream(bi, chain):
     """BacklogItem → Requirement → Scenario."""
-    if bi.requirement_id:
-        req = db.session.get(Requirement, bi.requirement_id)
+    if getattr(bi, "explore_requirement_id", None):
+        req = _scoped_get_or_none(
+            ExploreRequirement,
+            bi.explore_requirement_id,
+            project_id=getattr(bi, "project_id", None),
+            program_id=getattr(bi, "program_id", None),
+        )
         if req:
-            chain.append({"type": "requirement", "id": req.id, "title": req.title})
-            _trace_requirement_upstream(req, chain)
-
+            chain.append({
+                "type": "explore_requirement",
+                "id": req.id,
+                "title": req.title,
+                "code": req.code,
+                "status": req.status,
+                "priority": req.priority,
+                "fit_status": getattr(req, "fit_status", None),
+            })
+            _build_explore_upstream_inline(req, chain)
+            return
 
 def _trace_backlog_downstream(bi, chain):
-    """BacklogItem → FS → TS + Interfaces."""
+    """BacklogItem → FS → TS + TestCases → Defects + Interfaces."""
     if bi.functional_spec:
         chain.append({"type": "functional_spec", "id": bi.functional_spec.id,
                        "title": bi.functional_spec.title})
         _trace_fs_downstream(bi.functional_spec, chain)
+
+    test_cases = _scoped_query(
+        TestCase,
+        project_id=getattr(bi, "project_id", None),
+        program_id=getattr(bi, "program_id", None),
+    ).filter_by(backlog_item_id=bi.id).all()
+    for tc in test_cases:
+        chain.append({
+            "type": "test_case",
+            "id": tc.id,
+            "title": tc.title,
+            "code": tc.code,
+            "test_layer": tc.test_layer,
+            "status": tc.status,
+        })
+        _trace_test_case_downstream(tc, chain)
+
     # Sprint 9: linked interfaces
-    interfaces = Interface.query.filter_by(backlog_item_id=bi.id).all()
+    interfaces = _scoped_query(
+        Interface,
+        project_id=getattr(bi, "project_id", None),
+        program_id=getattr(bi, "program_id", None),
+    ).filter_by(backlog_item_id=bi.id).all()
     for iface in interfaces:
         chain.append({"type": "interface", "id": iface.id, "title": iface.name,
                        "code": iface.code, "direction": iface.direction})
@@ -343,12 +453,25 @@ def _trace_backlog_downstream(bi, chain):
 
 def _trace_config_upstream(ci, chain):
     """ConfigItem → Requirement → Scenario."""
-    if ci.requirement_id:
-        req = db.session.get(Requirement, ci.requirement_id)
+    if getattr(ci, "explore_requirement_id", None):
+        req = _scoped_get_or_none(
+            ExploreRequirement,
+            ci.explore_requirement_id,
+            project_id=getattr(ci, "project_id", None),
+            program_id=getattr(ci, "program_id", None),
+        )
         if req:
-            chain.append({"type": "requirement", "id": req.id, "title": req.title})
-            _trace_requirement_upstream(req, chain)
-
+            chain.append({
+                "type": "explore_requirement",
+                "id": req.id,
+                "title": req.title,
+                "code": req.code,
+                "status": req.status,
+                "priority": req.priority,
+                "fit_status": getattr(req, "fit_status", None),
+            })
+            _build_explore_upstream_inline(req, chain)
+            return
 
 def _trace_config_downstream(ci, chain):
     """ConfigItem → FS → TS."""
@@ -392,36 +515,50 @@ def _trace_requirement_upstream(req, chain):
 def _trace_requirement_downstream(req, chain):
     """Requirement (legacy or ExploreRequirement) → BacklogItems + ConfigItems → TestCases → Defects.
 
-    ADR-001: If req.id is a UUID string (ExploreRequirement), use explore_requirement_id
-    as the canonical FK on child models.  If req.id is an integer (legacy Requirement),
-    fall back to the legacy requirement_id FK for backward compatibility.
+    ADR-001: child models trace canonically via ``explore_requirement_id``.
+    Legacy requirement reads are mapped through ``ExploreRequirement.legacy_requirement_id``.
     """
     is_explore = isinstance(req.id, str)  # UUID string → ExploreRequirement
+    canonical_req_id = req.id
+    if not is_explore:
+        migrated = _resolve_migrated_explore_requirement(
+            req.id,
+            project_id=getattr(req, "project_id", None),
+            program_id=getattr(req, "program_id", None),
+        )
+        if migrated is None:
+            return
+        canonical_req_id = migrated.id
 
-    if is_explore:
-        backlog_items = BacklogItem.query.filter_by(explore_requirement_id=req.id).all()
-    else:
-        backlog_items = BacklogItem.query.filter_by(requirement_id=req.id).all()
+    project_id = getattr(req, "project_id", None)
+    program_id = getattr(req, "program_id", None)
+
+    backlog_items = _scoped_query(
+        BacklogItem,
+        project_id=project_id,
+        program_id=program_id,
+    ).filter_by(explore_requirement_id=canonical_req_id).all()
 
     for bi in backlog_items:
         chain.append({"type": "backlog_item", "id": bi.id, "title": bi.title,
                        "wricef_type": bi.wricef_type})
         _trace_backlog_downstream(bi, chain)
 
-    if is_explore:
-        config_items = ConfigItem.query.filter_by(explore_requirement_id=req.id).all()
-    else:
-        config_items = ConfigItem.query.filter_by(requirement_id=req.id).all()
+    config_items = _scoped_query(
+        ConfigItem,
+        project_id=project_id,
+        program_id=program_id,
+    ).filter_by(explore_requirement_id=canonical_req_id).all()
 
     for ci in config_items:
         chain.append({"type": "config_item", "id": ci.id, "title": ci.title})
         _trace_config_downstream(ci, chain)
 
-    # Test Cases — prefer explore_requirement_id
-    if is_explore:
-        test_cases = TestCase.query.filter_by(explore_requirement_id=req.id).all()
-    else:
-        test_cases = TestCase.query.filter_by(requirement_id=req.id).all()
+    test_cases = _scoped_query(
+        TestCase,
+        project_id=project_id,
+        program_id=program_id,
+    ).filter_by(explore_requirement_id=canonical_req_id).all()
 
     for tc in test_cases:
         chain.append({"type": "test_case", "id": tc.id, "title": tc.title,
@@ -470,7 +607,12 @@ def _trace_test_case_upstream(tc, chain):
     """TestCase → ExploreRequirement (or standard Requirement) → upstream hierarchy."""
     if tc.explore_requirement_id:
         from app.models.explore import ExploreRequirement
-        req = db.session.get(ExploreRequirement, tc.explore_requirement_id)
+        req = _scoped_get_or_none(
+            ExploreRequirement,
+            tc.explore_requirement_id,
+            project_id=getattr(tc, "project_id", None),
+            program_id=getattr(tc, "program_id", None),
+        )
         if req:
             chain.append({
                 "type": "explore_requirement",
@@ -481,18 +623,23 @@ def _trace_test_case_upstream(tc, chain):
             })
             # Walk the explore upstream hierarchy (workshop → process steps → levels)
             _build_explore_upstream_inline(req, chain)
-    elif tc.requirement_id:
-        req = db.session.get(Requirement, tc.requirement_id)
-        if req:
-            chain.append({"type": "requirement", "id": req.id, "title": req.title})
-            _trace_requirement_upstream(req, chain)
     if tc.backlog_item_id:
-        bi = db.session.get(BacklogItem, tc.backlog_item_id)
+        bi = _scoped_get_or_none(
+            BacklogItem,
+            tc.backlog_item_id,
+            project_id=getattr(tc, "project_id", None),
+            program_id=getattr(tc, "program_id", None),
+        )
         if bi:
             chain.append({"type": "backlog_item", "id": bi.id, "title": bi.title,
                           "wricef_type": bi.wricef_type})
     if tc.config_item_id:
-        ci = db.session.get(ConfigItem, tc.config_item_id)
+        ci = _scoped_get_or_none(
+            ConfigItem,
+            tc.config_item_id,
+            project_id=getattr(tc, "project_id", None),
+            program_id=getattr(tc, "program_id", None),
+        )
         if ci:
             chain.append({"type": "config_item", "id": ci.id, "title": ci.title})
 
@@ -504,16 +651,17 @@ def _build_explore_upstream_inline(req, chain):
     traceability blueprint's private _walk_process_level_hierarchy helper.
     """
     from app.models.explore import ExploreWorkshop, ProcessStep, ProcessLevel
+    project_id = getattr(req, "project_id", None)
 
     if req.workshop_id:
-        ws = db.session.get(ExploreWorkshop, req.workshop_id)
+        ws = _scoped_get_or_none(ExploreWorkshop, req.workshop_id, project_id=project_id)
         if ws:
             chain.append({"type": "workshop", "id": ws.id, "title": ws.name, "code": ws.code})
 
     # Determine starting process_level_id
     start_level_id = None
     if req.process_step_id:
-        ps = db.session.get(ProcessStep, req.process_step_id)
+        ps = _scoped_get_or_none(ProcessStep, req.process_step_id, project_id=project_id)
         if ps:
             chain.append({"type": "process_step", "id": str(ps.id), "title": f"Step {str(ps.id)[:8]}"})
             start_level_id = ps.process_level_id
@@ -525,7 +673,7 @@ def _build_explore_upstream_inline(req, chain):
     current_id = start_level_id
     while current_id and current_id not in visited:
         visited.add(current_id)
-        pl = db.session.get(ProcessLevel, current_id)
+        pl = _scoped_get_or_none(ProcessLevel, current_id, project_id=project_id)
         if not pl:
             break
         chain.append({
@@ -539,7 +687,11 @@ def _build_explore_upstream_inline(req, chain):
 
 def _trace_test_case_downstream(tc, chain):
     """TestCase → Defects."""
-    defects = Defect.query.filter_by(test_case_id=tc.id).all()
+    defects = _scoped_query(
+        Defect,
+        project_id=getattr(tc, "project_id", None),
+        program_id=getattr(tc, "program_id", None),
+    ).filter_by(test_case_id=tc.id).all()
     for d in defects:
         chain.append({"type": "defect", "id": d.id, "title": d.title,
                        "code": d.code, "severity": d.severity, "status": d.status})
@@ -548,18 +700,33 @@ def _trace_test_case_downstream(tc, chain):
 def _trace_defect_upstream(defect, chain):
     """Defect → TestCase → Requirement → Scenario."""
     if defect.test_case_id:
-        tc = db.session.get(TestCase, defect.test_case_id)
+        tc = _scoped_get_or_none(
+            TestCase,
+            defect.test_case_id,
+            project_id=getattr(defect, "project_id", None),
+            program_id=getattr(defect, "program_id", None),
+        )
         if tc:
             chain.append({"type": "test_case", "id": tc.id, "title": tc.title,
                           "code": tc.code, "test_layer": tc.test_layer})
             _trace_test_case_upstream(tc, chain)
     if defect.backlog_item_id:
-        bi = db.session.get(BacklogItem, defect.backlog_item_id)
+        bi = _scoped_get_or_none(
+            BacklogItem,
+            defect.backlog_item_id,
+            project_id=getattr(defect, "project_id", None),
+            program_id=getattr(defect, "program_id", None),
+        )
         if bi:
             chain.append({"type": "backlog_item", "id": bi.id, "title": bi.title,
                           "wricef_type": bi.wricef_type})
     if defect.config_item_id:
-        ci = db.session.get(ConfigItem, defect.config_item_id)
+        ci = _scoped_get_or_none(
+            ConfigItem,
+            defect.config_item_id,
+            project_id=getattr(defect, "project_id", None),
+            program_id=getattr(defect, "program_id", None),
+        )
         if ci:
             chain.append({"type": "config_item", "id": ci.id, "title": ci.title})
 
@@ -711,7 +878,7 @@ from app.models.explore import (
 )
 
 
-def trace_explore_requirement(requirement_id: str) -> dict:
+def trace_explore_requirement(requirement_id: str, *, project_id: int | None = None) -> dict:
     """
     Build a full traceability graph for a single *ExploreRequirement*.
 
@@ -729,18 +896,25 @@ def trace_explore_requirement(requirement_id: str) -> dict:
 
     Raises ``ValueError`` if the requirement does not exist.
     """
-    req = db.session.get(ExploreRequirement, requirement_id)
+    req = (
+        get_scoped_or_none(ExploreRequirement, requirement_id, project_id=project_id)
+        if project_id is not None
+        else db.session.get(ExploreRequirement, requirement_id)
+    )
     if not req:
         raise ValueError(f"Explore requirement not found: {requirement_id}")
+    active_project_id = req.project_id
 
     # ── 1. Backlog items (WRICEF) ────────────────────────────────────────
     backlog_items = BacklogItem.query.filter_by(
         explore_requirement_id=requirement_id,
+        project_id=active_project_id,
     ).all()
 
     # ── 2. Config items ──────────────────────────────────────────────────
     config_items = ConfigItem.query.filter_by(
         explore_requirement_id=requirement_id,
+        project_id=active_project_id,
     ).all()
 
     # ── 3. Test cases (via backlog_item_id OR direct explore_req FK) ─────
@@ -750,10 +924,12 @@ def trace_explore_requirement(requirement_id: str) -> dict:
     if backlog_ids:
         tc_via_backlog = TestCase.query.filter(
             TestCase.backlog_item_id.in_(backlog_ids),
+            TestCase.project_id == active_project_id,
         ).all()
 
     tc_via_direct = TestCase.query.filter_by(
         explore_requirement_id=requirement_id,
+        project_id=active_project_id,
     ).all()
 
     tc_map: dict[int, TestCase] = {}
@@ -768,10 +944,12 @@ def trace_explore_requirement(requirement_id: str) -> dict:
     if tc_ids:
         d_via_tc = Defect.query.filter(
             Defect.test_case_id.in_(tc_ids),
+            Defect.project_id == active_project_id,
         ).all()
 
     d_via_direct = Defect.query.filter_by(
         explore_requirement_id=requirement_id,
+        project_id=active_project_id,
     ).all()
 
     d_map: dict[int, Defect] = {}
@@ -782,12 +960,14 @@ def trace_explore_requirement(requirement_id: str) -> dict:
     # ── 5. Open items (M:N via RequirementOpenItemLink) ──────────────────
     links = RequirementOpenItemLink.query.filter_by(
         requirement_id=requirement_id,
+        project_id=active_project_id,
     ).all()
     oi_ids = [lnk.open_item_id for lnk in links]
     open_items: list[ExploreOpenItem] = []
     if oi_ids:
         open_items = ExploreOpenItem.query.filter(
             ExploreOpenItem.id.in_(oi_ids),
+            ExploreOpenItem.project_id == active_project_id,
         ).all()
 
     # ── 6. Coverage & depth ──────────────────────────────────────────────
@@ -845,12 +1025,12 @@ def trace_explore_requirement(requirement_id: str) -> dict:
     }
 
 
-def trace_explore_batch(requirement_ids: list[str]) -> list[dict]:
+def trace_explore_batch(requirement_ids: list[str], *, project_id: int | None = None) -> list[dict]:
     """Trace multiple explore requirements in one call."""
     results = []
     for rid in requirement_ids:
         try:
-            results.append(trace_explore_requirement(rid))
+            results.append(trace_explore_requirement(rid, project_id=project_id))
         except ValueError:
             results.append({"requirement_id": rid, "error": "not_found"})
     return results
@@ -861,7 +1041,7 @@ def trace_explore_batch(requirement_ids: list[str]) -> list[dict]:
 # Moved here from the blueprint layer to keep ORM access service-side.
 # ══════════════════════════════════════════════════════════════════════════════
 
-def build_explore_lateral(requirement_id: int) -> dict:
+def build_explore_lateral(requirement_id: int, *, project_id: int | None = None) -> dict:
     """Return Open Items and Decisions laterally linked to an ExploreRequirement.
 
     Queries the RequirementOpenItemLink M:N table and the ExploreDecision table
@@ -886,11 +1066,22 @@ def build_explore_lateral(requirement_id: int) -> dict:
     lateral: dict = {"open_items": [], "decisions": []}
 
     # Open Items (M:N via RequirementOpenItemLink)
+    req = (
+        get_scoped_or_none(ExploreRequirement, requirement_id, project_id=project_id)
+        if project_id is not None
+        else db.session.get(ExploreRequirement, requirement_id)
+    )
+    if not req:
+        return lateral
+
+    active_project_id = req.project_id
+
     links = RequirementOpenItemLink.query.filter_by(
         requirement_id=requirement_id,
+        project_id=active_project_id,
     ).all()
     for lnk in links:
-        oi = db.session.get(ExploreOpenItem, lnk.open_item_id)
+        oi = _scoped_get_or_none(ExploreOpenItem, lnk.open_item_id, project_id=active_project_id)
         if oi:
             lateral["open_items"].append({
                 "id": oi.id,
@@ -902,11 +1093,13 @@ def build_explore_lateral(requirement_id: int) -> dict:
             })
 
     # Decisions (via ProcessStep)
-    req = db.session.get(ExploreRequirement, requirement_id)
     if req and req.process_step_id:
-        ps = db.session.get(ProcessStep, req.process_step_id)
+        ps = _scoped_get_or_none(ProcessStep, req.process_step_id, project_id=active_project_id)
         if ps:
-            decisions = ExploreDecision.query.filter_by(process_step_id=ps.id).all()
+            decisions = ExploreDecision.query.filter_by(
+                process_step_id=ps.id,
+                project_id=active_project_id,
+            ).all()
             for d in decisions:
                 lateral["decisions"].append({
                     "id": d.id,
@@ -920,7 +1113,13 @@ def build_explore_lateral(requirement_id: int) -> dict:
     return lateral
 
 
-def build_lateral_links(entity_type: str, entity_id: int) -> dict:
+def build_lateral_links(
+    entity_type: str,
+    entity_id: int,
+    *,
+    project_id: int | None = None,
+    program_id: int | None = None,
+) -> dict:
     """Return lateral link data for standard (non-explore) entities.
 
     Handles three entity types:
@@ -945,17 +1144,22 @@ def build_lateral_links(entity_type: str, entity_id: int) -> dict:
     if entity_type == "requirement":
         from app.models.requirement import Requirement
 
-        req = db.session.get(Requirement, entity_id)
+        req = _scoped_get_or_none(Requirement, entity_id, project_id=project_id, program_id=program_id)
         if req:
             try:
                 from app.models.explore import ExploreOpenItem, RequirementOpenItemLink
 
                 links = RequirementOpenItemLink.query.filter_by(
                     requirement_id=str(entity_id),
+                    project_id=getattr(req, "project_id", project_id),
                 ).all()
                 lateral["open_items"] = []
                 for lnk in links:
-                    oi = db.session.get(ExploreOpenItem, lnk.open_item_id)
+                    oi = _scoped_get_or_none(
+                        ExploreOpenItem,
+                        lnk.open_item_id,
+                        project_id=getattr(req, "project_id", project_id),
+                    )
                     if oi:
                         lateral["open_items"].append({
                             "id": oi.id,
@@ -969,9 +1173,13 @@ def build_lateral_links(entity_type: str, entity_id: int) -> dict:
                 )
 
     elif entity_type == "backlog_item":
-        from app.models.integration import Interface
+        from app.models.interface_factory import Interface
 
-        interfaces = Interface.query.filter_by(backlog_item_id=entity_id).all()
+        interfaces = _scoped_query(
+            Interface,
+            project_id=project_id,
+            program_id=program_id,
+        ).filter_by(backlog_item_id=entity_id).all()
         lateral["interfaces"] = [
             {
                 "id": i.id,
@@ -984,7 +1192,7 @@ def build_lateral_links(entity_type: str, entity_id: int) -> dict:
         ]
 
     elif entity_type == "interface":
-        from app.models.integration import ConnectivityTest, SwitchPlan
+        from app.models.interface_factory import ConnectivityTest, SwitchPlan
 
         lateral["connectivity_tests"] = [
             {
@@ -992,7 +1200,11 @@ def build_lateral_links(entity_type: str, entity_id: int) -> dict:
                 "environment": ct.environment,
                 "result": ct.result,
             }
-            for ct in ConnectivityTest.query.filter_by(interface_id=entity_id).all()
+            for ct in _scoped_query(
+                ConnectivityTest,
+                project_id=project_id,
+                program_id=program_id,
+            ).filter_by(interface_id=entity_id).all()
         ]
         lateral["switch_plans"] = [
             {
@@ -1001,7 +1213,11 @@ def build_lateral_links(entity_type: str, entity_id: int) -> dict:
                 "status": sp.status,
                 "sequence": sp.sequence,
             }
-            for sp in SwitchPlan.query.filter_by(interface_id=entity_id).all()
+            for sp in _scoped_query(
+                SwitchPlan,
+                project_id=project_id,
+                program_id=program_id,
+            ).filter_by(interface_id=entity_id).all()
         ]
 
     return lateral
@@ -1055,18 +1271,47 @@ def trace_config_item(config_item_id: int, project_id: int, tenant_id: int | Non
         )
 
     test_cases = TestCase.query.filter_by(config_item_id=config_item_id).all()
+    tc_ids = [tc.id for tc in test_cases]
+
+    # Bulk: last execution per test_case — replaces N per-TC queries.
+    exec_by_tc: dict[int, TestExecution] = {}
+    if tc_ids:
+        max_created_sq = (
+            db.session.query(
+                TestExecution.test_case_id,
+                func.max(TestExecution.created_at).label("max_created"),
+            )
+            .filter(TestExecution.test_case_id.in_(tc_ids))
+            .group_by(TestExecution.test_case_id)
+            .subquery()
+        )
+        last_execs = (
+            db.session.query(TestExecution)
+            .join(
+                max_created_sq,
+                db.and_(
+                    TestExecution.test_case_id == max_created_sq.c.test_case_id,
+                    TestExecution.created_at == max_created_sq.c.max_created,
+                ),
+            )
+            .all()
+        )
+        exec_by_tc = {e.test_case_id: e for e in last_execs}
+
+    # Bulk: open defects for all test_cases — replaces N per-TC queries.
+    defects_by_tc: dict[int, list] = {}
+    if tc_ids:
+        open_defects_all = Defect.query.filter(
+            Defect.test_case_id.in_(tc_ids),
+            Defect.status.notin_(["closed", "resolved", "cancelled"]),
+        ).all()
+        for d in open_defects_all:
+            defects_by_tc.setdefault(d.test_case_id, []).append(d)
 
     tc_results = []
     for tc in test_cases:
-        last_exec = (
-            TestExecution.query.filter_by(test_case_id=tc.id)
-            .order_by(TestExecution.created_at.desc())
-            .first()
-        )
-        open_defects = Defect.query.filter(
-            Defect.test_case_id == tc.id,
-            Defect.status.notin_(["closed", "resolved", "cancelled"]),
-        ).all()
+        last_exec = exec_by_tc.get(tc.id)
+        open_defects = defects_by_tc.get(tc.id, [])
         tc_results.append({
             "id": tc.id,
             "code": getattr(tc, "code", ""),
@@ -1101,7 +1346,13 @@ def trace_config_item(config_item_id: int, project_id: int, tenant_id: int | Non
     )
 
     return {
-        "config_item": ci.to_dict(),
+        "config_item": {
+            "id": ci.id,
+            "code": ci.code,
+            "title": ci.title,
+            "module": ci.module,
+            "status": ci.status,
+        },
         "test_cases": tc_results,
         "coverage_summary": {
             "total_test_cases": total,
@@ -1124,10 +1375,9 @@ def get_config_items_without_tests(project_id: int, tenant_id: int | None) -> li
     Returns:
         [{"id", "code", "title", "module", "config_status"}]
     """
-    from sqlalchemy import select
-
     tested_ids_sub = select(TestCase.config_item_id).where(
-        TestCase.config_item_id.isnot(None)
+        TestCase.config_item_id.isnot(None),
+        TestCase.project_id == project_id,
     )
     untested = ConfigItem.query.filter_by(
         program_id=project_id,
@@ -1163,8 +1413,6 @@ def get_config_coverage_summary(project_id: int, tenant_id: int | None) -> dict:
           "by_module": {"FI": {"total", "covered", "pct"}, ...}
         }
     """
-    from sqlalchemy import select
-
     all_ci = ConfigItem.query.filter_by(
         program_id=project_id, tenant_id=tenant_id
     ).all()
@@ -1174,7 +1422,8 @@ def get_config_coverage_summary(project_id: int, tenant_id: int | None) -> dict:
         row[0]
         for row in db.session.execute(
             select(TestCase.config_item_id).where(
-                TestCase.config_item_id.isnot(None)
+                TestCase.config_item_id.isnot(None),
+                TestCase.project_id == project_id,
             )
         ).fetchall()
     }
@@ -1202,6 +1451,104 @@ def get_config_coverage_summary(project_id: int, tenant_id: int | None) -> dict:
         "without_tests": without_tests,
         "coverage_pct": coverage_pct,
         "by_module": by_module,
+    }
+
+
+def build_traceability_matrix_summary(project_id: int) -> dict:
+    """Compute the aggregated traceability coverage summary for a project.
+
+    All counts are strictly scoped to ``project_id`` — no cross-project data
+    bleeds into the result.  Built from four bulk queries; no Python-level loops
+    over individual entities.
+
+    Args:
+        project_id: The project whose matrix summary is computed.
+
+    Returns:
+        {
+          "total_requirements": int,
+          "requirements_with_tests": int,
+          "requirements_without_tests": int,
+          "unlinked_test_cases": int,
+          "total_defects": int,
+          "coverage_pct": float,
+        }
+    """
+    # 1. Total ExploreRequirements in project.
+    total_requirements: int = (
+        db.session.query(func.count(ExploreRequirement.id))
+        .filter(ExploreRequirement.project_id == project_id)
+        .scalar() or 0
+    )
+
+    # 2a. Requirement IDs covered via direct TestCase.explore_requirement_id FK.
+    direct_covered: set[str] = set(
+        db.session.execute(
+            select(distinct(TestCase.explore_requirement_id)).where(
+                TestCase.explore_requirement_id.isnot(None),
+                TestCase.project_id == project_id,
+            )
+        ).scalars().all()
+    )
+
+    # 2b. Requirement IDs covered via BacklogItem → TestCase join.
+    backlog_covered: set[str] = set(
+        db.session.execute(
+            select(distinct(BacklogItem.explore_requirement_id))
+            .join(TestCase, TestCase.backlog_item_id == BacklogItem.id)
+            .where(
+                BacklogItem.project_id == project_id,
+                TestCase.project_id == project_id,
+                BacklogItem.explore_requirement_id.isnot(None),
+            )
+        ).scalars().all()
+    )
+
+    requirements_with_tests = len(direct_covered | backlog_covered)
+
+    # 3. Unlinked test cases: TCs in project with no requirement chain.
+    linked_via_direct = select(TestCase.id).where(
+        TestCase.explore_requirement_id.isnot(None),
+        TestCase.project_id == project_id,
+    )
+    linked_via_backlog = (
+        select(TestCase.id)
+        .join(BacklogItem, TestCase.backlog_item_id == BacklogItem.id)
+        .where(
+            TestCase.project_id == project_id,
+            BacklogItem.explore_requirement_id.isnot(None),
+        )
+    )
+    unlinked_test_cases: int = (
+        db.session.query(func.count(TestCase.id))
+        .filter(
+            TestCase.project_id == project_id,
+            ~TestCase.id.in_(linked_via_direct),
+            ~TestCase.id.in_(linked_via_backlog),
+        )
+        .scalar() or 0
+    )
+
+    # 4. Total defects in project.
+    total_defects: int = (
+        db.session.query(func.count(Defect.id))
+        .filter(Defect.project_id == project_id)
+        .scalar() or 0
+    )
+
+    coverage_pct = (
+        round(requirements_with_tests / total_requirements * 100, 1)
+        if total_requirements
+        else 0.0
+    )
+
+    return {
+        "total_requirements": total_requirements,
+        "requirements_with_tests": requirements_with_tests,
+        "requirements_without_tests": total_requirements - requirements_with_tests,
+        "unlinked_test_cases": unlinked_test_cases,
+        "total_defects": total_defects,
+        "coverage_pct": coverage_pct,
     }
 
 

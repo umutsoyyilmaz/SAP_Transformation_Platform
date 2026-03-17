@@ -10,7 +10,7 @@ from app.models.explore import (
 from app.models.testing import TestCase, TestPlan, TestCycle, TestExecution, Defect
 from app.models.backlog import BacklogItem
 from app.models.raid import Risk, Action, Issue
-from app.models.integration import Interface
+from app.models.interface_factory import Interface
 
 
 def compute_program_health(program_id: int) -> dict:
@@ -21,19 +21,19 @@ def compute_program_health(program_id: int) -> dict:
     pid = program_id
 
     # ── 1. Explore Phase Health ────────────────────────────────────────
-    ws_total = Workshop.query.filter_by(project_id=pid).count()
-    ws_completed = Workshop.query.filter_by(project_id=pid, status="completed").count()
+    ws_total = Workshop.query.filter_by(program_id=pid).count()
+    ws_completed = Workshop.query.filter_by(program_id=pid, status="completed").count()
     ws_pct = round(ws_completed / ws_total * 100) if ws_total else 0
 
-    req_total = Requirement.query.filter_by(project_id=pid).count()
-    req_approved = Requirement.query.filter_by(project_id=pid, status="approved").count()
+    req_total = Requirement.query.filter_by(program_id=pid).count()
+    req_approved = Requirement.query.filter_by(program_id=pid, status="approved").count()
     req_pct = round(req_approved / req_total * 100) if req_total else 0
 
-    oi_total = OpenItem.query.filter_by(project_id=pid).count()
-    oi_open = OpenItem.query.filter_by(project_id=pid).filter(
+    oi_total = OpenItem.query.filter_by(program_id=pid).count()
+    oi_open = OpenItem.query.filter_by(program_id=pid).filter(
         OpenItem.status.in_(["open", "in_progress"])
     ).count()
-    oi_overdue = OpenItem.query.filter_by(project_id=pid).filter(
+    oi_overdue = OpenItem.query.filter_by(program_id=pid).filter(
         OpenItem.status.in_(["open", "in_progress"]),
         OpenItem.due_date < date.today(),
     ).count()

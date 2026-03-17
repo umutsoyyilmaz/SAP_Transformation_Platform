@@ -321,6 +321,7 @@ def assign_role(
         actor_user_id=assigned_by,
         tenant_id=scope_tenant_id,
         program_id=program_id,
+        project_id=project_id,
         diff={
             "user_id": user_id,
             "role_id": role.id,
@@ -364,6 +365,7 @@ def remove_role(user_id: int, role_name: str) -> bool:
         actor_user_id=None,
         tenant_id=user.tenant_id,
         program_id=ur.program_id,
+        project_id=ur.project_id,
         diff={
             "user_id": user_id,
             "role_id": role.id,
@@ -413,6 +415,7 @@ def assign_to_project(user_id: int, project_id: int, role_in_project: str = None
         actor_user_id=assigned_by,
         tenant_id=user.tenant_id,
         program_id=project.program_id,
+        project_id=project_id,
         diff={
             "user_id": user_id,
             "project_id": project_id,
@@ -440,6 +443,7 @@ def remove_from_project(user_id: int, project_id: int) -> bool:
         actor_user_id=None,
         tenant_id=user.tenant_id if user else None,
         program_id=None,
+        project_id=project_id,
         diff={"user_id": user_id, "project_id": project_id},
     )
     db.session.commit()

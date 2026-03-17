@@ -149,7 +149,7 @@ class IntegrationAnalyst:
         context = {"program_id": program_id, "interfaces": [], "waves": [],
                     "connectivity_tests": [], "switch_plans": []}
         try:
-            from app.models.integration import Interface
+            from app.models.interface_factory import Interface
             interfaces = Interface.query.filter_by(program_id=program_id).limit(50).all()
             context["interfaces"] = [
                 {"id": i.id, "name": getattr(i, "name", ""),
@@ -163,7 +163,7 @@ class IntegrationAnalyst:
             logger.debug("IntegrationAnalyst context (interfaces): %s", e)
 
         try:
-            from app.models.integration import Wave
+            from app.models.interface_factory import Wave
             waves = Wave.query.filter_by(program_id=program_id).limit(20).all()
             context["waves"] = [
                 {"id": w.id, "name": getattr(w, "name", ""),
@@ -174,7 +174,7 @@ class IntegrationAnalyst:
             logger.debug("IntegrationAnalyst context (waves): %s", e)
 
         try:
-            from app.models.integration import ConnectivityTest
+            from app.models.interface_factory import ConnectivityTest
             tests = ConnectivityTest.query.limit(30).all()
             context["connectivity_tests"] = [
                 {"id": t.id, "interface_id": getattr(t, "interface_id", None),

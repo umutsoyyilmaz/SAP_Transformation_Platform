@@ -1,0 +1,393 @@
+.cutover-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.cutover-tabs {
+    margin-bottom: 16px;
+}
+
+.cutover-loading {
+    display: grid;
+    place-items: center;
+    padding: 40px;
+}
+
+.cutover-plan-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    align-items: stretch;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.cutover-plan-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    min-height: 176px;
+    padding: 16px;
+    border: 2px solid transparent;
+    border-radius: 14px;
+    background: var(--pg-color-surface, #fff);
+    box-shadow: var(--pg-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.08));
+    cursor: pointer;
+}
+
+.cutover-plan-card.is-active {
+    border-color: var(--sap-blue, #0A6ED1);
+}
+
+.cutover-plan-card__head,
+.cutover-plan-detail__head,
+.cutover-runbook__head,
+.cutover-ai-modal__head,
+.cutover-warroom__head,
+.cutover-warroom__summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.cutover-plan-card__title,
+.cutover-plan-detail__title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--sapTextColor, #223548);
+}
+
+.cutover-plan-card__meta,
+.cutover-plan-card__dates,
+.cutover-plan-detail__copy,
+.cutover-plan-detail__meta,
+.cutover-runbook__meta,
+.cutover-table__subcopy,
+.cutover-ai-modal__copy,
+.cutover-warroom__meta {
+    font-size: 12px;
+    color: var(--pg-color-text-secondary, #6a6d70);
+}
+
+.cutover-plan-card__stats {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: auto;
+    font-size: 12px;
+    color: var(--pg-color-text-secondary, #6a6d70);
+}
+
+.cutover-plan-detail {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 18px;
+    border-radius: 16px;
+    border: 1px solid color-mix(in srgb, var(--sap-border, #e5e7eb) 88%, white);
+    background: var(--pg-color-surface, #fff);
+    box-shadow: var(--pg-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.08));
+}
+
+.cutover-plan-detail__meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px 16px;
+}
+
+.cutover-plan-detail__actions,
+.cutover-plan-detail__transitions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.cutover-runbook__progress-track,
+.cutover-warroom__progress-track {
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--sap-border, #e5e7eb);
+}
+
+.cutover-runbook__progress-fill,
+.cutover-warroom__progress-fill {
+    width: var(--cutover-pct, 0%);
+    height: 100%;
+    background: var(--cutover-fill, var(--sap-blue, #0A6ED1));
+}
+
+.cutover-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.cutover-kpi-card {
+    display: grid;
+    align-content: start;
+    gap: 6px;
+    min-height: 96px;
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--pg-color-surface, #fff);
+    box-shadow: var(--pg-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.08));
+    text-align: center;
+}
+
+.cutover-kpi-card--accent {
+    border: 2px solid var(--cutover-accent, var(--sap-blue, #0A6ED1));
+    background: color-mix(in srgb, var(--cutover-accent, #0A6ED1) 7%, white);
+}
+
+.cutover-kpi-card__label {
+    font-size: 11px;
+    color: var(--pg-color-text-secondary, #6a6d70);
+    text-transform: uppercase;
+}
+
+.cutover-kpi-card__value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--cutover-value, var(--sapTextColor, #223548));
+}
+
+.cutover-chip-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.cutover-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: color-mix(in srgb, var(--cutover-chip-color, #0A6ED1) 12%, white);
+    color: var(--cutover-chip-color, #0A6ED1);
+}
+
+.cutover-sla-details {
+    margin-bottom: 16px;
+}
+
+.cutover-sla-details__summary {
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.cutover-table--compact {
+    font-size: 12px;
+}
+
+.cutover-mini-btn {
+    padding: 2px 6px;
+    font-size: 11px;
+}
+
+.cutover-empty-state--panel {
+    padding: 24px;
+}
+
+.cutover-table__code {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.cutover-table__category {
+    text-transform: capitalize;
+}
+
+.cutover-table__assigned {
+    font-size: 11px;
+}
+
+.cutover-table__sla,
+.cutover-table__actions {
+    white-space: nowrap;
+}
+
+.cutover-table__sla-state {
+    font-weight: 600;
+    color: var(--cutover-sla-color, var(--sapTextColor, #223548));
+}
+
+.cutover-modal-body {
+    display: grid;
+    gap: 14px;
+    max-height: 70vh;
+    padding-right: 4px;
+    overflow-y: auto;
+}
+
+.cutover-modal-body > .fiori-row,
+.cutover-modal-body > .fiori-field,
+.cutover-modal-body > div {
+    min-width: 0;
+}
+
+.cutover-modal-body .fiori-field {
+    margin-bottom: 0;
+}
+
+.cutover-modal-body .fiori-field label {
+    margin-bottom: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pg-color-text-secondary, #6a6d70);
+}
+
+.cutover-modal-body .fiori-field input,
+.cutover-modal-body .fiori-field select,
+.cutover-modal-body .fiori-field textarea {
+    min-height: 42px;
+    border-radius: 10px;
+    border-color: color-mix(in srgb, var(--sap-border, #d5dadd) 88%, white);
+    background: color-mix(in srgb, var(--pg-color-surface, #fff) 96%, var(--pg-color-bg, #f6f7f9));
+}
+
+.cutover-modal-body .fiori-field textarea {
+    min-height: 108px;
+    resize: vertical;
+}
+
+.cutover-modal-body .fiori-row {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    align-items: start;
+    gap: 14px;
+}
+
+.cutover-modal-body .fiori-row .fiori-field {
+    display: grid;
+    align-content: start;
+}
+
+.cutover-actions-inline {
+    display: inline-flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.cutover-ai-modal {
+    max-width: 900px;
+    padding: 24px;
+}
+
+.cutover-ai-modal__title {
+    margin: 0;
+}
+
+.cutover-ai-modal__result {
+    display: grid;
+    align-items: center;
+    min-height: 180px;
+    margin-top: 16px;
+}
+
+.cutover-ai-list {
+    margin-top: 16px;
+}
+
+.cutover-ai-list__title {
+    margin: 0 0 8px;
+}
+
+.cutover-ai-list__items {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding-left: 18px;
+}
+
+.cutover-warroom {
+    display: grid;
+    gap: 12px;
+}
+
+.cutover-warroom__clock {
+    border: 1px solid var(--cutover-clock-border, var(--sap-positive));
+    border-radius: 14px;
+    background: var(--pg-color-surface, #fff);
+    box-shadow: var(--pg-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.08));
+    margin-bottom: 12px;
+}
+
+.cutover-warroom__clock-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--pg-color-border, #e5e7eb);
+}
+
+.cutover-warroom__delay {
+    margin-left: 8px;
+}
+
+.cutover-warroom__clock-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(100px, 1fr));
+    gap: 8px;
+    padding: 12px 16px 16px;
+    text-align: center;
+}
+
+.cutover-warroom__metric-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.cutover-warroom__metric-value--warn {
+    color: var(--sap-warning);
+}
+
+.cutover-warroom__metric-value--danger {
+    color: var(--sap-negative);
+}
+
+.cutover-warroom__badge {
+    margin-right: 4px;
+}
+
+.cutover-warroom__panel-title {
+    margin: 0 0 8px;
+}
+
+.cutover-warroom__task-status {
+    color: #fff;
+    background: var(--cutover-status-color, #6a6d70);
+}
+
+.cutover-warroom__issue {
+    margin-left: 4px;
+}
+
+@media (max-width: 720px) {
+    .cutover-plan-card {
+        min-height: unset;
+    }
+
+    .cutover-modal-body .fiori-row,
+    .cutover-plan-detail__meta {
+        grid-template-columns: 1fr;
+    }
+
+    .cutover-warroom__clock-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

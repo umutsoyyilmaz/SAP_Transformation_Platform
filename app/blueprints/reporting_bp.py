@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from sqlalchemy import or_
+
 from flask import Blueprint, g, jsonify, request, send_file
 
 from app.models import db
@@ -33,11 +35,43 @@ def _get_scoped_program_or_404(pid):
     if tenant_id is not None:
         program = get_scoped_or_none(Program, pid, tenant_id=tenant_id)
     else:
-        # Legacy/test mode — no tenant context available
-        program = db.session.get(Program, pid)
+        # Test/no-tenant context — use scoped_or_none without tenant constraint
+        program = Program.query.filter_by(id=pid).first()
     if not program:
         return None, (jsonify({"error": "Program not found"}), 404)
     return program, None
+
+
+def _entity_belongs_to_tenant(entity, tenant_id: int) -> bool:
+    """Allow tenant access to legacy rows with NULL tenant_id via parent program."""
+    direct_tenant = getattr(entity, "tenant_id", None)
+    if direct_tenant is not None:
+        return int(direct_tenant) == int(tenant_id)
+
+    program_id = getattr(entity, "program_id", None)
+    if program_id is not None:
+        program = get_scoped_or_none(Program, program_id, tenant_id=tenant_id)
+        return program is not None
+
+    return False
+
+
+def _get_reporting_entity_or_404(model, entity_id: int):
+    tenant_id = _get_tenant_id()
+    if tenant_id is not None:
+        entity = get_scoped_or_none(model, entity_id, tenant_id=tenant_id)
+        if entity:
+            return entity, None
+
+        entity = db.session.get(model, entity_id)
+        if not entity or not _entity_belongs_to_tenant(entity, tenant_id):
+            return None, (jsonify({"error": "Not found"}), 404)
+        return entity, None
+
+    entity = db.session.get(model, entity_id)
+    if not entity:
+        return None, (jsonify({"error": "Not found"}), 404)
+    return entity, None
 
 
 @reporting_bp.route("/program-health/<int:pid>", methods=["GET"])
@@ -61,7 +95,8 @@ def program_explore_health(pid):
     program, err = _get_scoped_program_or_404(pid)
     if err:
         return err
-    return jsonify(ExploreMetrics.program_health(pid)), 200
+    project_id = request.args.get("project_id", type=int) or pid
+    return jsonify(ExploreMetrics.program_health(project_id)), 200
 
 
 @reporting_bp.route("/weekly/<int:pid>", methods=["GET"])
@@ -145,7 +180,27 @@ def run_preset(report_key, pid):
 def list_definitions():
     """GET /api/v1/reports/definitions — List saved report definitions."""
     pid = request.args.get("program_id", type=int)
+    tenant_id = _get_tenant_id()
+
+    if pid:
+        program, err = _get_scoped_program_or_404(pid)
+        if err:
+            return err
+
     q = ReportDefinition.query
+
+    if tenant_id is not None:
+        if pid:
+            q = q.filter(
+                ReportDefinition.program_id == pid,
+                or_(
+                    ReportDefinition.tenant_id == tenant_id,
+                    ReportDefinition.tenant_id.is_(None),
+                ),
+            )
+        else:
+            q = q.filter(ReportDefinition.tenant_id == tenant_id)
+
     if pid:
         q = q.filter_by(program_id=pid)
     category = request.args.get("category")
@@ -169,8 +224,19 @@ def create_definition():
     name = data.get("name", "").strip()
     if not name:
         return jsonify({"error": "name is required"}), 400
+
+    tenant_id = _get_tenant_id()
+    program_id = data.get("program_id")
+    if tenant_id is not None:
+        if program_id is None:
+            return jsonify({"error": "program_id is required"}), 400
+        program, err = _get_scoped_program_or_404(program_id)
+        if err:
+            return err
+
     defn = ReportDefinition(
-        program_id=data.get("program_id"),
+        tenant_id=tenant_id,
+        program_id=program_id,
         name=name,
         description=data.get("description", ""),
         category=data.get("category", "custom"),
@@ -191,18 +257,18 @@ def create_definition():
 @reporting_bp.route("/definitions/<int:did>", methods=["GET"])
 def get_definition(did):
     """GET /api/v1/reports/definitions/<id> — Get report definition."""
-    defn = db.session.get(ReportDefinition, did)
-    if not defn:
-        return jsonify({"error": "Not found"}), 404
+    defn, err = _get_reporting_entity_or_404(ReportDefinition, did)
+    if err:
+        return err
     return jsonify(defn.to_dict()), 200
 
 
 @reporting_bp.route("/definitions/<int:did>", methods=["PUT"])
 def update_definition(did):
     """PUT /api/v1/reports/definitions/<id> — Update report definition."""
-    defn = db.session.get(ReportDefinition, did)
-    if not defn:
-        return jsonify({"error": "Not found"}), 404
+    defn, err = _get_reporting_entity_or_404(ReportDefinition, did)
+    if err:
+        return err
     data = request.get_json(silent=True) or {}
     for field in ("name", "description", "category", "query_type", "query_config",
                   "chart_type", "chart_config", "is_preset", "is_public", "schedule"):
@@ -215,9 +281,9 @@ def update_definition(did):
 @reporting_bp.route("/definitions/<int:did>", methods=["DELETE"])
 def delete_definition(did):
     """DELETE /api/v1/reports/definitions/<id> — Delete report definition."""
-    defn = db.session.get(ReportDefinition, did)
-    if not defn:
-        return jsonify({"error": "Not found"}), 404
+    defn, err = _get_reporting_entity_or_404(ReportDefinition, did)
+    if err:
+        return err
     db.session.delete(defn)
     db.session.commit()
     return jsonify({"deleted": True}), 200
@@ -226,9 +292,9 @@ def delete_definition(did):
 @reporting_bp.route("/definitions/<int:did>/run", methods=["GET"])
 def run_definition(did):
     """GET /api/v1/reports/definitions/<id>/run — Execute a saved report."""
-    defn = db.session.get(ReportDefinition, did)
-    if not defn:
-        return jsonify({"error": "Not found"}), 404
+    defn, err = _get_reporting_entity_or_404(ReportDefinition, did)
+    if err:
+        return err
     if defn.query_type == "preset":
         report_key = (defn.query_config or {}).get("preset_key", "")
         if not report_key:
@@ -249,7 +315,25 @@ def run_definition(did):
 def list_dashboards():
     """GET /api/v1/reports/dashboards — List dashboard layouts."""
     pid = request.args.get("program_id", type=int)
+    tenant_id = _get_tenant_id()
+
+    if pid:
+        program, err = _get_scoped_program_or_404(pid)
+        if err:
+            return err
+
     q = DashboardLayout.query
+    if tenant_id is not None:
+        if pid:
+            q = q.filter(
+                DashboardLayout.program_id == pid,
+                or_(
+                    DashboardLayout.tenant_id == tenant_id,
+                    DashboardLayout.tenant_id.is_(None),
+                ),
+            )
+        else:
+            q = q.filter(DashboardLayout.tenant_id == tenant_id)
     if pid:
         q = q.filter_by(program_id=pid)
     return jsonify({"dashboards": [d.to_dict() for d in q.all()]}), 200
@@ -261,7 +345,13 @@ def create_dashboard():
     data = request.get_json(silent=True) or {}
     if not data.get("program_id"):
         return jsonify({"error": "program_id is required"}), 400
+
+    program, err = _get_scoped_program_or_404(data["program_id"])
+    if err:
+        return err
+
     layout = DashboardLayout(
+        tenant_id=_get_tenant_id(),
         user_id=data.get("user_id"),
         program_id=data["program_id"],
         layout=data.get("layout", []),
@@ -274,18 +364,18 @@ def create_dashboard():
 @reporting_bp.route("/dashboards/<int:did>", methods=["GET"])
 def get_dashboard(did):
     """GET /api/v1/reports/dashboards/<id> — Get dashboard layout."""
-    layout = db.session.get(DashboardLayout, did)
-    if not layout:
-        return jsonify({"error": "Not found"}), 404
+    layout, err = _get_reporting_entity_or_404(DashboardLayout, did)
+    if err:
+        return err
     return jsonify(layout.to_dict()), 200
 
 
 @reporting_bp.route("/dashboards/<int:did>", methods=["PUT"])
 def update_dashboard(did):
     """PUT /api/v1/reports/dashboards/<id> — Update dashboard layout."""
-    layout = db.session.get(DashboardLayout, did)
-    if not layout:
-        return jsonify({"error": "Not found"}), 404
+    layout, err = _get_reporting_entity_or_404(DashboardLayout, did)
+    if err:
+        return err
     data = request.get_json(silent=True) or {}
     if "layout" in data:
         layout.layout = data["layout"]
@@ -296,9 +386,9 @@ def update_dashboard(did):
 @reporting_bp.route("/dashboards/<int:did>", methods=["DELETE"])
 def delete_dashboard(did):
     """DELETE /api/v1/reports/dashboards/<id> — Delete dashboard layout."""
-    layout = db.session.get(DashboardLayout, did)
-    if not layout:
-        return jsonify({"error": "Not found"}), 404
+    layout, err = _get_reporting_entity_or_404(DashboardLayout, did)
+    if err:
+        return err
     db.session.delete(layout)
     db.session.commit()
     return jsonify({"deleted": True}), 200
@@ -320,7 +410,42 @@ def gadget_data(gadget_type, pid):
     program, err = _get_scoped_program_or_404(pid)
     if err:
         return err
-    result = DashboardEngine.compute(gadget_type, pid)
+    project_id = request.args.get("project_id", type=int)
+    kwargs = {}
+    if project_id:
+        kwargs["project_id"] = project_id
+    result = DashboardEngine.compute(gadget_type, pid, **kwargs)
     if "error" in result:
         return jsonify(result), 400
     return jsonify(result), 200
+
+
+@reporting_bp.route("/gadgets/batch/<int:pid>", methods=["GET"])
+def gadget_batch(pid):
+    """GET /api/v1/reports/gadgets/batch/<pid> — Get multiple gadget payloads."""
+    program, err = _get_scoped_program_or_404(pid)
+    if err:
+        return err
+    raw_types = request.args.get("types", "")
+    types = [t.strip() for t in raw_types.split(",") if t.strip()]
+    if not types:
+        return jsonify({"error": "types query parameter is required"}), 400
+
+    project_id = request.args.get("project_id", type=int)
+    kwargs = {}
+    if project_id:
+        kwargs["project_id"] = project_id
+
+    items = {}
+    errors = {}
+    for gadget_type in types:
+        result = DashboardEngine.compute(gadget_type, pid, **kwargs)
+        if "error" in result:
+            errors[gadget_type] = result["error"]
+        else:
+            items[gadget_type] = result
+
+    return jsonify({
+        "items": items,
+        "errors": errors,
+    }), 200

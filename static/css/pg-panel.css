@@ -5,22 +5,56 @@
 
 .pg-panel {
     position: fixed;
-    right: 0;
-    top: var(--pg-header-height, 48px);
-    bottom: 0;
+    inset: 0;
+    display: flex;
+    justify-content: flex-end;
+    align-items: stretch;
+    z-index: var(--pg-z-dropdown, 110);
+    pointer-events: none;
+}
+
+.pg-panel__sheet {
     width: 420px;
+    margin-top: var(--pg-header-height, 48px);
+    height: calc(100vh - var(--pg-header-height, 48px));
     background: var(--pg-color-surface);
     border-left: 1px solid var(--pg-color-border);
     box-shadow: var(--pg-shadow-xl, -8px 0 24px rgba(0,0,0,0.12));
     display: flex;
     flex-direction: column;
     transform: translateX(100%);
-    transition: transform var(--pg-t-slow, 250ms ease);
-    z-index: var(--pg-z-dropdown, 110);
+    transition: transform var(--pg-t-slow, 250ms ease), opacity var(--pg-t-fast, 180ms ease);
+    pointer-events: auto;
 }
 
-.pg-panel--open {
+.pg-panel--open .pg-panel__sheet {
     transform: translateX(0);
+}
+
+.pg-panel--dialog {
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+    background: rgba(15, 23, 42, 0.28);
+    backdrop-filter: blur(6px);
+    pointer-events: auto;
+}
+
+.pg-panel--dialog .pg-panel__sheet {
+    width: min(680px, calc(100vw - 32px));
+    max-height: min(78vh, 760px);
+    height: auto;
+    margin-top: 0;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 20px;
+    box-shadow: 0 28px 60px rgba(15, 23, 42, 0.18);
+    transform: translateY(16px) scale(0.98);
+    opacity: 0;
+}
+
+.pg-panel--dialog.pg-panel--open .pg-panel__sheet {
+    transform: translateY(0) scale(1);
+    opacity: 1;
 }
 
 /* ── Header ────────────────────────────────────────────────── */
@@ -114,10 +148,17 @@
 
 /* ── Responsive ────────────────────────────────────────────── */
 @media (max-width: 900px) {
-    .pg-panel {
+    .pg-panel__sheet {
         width: 100%;
     }
     .has-panel {
         margin-right: 0;
+    }
+    .pg-panel--dialog {
+        padding: 12px;
+    }
+    .pg-panel--dialog .pg-panel__sheet {
+        width: 100%;
+        max-height: calc(100vh - 24px);
     }
 }

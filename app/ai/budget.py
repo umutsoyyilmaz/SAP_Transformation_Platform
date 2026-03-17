@@ -110,7 +110,7 @@ class TokenBudgetService:
             )
             db.session.add(budget)
 
-        db.session.flush()
+        db.session.commit()
         return budget
 
     def reset_budget(self, budget_id: int) -> AITokenBudget | None:
@@ -124,7 +124,7 @@ class TokenBudgetService:
         budget.request_count = 0
         budget.period_start = now
         budget.reset_at = self._compute_reset_at(budget.period, now)
-        db.session.flush()
+        db.session.commit()
         return budget
 
     def list_budgets(self, program_id: int | None = None) -> list[dict]:
@@ -140,7 +140,7 @@ class TokenBudgetService:
         if not budget:
             return False
         db.session.delete(budget)
-        db.session.flush()
+        db.session.commit()
         return True
 
     # ── Internal ──────────────────────────────────────────────────────────

@@ -39,6 +39,11 @@ from app.models.cutover import (
 )
 from app.models.auth import Tenant
 from app.models.program import Program
+from app.services.helpers.project_owned_scope import (
+    normalize_member_scope,
+    normalize_project_scope,
+    resolve_project_scope,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -669,16 +674,25 @@ def create_plan(data: dict) -> CutoverPlan:
     Returns:
         The persisted CutoverPlan instance.
     """
+    project_id = resolve_project_scope(data["program_id"], data.get("project_id"))
+    if project_id is None:
+        raise ValueError("project_id is required")
+    cutover_manager_id = normalize_member_scope(
+        data["program_id"],
+        data.get("cutover_manager_id"),
+        field_name="cutover_manager_id",
+        project_id=project_id,
+    )
     code = generate_plan_code(data["program_id"])
     plan = CutoverPlan(
         tenant_id=_tenant_id_for_program(data["program_id"]),
         program_id=data["program_id"],
-        project_id=data.get("project_id"),
+        project_id=project_id,
         code=code,
         name=data["name"],
         description=data.get("description", ""),
         cutover_manager=data.get("cutover_manager", ""),
-        cutover_manager_id=data.get("cutover_manager_id"),
+        cutover_manager_id=cutover_manager_id,
         environment=data.get("environment", "PRD"),
         planned_start=_parse_dt(data.get("planned_start")),
         planned_end=_parse_dt(data.get("planned_end")),
@@ -708,6 +722,16 @@ def update_plan(plan: CutoverPlan, data: dict, dt_fields: set[str] | None = None
     """
     if dt_fields is None:
         dt_fields = _DT_FIELDS
+    project_id = normalize_project_scope(plan.program_id, data.get("project_id", plan.project_id))
+    cutover_manager_id = (
+        normalize_member_scope(
+            plan.program_id,
+            data.get("cutover_manager_id"),
+            field_name="cutover_manager_id",
+            project_id=project_id,
+        )
+        if "cutover_manager_id" in data else plan.cutover_manager_id
+    )
     updatable = (
         "name", "description", "cutover_manager", "cutover_manager_id", "environment",
         "planned_start", "planned_end",
@@ -717,7 +741,10 @@ def update_plan(plan: CutoverPlan, data: dict, dt_fields: set[str] | None = None
     )
     for f in updatable:
         if f in data:
-            val = _parse_dt(data[f]) if f in dt_fields else data[f]
+            if f == "cutover_manager_id":
+                val = cutover_manager_id
+            else:
+                val = _parse_dt(data[f]) if f in dt_fields else data[f]
             setattr(plan, f, val)
     db.session.commit()
     logger.info("CutoverPlan updated id=%s", plan.id)
@@ -772,6 +799,13 @@ def create_scope_item(plan_id: int, data: dict) -> CutoverScopeItem:
     Returns:
         The persisted CutoverScopeItem instance.
     """
+    plan = db.session.get(CutoverPlan, plan_id)
+    owner_id = normalize_member_scope(
+        plan.program_id,
+        data.get("owner_id"),
+        field_name="owner_id",
+        project_id=plan.project_id,
+    )
     si = CutoverScopeItem(
         tenant_id=_tenant_id_for_plan(plan_id),
         cutover_plan_id=plan_id,
@@ -779,7 +813,7 @@ def create_scope_item(plan_id: int, data: dict) -> CutoverScopeItem:
         category=data.get("category", "custom"),
         description=data.get("description", ""),
         owner=data.get("owner", ""),
-        owner_id=data.get("owner_id"),
+        owner_id=owner_id,
         order=data.get("order", 0),
     )
     db.session.add(si)
@@ -798,9 +832,18 @@ def update_scope_item(si: CutoverScopeItem, data: dict) -> CutoverScopeItem:
     Returns:
         The updated CutoverScopeItem instance.
     """
+    owner_id = (
+        normalize_member_scope(
+            si.cutover_plan.program_id,
+            data.get("owner_id"),
+            field_name="owner_id",
+            project_id=si.cutover_plan.project_id,
+        )
+        if "owner_id" in data else si.owner_id
+    )
     for f in ("name", "category", "description", "owner", "owner_id", "order"):
         if f in data:
-            setattr(si, f, data[f])
+            setattr(si, f, owner_id if f == "owner_id" else data[f])
     db.session.commit()
     logger.info("CutoverScopeItem updated id=%s", si.id)
     return si
@@ -854,6 +897,13 @@ def create_task(si_id: int, plan_id: int, data: dict, *, program_id: int | None 
     Returns:
         The persisted RunbookTask instance.
     """
+    plan = db.session.get(CutoverPlan, plan_id)
+    responsible_id = normalize_member_scope(
+        plan.program_id,
+        data.get("responsible_id"),
+        field_name="responsible_id",
+        project_id=plan.project_id,
+    )
     code = generate_task_code(plan_id, program_id=program_id)
     task = RunbookTask(
         tenant_id=_tenant_id_for_scope_item(si_id),
@@ -866,7 +916,7 @@ def create_task(si_id: int, plan_id: int, data: dict, *, program_id: int | None 
         planned_end=_parse_dt(data.get("planned_end")),
         planned_duration_min=data.get("planned_duration_min"),
         responsible=data.get("responsible", ""),
-        responsible_id=data.get("responsible_id"),
+        responsible_id=responsible_id,
         accountable=data.get("accountable", ""),
         environment=data.get("environment", "PRD"),
         rollback_action=data.get("rollback_action", ""),
@@ -898,6 +948,15 @@ def update_task(task: RunbookTask, data: dict, dt_fields: set[str] | None = None
     """
     if dt_fields is None:
         dt_fields = _DT_FIELDS
+    responsible_id = (
+        normalize_member_scope(
+            task.scope_item.cutover_plan.program_id,
+            data.get("responsible_id"),
+            field_name="responsible_id",
+            project_id=task.scope_item.cutover_plan.project_id,
+        )
+        if "responsible_id" in data else task.responsible_id
+    )
     updatable = (
         "sequence", "title", "description",
         "planned_start", "planned_end", "planned_duration_min",
@@ -907,7 +966,10 @@ def update_task(task: RunbookTask, data: dict, dt_fields: set[str] | None = None
     )
     for f in updatable:
         if f in data:
-            val = _parse_dt(data[f]) if f in dt_fields else data[f]
+            if f == "responsible_id":
+                val = responsible_id
+            else:
+                val = _parse_dt(data[f]) if f in dt_fields else data[f]
             setattr(task, f, val)
     db.session.commit()
     logger.info("RunbookTask updated id=%s", task.id)
@@ -1451,7 +1513,12 @@ def start_task(tenant_id: int, program_id: int, task_id: int, executor_id: int |
     task.status = "in_progress"
     task.actual_start = now
     if executor_id:
-        task.responsible_id = executor_id
+        task.responsible_id = normalize_member_scope(
+            program_id,
+            executor_id,
+            field_name="executor_id",
+            project_id=task.scope_item.cutover_plan.project_id,
+        )
     db.session.commit()
     logger.info(
         "RunbookTask started",
@@ -1499,8 +1566,13 @@ def complete_task(
     task.actual_end = now
     task.executed_at = now
     if executor_id:
-        task.responsible_id = executor_id
-        member = db.session.get(__import__("app.models.program", fromlist=["TeamMember"]).TeamMember, executor_id)
+        task.responsible_id = normalize_member_scope(
+            program_id,
+            executor_id,
+            field_name="executor_id",
+            project_id=task.scope_item.cutover_plan.project_id,
+        )
+        member = db.session.get(__import__("app.models.program", fromlist=["TeamMember"]).TeamMember, task.responsible_id)
         if member:
             task.executed_by = member.name
 

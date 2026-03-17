@@ -1,0 +1,178 @@
+.hc-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.hc-page-header__actions,
+.hc-incident-detail__actions,
+.hc-wr-tab__head {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.hc-tabs {
+    margin-bottom: 12px;
+}
+
+.hc-esc-alert__level,
+.hc-esc-panel__count,
+.hc-wr-row__badge,
+.hc-incident-row__flag,
+.hc-cr-row__flag,
+.hc-wr-card__badge,
+.hc-wr-card__priority {
+    font-size: 0.75em;
+}
+
+.hc-esc-alert__target {
+    flex: 1;
+}
+
+.hc-esc-alert__time,
+.hc-wr-overview__eyebrow,
+.hc-wr-row__meta,
+.hc-wr-card__meta,
+.hc-empty-panel,
+.hc-exit-footnote,
+.hc-incident-detail__deadline,
+.hc-incident-detail__root-cause,
+.hc-lessons__meta {
+    color: var(--sap-text-secondary, #6a6d70);
+}
+
+.hc-wr-overview__eyebrow {
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.hc-wr-row__meta {
+    font-size: 0.85em;
+}
+
+.hc-wr-row__priority {
+    font-weight: 700;
+}
+
+.hc-section-header {
+    margin-bottom: 12px;
+}
+
+.hc-empty-panel {
+    padding: 24px;
+    text-align: center;
+}
+
+.hc-empty-panel__cta {
+    margin-left: 8px;
+}
+
+.hc-wr-tab__head {
+    margin-bottom: 12px;
+}
+
+.hc-exit-required {
+    margin-left: 4px;
+    font-size: 0.7em;
+    color: #dc2626;
+}
+
+.hc-exit-item__copy {
+    flex: 1;
+}
+
+.hc-exit-item__value,
+.hc-esc-history__time {
+    font-size: 0.8em;
+    color: var(--sap-text-secondary, #6a6d70);
+}
+
+.hc-exit-title {
+    margin: 0;
+}
+
+.hc-incident-detail__row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.hc-incident-detail__assign {
+    margin: 8px 0;
+}
+
+.hc-incident-detail__assign-label {
+    font-size: 0.85em;
+    font-weight: 600;
+}
+
+.hc-incident-detail__assign-select {
+    margin-left: 8px;
+}
+
+.hc-esc-history,
+.hc-lessons {
+    margin-top: 12px;
+}
+
+.hc-esc-history__title,
+.hc-lessons__title,
+.hc-wr-modal__title {
+    margin-bottom: 6px;
+}
+
+.hc-esc-history__row,
+.hc-lessons__row {
+    display: flex;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 0.9em;
+    border-bottom: 1px solid #f1f5f9;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.hc-esc-history__ack {
+    color: #22c55e;
+}
+
+.hc-incident-detail__deadline,
+.hc-incident-detail__root-cause,
+.hc-assignment-table,
+.hc-assignment-empty {
+    font-size: 0.9em;
+}
+
+.hc-assignment-empty {
+    color: var(--sap-text-secondary);
+}
+
+.hc-wr-modal__meta {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.hc-wr-modal__copy,
+.hc-wr-modal__submeta {
+    font-size: 0.9em;
+}
+
+.hc-wr-modal__section-title {
+    margin: 12px 0 6px;
+}
+
+.hc-wr-modal__actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+}

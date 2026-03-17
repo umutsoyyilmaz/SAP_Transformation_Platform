@@ -32,6 +32,13 @@ logger = logging.getLogger(__name__)
 class SuggestionQueue:
     """Service for managing AI suggestion lifecycle."""
 
+    # ── Read ──────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def get_by_id(suggestion_id: int) -> AISuggestion | None:
+        """Return a single suggestion by primary key, or None."""
+        return db.session.get(AISuggestion, suggestion_id)
+
     # ── Create ────────────────────────────────────────────────────────────
 
     @staticmethod

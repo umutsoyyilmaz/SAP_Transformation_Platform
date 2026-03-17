@@ -72,7 +72,12 @@ class RiskAssessment:
             if self.rag:
                 try:
                     signal_text = json.dumps(signals, indent=2)
-                    hits = self.rag.search(signal_text, top_k=5, entity_types=["risk"])
+                    hits = self.rag.search(
+                        signal_text,
+                        program_id=program_id,
+                        top_k=5,
+                        entity_type="risk",
+                    )
                     similar_risks = [
                         {"content": h.get("content", ""), "score": round(h.get("score", 0), 3)}
                         for h in hits
@@ -102,39 +107,29 @@ class RiskAssessment:
             if similar_risks:
                 program_context += f"\nSimilar past risks:\n{json.dumps(similar_risks[:3], indent=2)}"
 
-            rendered = template.render(
+            messages = self._normalize_prompt_messages(template.render(
                 project_signals=json.dumps(signals, indent=2),
                 program_context=program_context,
-            )
+            ))
+            if not messages:
+                result["error"] = "risk_assessment prompt template rendered no messages"
+                return result
 
             if not self.gateway:
                 result["error"] = "LLM Gateway not available"
                 return result
 
-            messages = [
-                {"role": "system", "content": rendered["system"]},
-                {"role": "user", "content": rendered["user"]},
-            ]
-
             llm_result = self.gateway.chat(
-                messages,
+                messages=messages,
+                purpose="risk_assessment",
+                program_id=program_id,
                 temperature=0.3,
                 max_tokens=2000,
                 metadata={"assistant": "risk_assessment", "program_id": program_id},
             )
 
             content = llm_result.get("content", "")
-            try:
-                import re
-
-                json_match = re.search(r"\[.*\]", content, re.DOTALL)
-                if json_match:
-                    risks = json.loads(json_match.group())
-                else:
-                    risks = json.loads(content)
-            except (json.JSONDecodeError, TypeError):
-                logger.warning("Failed to parse risk assessment response")
-                risks = []
+            risks = self._parse_risks(content)
 
             result["risks"] = risks
 
@@ -160,6 +155,53 @@ class RiskAssessment:
             result["error"] = str(exc)
 
         return result
+
+    @staticmethod
+    def _normalize_prompt_messages(rendered: Any) -> list[dict]:
+        """Accept both legacy dict and current list-based prompt render contracts."""
+        if isinstance(rendered, list):
+            return [
+                {"role": msg.get("role", ""), "content": msg.get("content", "")}
+                for msg in rendered
+                if isinstance(msg, dict) and msg.get("role") and msg.get("content")
+            ]
+
+        if isinstance(rendered, dict):
+            messages = []
+            system = rendered.get("system")
+            user = rendered.get("user")
+            if system:
+                messages.append({"role": "system", "content": system})
+            if user:
+                messages.append({"role": "user", "content": user})
+            return messages
+
+        return []
+
+    @staticmethod
+    def _parse_risks(content: str) -> list[dict]:
+        """Parse either an array response or a single risk object into a uniform list."""
+        try:
+            import re
+
+            json_match = re.search(r"\[.*\]", content, re.DOTALL)
+            if json_match:
+                parsed = json.loads(json_match.group())
+            else:
+                parsed = json.loads(content)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Failed to parse risk assessment response")
+            return []
+
+        if isinstance(parsed, list):
+            return [item for item in parsed if isinstance(item, dict)]
+
+        if isinstance(parsed, dict):
+            if isinstance(parsed.get("risks"), list):
+                return [item for item in parsed["risks"] if isinstance(item, dict)]
+            return [parsed]
+
+        return []
 
     def _gather_signals(self, program_id: int) -> dict:
         """Collect project signals from all modules."""

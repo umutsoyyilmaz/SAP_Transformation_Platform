@@ -1,7 +1,7 @@
 """
 F5 — Dashboard Gadget Engine.
 
-12 built-in gadget types that compute real-time data for the drag-drop dashboard.
+Registered gadget types that compute real-time data for the workspace dashboard.
 Each gadget returns a uniform structure:
   {"title": str, "type": str, "data": ..., "chart_config": {...}}
 """
@@ -63,7 +63,7 @@ class DashboardEngine:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# GADGET IMPLEMENTATIONS (12 built-in)
+# GADGET IMPLEMENTATIONS
 # ═════════════════════════════════════════════════════════════════════════════
 
 # 1 ── Pass Rate Gauge ────────────────────────────────────────────────────
@@ -405,10 +405,16 @@ _DEFECT_OPEN = {"open", "in_progress", "reopened"}
 _RISK_OPEN = {"open", "in_progress"}
 
 
+def _resolve_project_scope(pid, kw):
+    """Allow dashboard overview gadgets to follow the active project context."""
+    return kw.get("project_id") or pid
+
+
 # 13 ── Health Score ───────────────────────────────────────────────────────
 @DashboardEngine.register("health_score", "Health Score", "1x1")
 def _health_score(pid, **kw):
     """Program health gauge based on open defects & risks."""
+    project_id = _resolve_project_scope(pid, kw)
     open_defects = Defect.query.filter(
         Defect.program_id == pid, Defect.status.in_(_DEFECT_OPEN),
     ).count()
@@ -427,7 +433,7 @@ def _health_score(pid, **kw):
         health -= 5
     health = max(0, min(100, health))
 
-    req_count = ExploreRequirement.query.filter_by(project_id=pid).count()
+    req_count = ExploreRequirement.query.filter_by(project_id=project_id).count()
     tc_count = TestCase.query.filter_by(program_id=pid).count()
     test_coverage = min(100.0, round(tc_count / req_count * 100, 1)) if req_count else 0
 
@@ -451,6 +457,7 @@ def _health_score(pid, **kw):
 @DashboardEngine.register("kpi_strip", "KPI Strip", "2x1")
 def _kpi_strip(pid, **kw):
     """Five key counters: requirements, WRICEF, test cases, defects, risks."""
+    project_id = _resolve_project_scope(pid, kw)
     return {
         "title": "KPI Strip",
         "type": "kpi_strip",
@@ -458,7 +465,7 @@ def _kpi_strip(pid, **kw):
             "items": [
                 {
                     "label": "Requirements",
-                    "value": ExploreRequirement.query.filter_by(project_id=pid).count(),
+                    "value": ExploreRequirement.query.filter_by(project_id=project_id).count(),
                     "view": "explore-requirements",
                     "icon": "requirements",
                 },

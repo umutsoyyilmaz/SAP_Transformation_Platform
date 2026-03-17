@@ -15,11 +15,28 @@ Architecture ref:  §10.6.1 — Natural Language Query Assistant
 import json
 import logging
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from app.models import db
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class QueryContext:
+    """Normalized query analysis used by deterministic SQL generation."""
+
+    original_query: str
+    normalized_query: str
+    program_id: int | None
+    project_id: int | None
+    glossary_matches: list[dict]
+    module_values: list[str]
+    intent: str
+    entity: str | None
+    workshop_scope: bool
+    wants_grouping: bool
 
 # ── SAP Glossary (Term → DB mapping) ─────────────────────────────────────────
 
@@ -39,6 +56,9 @@ SAP_GLOSSARY = {
     "conversion": {"table": "backlog_items", "filter": "wricef_type = 'conversion'"},
     "enhancement": {"table": "backlog_items", "filter": "wricef_type = 'enhancement'"},
     "form": {"table": "backlog_items", "filter": "wricef_type = 'form'"},
+    "rfc": {"table": "change_requests", "alias": "RFC change request"},
+    "change request": {"table": "change_requests", "alias": "RFC change request"},
+    "change requests": {"table": "change_requests", "alias": "RFC change requests"},
 
     # Severity shortcuts
     "critical": {"column": "severity", "values": ["P1"]},
@@ -68,6 +88,17 @@ SAP_GLOSSARY = {
     "basis": {"column": "module", "values": ["BASIS"]},
     "btp": {"column": "module", "values": ["BTP"]},
 
+    # Entity shortcuts
+    "config item": {"table": "config_items", "alias": "configuration item"},
+    "config items": {"table": "config_items", "alias": "configuration items"},
+    "configuration item": {"table": "config_items", "alias": "configuration item"},
+    "backlog item": {"table": "backlog_items", "alias": "backlog/WRICEF item"},
+    "backlog items": {"table": "backlog_items", "alias": "backlog/WRICEF items"},
+    "action item": {"table": "actions", "alias": "action item"},
+    "action items": {"table": "actions", "alias": "action items"},
+    "issue": {"table": "issues", "alias": "issue"},
+    "issues": {"table": "issues", "alias": "issues"},
+
     # Localized shortcuts (Turkish)
     "gereksinim": {"table": "requirements", "alias": "requirement"},
     "hata": {"table": "defects", "alias": "defect"},
@@ -77,6 +108,310 @@ SAP_GLOSSARY = {
     "karar": {"table": "decisions", "alias": "decision"},
     "sorun": {"table": "issues", "alias": "issue"},
 }
+
+_WORKSHOP_COUNT_FALLBACKS: dict[str, dict[str, str]] = {
+    "open_items": {
+        "table": "explore_open_items eoi",
+        "join": "JOIN explore_workshops ew ON ew.id = eoi.workshop_id",
+        "scope_alias": "eoi",
+        "count_alias": "workshop_open_item_count",
+        "extra_filter": "\n  AND eoi.status IN ('open', 'in_progress', 'blocked')",
+        "explanation": "Counts open workshop follow-up items for the selected program.",
+    },
+    "requirements": {
+        "table": "explore_requirements er",
+        "join": "JOIN explore_workshops ew ON ew.id = er.workshop_id",
+        "scope_alias": "er",
+        "count_alias": "workshop_requirement_count",
+        "extra_filter": "",
+        "explanation": "Counts workshop requirements for the selected program.",
+    },
+}
+
+_MODULE_COUNT_FALLBACKS: dict[str, dict[str, str]] = {
+    "test_cases": {
+        "table": "test_cases tc",
+        "scope_alias": "tc",
+        "module_column": "module",
+        "count_alias": "test_case_count",
+        "explanation": "Counts test cases for the selected SAP module in the selected program.",
+    },
+}
+
+_ENTITY_QUERY_FALLBACKS: dict[str, dict[str, str | bool | list[str]]] = {
+    "defects": {
+        "table": "defects d",
+        "scope_alias": "d",
+        "module_column": "module",
+        "count_alias": "defect_count",
+        "supports_project_scope": False,
+        "explanation": "Counts defects for the selected program.",
+        "singular_label": "defect",
+        "plural_label": "defects",
+        "list_columns": ["d.code", "d.title", "d.status", "d.severity", "d.module", "d.assigned_to", "d.reported_at"],
+        "default_order": "d.reported_at DESC, d.code ASC",
+        "status_enum_key": "defects.status",
+        "severity_enum_key": "defects.severity",
+    },
+    "test_cases": {
+        "table": "test_cases tc",
+        "scope_alias": "tc",
+        "module_column": "module",
+        "count_alias": "test_case_count",
+        "supports_project_scope": False,
+        "explanation": "Counts test cases for the selected program.",
+        "singular_label": "test case",
+        "plural_label": "test cases",
+        "list_columns": ["tc.code", "tc.title", "tc.status", "tc.priority", "tc.module", "tc.test_layer"],
+        "default_order": "tc.updated_at DESC, tc.code ASC",
+        "status_enum_key": "test_cases.status",
+    },
+    "requirements": {
+        "table": "explore_requirements req",
+        "scope_alias": "req",
+        "module_column": "sap_module",
+        "count_alias": "requirement_count",
+        "supports_project_scope": False,
+        "explanation": "Counts requirements (explore) for the selected program.",
+        "singular_label": "requirement",
+        "plural_label": "requirements",
+        "list_columns": ["req.code", "req.title", "req.status", "req.priority", "req.sap_module", "req.fit_status"],
+        "default_order": "req.updated_at DESC, req.code ASC",
+        "status_enum_key": "requirements.status",
+    },
+    "change_requests": {
+        "table": "change_requests cr",
+        "scope_alias": "cr",
+        "module_column": "source_module",
+        "count_alias": "rfc_count",
+        "supports_project_scope": True,
+        "explanation": "Counts RFC change requests for the selected project or program.",
+        "singular_label": "RFC change request",
+        "plural_label": "RFC change requests",
+        "list_columns": ["cr.code", "cr.title", "cr.status", "cr.change_model", "cr.change_domain"],
+        "default_order": "cr.updated_at DESC, cr.code ASC",
+        "status_enum_key": "change_requests.status",
+    },
+    "risks": {
+        "table": "risks r",
+        "scope_alias": "r",
+        "count_alias": "risk_count",
+        "supports_project_scope": False,
+        "explanation": "Counts risk items for the selected program.",
+        "singular_label": "risk item",
+        "plural_label": "risk items",
+        "list_columns": ["r.code", "r.title", "r.status", "r.priority", "r.rag_status", "r.owner"],
+        "default_order": "r.risk_score DESC, r.updated_at DESC, r.code ASC",
+        "status_enum_key": "risks.status",
+    },
+    "config_items": {
+        "table": "config_items ci",
+        "scope_alias": "ci",
+        "module_column": "module",
+        "count_alias": "config_item_count",
+        "supports_project_scope": False,
+        "explanation": "Counts configuration items for the selected program.",
+        "singular_label": "config item",
+        "plural_label": "config items",
+        "list_columns": ["ci.code", "ci.title", "ci.status", "ci.priority", "ci.module", "ci.assigned_to"],
+        "default_order": "ci.updated_at DESC, ci.code ASC",
+        "status_enum_key": "config_items.status",
+    },
+    "backlog_items": {
+        "table": "backlog_items bi",
+        "scope_alias": "bi",
+        "module_column": "module",
+        "count_alias": "backlog_item_count",
+        "supports_project_scope": False,
+        "explanation": "Counts backlog/WRICEF items for the selected program.",
+        "singular_label": "backlog item",
+        "plural_label": "backlog items",
+        "list_columns": ["bi.code", "bi.title", "bi.status", "bi.priority", "bi.wricef_type", "bi.module", "bi.assigned_to"],
+        "default_order": "bi.updated_at DESC, bi.code ASC",
+        "status_enum_key": "backlog_items.status",
+    },
+    "actions": {
+        "table": "actions a",
+        "scope_alias": "a",
+        "count_alias": "action_count",
+        "supports_project_scope": False,
+        "explanation": "Counts action items for the selected program.",
+        "singular_label": "action item",
+        "plural_label": "action items",
+        "list_columns": ["a.code", "a.title", "a.status", "a.priority", "a.owner", "a.due_date"],
+        "default_order": "a.due_date ASC, a.code ASC",
+        "status_enum_key": "actions.status",
+    },
+    "issues": {
+        "table": "issues i",
+        "scope_alias": "i",
+        "count_alias": "issue_count",
+        "supports_project_scope": False,
+        "explanation": "Counts issues for the selected program.",
+        "singular_label": "issue",
+        "plural_label": "issues",
+        "list_columns": ["i.code", "i.title", "i.status", "i.priority", "i.severity", "i.owner"],
+        "default_order": "i.updated_at DESC, i.code ASC",
+        "status_enum_key": "issues.status",
+    },
+}
+
+_LIST_SORT_KEYWORDS: dict[str, str] = {
+    "priority": "priority",
+    "status": "status",
+    "severity": "severity",
+    "module": "module",
+    "updated": "updated_at",
+    "updated at": "updated_at",
+    "created": "created_at",
+    "created at": "created_at",
+    "date": "updated_at",
+    "title": "title",
+    "code": "code",
+}
+
+_LIST_PRIORITY_VALUES: dict[str, str] = {
+    "critical priority": "critical",
+    "high priority": "high",
+    "medium priority": "medium",
+    "low priority": "low",
+    "must have": "must_have",
+    "must-have": "must_have",
+    "should have": "should_have",
+    "should-have": "should_have",
+    "could have": "could_have",
+    "could-have": "could_have",
+    "wont have": "wont_have",
+    "won't have": "wont_have",
+}
+
+_FALLBACK_QUERY_PATTERNS: list[tuple[re.Pattern[str], tuple[str, str]]] = [
+    (
+        re.compile(r"\brequirements?\b.*\bfit(?:/|\s+to\s+)?gap\b|\bfit(?:/|\s+to\s+)?gap\b.*\brequirements?\b", re.IGNORECASE),
+        (
+            """
+            SELECT
+                COALESCE(fit_status, 'unclassified') AS fit_status,
+                COUNT(*) AS requirement_count
+            FROM explore_requirements
+            WHERE {scope_column} = {scope_value}
+            GROUP BY COALESCE(fit_status, 'unclassified')
+            ORDER BY requirement_count DESC, fit_status ASC
+            """.strip(),
+            "Groups explore requirements by fit/gap status for the selected scope.",
+        ),
+    ),
+    (
+        re.compile(r"\bhow many\b.*\bopen\b.*\bdefects?\b|\bopen\b.*\bdefects?\b", re.IGNORECASE),
+        (
+            """
+            SELECT COUNT(*) AS open_defect_count
+            FROM defects
+            WHERE {scope_column} = {scope_value}
+              AND status NOT IN ('closed', 'rejected')
+            """.strip(),
+            "Counts open defects for the selected program.",
+        ),
+    ),
+    (
+        re.compile(
+            r"\bhow many\b.*\bopen\s+items?\b.*\bworkshops?\b|"
+            r"\bopen\s+items?\b.*\bunder\b.*\bworkshops?\b|"
+            r"\bkaç\b.*\baçık\s+madd(e|eler)\b.*\bworkshop\b",
+            re.IGNORECASE,
+        ),
+        (
+            """
+            SELECT COUNT(*) AS workshop_open_item_count
+                        FROM explore_open_items eoi
+                        JOIN explore_workshops ew ON ew.id = eoi.workshop_id
+                        WHERE eoi.{scope_column} = {scope_value}
+                            AND eoi.workshop_id IS NOT NULL
+                            AND eoi.status IN ('open', 'in_progress', 'blocked'){explore_process_area_filter}
+            """.strip(),
+            "Counts open workshop follow-up items for the selected program.",
+        ),
+    ),
+    (
+        re.compile(
+            r"\bhow many\b.*\brequirements?\b.*\bworkshops?\b|"
+            r"\brequirements?\b.*\bunder\b.*\bworkshops?\b|"
+            r"\bkaç\b.*\bgereksinim\b.*\bworkshop\b",
+            re.IGNORECASE,
+        ),
+        (
+            """
+            SELECT COUNT(*) AS workshop_requirement_count
+            FROM explore_requirements er
+            JOIN explore_workshops ew ON ew.id = er.workshop_id
+            WHERE er.{scope_column} = {scope_value}
+              AND er.workshop_id IS NOT NULL{explore_process_area_filter}
+            """.strip(),
+            "Counts workshop requirements for the selected program.",
+        ),
+    ),
+    (
+        re.compile(r"\bp1\b.*\bdefects?\b.*\bfi\b|\bfi\b.*\bp1\b.*\bdefects?\b", re.IGNORECASE),
+        (
+            """
+            SELECT code, title, status, severity, module, assigned_to, reported_at
+            FROM defects
+            WHERE {scope_column} = {scope_value}
+              AND severity = 'P1'
+              AND module = 'FI'
+            ORDER BY reported_at DESC, code ASC
+            """.strip(),
+            "Lists P1 FI defects for the selected program.",
+        ),
+    ),
+    (
+        re.compile(r"\bwricef\b.*\bmodule\b|\bmodule\b.*\bwricef\b", re.IGNORECASE),
+        (
+            """
+            SELECT COALESCE(module, 'unassigned') AS module, COUNT(*) AS wricef_count
+            FROM backlog_items
+            WHERE {scope_column} = {scope_value}
+            GROUP BY COALESCE(module, 'unassigned')
+            ORDER BY wricef_count DESC, module ASC
+            """.strip(),
+            "Summarizes WRICEF backlog items by SAP module.",
+        ),
+    ),
+    (
+        re.compile(r"\btest\b.*\b(pass rate|execution pass rate)\b|\bpass rate\b.*\btest\b", re.IGNORECASE),
+        (
+            """
+            SELECT
+                COUNT(*) AS total_executions,
+                SUM(CASE WHEN result = 'pass' THEN 1 ELSE 0 END) AS passed_executions,
+                ROUND(
+                    100.0 * SUM(CASE WHEN result = 'pass' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0),
+                    2
+                ) AS pass_rate_pct
+            FROM test_executions te
+            JOIN test_cycles tc ON tc.id = te.cycle_id
+            JOIN test_plans tp ON tp.id = tc.plan_id
+            WHERE tp.{scope_column} = {scope_value}
+            """.strip(),
+            "Calculates overall test execution pass rate for the selected program.",
+        ),
+    ),
+    (
+        re.compile(r"\bhow many\b.*\bdecisions?\b|\bcount\b.*\bdecisions?\b|\bkaç\b.*\bkarar\b", re.IGNORECASE),
+        (
+            """
+            SELECT
+                (SELECT COUNT(*) FROM decisions WHERE {scope_column} = {scope_value}) AS governance_decision_count,
+                (SELECT COUNT(*) FROM explore_decisions WHERE {scope_column} = {scope_value}) AS workshop_decision_count,
+                (
+                    (SELECT COUNT(*) FROM decisions WHERE {scope_column} = {scope_value}) +
+                    (SELECT COUNT(*) FROM explore_decisions WHERE {scope_column} = {scope_value})
+                ) AS total_decision_count
+            """.strip(),
+            "Counts governance and workshop decisions together for the selected program.",
+        ),
+    ),
+]
 
 # ── DB Schema context for the LLM ────────────────────────────────────────────
 
@@ -121,6 +456,9 @@ actions (id, program_id, code, title, description, status, owner, priority, acti
 issues (id, program_id, code, title, description, status, owner, priority, severity, escalation_path, root_cause, resolution, resolution_date, workstream_id, phase_id, created_at, updated_at)
 decisions (id, program_id, code, title, description, status, owner, priority, decision_date, decision_owner, alternatives, rationale, impact_description, reversible, workstream_id, phase_id, created_at, updated_at)
 
+-- Change Management
+change_requests (id, program_id, project_id, code, title, description, change_model, change_domain, status, priority, risk_level, environment, source_module, source_entity_type, source_entity_id, planned_start, planned_end, actual_start, actual_end, approved_at, validated_at, closed_at, created_at, updated_at)
+
 -- Notifications
 notifications (id, program_id, recipient, title, message, category, severity, entity_type, entity_id, is_read, read_at, created_at)
 
@@ -161,6 +499,8 @@ Key relationships:
 - risks/actions/issues/decisions.program_id → programs.id
 - risks/actions/issues/decisions.workstream_id → workstreams.id
 - risks/actions/issues/decisions.phase_id → phases.id
+- change_requests.program_id → programs.id
+- change_requests.project_id → projects.id
 
 Common enum values:
 - fit_gap: 'fit', 'partial_fit', 'gap', '' (empty = not classified)
@@ -196,7 +536,11 @@ _ALLOWED_TABLES = {
     "test_plans", "test_cycles", "test_cases", "test_executions",
     "defects",
     "risks", "actions", "issues", "decisions",
+    "change_requests",
     "notifications",
+    "explore_workshops", "explore_requirements", "explore_open_items", "explore_decisions",
+    "process_levels", "process_steps", "workshop_attendees", "workshop_agenda_items",
+    "explore_workshop_documents", "workshop_scope_items", "projects",
 }
 
 # ── Known Enum Values (for SQL auto-correction) ──────────────────────────────
@@ -261,6 +605,7 @@ _ENUM_DEFINITIONS: dict[str, list[str]] = {
     "test_executions.result": ["not_run", "pass", "fail", "blocked", "deferred"],
     "defects.severity": ["P1", "P2", "P3", "P4"],
     "defects.status": ["new", "open", "in_progress", "fixed", "retest", "closed", "rejected", "reopened"],
+    "change_requests.status": ["draft", "submitted", "approved", "in_progress", "validated", "closed", "rejected", "cancelled"],
     # RAID
     "risks.status": ["identified", "analysed", "mitigating", "accepted", "closed", "expired"],
     "risks.priority": ["critical", "high", "medium", "low"],
@@ -354,7 +699,7 @@ def validate_sql(sql: str) -> dict:
 
 def sanitize_sql(sql: str) -> str:
     """Remove potentially dangerous characters and normalize whitespace."""
-    # Remove inline/block comments 
+    # Remove inline/block comments
     sql = re.sub(r'--.*$', '', sql, flags=re.MULTILINE)
     sql = re.sub(r'/\*.*?\*/', '', sql, flags=re.DOTALL)
     # Collapse whitespace
@@ -388,6 +733,7 @@ class NLQueryAssistant:
         self,
         user_query: str,
         program_id: int | None = None,
+        project_id: int | None = None,
         auto_execute: bool = True,
     ) -> dict:
         """
@@ -399,12 +745,13 @@ class NLQueryAssistant:
             auto_execute: If True, execute SQL automatically when confident.
 
         Returns:
-            dict with keys: sql, explanation, confidence, results, row_count, 
+            dict with keys: sql, explanation, confidence, results, row_count,
                             glossary_matches, executed, error
         """
         result = {
             "original_query": user_query,
             "program_id": program_id,
+            "project_id": project_id,
             "sql": None,
             "explanation": "",
             "confidence": 0.0,
@@ -414,34 +761,47 @@ class NLQueryAssistant:
             "glossary_matches": [],
             "executed": False,
             "error": None,
+            "answer": "",
         }
 
-        # 1. Glossary enrichment
-        glossary_matches = self._resolve_glossary(user_query)
-        result["glossary_matches"] = glossary_matches
+        # 1. Build deterministic query context up front.
+        query_context = self._build_query_context(user_query, program_id, project_id)
+        result["glossary_matches"] = query_context.glossary_matches
 
-        # 2. Build prompt via registry or fallback
-        messages = self._build_prompt(user_query, program_id, glossary_matches)
+        # 2. Prefer deterministic SQL before calling the LLM.
+        deterministic = self._fallback_sql(query_context)
+        if deterministic:
+            result["sql"] = deterministic["sql"]
+            result["explanation"] = deterministic["explanation"]
+            result["confidence"] = deterministic["confidence"]
+        else:
+            messages = self._build_prompt(query_context)
 
-        # 3. Call LLM
-        try:
-            llm_response = self.gateway.chat(
-                messages=messages,
-                purpose="nl_query",
-                program_id=program_id,
-            )
-            parsed = self._parse_llm_response(llm_response["content"])
-            result["sql"] = parsed.get("sql")
-            result["explanation"] = parsed.get("explanation", "")
-            result["confidence"] = parsed.get("confidence", 0.0)
-        except Exception as e:
-            logger.error("NL Query LLM call failed: %s", e)
-            result["error"] = f"AI query failed: {str(e)}"
-            return result
+            try:
+                llm_response = self.gateway.chat(
+                    messages=messages,
+                    purpose="nl_query",
+                    program_id=program_id,
+                )
+                parsed = self._parse_llm_response(llm_response["content"])
+                result["sql"] = parsed.get("sql")
+                result["explanation"] = parsed.get("explanation", "")
+                result["confidence"] = parsed.get("confidence", 0.0)
+            except Exception as e:
+                logger.error("NL Query LLM call failed: %s", e)
+                guidance = self._build_guidance_response(query_context, str(e))
+                result.update(guidance)
+                return result
+
+            if not result["sql"]:
+                guidance = self._build_guidance_response(query_context)
+                result.update(guidance)
+                return result
 
         # 4. Validate SQL
         if not result["sql"]:
-            result["error"] = "Could not generate SQL for this query"
+            guidance = self._build_guidance_response(query_context)
+            result.update(guidance)
             return result
 
         cleaned_sql = sanitize_sql(result["sql"])
@@ -462,6 +822,7 @@ class NLQueryAssistant:
                 result["columns"] = exec_result["columns"]
                 result["row_count"] = exec_result["row_count"]
                 result["executed"] = True
+                result["answer"] = self._build_answer(query_context, result)
             except Exception as e:
                 logger.error("SQL execution failed: %s", e)
                 result["error"] = f"Query execution failed: {str(e)}"
@@ -484,34 +845,480 @@ class NLQueryAssistant:
         matches = []
         lower = query.lower()
         for term, info in SAP_GLOSSARY.items():
-            if term in lower:
+            pattern = re.compile(rf"(?<!\w){re.escape(term.lower())}(?!\w)")
+            if pattern.search(lower):
                 matches.append({"term": term, **info})
         return matches
 
+    @staticmethod
+    def _build_query_context(user_query: str, program_id: int | None, project_id: int | None = None) -> QueryContext:
+        """Analyze a natural-language query into deterministic routing signals."""
+        glossary_matches = NLQueryAssistant._resolve_glossary(user_query)
+        normalized_query = re.sub(r"\s+", " ", user_query.lower()).strip()
+        module_values: list[str] = []
+        for match in glossary_matches:
+            if match.get("column") != "module":
+                continue
+            for value in match.get("values", []):
+                if isinstance(value, str):
+                    module_values.append(value)
+
+        return QueryContext(
+            original_query=user_query,
+            normalized_query=normalized_query,
+            program_id=program_id,
+            project_id=project_id,
+            glossary_matches=glossary_matches,
+            module_values=sorted(set(module_values)),
+            intent=NLQueryAssistant._detect_query_intent(user_query),
+            entity=NLQueryAssistant._detect_primary_entity(user_query),
+            workshop_scope=bool(re.search(r"\bworkshops?\b|\bworkshop\b", user_query, re.IGNORECASE)),
+            wants_grouping=bool(re.search(r"\bby\b|\bdistribution\b|\bgroup\b|\bstatus\b", user_query, re.IGNORECASE)),
+        )
+
+    @staticmethod
+    def _fallback_sql(query_context: QueryContext) -> dict | None:
+        """Return deterministic SQL for common assistant hints when the LLM cannot."""
+        scope_column = "program_id"
+        scope_value = str(query_context.program_id) if query_context.program_id is not None else "1=1"
+        explore_process_area_filter = NLQueryAssistant._build_explore_process_area_filter(query_context.glossary_matches, "ew")
+
+        workshop_metric_sql = NLQueryAssistant._fallback_workshop_metric_sql(
+            query_context,
+        )
+        if workshop_metric_sql is not None:
+            return workshop_metric_sql
+
+        module_metric_sql = NLQueryAssistant._fallback_module_metric_sql(
+            query_context,
+        )
+        if module_metric_sql is not None:
+            return module_metric_sql
+
+        entity_metric_sql = NLQueryAssistant._fallback_entity_metric_sql(
+            query_context,
+        )
+        if entity_metric_sql is not None:
+            return entity_metric_sql
+
+        for pattern, (template, explanation) in _FALLBACK_QUERY_PATTERNS:
+            if not pattern.search(query_context.original_query):
+                continue
+            if query_context.program_id is None:
+                sql = template.replace("WHERE {scope_column} = {scope_value}\n", "WHERE ")
+                sql = sql.replace("WHERE {scope_column} = {scope_value}", "")
+                sql = sql.replace("WHERE eoi.{scope_column} = {scope_value}\n", "WHERE ")
+                sql = sql.replace("WHERE eoi.{scope_column} = {scope_value}", "")
+                sql = sql.replace("WHERE er.{scope_column} = {scope_value}\n", "WHERE ")
+                sql = sql.replace("WHERE er.{scope_column} = {scope_value}", "")
+                sql = sql.replace("tp.{scope_column} = {scope_value}", "1=1")
+            else:
+                sql = template.format(
+                    scope_column=scope_column,
+                    scope_value=scope_value,
+                    explore_process_area_filter=explore_process_area_filter,
+                )
+
+            sql = sql.replace("{explore_process_area_filter}", explore_process_area_filter)
+
+            sql = re.sub(r"\n\s+", "\n", sql).strip()
+            return {
+                "sql": sql,
+                "explanation": explanation,
+                "confidence": 0.82,
+            }
+
+        return None
+
+    @staticmethod
+    def _fallback_module_metric_sql(
+        query_context: QueryContext,
+    ) -> dict | None:
+        """Return generic SQL for module-scoped count queries on domain entities."""
+        if query_context.intent != "count":
+            return None
+
+        metric_key = NLQueryAssistant._detect_module_metric(query_context.original_query)
+        if metric_key is None:
+            return None
+
+        metric = _MODULE_COUNT_FALLBACKS[metric_key]
+        module_filter = NLQueryAssistant._build_module_column_filter(
+            query_context.glossary_matches,
+            metric["scope_alias"],
+            metric["module_column"],
+        )
+        if not module_filter:
+            return None
+
+        scope_alias = metric["scope_alias"]
+        scope_filter = "1=1" if query_context.program_id is None else f"{scope_alias}.program_id = {query_context.program_id}"
+        sql = (
+            f"SELECT COUNT(*) AS {metric['count_alias']}\n"
+            f"FROM {metric['table']}\n"
+            f"WHERE {scope_filter}"
+            f"{module_filter}"
+        )
+        sql = re.sub(r"\n\s+", "\n", sql).strip()
+        return {
+            "sql": sql,
+            "explanation": metric["explanation"],
+            "confidence": 0.84,
+        }
+
+    @staticmethod
+    def _fallback_entity_metric_sql(
+        query_context: QueryContext,
+    ) -> dict | None:
+        """Return generic SQL for entity count/list queries such as RFC or risk totals."""
+        if query_context.intent not in {"count", "list"}:
+            return None
+        if query_context.entity not in _ENTITY_QUERY_FALLBACKS:
+            return None
+
+        metric = _ENTITY_QUERY_FALLBACKS[query_context.entity]
+        scope_filter = NLQueryAssistant._build_scope_filter(
+            scope_alias=str(metric["scope_alias"]),
+            program_id=query_context.program_id,
+            project_id=query_context.project_id,
+            supports_project_scope=bool(metric.get("supports_project_scope", False)),
+        )
+        status_filter = NLQueryAssistant._build_entity_status_filter(query_context, metric)
+        module_column = metric.get("module_column")
+        if isinstance(module_column, str):
+            module_filter = NLQueryAssistant._build_module_column_filter(
+                query_context.glossary_matches,
+                str(metric["scope_alias"]),
+                module_column,
+            )
+        else:
+            module_filter = ""
+        priority_filter = NLQueryAssistant._build_entity_priority_filter(query_context, metric)
+        severity_filter = NLQueryAssistant._build_entity_severity_filter(query_context, metric)
+        scope_phrase = "project or program" if bool(metric.get("supports_project_scope", False)) else "program"
+        if query_context.intent == "list":
+            list_columns = ", ".join(str(column) for column in metric.get("list_columns", []))
+            order_by = NLQueryAssistant._build_list_order_by(query_context, metric)
+            limit_clause = NLQueryAssistant._build_list_limit_clause(query_context)
+            sql = (
+                f"SELECT {list_columns}\n"
+                f"FROM {metric['table']}\n"
+                f"WHERE {scope_filter}{status_filter}{module_filter}{priority_filter}{severity_filter}\n"
+                f"ORDER BY {order_by}\n"
+                f"LIMIT {limit_clause}"
+            )
+            confidence = 0.8
+            explanation = f"Lists {metric['plural_label']} for the selected {scope_phrase}."
+        else:
+            sql = (
+                f"SELECT COUNT(*) AS {metric['count_alias']}\n"
+                f"FROM {metric['table']}\n"
+                f"WHERE {scope_filter}{status_filter}{module_filter}{priority_filter}{severity_filter}"
+            )
+            confidence = 0.84
+            explanation = str(metric["explanation"])
+        sql = re.sub(r"\n\s+", "\n", sql).strip()
+        return {
+            "sql": sql,
+            "explanation": explanation,
+            "confidence": confidence,
+        }
+
+    @staticmethod
+    def _fallback_workshop_metric_sql(
+        query_context: QueryContext,
+    ) -> dict | None:
+        """Return generic SQL for workshop-scoped count queries with optional module filters."""
+        if query_context.intent != "count":
+            return None
+        if not query_context.workshop_scope:
+            return None
+
+        metric_key = NLQueryAssistant._detect_workshop_metric(query_context.original_query)
+        if metric_key is None:
+            return None
+
+        metric = _WORKSHOP_COUNT_FALLBACKS[metric_key]
+        scope_alias = metric["scope_alias"]
+        scope_filter = "1=1" if query_context.program_id is None else f"{scope_alias}.program_id = {query_context.program_id}"
+        explore_process_area_filter = NLQueryAssistant._build_explore_process_area_filter(query_context.glossary_matches, "ew")
+        sql = (
+            f"SELECT COUNT(*) AS {metric['count_alias']}\n"
+            f"FROM {metric['table']}\n"
+            f"{metric['join']}\n"
+            f"WHERE {scope_filter}\n"
+            f"  AND {scope_alias}.workshop_id IS NOT NULL"
+            f"{metric['extra_filter']}"
+            f"{explore_process_area_filter}"
+        )
+        sql = re.sub(r"\n\s+", "\n", sql).strip()
+        return {
+            "sql": sql,
+            "explanation": metric["explanation"],
+            "confidence": 0.84,
+        }
+
+    @staticmethod
+    def _detect_workshop_metric(user_query: str) -> str | None:
+        """Identify which workshop metric the user wants counted."""
+        lowered_query = user_query.lower()
+        if re.search(r"\bopen\s+items?\b|\baçık\s+madd(e|eler)\b", lowered_query):
+            return "open_items"
+        if re.search(r"\brequirements?\b|\bgereksinim\b", lowered_query):
+            return "requirements"
+        return None
+
+    @staticmethod
+    def _detect_module_metric(user_query: str) -> str | None:
+        """Identify which module-scoped entity the user wants counted."""
+        lowered_query = user_query.lower()
+        if re.search(r"\btest\s+cases?\b|\btest\b", lowered_query):
+            return "test_cases"
+        return None
+
+    @staticmethod
+    def _detect_query_intent(user_query: str) -> str:
+        """Classify the query into a pragmatic intent bucket."""
+        lowered_query = user_query.lower()
+        if NLQueryAssistant._is_count_like_query(user_query):
+            return "count"
+        if re.search(r"\blist\b|\bshow\b|\bhangi\b|\blistele\b|\btop\s+\d+\b|\bfirst\s+\d+\b|\bsort(?:ed)?\s+by\b|\border\s+by\b", lowered_query):
+            return "list"
+        if re.search(r"\bdistribution\b|\bgroup(?:ed)?\b|\bgroup\s+by\b|\bby\s+status\b|\bby\s+module\b|\bby\s+priority\b", lowered_query):
+            return "distribution"
+        return "unknown"
+
+    @staticmethod
+    def _detect_primary_entity(user_query: str) -> str | None:
+        """Detect the main business entity being queried."""
+        lowered_query = user_query.lower()
+        if re.search(r"\brfcs?\b|\bchange\s+requests?\b", lowered_query):
+            return "change_requests"
+        if re.search(r"\bconfig(?:uration)?\s+items?\b|\bconfig\s+items?\b", lowered_query):
+            return "config_items"
+        if re.search(r"\bbacklog\s+items?\b", lowered_query):
+            return "backlog_items"
+        if re.search(r"\brisks?\b|\brisk\s+items?\b", lowered_query):
+            return "risks"
+        if re.search(r"\bopen\s+items?\b|\baçık\s+madd", lowered_query):
+            return "open_items"
+        if re.search(r"\brequirements?\b|\bgereksinim", lowered_query):
+            return "requirements"
+        if re.search(r"\btest\s+cases?\b|\btest\b", lowered_query):
+            return "test_cases"
+        if re.search(r"\bdefects?\b|\bhata\b", lowered_query):
+            return "defects"
+        if re.search(r"\bdecisions?\b|\bkarar\b", lowered_query):
+            return "decisions"
+        if re.search(r"\bactions?\b|\baction\s+items?\b|\bgorev\b", lowered_query):
+            return "actions"
+        if re.search(r"\bissues?\b|\bsorun\b", lowered_query):
+            return "issues"
+        if re.search(r"\bwricef\b", lowered_query):
+            return "backlog_items"
+        return None
+
+    @staticmethod
+    def _is_count_like_query(user_query: str) -> bool:
+        """Detect count-style phrasing, including minor typos in 'how many'."""
+        return bool(re.search(r"\bhow\s+ma\w*\b|\bcount\b|\bkaç\b", user_query, re.IGNORECASE))
+
+    @staticmethod
+    def _build_explore_process_area_filter(glossary_matches: list[dict], table_alias: str) -> str:
+        """Map detected SAP module glossary terms to Explore process-area filters."""
+        process_areas: list[str] = []
+        for match in glossary_matches:
+            if match.get("column") != "module":
+                continue
+            for value in match.get("values", []):
+                if value in {"FI", "CO", "MM", "SD", "PP", "QM", "PM", "HCM", "BASIS", "BTP", "HR"}:
+                    process_areas.append("HR" if value == "HCM" else value)
+
+        if not process_areas:
+            return ""
+
+        unique_values = sorted(set(process_areas))
+        quoted_values = ", ".join(f"'{value}'" for value in unique_values)
+        return f"\n  AND {table_alias}.process_area IN ({quoted_values})"
+
+    @staticmethod
+    def _build_module_column_filter(glossary_matches: list[dict], table_alias: str, column_name: str = "module") -> str:
+        """Build a SQL filter for detected SAP module glossary terms."""
+        modules: list[str] = []
+        for match in glossary_matches:
+            if match.get("column") != "module":
+                continue
+            modules.extend(value for value in match.get("values", []) if isinstance(value, str))
+
+        if not modules:
+            return ""
+
+        unique_values = sorted(set(modules))
+        quoted_values = ", ".join(f"'{value}'" for value in unique_values)
+        return f"\n  AND {table_alias}.{column_name} IN ({quoted_values})"
+
+    @staticmethod
+    def _build_scope_filter(
+        scope_alias: str,
+        program_id: int | None,
+        project_id: int | None,
+        supports_project_scope: bool = False,
+    ) -> str:
+        """Build a scope filter using project when available, otherwise program."""
+        filters: list[str] = []
+        if program_id is not None:
+            filters.append(f"{scope_alias}.program_id = {program_id}")
+        if supports_project_scope and project_id is not None:
+            filters.append(f"{scope_alias}.project_id = {project_id}")
+        return " AND ".join(filters) if filters else "1=1"
+
+    @staticmethod
+    def _build_entity_status_filter(query_context: QueryContext, metric: dict[str, str | bool | list[str]]) -> str:
+        """Add pragmatic status filters based on query wording and entity enums."""
+        normalized_query = query_context.normalized_query
+        scope_alias = str(metric["scope_alias"])
+        status_column = f"{scope_alias}.status"
+
+        if "open" in normalized_query:
+            if query_context.entity == "defects":
+                return f"\n  AND {status_column} NOT IN ('closed', 'rejected')"
+            if query_context.entity == "risks":
+                return f"\n  AND {status_column} NOT IN ('closed', 'mitigated')"
+            if query_context.entity == "change_requests":
+                return f"\n  AND {status_column} NOT IN ('closed', 'rejected', 'cancelled')"
+            if query_context.entity == "requirements":
+                return f"\n  AND {status_column} NOT IN ('implemented', 'verified', 'rejected')"
+
+        status_enum_key = metric.get("status_enum_key")
+        if not isinstance(status_enum_key, str):
+            return ""
+
+        matched_status = NLQueryAssistant._detect_status_value(normalized_query, _ENUM_DEFINITIONS.get(status_enum_key, []))
+        if matched_status is None:
+            return ""
+        return f"\n  AND {status_column} = '{matched_status}'"
+
+    @staticmethod
+    def _build_entity_priority_filter(query_context: QueryContext, metric: dict[str, str | bool | list[str]]) -> str:
+        """Add pragmatic priority filters for list queries."""
+        normalized_query = query_context.normalized_query
+        scope_alias = str(metric["scope_alias"])
+        priority_column = f"{scope_alias}.priority"
+
+        matched_priority = NLQueryAssistant._detect_priority_value(normalized_query)
+        if matched_priority is None:
+            return ""
+        return f"\n  AND {priority_column} = '{matched_priority}'"
+
+    @staticmethod
+    def _build_entity_severity_filter(query_context: QueryContext, metric: dict[str, str | bool | list[str]]) -> str:
+        """Add pragmatic severity filters for entity queries when supported."""
+        severity_enum_key = metric.get("severity_enum_key")
+        if not isinstance(severity_enum_key, str):
+            return ""
+
+        scope_alias = str(metric["scope_alias"])
+        severity_column = f"{scope_alias}.severity"
+
+        severities: list[str] = []
+        for match in query_context.glossary_matches:
+            if match.get("column") != "severity":
+                continue
+            severities.extend(value for value in match.get("values", []) if isinstance(value, str))
+
+        if severities:
+            unique_values = sorted(set(severities))
+            if len(unique_values) == 1:
+                return f"\n  AND {severity_column} = '{unique_values[0]}'"
+            quoted_values = ", ".join(f"'{value}'" for value in unique_values)
+            return f"\n  AND {severity_column} IN ({quoted_values})"
+
+        matched_severity = NLQueryAssistant._detect_status_value(
+            query_context.normalized_query,
+            _ENUM_DEFINITIONS.get(severity_enum_key, []),
+        )
+        if matched_severity is None:
+            return ""
+        return f"\n  AND {severity_column} = '{matched_severity}'"
+
+    @staticmethod
+    def _detect_priority_value(normalized_query: str) -> str | None:
+        """Find a concrete priority value mentioned in the query."""
+        for phrase, mapped_value in _LIST_PRIORITY_VALUES.items():
+            if re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", normalized_query):
+                return mapped_value
+        return None
+
+    @staticmethod
+    def _build_list_order_by(query_context: QueryContext, metric: dict[str, str | bool | list[str]]) -> str:
+        """Build ORDER BY for deterministic list queries."""
+        normalized_query = query_context.normalized_query
+        scope_alias = str(metric["scope_alias"])
+        for phrase, column_name in _LIST_SORT_KEYWORDS.items():
+            if re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", normalized_query) and re.search(r"\bsort(?:ed)?\s+by\b|\border\s+by\b", normalized_query):
+                direction = "ASC" if re.search(r"\basc|ascending\b", normalized_query) else "DESC"
+                return f"{scope_alias}.{column_name} {direction}"
+        return str(metric["default_order"])
+
+    @staticmethod
+    def _build_list_limit_clause(query_context: QueryContext) -> int:
+        """Build LIMIT for deterministic list queries."""
+        match = re.search(r"\b(?:top|first|limit)\s+(\d{1,3})\b", query_context.normalized_query)
+        if not match:
+            return 100
+        return max(1, min(int(match.group(1)), 100))
+
+    @staticmethod
+    def _detect_status_value(normalized_query: str, allowed_values: list[str]) -> str | None:
+        """Find a concrete status name mentioned in the query."""
+        for allowed_value in allowed_values:
+            patterns = {allowed_value.lower(), allowed_value.lower().replace("_", " ")}
+            for pattern in patterns:
+                if re.search(rf"(?<!\w){re.escape(pattern)}(?!\w)", normalized_query):
+                    return allowed_value
+        return None
+
+    @staticmethod
+    def _build_answer(query_context: QueryContext, result: dict[str, Any]) -> str:
+        """Summarize executed results in a chat-friendly sentence."""
+        if not result.get("executed"):
+            return ""
+
+        rows = result.get("results") or []
+        if not rows:
+            return "I did not find any matching records in the current scope."
+
+        entity_metric = _ENTITY_QUERY_FALLBACKS.get(query_context.entity or "")
+        if (
+            query_context.intent == "count"
+            and entity_metric is not None
+            and len(rows) == 1
+            and str(entity_metric["count_alias"]) in rows[0]
+        ):
+            count_value = rows[0][str(entity_metric["count_alias"])]
+            label = str(entity_metric["singular_label"] if count_value == 1 else entity_metric["plural_label"])
+            scope_label = "selected project" if query_context.project_id is not None else "selected program"
+            return f"There {'is' if count_value == 1 else 'are'} {count_value} {label} in the {scope_label}."
+
+        if query_context.intent == "list":
+            scope_label = "current scope"
+            return f"I found {result.get('row_count', len(rows))} matching rows in the {scope_label}."
+
+        if query_context.intent == "count" and len(rows) == 1 and len(rows[0]) == 1:
+            count_value = next(iter(rows[0].values()))
+            return f"The current query returned {count_value}."
+
+        return f"I found {result.get('row_count', len(rows))} matching rows."
+
     # ── Prompt Building ───────────────────────────────────────────────────
 
-    def _build_prompt(
-        self, user_query: str, program_id: int | None,
-        glossary_matches: list[dict],
-    ) -> list[dict]:
-        """Build chat messages for the LLM."""
-        # Try YAML template first
-        if self.prompt_registry:
-            try:
-                return self.prompt_registry.render(
-                    "nl_query",
-                    user_query=user_query,
-                    program_id=program_id or "any",
-                )
-            except KeyError:
-                pass
-
-        # Fallback: inline prompt
+    def _build_prompt(self, query_context: QueryContext) -> list[dict]:
+        """Build chat messages for the LLM using the canonical in-code schema context."""
         glossary_ctx = ""
-        if glossary_matches:
+        if query_context.glossary_matches:
             glossary_ctx = "\n\nDetected SAP terms:\n" + "\n".join(
                 f"- \"{m['term']}\": {m.get('alias', m.get('table', m.get('column', '')))}"
-                for m in glossary_matches
+                for m in query_context.glossary_matches
             )
 
         # Detect DB engine for SQL dialect
@@ -532,18 +1339,48 @@ class NLQueryAssistant:
             f"4. {sql_dialect}\n"
             "5. LIMIT 100 maximum\n"
             "6. ALL enum values are lowercase (e.g. 'medium' not 'Medium'). Exception: defects.severity uses 'P1','P2','P3','P4'.\n"
+            "7. Prefer exact existing table and column names from the schema context.\n"
+            "8. If the query looks like a simple count/list/filter question, generate the simplest valid SQL that answers it.\n"
             "7. Return valid JSON: {\"sql\": \"...\", \"explanation\": \"...\", \"confidence\": 0.0-1.0}\n"
             f"{glossary_ctx}"
         )
 
-        user = f"Convert to SQL:\n\nQuery: {user_query}"
-        if program_id:
-            user += f"\nProgram ID: {program_id}"
+        user = f"Convert to SQL:\n\nQuery: {query_context.original_query}"
+        if query_context.program_id:
+            user += f"\nProgram ID: {query_context.program_id}"
+        if query_context.project_id:
+            user += f"\nProject ID: {query_context.project_id}"
 
         return [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ]
+
+    @staticmethod
+    def _build_guidance_response(query_context: QueryContext, reason: str | None = None) -> dict:
+        """Return a non-failing response for unsupported or noisy questions."""
+        base_suggestions = [
+            "How many open defects are there?",
+            "Requirements by fit/gap status",
+            "How many requirements are under SD workshops?",
+            "How many test cases are related to MM module?",
+            "How many RFCs do we have in this project?",
+        ]
+        entity_hint = query_context.entity.replace("_", " ") if query_context.entity else "program data"
+        explanation = (
+            f"I could not map this question to a safe SQL pattern yet. Try rephrasing it as a count, list, or distribution query about {entity_hint}."
+        )
+        if reason:
+            explanation += f" Technical detail: {reason}."
+
+        return {
+            "sql": None,
+            "explanation": explanation,
+            "confidence": 0.2,
+            "error": None,
+            "answer": explanation,
+            "suggestions": base_suggestions,
+        }
 
     # ── LLM Response Parsing ──────────────────────────────────────────────
 
@@ -556,7 +1393,7 @@ class NLQueryAssistant:
             # Remove opening fence (possibly with language tag)
             cleaned = re.sub(r'^```\w*\n?', '', cleaned)
             cleaned = re.sub(r'\n?```$', '', cleaned)
-        
+
         try:
             return json.loads(cleaned)
         except json.JSONDecodeError:

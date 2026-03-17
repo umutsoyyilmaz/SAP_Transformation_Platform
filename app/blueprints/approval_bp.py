@@ -14,7 +14,7 @@ Routes:
 
 from datetime import datetime, timezone
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from app.models import db
 from app.models.testing import (
@@ -26,6 +26,8 @@ from app.models.testing import (
     TestPlan,
     TestCycle,
 )
+from app.services.helpers.project_owned_scope import resolve_project_scope
+from app.services.helpers.testing_operational_roles import require_operational_permission
 
 approval_bp = Blueprint("approval_bp", __name__, url_prefix="/api/v1")
 
@@ -45,6 +47,21 @@ def _current_user():
     )
 
 
+def _active_project_scope(pid: int, payload: dict | None = None) -> int:
+    body = payload or {}
+    return resolve_project_scope(
+        pid,
+        body.get("project_id") or request.args.get("project_id", type=int) or getattr(g, "project_id", None),
+    )
+
+
+def _entity_project_id(entity_type, entity) -> int | None:
+    if entity_type == "test_cycle":
+        plan = db.session.get(TestPlan, entity.plan_id) if entity and entity.plan_id else None
+        return plan.project_id if plan else None
+    return getattr(entity, "project_id", None)
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # WORKFLOW CRUD
 # ═════════════════════════════════════════════════════════════════════════════
@@ -52,7 +69,8 @@ def _current_user():
 @approval_bp.route("/programs/<int:pid>/approval-workflows", methods=["GET"])
 def list_workflows(pid):
     """List approval workflows for a program, optionally filtered by entity_type."""
-    q = ApprovalWorkflow.query.filter_by(program_id=pid)
+    project_id = _active_project_scope(pid)
+    q = ApprovalWorkflow.query.filter_by(program_id=pid, project_id=project_id)
     et = request.args.get("entity_type")
     if et:
         q = q.filter_by(entity_type=et)
@@ -68,10 +86,15 @@ def create_workflow(pid):
 
     Body: { name, entity_type, stages: [{stage, role, required}] }
     """
+    permission_error = require_operational_permission("approval_configure")
+    if permission_error:
+        return permission_error
+
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     entity_type = data.get("entity_type", "")
     stages = data.get("stages") or []
+    project_id = _active_project_scope(pid, data)
 
     errors = []
     if not name:
@@ -94,6 +117,7 @@ def create_workflow(pid):
 
     wf = ApprovalWorkflow(
         program_id=pid,
+        project_id=project_id,
         entity_type=entity_type,
         name=name,
         stages=normalised,
@@ -108,6 +132,10 @@ def create_workflow(pid):
 @approval_bp.route("/approval-workflows/<int:wid>", methods=["PUT"])
 def update_workflow(wid):
     """Update an existing workflow (name, stages, is_active)."""
+    permission_error = require_operational_permission("approval_configure")
+    if permission_error:
+        return permission_error
+
     wf = db.session.get(ApprovalWorkflow, wid)
     if not wf:
         return jsonify({"error": "Workflow not found"}), 404
@@ -130,6 +158,10 @@ def update_workflow(wid):
 @approval_bp.route("/approval-workflows/<int:wid>", methods=["DELETE"])
 def delete_workflow(wid):
     """Delete a workflow and its records."""
+    permission_error = require_operational_permission("approval_configure")
+    if permission_error:
+        return permission_error
+
     wf = db.session.get(ApprovalWorkflow, wid)
     if not wf:
         return jsonify({"error": "Workflow not found"}), 404
@@ -151,6 +183,10 @@ def submit_for_approval():
     If workflow_id is not given, picks the first active workflow for the
     entity's program + entity_type.  Creates one ApprovalRecord per stage.
     """
+    permission_error = require_operational_permission("approval_submit")
+    if permission_error:
+        return permission_error
+
     data = request.get_json(silent=True) or {}
     entity_type = data.get("entity_type", "")
     entity_id = data.get("entity_id")
@@ -164,16 +200,24 @@ def submit_for_approval():
     entity = db.session.get(Model, entity_id) if Model else None
     if not entity:
         return jsonify({"error": f"{entity_type} #{entity_id} not found"}), 404
+    entity_project_id = _entity_project_id(entity_type, entity)
+    if entity_project_id is None:
+        return jsonify({"error": "Entity has no project scope"}), 400
 
     # Resolve workflow
     wf = None
     if workflow_id:
         wf = db.session.get(ApprovalWorkflow, workflow_id)
+        if wf and wf.project_id != entity_project_id:
+            return jsonify({"error": "Workflow is outside the entity project scope"}), 400
     else:
         program_id = getattr(entity, "program_id", None)
         if program_id:
             wf = ApprovalWorkflow.query.filter_by(
-                program_id=program_id, entity_type=entity_type, is_active=True
+                program_id=program_id,
+                project_id=entity_project_id,
+                entity_type=entity_type,
+                is_active=True,
             ).first()
 
     if not wf:
@@ -217,6 +261,10 @@ def decide_approval(aid):
 
     Body: { decision: "approved"|"rejected", comment? }
     """
+    permission_error = require_operational_permission("approval_decide")
+    if permission_error:
+        return permission_error
+
     rec = db.session.get(ApprovalRecord, aid)
     if not rec:
         return jsonify({"error": "Approval record not found"}), 404
@@ -283,7 +331,11 @@ def pending_approvals():
 
     pid = request.args.get("program_id")
     if pid:
-        q = q.join(ApprovalWorkflow).filter(ApprovalWorkflow.program_id == int(pid))
+        project_id = _active_project_scope(int(pid))
+        q = q.join(ApprovalWorkflow).filter(
+            ApprovalWorkflow.program_id == int(pid),
+            ApprovalWorkflow.project_id == project_id,
+        )
 
     return jsonify([r.to_dict() for r in q.order_by(ApprovalRecord.created_at.desc()).all()])
 
@@ -325,3 +377,4 @@ def entity_approval_status(entity_type, eid):
         "status": overall,
         "records": [r.to_dict() for r in records],
     })
+    project_id = _active_project_scope(pid, data)

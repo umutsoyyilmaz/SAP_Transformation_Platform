@@ -16,7 +16,7 @@ db.session.commit() is called only in this file (service layer ownership).
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import select
 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-VALID_PROJECT_TYPES = {"greenfield", "brownfield", "selective_migration", "cloud_move"}
+VALID_PROJECT_TYPES = {"greenfield", "brownfield", "bluefield", "selective_data_transition"}
 VALID_CHARTER_STATUSES = {"draft", "in_review", "approved", "rejected"}
 VALID_SYSTEM_TYPES = {"sap_erp", "s4hana", "non_sap", "middleware", "cloud", "legacy"}
 VALID_ROLES = {"source", "target", "interface", "decommission", "keep"}
@@ -107,8 +107,18 @@ def create_or_update_charter(tenant_id: int, program_id: int, data: dict) -> dic
         "estimated_duration_months", "approval_notes",
     ]
     for field in UPDATABLE_FIELDS:
-        if field in data:
-            setattr(charter, field, data[field])
+        if field not in data:
+            continue
+        value = data[field]
+        # SQLite Date columns require a Python date object — convert ISO string.
+        if field == "target_go_live_date" and isinstance(value, str) and value:
+            try:
+                value = date.fromisoformat(value)
+            except ValueError:
+                raise ValueError(
+                    f"target_go_live_date must be a valid ISO date (YYYY-MM-DD), got: {value!r}"
+                )
+        setattr(charter, field, value)
 
     # status can only be set to draft/in_review via this function; approved/rejected
     # go through approve_charter() which enforces permission checks in the blueprint

@@ -48,11 +48,24 @@ def upgrade():
 
     # 3. test_executions assignment
     op.add_column("test_executions", sa.Column("assigned_to", sa.String(100), server_default=""))
-    op.add_column("test_executions", sa.Column("assigned_to_id", sa.Integer(), sa.ForeignKey("team_members.id", ondelete="SET NULL"), nullable=True))
+    with op.batch_alter_table("test_executions") as batch_op:
+        batch_op.add_column(sa.Column("assigned_to_id", sa.Integer(), nullable=True))
+        batch_op.create_foreign_key(
+            "fk_test_executions_assigned_to_id_team_members",
+            "team_members",
+            ["assigned_to_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
 
 
 def downgrade():
-    op.drop_column("test_executions", "assigned_to_id")
+    with op.batch_alter_table("test_executions") as batch_op:
+        batch_op.drop_constraint(
+            "fk_test_executions_assigned_to_id_team_members",
+            type_="foreignkey",
+        )
+        batch_op.drop_column("assigned_to_id")
     op.drop_column("test_executions", "assigned_to")
     op.drop_column("plan_scopes", "coverage_status")
     op.drop_column("plan_scopes", "risk_level")

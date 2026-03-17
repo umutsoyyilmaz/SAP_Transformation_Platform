@@ -49,10 +49,10 @@ class ProcessLevel(db.Model):
 
     __tablename__ = "process_levels"
     __table_args__ = (
-        db.UniqueConstraint("program_id", "code", name="uq_pl_program_code"),
-        db.Index("idx_pl_program_parent", "program_id", "parent_id"),
-        db.Index("idx_pl_program_level", "program_id", "level"),
-        db.Index("idx_pl_program_scope_item", "program_id", "scope_item_code"),
+        db.UniqueConstraint("project_id", "code", name="uq_pl_project_code"),
+        db.Index("idx_pl_project_parent", "project_id", "parent_id"),
+        db.Index("idx_pl_project_level", "project_id", "level"),
+        db.Index("idx_pl_project_scope_item", "project_id", "scope_item_code"),
     )
 
     id = db.Column(db.String(36), primary_key=True, default=_uuid)
@@ -71,8 +71,8 @@ class ProcessLevel(db.Model):
     )
     # Faz 1.4: Re-pointed from programs.id → projects.id (was naming bug).
     project_id = db.Column(
-        db.Integer, db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True, index=True,
+        db.Integer, db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False, index=True,
     )
     parent_id = db.Column(
         db.String(36), db.ForeignKey("process_levels.id", ondelete="CASCADE"),
@@ -241,8 +241,8 @@ class ProcessStep(db.Model):
     )
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
     )
     workshop_id = db.Column(

@@ -11,7 +11,7 @@ Usage:
 import logging
 import os
 
-from flask import Flask, send_from_directory
+from flask import Flask, render_template, send_from_directory
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -248,7 +248,7 @@ def create_app(config_name=None):
     from app.models import raid as _raid_models             # noqa: F401
     from app.models import notification as _notification_models  # noqa: F401
     from app.models import ai as _ai_models                 # noqa: F401
-    from app.models import integration as _integration_models  # noqa: F401
+    from app.models import interface_factory as _interface_factory_models  # noqa: F401
     from app.models import explore as _explore_models       # noqa: F401
     from app.models import data_factory as _data_factory_models  # noqa: F401
     from app.models import audit as _audit_models           # noqa: F401
@@ -264,7 +264,7 @@ def create_app(config_name=None):
     from app.models import bdd_parametric as _bdd_parametric_models  # noqa: F401
     from app.models import exploratory_evidence as _exploratory_evidence_models  # noqa: F401
     from app.models import custom_fields as _custom_fields_models  # noqa: F401
-    from app.models import integrations as _integrations_models  # noqa: F401
+    from app.models import external_integrations as _external_integrations_models  # noqa: F401
     from app.models import observability as _observability_models  # noqa: F401
     from app.models import gate_criteria as _gate_criteria_models  # noqa: F401
     from app.models import signoff as _signoff_models               # noqa: F401
@@ -272,34 +272,47 @@ def create_app(config_name=None):
     from app.models import process_mining as _process_mining_models  # noqa: F401  # S8-01
     from app.models import project as _project_models              # noqa: F401
     from app.models import program_governance as _program_governance_models  # noqa: F401
+    from app.models import change_management as _change_management_models  # noqa: F401
 
     # Faz 3: Auto-sync program_id → project_id on operational models
     from app.models._project_id_sync import register_all as _register_project_id_sync
     _register_project_id_sync()
 
     # ── Auto-create tables (safe for production — CREATE IF NOT EXISTS) ──
-    with app.app_context():
-        try:
-            db.create_all()
-            app.logger.info("db.create_all() completed successfully")
-        except Exception as e:
-            app.logger.warning("db.create_all() failed: %s", e)
+    if os.getenv("SKIP_AUTO_CREATE_ALL", "").lower() not in {"1", "true", "yes"}:
+        with app.app_context():
+            try:
+                db.create_all()
+                app.logger.info("db.create_all() completed successfully")
+            except Exception as e:
+                app.logger.warning("db.create_all() failed: %s", e)
 
-        # ── Auto-add missing columns (PostgreSQL only) ───────────────
-        # db.create_all() does not ALTER existing tables. This ensures
-        # columns added in code but missing in DB are created on startup.
-        try:
-            _auto_add_missing_columns(app, db)
-        except Exception as e:
-            app.logger.warning("auto-add-columns failed: %s", e)
+            # ── Auto-add missing columns (PostgreSQL only) ───────────────
+            # db.create_all() does not ALTER existing tables. This ensures
+            # columns added in code but missing in DB are created on startup.
+            try:
+                _auto_add_missing_columns(app, db)
+            except Exception as e:
+                app.logger.warning("auto-add-columns failed: %s", e)
+
+            try:
+                from app.services.spec_template_service import seed_default_templates
+
+                seeded_count = seed_default_templates()
+                if seeded_count > 0:
+                    db.session.commit()
+                    app.logger.info("Seeded %d default spec templates", seeded_count)
+            except Exception as e:
+                db.session.rollback()
+                app.logger.warning("default spec template seed failed: %s", e)
 
     # ── Blueprints ───────────────────────────────────────────────────────
     from app.blueprints.program_bp import program_bp
     from app.blueprints.backlog_bp import backlog_bp
-    from app.blueprints.testing_bp import testing_bp
+    from app.blueprints.testing import testing_bp
     from app.blueprints.raid_bp import raid_bp
     from app.blueprints.ai_bp import ai_bp
-    from app.blueprints.integration_bp import integration_bp
+    from app.blueprints.interface_factory_bp import interface_factory_bp
     from app.blueprints.health_bp import health_bp
     from app.blueprints.metrics_bp import metrics_bp, app_metrics_bp
     from app.blueprints.explore import explore_bp
@@ -331,7 +344,7 @@ def create_app(config_name=None):
     from app.blueprints.bdd_parametric_bp import bdd_parametric_bp
     from app.blueprints.exploratory_evidence_bp import exploratory_evidence_bp
     from app.blueprints.custom_fields_bp import custom_fields_bp
-    from app.blueprints.integrations_bp import integrations_bp
+    from app.blueprints.external_integration_bp import external_integration_bp
     from app.blueprints.observability_bp import observability_bp
     from app.blueprints.gate_criteria_bp import gate_criteria_bp
     from app.blueprints.signoff_bp import signoff_bp
@@ -342,13 +355,14 @@ def create_app(config_name=None):
     from app.blueprints.sap_auth_bp import sap_auth_bp
     from app.blueprints.process_mining_bp import process_mining_bp  # S8-01
     from app.blueprints.program_governance_bp import program_governance_bp  # Faz 2.4
+    from app.blueprints.change_management_bp import change_management_bp
 
     app.register_blueprint(program_bp)
     app.register_blueprint(backlog_bp)
     app.register_blueprint(testing_bp)
     app.register_blueprint(raid_bp)
     app.register_blueprint(ai_bp)
-    app.register_blueprint(integration_bp)
+    app.register_blueprint(interface_factory_bp)
     app.register_blueprint(health_bp)
     app.register_blueprint(metrics_bp)
     app.register_blueprint(app_metrics_bp)
@@ -384,7 +398,7 @@ def create_app(config_name=None):
     app.register_blueprint(bdd_parametric_bp)
     app.register_blueprint(exploratory_evidence_bp)
     app.register_blueprint(custom_fields_bp)
-    app.register_blueprint(integrations_bp)
+    app.register_blueprint(external_integration_bp)
     app.register_blueprint(observability_bp)
     app.register_blueprint(gate_criteria_bp)
     app.register_blueprint(signoff_bp)
@@ -395,6 +409,7 @@ def create_app(config_name=None):
     app.register_blueprint(sap_auth_bp)
     app.register_blueprint(process_mining_bp)  # S8-01
     app.register_blueprint(program_governance_bp)  # Faz 2.4
+    app.register_blueprint(change_management_bp)
 
     # ── Blueprint Permission Guards (Sprint 6) ──────────────────────────
     from app.middleware.blueprint_permissions import apply_all_blueprint_permissions
@@ -410,9 +425,15 @@ def create_app(config_name=None):
         logger.info("Seeded %s new spec templates.", count)
 
     # ── SPA catch-all ────────────────────────────────────────────────────
+    def _spa_shell_context():
+        auth_enabled = str(app.config.get("API_AUTH_ENABLED", "true")).lower() not in ("false", "0", "no", "off")
+        return {
+            "api_auth_enabled": auth_enabled,
+        }
+
     @app.route("/")
     def index():
-        return send_from_directory(app.template_folder, "index.html")
+        return render_template("index.html", **_spa_shell_context())
 
     @app.route("/login")
     def login_page():
@@ -429,7 +450,7 @@ def create_app(config_name=None):
         from flask import request
         if request.path.startswith("/api/"):
             return {"error": "Not found", "path": request.path}, 404
-        return send_from_directory(app.template_folder, "index.html")
+        return render_template("index.html", **_spa_shell_context())
 
     @app.errorhandler(500)
     def server_error(e):

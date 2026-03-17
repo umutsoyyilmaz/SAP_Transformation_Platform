@@ -29,13 +29,13 @@ def _resolve_explore_program_context():
     the ``_get_program_id`` helper and legacy service functions can read it.
     """
     pid = (
-        request.args.get("program_id", type=int)
-        or request.args.get("project_id", type=int)
+        request.args.get("project_id", type=int)
+        or request.args.get("program_id", type=int)
     )
 
     if not pid:
         data = request.get_json(silent=True) or {}
-        pid = data.get("program_id") or data.get("project_id")
+        pid = data.get("project_id") or data.get("program_id")
         if pid is not None:
             try:
                 pid = int(pid)
@@ -84,11 +84,11 @@ def _get_program_id(data=None):
     """
     pid = None
     if data:
-        pid = data.get("program_id") or data.get("project_id")
+        pid = data.get("project_id") or data.get("program_id")
     if pid is None:
         pid = (
-            request.args.get("program_id", type=int)
-            or request.args.get("project_id", type=int)
+            request.args.get("project_id", type=int)
+            or request.args.get("program_id", type=int)
         )
     if not pid:
         pid = getattr(g, "explore_program_id", None)

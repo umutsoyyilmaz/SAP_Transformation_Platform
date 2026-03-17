@@ -15,29 +15,36 @@ const App = (() => {
     let _charts = [];
 
     function _destroyCharts() {
-        _charts.forEach(c => { try { c.destroy(); } catch {} });
+        _charts.forEach(c => { try { c.destroy(); } catch { } });
         _charts = [];
     }
 
     // ── View registry ────────────────────────────────────────────────────
     const views = {
-        dashboard:    () => DashboardView.render(),
+        dashboard: () => DashboardView.render(),
         'dashboard-f5': () => DashboardView.render(),  // backward compat alias
         'executive-cockpit': () => ExecutiveCockpitView.render(),
         'my-projects': () => MyProjectsView.render(),
-        programs:     () => ProgramView.render(),
+        programs: () => ProgramView.render(),
         // Legacy SCOPE views removed — FE-Sprint 1
-        backlog:      () => BacklogView.render(),
-        'test-planning':      () => TestPlanningView.render(),
-        'test-case-detail':   (id) => TestCaseDetailView.render(id),
-        'test-execution':     () => TestExecutionView.render(),
-        'defect-management':  () => DefectManagementView.render(),
-        'approvals':          () => ApprovalsView.render(),
-        integration:  () => IntegrationView.render(),
+        backlog: () => BacklogView.render(),
+        'test-overview': () => TestOverviewView.render(),
+        'test-manager-cockpit': () => TestOverviewView.render('manager'),
+        'test-lead-cockpit': () => TestOverviewView.render('lead'),
+        'business-tester-workspace': () => TestOverviewView.render('business'),
+        'test-planning': () => TestPlanningView.render(),
+        'test-case-detail': (id) => TestCaseDetailView.render(id),
+        'execution-center': () => TestExecutionView.render(),
+        'test-execution': () => TestExecutionView.render(),
+        'defects-retest': () => DefectManagementView.render(),
+        'defect-management': () => DefectManagementView.render(),
+        'signoff-approvals': () => ApprovalsView.render(),
+        'approvals': () => ApprovalsView.render(),
+        integration: () => IntegrationView.render(),
         'data-factory': () => DataFactoryView.render(),
-        cutover:      () => CutoverView.render(),
-        raid:         () => RaidView.render(),
-        reports:      () => ReportsView.render(),
+        cutover: () => CutoverView.render(),
+        raid: () => RaidView.render(),
+        reports: () => ReportsView.render(),
         'suite-folders': () => SuiteFoldersView.render(),
         'env-matrix': () => EnvMatrixView.render(),
         'bdd-editor': () => BddEditorView.render(),
@@ -48,21 +55,26 @@ const App = (() => {
         'integrations': () => IntegrationsView.init(window.currentProgramId),
         'observability': () => ObservabilityView.init(),
         'gate-criteria': () => GateCriteriaView.render(document.getElementById('main-content')),
-        'discover':     () => DiscoverView.render(document.getElementById('mainContent')),
-        'timeline':     () => TimelineView.render(document.getElementById('mainContent')),
-        'raci':         () => RaciView.render(document.getElementById('mainContent')),
-        'hypercare':     () => HypercareView.render(document.getElementById('mainContent')),
+        'discover': () => DiscoverView.render(document.getElementById('mainContent')),
+        'timeline': () => DiscoverView.renderForTimelineRoute(document.getElementById('mainContent')),
+        'raci': () => DiscoverView.renderForRaciRoute(document.getElementById('mainContent')),
+        'hypercare': () => HypercareView.render(document.getElementById('mainContent')),
         'project-setup': () => ProjectSetupView.render(),
+        'change-management': () => ChangeManagementView.render(),
         'ai-insights': () => AIInsightsView.render(),
-        'ai-query':   () => AIQueryView.render(),
-        'ai-admin':   () => AIAdminView.render(),
+        'ai-query': () => AIQueryView.render(),
+        'ai-admin': () => AIAdminView.render(),
         // Explore Phase views
-        'explore-dashboard':       () => ExploreDashboardView.render(),
-        'explore-hierarchy':       () => ExploreHierarchyView.render(),
-        'explore-workshops':       () => ExploreWorkshopHubView.render(),
+        'explore-dashboard': () => ExploreDashboardView.render(),
+        'explore-overview': () => ExploreDashboardView.render(),
+        'explore-hierarchy': () => ExploreHierarchyView.render(),
+        'explore-scope': () => ExploreHierarchyView.render(),
+        'explore-workshops': () => ExploreWorkshopHubView.render(),
         'explore-workshop-detail': () => ExploreWorkshopDetailView.render(),
-        'explore-requirements':    () => ExploreRequirementHubView.render(),
-        'knowledge-base':           () => KnowledgeBaseView.init(window.currentTenantId),
+        'explore-requirements': () => ExploreOutcomeHubView.renderForRequirementRoute(),
+        'explore-outcomes': () => ExploreOutcomeHubView.render(),
+        'explore-traceability': () => ExploreOutcomeHubView.renderForTraceabilityRoute(),
+        'knowledge-base': () => KnowledgeBaseView.init(window.currentTenantId),
     };
 
     let currentView = 'programs';
@@ -75,24 +87,55 @@ const App = (() => {
     const programRequiredViews = new Set([
         'dashboard', 'dashboard-f5',
         'executive-cockpit',
-        'backlog', 'test-planning', 'test-execution', 'defect-management', 'approvals', 'integration', 'data-factory', 'cutover', 'raid',
+        'backlog', 'test-overview', 'test-manager-cockpit', 'test-lead-cockpit', 'business-tester-workspace', 'test-planning', 'execution-center', 'test-execution', 'defects-retest', 'defect-management', 'signoff-approvals', 'approvals', 'integration', 'data-factory', 'cutover', 'raid',
         'test-case-detail',
         'reports', 'suite-folders', 'env-matrix', 'bdd-editor', 'data-driven', 'exploratory', 'evidence', 'custom-fields', 'integrations', 'observability', 'gate-criteria', 'project-setup', 'ai-insights', 'ai-query', 'discover', 'timeline', 'raci', 'hypercare',
-        'explore-dashboard', 'explore-hierarchy', 'explore-workshops', 'explore-workshop-detail', 'explore-requirements',
+        'change-management',
+        'explore-dashboard', 'explore-overview', 'explore-hierarchy', 'explore-scope', 'explore-workshops', 'explore-workshop-detail', 'explore-requirements', 'explore-outcomes', 'explore-traceability',
     ]);
 
     const projectAwareViews = new Set([
         'project-setup',
-        'explore-dashboard', 'explore-hierarchy', 'explore-workshops', 'explore-workshop-detail', 'explore-requirements',
-        'test-planning', 'test-execution', 'defect-management',
+        'explore-dashboard', 'explore-overview', 'explore-hierarchy', 'explore-scope', 'explore-workshops', 'explore-workshop-detail', 'explore-requirements', 'explore-outcomes', 'explore-traceability',
+        'test-overview', 'test-manager-cockpit', 'test-lead-cockpit', 'business-tester-workspace', 'test-planning', 'execution-center', 'test-execution', 'defects-retest', 'defect-management', 'signoff-approvals',
         'cutover', 'hypercare', 'integration', 'data-factory',
+        'change-management',
     ]);
+
+    const sidebarViewAliases = {
+        'dashboard-f5': 'dashboard',
+        'executive-cockpit': 'dashboard',
+        'timeline': 'discover',
+        'raci': 'discover',
+        'explore-scope': 'explore-overview',
+        'explore-workshops': 'explore-overview',
+        'explore-workshop-detail': 'explore-overview',
+        'explore-requirements': 'explore-overview',
+        'explore-outcomes': 'explore-overview',
+        'explore-traceability': 'explore-overview',
+        integration: 'backlog',
+        'data-factory': 'backlog',
+        'test-manager-cockpit': 'test-overview',
+        'test-lead-cockpit': 'test-overview',
+        'business-tester-workspace': 'test-overview',
+        'test-planning': 'test-overview',
+        'execution-center': 'test-overview',
+        'test-execution': 'test-overview',
+        'defects-retest': 'test-overview',
+        'defect-management': 'test-overview',
+        'signoff-approvals': 'test-overview',
+        approvals: 'test-overview',
+    };
 
     function _isProjectRequiredView(viewName) {
         // Project Setup is the project-selection gateway; it must stay reachable
         // with program-only context. Programs view is always reachable.
         if (!viewName || viewName === 'programs' || viewName === 'project-setup') return false;
         return projectAwareViews.has(viewName);
+    }
+
+    function _resolveSidebarView(viewName) {
+        return sidebarViewAliases[viewName] || viewName;
     }
 
     function _currentTenantId() {
@@ -104,6 +147,13 @@ const App = (() => {
         if (value === null || value === undefined || value === '') return null;
         const parsed = Number.parseInt(String(value), 10);
         return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    }
+
+    function _sameIdentity(a, b) {
+        const parsedA = _safeInt(a);
+        const parsedB = _safeInt(b);
+        if (parsedA !== null || parsedB !== null) return parsedA === parsedB;
+        return a === b;
     }
 
     function _trackContextEvent(type, details = {}) {
@@ -170,7 +220,7 @@ const App = (() => {
                     localStorage.removeItem('sap_active_program');
                     return null;
                 }
-                if (program.tenant_id !== currentTenantId) {
+                if (!_sameIdentity(program.tenant_id, currentTenantId)) {
                     localStorage.removeItem('sap_active_program');
                     return null;
                 }
@@ -187,12 +237,12 @@ const App = (() => {
         try {
             const project = JSON.parse(stored);
             const currentTenantId = _currentTenantId();
-            if (!project || project.tenant_id !== currentTenantId) {
+            if (!project || !_sameIdentity(project.tenant_id, currentTenantId)) {
                 localStorage.removeItem('sap_active_project');
                 return null;
             }
             const activeProgram = getActiveProgram();
-            if (!activeProgram || project.program_id !== activeProgram.id) {
+            if (!activeProgram || !_sameIdentity(project.program_id, activeProgram.id)) {
                 localStorage.removeItem('sap_active_project');
                 return null;
             }
@@ -233,6 +283,7 @@ const App = (() => {
         }
         _syncGlobalContext();
         updateContextIndicators();
+        updateSidebarState();  // enable project-aware sidebar items immediately
         renderContextBanner();
         if (options.syncUrl !== false) _syncUrlContext({ replace: true });
         if (
@@ -279,21 +330,21 @@ const App = (() => {
         const prog = getActiveProgram();
         const project = getActiveProject();
         const nameEl = document.getElementById('activeProgramName');
+        const projectEl = document.getElementById('activeProjectName');
         const badge = document.getElementById('activeProgramBadge');
-        const sidebarProgram = document.getElementById('sidebarActiveProgramName');
-        const sidebarProject = document.getElementById('sidebarActiveProjectName');
 
         if (prog) {
             nameEl.textContent = prog.name;
             badge.classList.add('shell-header__program-badge--active');
-            badge.title = `${prog.name} (${prog.project_type}) — Click to switch`;
+            badge.title = `${prog.name}${project ? ` / ${project.name}` : ''} — Open context switcher`;
         } else {
             nameEl.textContent = 'No program selected';
             badge.classList.remove('shell-header__program-badge--active');
-            badge.title = 'Click to select a program';
+            badge.title = 'Open context switcher';
         }
-        if (sidebarProgram) sidebarProgram.textContent = prog ? prog.name : '—';
-        if (sidebarProject) sidebarProject.textContent = project ? project.name : '—';
+        if (projectEl) {
+            projectEl.textContent = project ? project.name : (prog ? 'All projects' : 'No project');
+        }
     }
 
     function _buildSelectOptions(items, valueKey = 'id', labelBuilder = (x) => x.name) {
@@ -322,12 +373,21 @@ const App = (() => {
             const list = await API.get(`/programs/${programId}/projects`);
             _projectOptions = Array.isArray(list) ? list : [];
         } catch {
-            _projectOptions = [];
+            try {
+                const detail = await API.get(`/programs/${programId}`);
+                _projectOptions = Array.isArray(detail?.projects) ? detail.projects : [];
+            } catch {
+                _projectOptions = [];
+            }
         }
         const activeProject = getActiveProject();
         if (activeProject && !_projectOptions.some(p => Number(p.id) === Number(activeProject.id))) {
             setActiveProject(null);
             toast('Selected project no longer belongs to this program. Please select again.', 'warning');
+        }
+        // Auto-select if only one project available and none is currently set
+        if (_projectOptions.length === 1 && !getActiveProject()) {
+            setActiveProject(_projectOptions[0], { syncUrl: true });
         }
         renderContextSelectors();
     }
@@ -417,9 +477,11 @@ const App = (() => {
             setActiveProgram(selected);
             if (!selected) {
                 toast('Program context cleared', 'info');
+                closeContextSelector();
                 return;
             }
             await loadProjectOptions(selected.id);
+            openContextSelector('project');
         });
 
         projectSelect.addEventListener('change', (event) => {
@@ -431,7 +493,44 @@ const App = (() => {
             } else {
                 toast('Project selection cleared', 'info');
             }
+            closeContextSelector();
         });
+    }
+
+    function closeContextSelector() {
+        const panel = document.getElementById('shellContextSelector');
+        const switcher = document.getElementById('shellContextSwitcher');
+        const badge = document.getElementById('activeProgramBadge');
+        if (!panel || !switcher || !badge) return;
+        panel.hidden = true;
+        switcher.classList.remove('shell-context-switcher--open');
+        badge.setAttribute('aria-expanded', 'false');
+    }
+
+    function openContextSelector(target = 'program') {
+        const panel = document.getElementById('shellContextSelector');
+        const switcher = document.getElementById('shellContextSwitcher');
+        const badge = document.getElementById('activeProgramBadge');
+        if (!panel || !switcher || !badge) return;
+        panel.hidden = false;
+        switcher.classList.add('shell-context-switcher--open');
+        badge.setAttribute('aria-expanded', 'true');
+
+        const focusId = target === 'project' ? 'headerProjectSelect' : 'headerProgramSelect';
+        window.requestAnimationFrame(() => {
+            document.getElementById(focusId)?.focus();
+        });
+    }
+
+    function toggleContextSelector(event) {
+        if (event) event.stopPropagation();
+        const panel = document.getElementById('shellContextSelector');
+        if (!panel) return;
+        if (panel.hidden) {
+            openContextSelector('program');
+        } else {
+            closeContextSelector();
+        }
     }
 
     function updateSidebarState() {
@@ -466,6 +565,10 @@ const App = (() => {
 
         const program = getActiveProgram();
         const project = getActiveProject();
+
+        // No banner needed when both program and project are fully set
+        if (program && project) return;
+
         const banner = document.createElement('div');
         banner.id = 'contextGuardBanner';
         banner.className = 'context-guard-banner';
@@ -478,13 +581,11 @@ const App = (() => {
         } else if (!project && _isProjectRequiredView(currentView)) {
             banner.innerHTML = `
                 <span>Program: <strong>${esc(program.name)}</strong>. Project is required for this screen.</span>
-                <button onclick="document.getElementById('headerProjectSelect')?.focus()">Select Project</button>
+                <button onclick="App.openContextSelector('project')">Select Project</button>
             `;
         } else {
-            banner.innerHTML = `
-                <span>Context: <strong>${esc(program.name)}</strong> / <strong>${esc(project ? project.name : 'No project')}</strong></span>
-                <button onclick="App.navigate('programs')">Change</button>
-            `;
+            // Program selected but no project — only show on project-aware views
+            return;
         }
         main.prepend(banner);
     }
@@ -507,12 +608,14 @@ const App = (() => {
 
         // Cleanup previous charts
         _destroyCharts();
+        closeContextSelector();
 
         currentView = viewName;
+        const activeSidebarView = _resolveSidebarView(viewName);
 
         // Update sidebar active state
         document.querySelectorAll('.sidebar__item').forEach(item => {
-            item.classList.toggle('active', item.dataset.view === viewName);
+            item.classList.toggle('active', item.dataset.view === activeSidebarView);
         });
 
         // Render the view
@@ -526,6 +629,27 @@ const App = (() => {
             void main.offsetWidth; // force reflow to restart animation
             main.classList.add('pg-view-enter');
         }
+    }
+
+    function _resolveHashRoute() {
+        const hash = window.location.hash || '';
+        const testCaseMatch = hash.match(/^#test-case-detail\/(\d+)(?:\/tab\/([a-z-]+))?$/);
+        if (testCaseMatch) {
+            return {
+                view: 'test-case-detail',
+                args: [Number(testCaseMatch[1])],
+            };
+        }
+        return null;
+    }
+
+    function _navigateFromHashIfPossible() {
+        const route = _resolveHashRoute();
+        if (!route) return false;
+        if (programRequiredViews.has(route.view) && !getActiveProgram()) return false;
+        if (_isProjectRequiredView(route.view) && !getActiveProject()) return false;
+        navigate(route.view, ...(route.args || []));
+        return true;
     }
 
     // ── Placeholder for future modules ───────────────────────────────────
@@ -551,13 +675,127 @@ const App = (() => {
     }
 
     // ── Modal ────────────────────────────────────────────────────────────
+    let _dialogResolver = null;
+
+    function _closeModalOverlay() {
+        document.getElementById('modalOverlay').classList.remove('open');
+    }
+
     function openModal(html) {
         document.getElementById('modalContainer').innerHTML = html;
         document.getElementById('modalOverlay').classList.add('open');
     }
 
     function closeModal() {
-        document.getElementById('modalOverlay').classList.remove('open');
+        if (_dialogResolver) {
+            const resolve = _dialogResolver;
+            _dialogResolver = null;
+            _closeModalOverlay();
+            resolve(null);
+            return;
+        }
+        _closeModalOverlay();
+    }
+
+    function resolveDialog(result) {
+        const resolve = _dialogResolver;
+        _dialogResolver = null;
+        _closeModalOverlay();
+        if (resolve) resolve(result);
+    }
+
+    function submitPromptDialog() {
+        const input = document.getElementById('appPromptInput');
+        if (!input) {
+            resolveDialog('');
+            return;
+        }
+        const value = input.value ?? '';
+        if (input.required && !String(value).trim()) {
+            input.focus();
+            return;
+        }
+        resolveDialog(value);
+    }
+
+    function confirmDialog(options = {}) {
+        const {
+            title = 'Confirm action',
+            message = 'Are you sure you want to continue?',
+            confirmLabel = 'Confirm',
+            cancelLabel = 'Cancel',
+            testId = 'app-confirm-modal',
+            confirmTestId = 'app-confirm-submit',
+            cancelTestId = 'app-confirm-cancel',
+            variant = 'danger',
+        } = options;
+
+        return new Promise((resolve) => {
+            _dialogResolver = resolve;
+            openModal(`
+                <div class="modal" data-testid="${esc(testId)}">
+                    <div class="modal-header">
+                        <h2>${esc(title)}</h2>
+                        <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="pg-confirm-copy">${esc(message)}</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-testid="${esc(cancelTestId)}" onclick="App.resolveDialog(false)">${esc(cancelLabel)}</button>
+                        <button type="button" class="btn btn-${esc(variant)}" data-testid="${esc(confirmTestId)}" onclick="App.resolveDialog(true)">${esc(confirmLabel)}</button>
+                    </div>
+                </div>
+            `);
+        });
+    }
+
+    function promptDialog(options = {}) {
+        const {
+            title = 'Input required',
+            message = '',
+            label = 'Value',
+            value = '',
+            placeholder = '',
+            confirmLabel = 'Save',
+            cancelLabel = 'Cancel',
+            testId = 'app-prompt-modal',
+            confirmTestId = 'app-prompt-submit',
+            cancelTestId = 'app-prompt-cancel',
+            inputType = 'text',
+            multiline = false,
+            required = false,
+        } = options;
+
+        const inputHtml = multiline
+            ? `<textarea id="appPromptInput" class="form-input" rows="4" placeholder="${esc(placeholder)}" ${required ? 'required' : ''}>${esc(value)}</textarea>`
+            : `<input id="appPromptInput" class="form-input" type="${esc(inputType)}" value="${esc(value)}" placeholder="${esc(placeholder)}" ${required ? 'required' : ''}>`;
+
+        return new Promise((resolve) => {
+            _dialogResolver = resolve;
+            openModal(`
+                <div class="modal" data-testid="${esc(testId)}">
+                    <div class="modal-header">
+                        <h2>${esc(title)}</h2>
+                        <button class="modal-close" onclick="App.closeModal()" title="Close">&times;</button>
+                    </div>
+                    <form onsubmit="event.preventDefault(); App.submitPromptDialog()">
+                        <div class="modal-body">
+                            ${message ? `<p class="pg-confirm-copy">${esc(message)}</p>` : ''}
+                            <div class="form-group">
+                                <label for="appPromptInput">${esc(label)}</label>
+                                ${inputHtml}
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-testid="${esc(cancelTestId)}" onclick="App.closeModal()">${esc(cancelLabel)}</button>
+                            <button type="submit" class="btn btn-primary" data-testid="${esc(confirmTestId)}">${esc(confirmLabel)}</button>
+                        </div>
+                    </form>
+                </div>
+            `);
+            window.requestAnimationFrame(() => document.getElementById('appPromptInput')?.focus());
+        });
     }
 
     // ── Init ─────────────────────────────────────────────────────────────
@@ -580,6 +818,21 @@ const App = (() => {
             if (e.key === 'Escape' && document.getElementById('modalOverlay').classList.contains('open')) {
                 closeModal();
             }
+            if (e.key === 'Escape') {
+                closeContextSelector();
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            const switcher = document.getElementById('shellContextSwitcher');
+            if (!switcher) return;
+            if (!switcher.contains(event.target)) {
+                closeContextSelector();
+            }
+        });
+
+        window.addEventListener('hashchange', () => {
+            _navigateFromHashIfPossible();
         });
 
         // Initialize notification panel (Sprint 6)
@@ -636,8 +889,10 @@ const App = (() => {
             PGa11y.initModalFocusTrap();
         }
 
-        // Render default view
-        navigate('programs');
+        // Render hash-targeted deep link when possible, otherwise fall back to programs.
+        if (!_navigateFromHashIfPossible()) {
+            navigate('programs');
+        }
     }
 
     // ── Sidebar Collapse (UI-S03-T03) ─────────────────────────────
@@ -731,8 +986,12 @@ const App = (() => {
     // Public API
     return {
         navigate, toast, openModal, closeModal,
+        confirmDialog, promptDialog, resolveDialog, submitPromptDialog,
         getActiveProgram, setActiveProgram,
         getActiveProject, setActiveProject,
+        toggleContextSelector,
+        openContextSelector,
+        closeContextSelector,
         syncUrlContext: _syncUrlContext,
         getContextEvents: () => _contextEvents.slice(),
         updateProgramBadge: updateContextIndicators,
@@ -741,3 +1000,5 @@ const App = (() => {
         state: {},
     };
 })();
+
+window.App = App;

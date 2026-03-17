@@ -1,0 +1,542 @@
+.data-factory-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.data-factory-header__actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.data-factory-tabs {
+    margin-bottom: 1rem;
+}
+
+.data-factory-loading,
+.data-factory-spinner-shell {
+    text-align: center;
+    padding: 40px;
+}
+
+.data-factory-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.data-factory-kpi-card {
+    min-width: 160px;
+    background: var(--pg-color-surface);
+    border-radius: var(--pg-radius-md);
+    padding: var(--pg-sp-4);
+    box-shadow: var(--pg-shadow-sm);
+}
+
+.data-factory-kpi-card__label {
+    font-size: 13px;
+    color: var(--pg-color-text-secondary);
+}
+
+.data-factory-kpi-card__value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--pg-color-primary);
+}
+
+.data-factory-kpi-card__value--positive {
+    color: var(--pg-color-positive);
+}
+
+.data-factory-kpi-card__value--warning {
+    color: var(--pg-color-warning);
+}
+
+.data-factory-filter-bar {
+    margin-bottom: 8px;
+}
+
+.data-factory-filter-count {
+    font-size: 12px;
+    color: var(--pg-color-text-tertiary);
+}
+
+.data-factory-empty {
+    padding: 40px;
+}
+
+.data-factory-row-clickable {
+    cursor: pointer;
+}
+
+.data-factory-cell-copy {
+    font-size: 13px;
+    color: var(--pg-color-text-secondary);
+}
+
+.data-factory-cell-copy--small {
+    font-size: 12px;
+}
+
+.data-factory-cell-copy--success {
+    color: #30914c;
+}
+
+.data-factory-cell-copy--danger {
+    color: #bb0000;
+}
+
+.data-factory-cell-copy--strong {
+    font-weight: 600;
+    color: #64748b;
+}
+
+.data-factory-code {
+    font-size: 12px;
+}
+
+.data-factory-table-cell--right {
+    text-align: right;
+}
+
+.data-factory-waves-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+    align-items: stretch;
+    grid-auto-rows: 1fr;
+}
+
+.data-factory-wave-card {
+    cursor: pointer;
+    border-left: 4px solid var(--df-accent, var(--pg-color-border));
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.data-factory-wave-card__body {
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    gap: 12px;
+    padding: 16px;
+    height: 100%;
+}
+
+.data-factory-wave-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.data-factory-wave-card__title {
+    margin: 0;
+    font-size: 15px;
+}
+
+.data-factory-wave-card__description {
+    color: var(--pg-color-text-secondary);
+    font-size: 13px;
+    margin: 0;
+}
+
+.data-factory-wave-card__meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.data-factory-wave-card__actions {
+    display: flex;
+    gap: 8px;
+    margin-top: auto;
+}
+
+.data-factory-select-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.data-factory-select-row__label {
+    font-weight: 600;
+}
+
+.data-factory-select {
+    max-width: 400px;
+}
+
+.data-factory-dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.data-factory-dashboard-card {
+    padding: 20px;
+}
+
+.data-factory-dashboard-card__title {
+    margin: 0 0 4px;
+}
+
+.data-factory-dashboard-card__title--spaced {
+    margin-bottom: 16px;
+}
+
+.data-factory-dashboard-card__meta {
+    color: var(--pg-color-text-secondary);
+    font-size: 13px;
+    margin: 0 0 16px;
+}
+
+.data-factory-quality-layout {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 16px;
+}
+
+.data-factory-quality-score {
+    text-align: center;
+}
+
+.data-factory-quality-score__value {
+    font-size: 48px;
+    font-weight: 700;
+    color: var(--df-quality-color, var(--pg-color-primary));
+}
+
+.data-factory-quality-score__label {
+    font-size: 12px;
+    color: var(--pg-color-text-secondary);
+}
+
+.data-factory-quality-chart-wrap {
+    flex: 1;
+}
+
+.data-factory-status-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.data-factory-status-chip {
+    text-align: center;
+    min-width: 80px;
+    padding: 12px;
+    border-radius: 8px;
+    background: var(--df-chip-bg, rgba(248, 250, 252, 0.92));
+}
+
+.data-factory-status-chip__value {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--df-chip-fg, var(--pg-color-text));
+}
+
+.data-factory-status-chip__label {
+    font-size: 12px;
+    color: var(--pg-color-text-secondary);
+}
+
+.data-factory-empty-copy {
+    color: var(--pg-color-text-secondary);
+}
+
+.data-factory-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.data-factory-progress__track {
+    flex: 1;
+    height: 8px;
+    background: var(--pg-color-border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.data-factory-progress__fill {
+    width: var(--df-progress-pct, 0%);
+    height: 100%;
+    background: var(--df-progress-color, var(--pg-color-primary));
+    border-radius: 4px;
+}
+
+.data-factory-progress__label {
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.data-factory-chart-wrap {
+    margin-top: 20px;
+}
+
+.data-factory-summary-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.data-factory-table {
+    font-size: 13px;
+}
+
+.data-factory-empty-inline {
+    color: var(--pg-color-text-secondary);
+}
+
+.data-factory-alert-row {
+    background: #fff3f3;
+    color: #bb0000;
+    font-size: 12px;
+    padding: 4px 12px;
+}
+
+.data-factory-modal-body {
+    max-height: 65vh;
+    overflow-y: auto;
+    display: grid;
+    gap: 16px;
+}
+
+.data-factory-form-stack {
+    display: grid;
+    gap: 12px;
+}
+
+.data-factory-form-stack > div {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+}
+
+.data-factory-form-stack label,
+.data-factory-form-grid label,
+.data-factory-status-section__label {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 700;
+    color: #4f657a;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.data-factory-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    align-items: start;
+}
+
+.data-factory-form-grid > div {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+}
+
+.data-factory-modal-actions {
+    margin-top: 16px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.data-factory-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    align-items: start;
+    font-size: 13px;
+    margin-bottom: 16px;
+}
+
+.data-factory-detail-grid > div {
+    display: grid;
+    gap: 4px;
+    align-content: start;
+    min-width: 0;
+    min-height: 58px;
+    padding: 12px 14px;
+    border: 1px solid #dbe7f2;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #fbfdff 0%, #f5f9fd 100%);
+}
+
+.data-factory-detail-copy {
+    color: var(--pg-color-text-secondary);
+    font-size: 13px;
+}
+
+.data-factory-meta-row {
+    display: flex;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--pg-color-text-secondary);
+    flex-wrap: wrap;
+}
+
+.data-factory-status-section {
+    margin-top: 16px;
+    display: grid;
+    gap: 8px;
+}
+
+.data-factory-status-section__label {
+    font-weight: 600;
+}
+
+.data-factory-status-section__actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.data-factory-modal-body .form-control,
+.data-factory-select-row .form-control {
+    width: 100%;
+    min-height: 42px;
+    padding: 9px 12px;
+    border: 1px solid #cfdeeb;
+    border-radius: 12px;
+    background: #fff;
+    box-sizing: border-box;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.data-factory-modal-body .form-control:focus,
+.data-factory-select-row .form-control:focus {
+    outline: none;
+    border-color: #2f6fed;
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.14);
+}
+
+.data-factory-modal-body textarea.form-control {
+    min-height: 92px;
+    resize: vertical;
+}
+
+.data-factory-ai-modal {
+    max-width: 900px;
+    padding: 24px;
+}
+
+.data-factory-ai-modal__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.data-factory-ai-modal__title {
+    margin: 0;
+}
+
+.data-factory-ai-modal__grid {
+    display: grid;
+    gap: 12px;
+}
+
+.data-factory-ai-modal__grid--quality {
+    grid-template-columns: 2fr 1fr;
+}
+
+.data-factory-ai-modal__grid--migration {
+    grid-template-columns: 1fr 1fr;
+}
+
+.data-factory-ai-modal__label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.data-factory-ai-modal__actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16px;
+}
+
+.data-factory-ai-modal__result {
+    margin-top: 16px;
+}
+
+.data-factory-ai-loading {
+    min-height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.data-factory-ai-badges {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.data-factory-ai-card {
+    margin-top: 16px;
+    padding: 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.data-factory-ai-card__eyebrow {
+    font-size: 12px;
+    color: #64748b;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.data-factory-ai-card__copy {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.data-factory-ai-list {
+    margin-top: 16px;
+}
+
+.data-factory-ai-list__title {
+    margin: 0 0 8px;
+}
+
+.data-factory-ai-list__items {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 6px;
+}
+
+@media (max-width: 900px) {
+    .data-factory-dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .data-factory-ai-modal__grid--quality,
+    .data-factory-ai-modal__grid--migration,
+    .data-factory-detail-grid,
+    .data-factory-form-grid {
+        grid-template-columns: 1fr;
+    }
+}

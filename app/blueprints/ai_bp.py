@@ -87,10 +87,12 @@ Endpoints:
                    /api/v1/ai/programs/<pid>/tc-maintenance  GET  (F4)
 """
 
+import json
 import logging
+import re
 from datetime import UTC, datetime
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, Response, g, jsonify, request, stream_with_context
 
 from app.ai.assistants import (
     DataMigrationAdvisor,
@@ -111,12 +113,8 @@ from app.ai.prompt_registry import PromptRegistry
 from app.ai.rag import RAGPipeline
 from app.ai.suggestion_queue import SuggestionQueue
 from app.middleware.permission_required import require_permission
-from app.models import db
-from app.models.ai import (
-    AIAuditLog,
-    AISuggestion,
-    AIUsageLog,
-)
+from app.services import ai_reporting_service
+from app.services.ai_nl_query_refinement_service import refine_saved_query
 from app.services.ai_admin_service import get_admin_dashboard_stats
 from app.services.ai_kb_service import (
     activate_kb_version as activate_kb_version_service,
@@ -140,6 +138,9 @@ from app.services.ai_kb_service import (
 logger = logging.getLogger(__name__)
 
 ai_bp = Blueprint("ai", __name__, url_prefix="/api/v1/ai")
+
+# Boolean SQLAlchemy filters in this module must use `.is_(False)` for
+# false-predicate comparisons if/when such predicates are introduced.
 
 # ── Rate limiting ─────────────────────────────────────────────────────────
 from app import limiter  # noqa: E402
@@ -289,6 +290,7 @@ def _get_orchestrator():
 
 
 @ai_bp.route("/suggestions", methods=["GET"])
+@require_permission("ai.view")
 def list_suggestions():
     """List AI suggestions with filters and pagination."""
     result = SuggestionQueue.list_suggestions(
@@ -304,6 +306,7 @@ def list_suggestions():
 
 
 @ai_bp.route("/suggestions", methods=["POST"])
+@require_permission("ai.generate")
 def create_suggestion():
     """Create a new AI suggestion."""
     data = request.get_json(silent=True) or {}
@@ -331,6 +334,7 @@ def create_suggestion():
 
 
 @ai_bp.route("/suggestions/pending-count", methods=["GET"])
+@require_permission("ai.view")
 def pending_count():
     """Get count of pending suggestions."""
     pid = request.args.get("program_id", type=int)
@@ -339,6 +343,7 @@ def pending_count():
 
 
 @ai_bp.route("/suggestions/stats", methods=["GET"])
+@require_permission("ai.view")
 def suggestion_stats():
     """Get suggestion statistics."""
     pid = request.args.get("program_id", type=int)
@@ -347,15 +352,17 @@ def suggestion_stats():
 
 
 @ai_bp.route("/suggestions/<int:sid>", methods=["GET"])
+@require_permission("ai.view")
 def get_suggestion(sid):
     """Get a single suggestion by ID."""
-    s = db.session.get(AISuggestion, sid)
+    s = SuggestionQueue.get_by_id(sid)
     if not s:
         return jsonify({"error": "Suggestion not found"}), 404
     return jsonify(s.to_dict())
 
 
 @ai_bp.route("/suggestions/<int:sid>/approve", methods=["PATCH"])
+@require_permission("ai.generate")
 def approve_suggestion(sid):
     """Approve a pending suggestion."""
     data = request.get_json(silent=True) or {}
@@ -373,6 +380,7 @@ def approve_suggestion(sid):
 
 
 @ai_bp.route("/suggestions/<int:sid>/reject", methods=["PATCH"])
+@require_permission("ai.generate")
 def reject_suggestion(sid):
     """Reject a pending suggestion."""
     data = request.get_json(silent=True) or {}
@@ -390,6 +398,7 @@ def reject_suggestion(sid):
 
 
 @ai_bp.route("/suggestions/<int:sid>/modify", methods=["PATCH"])
+@require_permission("ai.generate")
 def modify_suggestion(sid):
     """Modify a suggestion's data and approve."""
     data = request.get_json(silent=True) or {}
@@ -416,106 +425,27 @@ def modify_suggestion(sid):
 
 
 @ai_bp.route("/usage", methods=["GET"])
+@require_permission("ai.view")
 def usage_stats():
     """Get token usage statistics."""
     pid = request.args.get("program_id", type=int)
     days = request.args.get("days", 30, type=int)
-
-    q = AIUsageLog.query
-    if pid:
-        q = q.filter(AIUsageLog.program_id == pid)
-
-    # Calculate cutoff date
-    from datetime import timedelta
-
-    cutoff = datetime.now(UTC) - timedelta(days=days)
-    q = q.filter(AIUsageLog.created_at >= cutoff)
-
-    logs = q.all()
-
-    total_prompt = sum(entry.prompt_tokens for entry in logs)
-    total_completion = sum(entry.completion_tokens for entry in logs)
-    total_cost = sum(entry.cost_usd for entry in logs)
-    total_calls = len(logs)
-    avg_latency = sum(entry.latency_ms for entry in logs) / max(total_calls, 1)
-    # Use .is_(False) for correct SQL boolean semantics — avoids NULL comparison pitfalls
-    error_q = AIUsageLog.query.filter(AIUsageLog.created_at >= cutoff, AIUsageLog.success.is_(False))
-    if pid:
-        error_q = error_q.filter(AIUsageLog.program_id == pid)
-    error_count = error_q.count()
-
-    # Group by model
-    by_model = {}
-    for entry in logs:
-        if entry.model not in by_model:
-            by_model[entry.model] = {"calls": 0, "tokens": 0, "cost": 0.0}
-        by_model[entry.model]["calls"] += 1
-        by_model[entry.model]["tokens"] += entry.total_tokens
-        by_model[entry.model]["cost"] += entry.cost_usd
-
-    # Group by purpose
-    by_purpose = {}
-    for entry in logs:
-        p = entry.purpose or "other"
-        if p not in by_purpose:
-            by_purpose[p] = {"calls": 0, "tokens": 0, "cost": 0.0}
-        by_purpose[p]["calls"] += 1
-        by_purpose[p]["tokens"] += entry.total_tokens
-        by_purpose[p]["cost"] += entry.cost_usd
-
-    return jsonify(
-        {
-            "period_days": days,
-            "total_calls": total_calls,
-            "total_prompt_tokens": total_prompt,
-            "total_completion_tokens": total_completion,
-            "total_tokens": total_prompt + total_completion,
-            "total_cost_usd": round(total_cost, 4),
-            "avg_latency_ms": round(avg_latency),
-            "error_count": error_count,
-            "error_rate": round(error_count / max(total_calls, 1) * 100, 1),
-            "by_model": {k: {**v, "cost": round(v["cost"], 4)} for k, v in by_model.items()},
-            "by_purpose": {k: {**v, "cost": round(v["cost"], 4)} for k, v in by_purpose.items()},
-        }
+    result = ai_reporting_service.get_usage_stats(
+        getattr(g, "jwt_tenant_id", None), program_id=pid, days=days,
     )
+    return jsonify(result)
 
 
 @ai_bp.route("/usage/cost", methods=["GET"])
+@require_permission("ai.view")
 def cost_summary():
     """Get cost breakdown by day/week/month."""
     pid = request.args.get("program_id", type=int)
-    granularity = request.args.get("granularity", "daily")  # daily, weekly, monthly
-
-    q = AIUsageLog.query
-    if pid:
-        q = q.filter(AIUsageLog.program_id == pid)
-
-    logs = q.order_by(AIUsageLog.created_at.desc()).limit(1000).all()
-
-    # Group by date
-    daily = {}
-    for entry in logs:
-        if entry.created_at:
-            day = entry.created_at.strftime("%Y-%m-%d")
-            if day not in daily:
-                daily[day] = {"date": day, "calls": 0, "tokens": 0, "cost": 0.0}
-            daily[day]["calls"] += 1
-            daily[day]["tokens"] += entry.total_tokens
-            daily[day]["cost"] += entry.cost_usd
-
-    timeline = sorted(daily.values(), key=lambda x: x["date"])
-    for entry in timeline:
-        entry["cost"] = round(entry["cost"], 4)
-
-    total_cost = sum(e["cost"] for e in timeline)
-
-    return jsonify(
-        {
-            "granularity": granularity,
-            "total_cost_usd": round(total_cost, 4),
-            "timeline": timeline,
-        }
+    granularity = request.args.get("granularity", "daily")
+    result = ai_reporting_service.get_cost_summary(
+        getattr(g, "jwt_tenant_id", None), program_id=pid, granularity=granularity,
     )
+    return jsonify(result)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -524,34 +454,20 @@ def cost_summary():
 
 
 @ai_bp.route("/audit-log", methods=["GET"])
+@require_permission("ai.view")
 def audit_log():
     """List AI audit log entries."""
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 20, type=int)
-    action = request.args.get("action")
-    user = request.args.get("user")
-    pid = request.args.get("program_id", type=int)
-
-    q = AIAuditLog.query
-    if action:
-        q = q.filter(AIAuditLog.action == action)
-    if user:
-        q = q.filter(AIAuditLog.user == user)
-    if pid:
-        q = q.filter(AIAuditLog.program_id == pid)
-
-    q = q.order_by(AIAuditLog.created_at.desc())
-    total = q.count()
-    items = q.offset((page - 1) * per_page).limit(per_page).all()
-
-    return jsonify(
-        {
-            "items": [entry.to_dict() for entry in items],
-            "total": total,
-            "page": page,
-            "per_page": per_page,
-        }
+    result = ai_reporting_service.get_audit_log(
+        getattr(g, "jwt_tenant_id", None),
+        page=page,
+        per_page=per_page,
+        action=request.args.get("action"),
+        user=request.args.get("user"),
+        program_id=request.args.get("program_id", type=int),
     )
+    return jsonify(result)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -560,12 +476,15 @@ def audit_log():
 
 
 @ai_bp.route("/embeddings/search", methods=["POST"])
+@require_permission("ai.generate")
 def embedding_search():
     """Hybrid semantic + keyword search over indexed entities."""
     data = request.get_json(silent=True) or {}
     query = data.get("query", "")
     if not query:
         return jsonify({"error": "query is required"}), 400
+    if len(query) > 2000:
+        return jsonify({"error": "query must be at most 2000 characters"}), 400
 
     rag = _get_rag()
     results = rag.search(
@@ -579,6 +498,7 @@ def embedding_search():
 
 
 @ai_bp.route("/embeddings/stats", methods=["GET"])
+@require_permission("ai.view")
 def embedding_stats():
     """Get embedding index statistics."""
     pid = request.args.get("program_id", type=int)
@@ -587,6 +507,7 @@ def embedding_stats():
 
 
 @ai_bp.route("/embeddings/index", methods=["POST"])
+@require_permission("ai.admin")
 def index_entities():
     """Batch-index entities into the vector store."""
     data = request.get_json(silent=True) or {}
@@ -623,6 +544,7 @@ def admin_dashboard():
 
 
 @ai_bp.route("/prompts", methods=["GET"])
+@require_permission("ai.view")
 def list_prompts():
     """List all registered prompt templates."""
     registry = _get_prompt_registry()
@@ -635,6 +557,7 @@ def list_prompts():
 
 
 @ai_bp.route("/query/natural-language", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def nl_query():
     """Process a natural-language query against SAP transformation data."""
@@ -642,16 +565,128 @@ def nl_query():
     query = data.get("query", "").strip()
     if not query:
         return jsonify({"error": "query is required"}), 400
+    if len(query) > 2000:
+        return jsonify({"error": "query must be at most 2000 characters"}), 400
 
     assistant = _get_nl_query()
     result = assistant.process_query(
         user_query=query,
         program_id=data.get("program_id"),
+        project_id=data.get("project_id"),
         auto_execute=data.get("auto_execute", True),
     )
+    if data.get("routing_note"):
+        result["routing_note"] = data.get("routing_note")
+    if data.get("routed_as_fresh_query") is not None:
+        result["routed_as_fresh_query"] = bool(data.get("routed_as_fresh_query"))
+
+    conversation_id = data.get("conversation_id")
+    if conversation_id is not None:
+        exchange_result = _save_nl_query_exchange(
+            conversation_id,
+            query,
+            result,
+            project_id=data.get("project_id"),
+        )
+        if exchange_result.get("error"):
+            code = 404 if "not found" in exchange_result["error"] else 400
+            return jsonify(exchange_result), code
+        result["conversation_id"] = conversation_id
+        result["assistant_message_id"] = exchange_result["assistant_message"]["id"]
+        result["user_message_id"] = exchange_result["user_message"]["id"]
 
     status = 200 if not result.get("error") or result.get("executed") else 422
     return jsonify(result), status
+
+
+@ai_bp.route("/query/refine", methods=["POST"])
+@require_permission("ai.generate")
+@_ai_generate_limit
+def refine_nl_query():
+    """Apply a deterministic follow-up refinement to the latest saved NL query."""
+    data = request.get_json(silent=True) or {}
+    conversation_id = data.get("conversation_id")
+    refinement = data.get("refinement", "").strip()
+    if not conversation_id:
+        return jsonify({"error": "conversation_id is required"}), 400
+    if not refinement:
+        return jsonify({"error": "refinement is required"}), 400
+
+    result = refine_saved_query(conversation_id, refinement)
+    if result.get("error"):
+        code = 404 if "not found" in result["error"] else 400
+        return jsonify(result), code
+
+    exchange_result = _save_nl_query_refinement_exchange(conversation_id, refinement, result)
+    if exchange_result.get("error"):
+        code = 404 if "not found" in exchange_result["error"] else 400
+        return jsonify(exchange_result), code
+
+    result["conversation_id"] = conversation_id
+    result["assistant_message_id"] = exchange_result["assistant_message"]["id"]
+    result["user_message_id"] = exchange_result["user_message"]["id"]
+    return jsonify(result), 200
+
+
+@ai_bp.route("/chat/stream", methods=["POST"])
+@require_permission("ai.generate")
+def chat_stream():
+    """
+    SSE endpoint for the floating chatbot widget.
+
+    Streams AI responses word-by-word using Server-Sent Events.
+    Automatically routes data questions to NL query and free-form
+    questions to the general SAP chat assistant.
+
+    Request body (JSON):
+        conversation_id (int, required): Active conversation session ID.
+        message         (str, required): User message text (max 4000 chars).
+        program_id      (int, optional): Active program for budget/context.
+
+    Response: text/event-stream
+        data: {"type": "intent",    "value": "general_chat"|"nl_query"}
+        data: {"type": "chunk",     "content": str}
+        data: {"type": "nl_result", "data": dict}
+        data: {"type": "done",      "usage": dict, "message_id": int}
+        data: {"type": "error",     "message": str}
+    """
+    data = request.get_json(silent=True) or {}
+    conversation_id = data.get("conversation_id")
+    message = (data.get("message") or "").strip()
+    program_id = data.get("program_id")
+
+    if not conversation_id:
+        return jsonify({"error": "conversation_id is required"}), 400
+    if not message:
+        return jsonify({"error": "message is required"}), 400
+    if len(message) > 4000:
+        return jsonify({"error": "message too long (max 4000 chars)"}), 400
+
+    tenant_id = getattr(g, "jwt_tenant_id", None)
+
+    # Resolve manager and app BEFORE entering the generator — the generator
+    # runs lazily outside the request context, so `current_app` is not available.
+    mgr = _get_conversation_manager()
+    conv_id_int = int(conversation_id)
+
+    def _generate():
+        try:
+            for event in mgr.send_message_stream(
+                conversation_id=conv_id_int,
+                user_message=message,
+                program_id=program_id,
+                tenant_id=tenant_id,
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception:
+            logger.exception("chat_stream generator error conversation_id=%s", conversation_id)
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Internal server error'})}\n\n"
+
+    resp = Response(stream_with_context(_generate()), content_type="text/event-stream")
+    resp.headers["X-Accel-Buffering"] = "no"
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["Connection"] = "keep-alive"
+    return resp
 
 
 @ai_bp.route("/query/execute-sql", methods=["POST"])
@@ -723,32 +758,12 @@ def execute_validated_sql():
     if not _detect_upper.lstrip().startswith("SELECT") and not _detect_upper.lstrip().startswith("WITH"):
         return jsonify({"error": "Only SELECT / WITH … SELECT queries are allowed"}), 403
 
-    # ── Layer 4: Execute with row limit in a read-only fashion ───────
-    MAX_ROWS = 500
+    # ── Layer 4: Execute via service (read-only) ────────────────────
     try:
-        # Use a nested transaction so any accidental write is rolled back
-        with db.session.begin_nested():
-            result = db.session.execute(db.text(final_sql))
-            columns = list(result.keys()) if result.returns_rows else []
-            rows = [dict(zip(columns, row)) for row in result.fetchmany(MAX_ROWS)] if result.returns_rows else []
-        # Explicitly rollback to guarantee read-only (no accidental commit)
-        db.session.rollback()
-
-        return jsonify(
-            {
-                "sql": final_sql,
-                "columns": columns,
-                "results": rows,
-                "row_count": len(rows),
-                "truncated": len(rows) >= MAX_ROWS,
-                "executed": True,
-            }
-        )
-    except Exception:
-        db.session.rollback()
-        logger.exception("SQL execution failed for query: %s", final_sql[:200])
-        # ── Layer 5: Never leak internal DB error details ────────────
-        return jsonify({"error": "SQL execution failed. The query may be invalid or reference unknown columns."}), 400
+        result = ai_reporting_service.execute_readonly_sql(final_sql)
+        return jsonify(result)
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -757,6 +772,7 @@ def execute_validated_sql():
 
 
 @ai_bp.route("/analyst/requirement/<int:req_id>", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def analyse_requirement(req_id):
     """AI Fit/Gap classification for a single requirement."""
@@ -771,6 +787,7 @@ def analyse_requirement(req_id):
 
 
 @ai_bp.route("/analyst/requirement/batch", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def analyse_requirements_batch():
     """AI Fit/Gap classification for multiple requirements."""
@@ -793,6 +810,7 @@ def analyse_requirements_batch():
 
 
 @ai_bp.route("/triage/defect/<int:defect_id>", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def triage_defect(defect_id):
     """AI severity + module triage for a single defect."""
@@ -807,6 +825,7 @@ def triage_defect(defect_id):
 
 
 @ai_bp.route("/triage/defect/batch", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def triage_defects_batch():
     """AI triage for multiple defects."""
@@ -829,6 +848,7 @@ def triage_defects_batch():
 
 
 @ai_bp.route("/assess/risk/<int:program_id>", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def assess_risk(program_id):
     """POST /api/v1/ai/assess/risk/<pid> - Run AI risk assessment."""
@@ -846,6 +866,7 @@ def assess_risk(program_id):
 
 
 @ai_bp.route("/assess/risk/<int:program_id>/signals", methods=["GET"])
+@require_permission("ai.view")
 def risk_signals(program_id):
     """GET /api/v1/ai/assess/risk/<pid>/signals - Get raw project signals."""
     from app.ai.assistants.risk_assessment import RiskAssessment
@@ -861,11 +882,12 @@ def risk_signals(program_id):
 
 
 @ai_bp.route("/generate/test-cases", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def generate_test_cases():
     """
     POST /api/v1/ai/generate/test-cases
-    Body: { requirement_id: int?, process_step: str?, module: str, test_layer: str }
+    Body: { explore_requirement_id: str?, requirement_id: int|str?, process_step: str?, module: str, test_layer: str }
     """
     from app.ai.assistants.test_case_generator import TestCaseGenerator
 
@@ -877,7 +899,7 @@ def generate_test_cases():
         suggestion_queue=SuggestionQueue(),
     )
     result = assistant.generate(
-        requirement_id=data.get("requirement_id"),
+        requirement_id=data.get("explore_requirement_id") or data.get("requirement_id"),
         process_step=data.get("process_step"),
         module=data.get("module", "FI"),
         test_layer=data.get("test_layer", "sit"),
@@ -887,11 +909,12 @@ def generate_test_cases():
 
 
 @ai_bp.route("/generate/test-cases/batch", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def generate_test_cases_batch():
     """
     POST /api/v1/ai/generate/test-cases/batch
-    Body: { requirement_ids: [int], module: str, test_layer: str }
+    Body: { requirement_ids: [int|str], module: str, test_layer: str }
     """
     from app.ai.assistants.test_case_generator import TestCaseGenerator
 
@@ -923,6 +946,7 @@ def generate_test_cases_batch():
 
 
 @ai_bp.route("/analyze/change-impact", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def analyze_change_impact():
     """
@@ -932,6 +956,12 @@ def analyze_change_impact():
     from app.ai.assistants.change_impact import ChangeImpactAnalyzer
 
     data = request.get_json(silent=True) or {}
+    change_desc = data.get("change_description", "")
+    if not change_desc:
+        return jsonify({"error": "change_description is required"}), 400
+    if len(change_desc) > 10000:
+        return jsonify({"error": "change_description must be at most 10000 characters"}), 400
+
     assistant = ChangeImpactAnalyzer(
         gateway=_get_gateway(),
         rag=_get_rag(),
@@ -939,7 +969,7 @@ def analyze_change_impact():
         suggestion_queue=SuggestionQueue(),
     )
     result = assistant.analyze(
-        change_description=data.get("change_description", ""),
+        change_description=change_desc,
         program_id=data.get("program_id"),
         entity_type=data.get("entity_type"),
         entity_id=data.get("entity_id"),
@@ -954,6 +984,7 @@ def analyze_change_impact():
 
 
 @ai_bp.route("/cutover/optimize/<int:plan_id>", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def cutover_optimize(plan_id):
     """
@@ -974,6 +1005,7 @@ def cutover_optimize(plan_id):
 
 
 @ai_bp.route("/cutover/go-nogo/<int:plan_id>", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def cutover_go_nogo(plan_id):
     """
@@ -999,6 +1031,7 @@ def cutover_go_nogo(plan_id):
 
 
 @ai_bp.route("/meeting-minutes/generate", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def generate_meeting_minutes():
     """
@@ -1008,6 +1041,12 @@ def generate_meeting_minutes():
     from app.ai.assistants.meeting_minutes import MeetingMinutesAssistant
 
     data = request.get_json(silent=True) or {}
+    raw_text = data.get("raw_text", "")
+    if not raw_text:
+        return jsonify({"error": "raw_text is required"}), 400
+    if len(raw_text) > 50000:
+        return jsonify({"error": "raw_text must be at most 50000 characters"}), 400
+
     assistant = MeetingMinutesAssistant(
         gateway=_get_gateway(),
         rag=_get_rag(),
@@ -1015,7 +1054,7 @@ def generate_meeting_minutes():
         suggestion_queue=SuggestionQueue(),
     )
     result = assistant.generate_minutes(
-        raw_text=data.get("raw_text", ""),
+        raw_text=raw_text,
         program_id=data.get("program_id"),
         meeting_type=data.get("meeting_type", "general"),
     )
@@ -1024,6 +1063,7 @@ def generate_meeting_minutes():
 
 
 @ai_bp.route("/meeting-minutes/extract-actions", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def extract_meeting_actions():
     """
@@ -1053,12 +1093,14 @@ def extract_meeting_actions():
 
 
 @ai_bp.route("/kb/versions", methods=["GET"])
+@require_permission("ai.view")
 def list_kb_versions():
     """List all KB versions."""
     return jsonify(list_kb_versions_service())
 
 
 @ai_bp.route("/kb/versions", methods=["POST"])
+@require_permission("ai.admin")
 def create_kb_version():
     """Create a new KB version."""
     data = request.get_json(silent=True) or {}
@@ -1067,6 +1109,7 @@ def create_kb_version():
 
 
 @ai_bp.route("/kb/versions/<int:vid>", methods=["GET"])
+@require_permission("ai.view")
 def get_kb_version(vid):
     """Get a specific KB version with stats."""
     payload, status_code = get_kb_version_with_stats_service(vid)
@@ -1074,6 +1117,7 @@ def get_kb_version(vid):
 
 
 @ai_bp.route("/kb/versions/<int:vid>/activate", methods=["PATCH"])
+@require_permission("ai.admin")
 def activate_kb_version(vid):
     """Activate a KB version (archives the currently active one)."""
     payload, status_code = activate_kb_version_service(vid)
@@ -1081,6 +1125,7 @@ def activate_kb_version(vid):
 
 
 @ai_bp.route("/kb/versions/<int:vid>/archive", methods=["PATCH"])
+@require_permission("ai.admin")
 def archive_kb_version(vid):
     """Archive a KB version."""
     payload, status_code = archive_kb_version_service(vid)
@@ -1088,6 +1133,7 @@ def archive_kb_version(vid):
 
 
 @ai_bp.route("/kb/stale", methods=["GET"])
+@require_permission("ai.view")
 def find_stale_embeddings():
     """Find embeddings without content hashes (potential staleness)."""
     from app.ai.rag import RAGPipeline
@@ -1099,6 +1145,7 @@ def find_stale_embeddings():
 
 
 @ai_bp.route("/kb/diff/<version_a>/<version_b>", methods=["GET"])
+@require_permission("ai.view")
 def diff_kb_versions(version_a, version_b):
     """Compare two KB versions — entities added, removed, changed."""
     return jsonify(diff_kb_versions_service(version_a, version_b))
@@ -1155,6 +1202,7 @@ def _get_data_quality():
 
 
 @ai_bp.route("/doc-gen/steering-pack", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def generate_steering_pack():
     """Generate a steering committee briefing pack."""
@@ -1176,6 +1224,7 @@ def generate_steering_pack():
 
 
 @ai_bp.route("/doc-gen/wricef-spec", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def generate_wricef_spec():
     """Generate a WRICEF functional specification."""
@@ -1197,6 +1246,7 @@ def generate_wricef_spec():
 
 
 @ai_bp.route("/doc-gen/data-quality", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def analyze_data_quality():
     """Analyze data quality for a data object."""
@@ -1235,7 +1285,76 @@ def _get_conversation_manager():
     return current_app._ai_conversation_mgr
 
 
+def _build_nl_query_conversation_title(query: str) -> str:
+    """Build a compact saved conversation title from a user prompt."""
+    normalized = re.sub(r"\s+", " ", query).strip()
+    if len(normalized) <= 72:
+        return normalized
+    return f"{normalized[:69]}..."
+
+
+def _save_nl_query_exchange(conversation_id: int, query: str, result: dict, *, project_id: int | None = None) -> dict:
+    """Persist an NL query request/response pair into the conversation timeline."""
+    assistant_payload = {
+        "type": "nl_query_result",
+        "original_query": result.get("original_query", query),
+        "program_id": result.get("program_id"),
+        "project_id": result.get("project_id", project_id),
+        "answer": result.get("answer", ""),
+        "explanation": result.get("explanation", ""),
+        "confidence": result.get("confidence", 0.0),
+        "sql": result.get("sql"),
+        "results": result.get("results", []),
+        "columns": result.get("columns", []),
+        "row_count": result.get("row_count", 0),
+        "glossary_matches": result.get("glossary_matches", []),
+        "executed": result.get("executed", False),
+        "error": result.get("error"),
+        "suggestions": result.get("suggestions", []),
+        "routing_note": result.get("routing_note"),
+        "routed_as_fresh_query": bool(result.get("routed_as_fresh_query", False)),
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+    return _get_conversation_manager().append_structured_exchange(
+        conversation_id,
+        user_message=query,
+        assistant_payload=assistant_payload,
+        title=_build_nl_query_conversation_title(query),
+    )
+
+
+def _save_nl_query_refinement_exchange(conversation_id: int, refinement: str, result: dict) -> dict:
+    """Persist an NL query refinement request/response pair."""
+    assistant_payload = {
+        "type": "nl_query_result",
+        "original_query": result.get("original_query"),
+        "refinement": result.get("refinement", refinement),
+        "program_id": result.get("program_id"),
+        "project_id": result.get("project_id"),
+        "answer": result.get("answer", ""),
+        "explanation": result.get("explanation", ""),
+        "confidence": result.get("confidence", 0.0),
+        "sql": result.get("sql"),
+        "results": result.get("results", []),
+        "columns": result.get("columns", []),
+        "row_count": result.get("row_count", 0),
+        "glossary_matches": result.get("glossary_matches", []),
+        "executed": result.get("executed", False),
+        "error": result.get("error"),
+        "suggestions": result.get("suggestions", []),
+        "routing_note": result.get("routing_note"),
+        "routed_as_fresh_query": bool(result.get("routed_as_fresh_query", False)),
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+    return _get_conversation_manager().append_structured_exchange(
+        conversation_id,
+        user_message=refinement,
+        assistant_payload=assistant_payload,
+    )
+
+
 @ai_bp.route("/conversations", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def create_conversation():
     """Create a new multi-turn conversation session."""
@@ -1254,6 +1373,7 @@ def create_conversation():
 
 
 @ai_bp.route("/conversations", methods=["GET"])
+@require_permission("ai.view")
 def list_conversations():
     """List conversation sessions with optional filters."""
     conversations = _get_conversation_manager().list_sessions(
@@ -1267,6 +1387,7 @@ def list_conversations():
 
 
 @ai_bp.route("/conversations/<int:conv_id>", methods=["GET"])
+@require_permission("ai.view")
 def get_conversation(conv_id):
     """Get a conversation with all messages."""
     include_messages = request.args.get("messages", "true").lower() != "false"
@@ -1277,6 +1398,7 @@ def get_conversation(conv_id):
 
 
 @ai_bp.route("/conversations/<int:conv_id>/messages", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def send_conversation_message(conv_id):
     """Send a message in an existing conversation and get AI response."""
@@ -1297,6 +1419,7 @@ def send_conversation_message(conv_id):
 
 
 @ai_bp.route("/conversations/<int:conv_id>/close", methods=["POST"])
+@require_permission("ai.generate")
 def close_conversation(conv_id):
     """Close a conversation session."""
     result = _get_conversation_manager().close_session(conv_id)
@@ -1309,144 +1432,36 @@ def close_conversation(conv_id):
 
 
 @ai_bp.route("/performance/dashboard", methods=["GET"])
+@require_permission("ai.view")
 def performance_dashboard():
     """
     Aggregated AI performance metrics: latency, cost, cache stats, top models.
     Query params: days (int, default 7), program_id (int, optional).
     """
-
     days = request.args.get("days", 7, type=int)
     program_id = request.args.get("program_id", type=int)
-    cutoff = datetime.now(UTC).replace(
-        hour=0,
-        minute=0,
-        second=0,
-        microsecond=0,
+    result = ai_reporting_service.get_performance_dashboard(
+        getattr(g, "jwt_tenant_id", None), days=days, program_id=program_id,
     )
-    from datetime import timedelta
-
-    cutoff = cutoff - timedelta(days=days)
-
-    q = AIUsageLog.query.filter(AIUsageLog.created_at >= cutoff)
-    if program_id:
-        q = q.filter_by(program_id=program_id)
-
-    logs = q.all()
-    if not logs:
-        return jsonify(
-            {
-                "period_days": days,
-                "total_requests": 0,
-                "avg_latency_ms": 0,
-                "total_cost_usd": 0.0,
-                "cache_hit_rate_pct": 0.0,
-                "success_rate_pct": 0.0,
-                "by_model": {},
-                "by_purpose": {},
-            }
-        )
-
-    total = len(logs)
-    successes = sum(1 for entry in logs if entry.success)
-    cache_hits = sum(1 for entry in logs if entry.cache_hit)
-    total_cost = sum(entry.cost_usd or 0 for entry in logs)
-    latencies = [entry.latency_ms for entry in logs if entry.latency_ms and entry.success]
-    avg_latency = int(sum(latencies) / len(latencies)) if latencies else 0
-
-    by_model: dict[str, dict] = {}
-    by_purpose: dict[str, dict] = {}
-    for entry in logs:
-        m = entry.model or "unknown"
-        by_model.setdefault(m, {"count": 0, "cost": 0.0, "tokens": 0})
-        by_model[m]["count"] += 1
-        by_model[m]["cost"] += entry.cost_usd or 0
-        by_model[m]["tokens"] += entry.total_tokens or 0
-
-        p = entry.purpose or "other"
-        by_purpose.setdefault(p, {"count": 0, "cost": 0.0, "avg_latency": 0, "_latencies": []})
-        by_purpose[p]["count"] += 1
-        by_purpose[p]["cost"] += entry.cost_usd or 0
-        if entry.latency_ms:
-            by_purpose[p]["_latencies"].append(entry.latency_ms)
-
-    for v in by_purpose.values():
-        lats = v.pop("_latencies")
-        v["avg_latency"] = int(sum(lats) / len(lats)) if lats else 0
-
-    return jsonify(
-        {
-            "period_days": days,
-            "total_requests": total,
-            "total_successes": successes,
-            "avg_latency_ms": avg_latency,
-            "total_cost_usd": round(total_cost, 6),
-            "cache_hit_rate_pct": round(cache_hits / total * 100, 1) if total else 0.0,
-            "success_rate_pct": round(successes / total * 100, 1) if total else 0.0,
-            "by_model": by_model,
-            "by_purpose": by_purpose,
-        }
-    )
+    return jsonify(result)
 
 
 @ai_bp.route("/performance/by-assistant", methods=["GET"])
+@require_permission("ai.view")
 def performance_by_assistant():
     """Per-assistant-type aggregated performance metrics."""
     days = request.args.get("days", 7, type=int)
-    from datetime import timedelta
-
-    cutoff = datetime.now(UTC) - timedelta(days=days)
-
-    logs = AIUsageLog.query.filter(
-        AIUsageLog.created_at >= cutoff,
-        AIUsageLog.purpose.isnot(None),
-        AIUsageLog.purpose != "",
-    ).all()
-
-    assistants: dict[str, dict] = {}
-    for entry in logs:
-        key = entry.purpose
-        a = assistants.setdefault(
-            key,
-            {
-                "requests": 0,
-                "successes": 0,
-                "failures": 0,
-                "total_tokens": 0,
-                "total_cost": 0.0,
-                "latencies": [],
-                "cache_hits": 0,
-            },
-        )
-        a["requests"] += 1
-        if entry.success:
-            a["successes"] += 1
-        else:
-            a["failures"] += 1
-        a["total_tokens"] += entry.total_tokens or 0
-        a["total_cost"] += entry.cost_usd or 0
-        if entry.latency_ms:
-            a["latencies"].append(entry.latency_ms)
-        if entry.cache_hit:
-            a["cache_hits"] += 1
-
-    result = {}
-    for key, a in assistants.items():
-        lats = a.pop("latencies")
-        result[key] = {
-            **a,
-            "total_cost": round(a["total_cost"], 6),
-            "avg_latency_ms": int(sum(lats) / len(lats)) if lats else 0,
-            "p95_latency_ms": int(sorted(lats)[int(len(lats) * 0.95)]) if len(lats) > 1 else (lats[0] if lats else 0),
-            "cache_hit_rate_pct": round(a["cache_hits"] / a["requests"] * 100, 1) if a["requests"] else 0.0,
-        }
-
-    return jsonify({"period_days": days, "assistants": result})
+    result = ai_reporting_service.get_performance_by_assistant(
+        getattr(g, "jwt_tenant_id", None), days=days,
+    )
+    return jsonify(result)
 
 
 # ── S20: Cache Management ────────────────────────────────────────────────────
 
 
 @ai_bp.route("/cache/stats", methods=["GET"])
+@require_permission("ai.view")
 def cache_stats():
     """In-memory + DB cache statistics."""
     gw = _get_gateway()
@@ -1458,6 +1473,7 @@ def cache_stats():
 
 
 @ai_bp.route("/cache/clear", methods=["POST"])
+@require_permission("ai.admin")
 def cache_clear():
     """Invalidate all cached responses."""
     gw = _get_gateway()
@@ -1477,6 +1493,7 @@ def _get_budget_service():
 
 
 @ai_bp.route("/budgets", methods=["GET"])
+@require_permission("ai.view")
 def list_budgets():
     """List all token budgets, optionally filtered by program_id."""
     program_id = request.args.get("program_id", type=int)
@@ -1486,6 +1503,7 @@ def list_budgets():
 
 
 @ai_bp.route("/budgets", methods=["POST"])
+@require_permission("ai.admin")
 def create_budget():
     """Create or update a token budget."""
     data = request.get_json(silent=True) or {}
@@ -1497,32 +1515,32 @@ def create_budget():
         token_limit=data.get("token_limit", 1_000_000),
         cost_limit_usd=data.get("cost_limit_usd", 10.0),
     )
-    db.session.commit()
     return jsonify(budget.to_dict()), 201
 
 
 @ai_bp.route("/budgets/<int:budget_id>", methods=["DELETE"])
+@require_permission("ai.admin")
 def delete_budget(budget_id):
     """Delete a token budget."""
     svc = _get_budget_service()
     if svc.delete_budget(budget_id):
-        db.session.commit()
         return jsonify({"deleted": True})
     return jsonify({"error": "Budget not found"}), 404
 
 
 @ai_bp.route("/budgets/<int:budget_id>/reset", methods=["POST"])
+@require_permission("ai.admin")
 def reset_budget(budget_id):
     """Manually reset a budget's usage counters."""
     svc = _get_budget_service()
     budget = svc.reset_budget(budget_id)
     if not budget:
         return jsonify({"error": "Budget not found"}), 404
-    db.session.commit()
     return jsonify(budget.to_dict())
 
 
 @ai_bp.route("/budgets/status", methods=["GET"])
+@require_permission("ai.view")
 def budget_status():
     """Check budget status for a program/user."""
     program_id = request.args.get("program_id", type=int)
@@ -1538,6 +1556,7 @@ def budget_status():
 
 
 @ai_bp.route("/migration/analyze", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def migration_analyze():
     """Analyze data migration strategy for a program."""
@@ -1556,6 +1575,7 @@ def migration_analyze():
 
 
 @ai_bp.route("/migration/optimize-waves", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def migration_optimize_waves():
     """Optimize migration wave sequencing."""
@@ -1573,6 +1593,7 @@ def migration_optimize_waves():
 
 
 @ai_bp.route("/migration/reconciliation", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def migration_reconciliation():
     """Generate data reconciliation checklist."""
@@ -1595,6 +1616,7 @@ def migration_reconciliation():
 
 
 @ai_bp.route("/integration/dependencies", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def integration_dependencies():
     """Analyze integration dependencies for a program."""
@@ -1612,6 +1634,7 @@ def integration_dependencies():
 
 
 @ai_bp.route("/integration/validate-switch", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def integration_validate_switch():
     """Validate a switch/cutover plan for integration readiness."""
@@ -1634,6 +1657,7 @@ def integration_validate_switch():
 
 
 @ai_bp.route("/feedback/stats", methods=["GET"])
+@require_permission("ai.view")
 def feedback_stats():
     """Get feedback statistics for an assistant type."""
     assistant_type = request.args.get("assistant_type")
@@ -1643,6 +1667,7 @@ def feedback_stats():
 
 
 @ai_bp.route("/feedback/accuracy", methods=["GET"])
+@require_permission("ai.view")
 def feedback_accuracy():
     """Compute current accuracy scores across all assistants."""
     days = request.args.get("days", 30, type=int)
@@ -1652,6 +1677,7 @@ def feedback_accuracy():
 
 
 @ai_bp.route("/feedback/recommendations", methods=["GET"])
+@require_permission("ai.view")
 def feedback_recommendations():
     """Get prompt improvement recommendations."""
     days = request.args.get("days", 30, type=int)
@@ -1661,13 +1687,13 @@ def feedback_recommendations():
 
 
 @ai_bp.route("/feedback/compute", methods=["POST"])
+@require_permission("ai.admin")
 def feedback_compute():
     """Compute and persist feedback metrics."""
     data = request.get_json(silent=True) or {}
     days = data.get("days", 30)
     pipeline = _get_feedback_pipeline()
     result = pipeline.save_metrics(days=days)
-    db.session.commit()
     return jsonify(result)
 
 
@@ -1677,6 +1703,7 @@ def feedback_compute():
 
 
 @ai_bp.route("/tasks", methods=["GET"])
+@require_permission("ai.view")
 def list_tasks():
     """List AI tasks with optional filters."""
     runner = _get_task_runner()
@@ -1689,6 +1716,7 @@ def list_tasks():
 
 
 @ai_bp.route("/tasks", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def create_task():
     """Submit a new AI task."""
@@ -1709,6 +1737,7 @@ def create_task():
 
 
 @ai_bp.route("/tasks/<int:task_id>", methods=["GET"])
+@require_permission("ai.view")
 def get_task(task_id):
     """Get task status and result."""
     runner = _get_task_runner()
@@ -1719,6 +1748,7 @@ def get_task(task_id):
 
 
 @ai_bp.route("/tasks/<int:task_id>/cancel", methods=["POST"])
+@require_permission("ai.generate")
 def cancel_task(task_id):
     """Cancel a pending or running task."""
     runner = _get_task_runner()
@@ -1732,6 +1762,7 @@ def cancel_task(task_id):
 
 
 @ai_bp.route("/export/formats", methods=["GET"])
+@require_permission("ai.view")
 def export_formats():
     """List supported export formats and document types."""
     exporter = _get_doc_exporter()
@@ -1744,6 +1775,7 @@ def export_formats():
 
 
 @ai_bp.route("/export/<fmt>", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def export_document(fmt):
     """Export AI-generated content to a specific format."""
@@ -1773,6 +1805,7 @@ def export_document(fmt):
 
 
 @ai_bp.route("/workflows", methods=["GET"])
+@require_permission("ai.view")
 def list_workflows():
     """List available AI workflows."""
     orchestrator = _get_orchestrator()
@@ -1780,6 +1813,7 @@ def list_workflows():
 
 
 @ai_bp.route("/workflows/<workflow_name>/execute", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def execute_workflow(workflow_name):
     """Execute an AI workflow (sync or async)."""
@@ -1805,6 +1839,7 @@ def execute_workflow(workflow_name):
 
 
 @ai_bp.route("/workflows/tasks/<int:task_id>", methods=["GET"])
+@require_permission("ai.view")
 def workflow_task_status(task_id):
     """Get workflow task status (delegates to TaskRunner)."""
     runner = _get_task_runner()
@@ -1873,6 +1908,7 @@ def _get_tc_maintenance():
 
 
 @ai_bp.route("/smart-search", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_query_limit
 def smart_search():
     """F4: Natural-language smart search across testing entities."""
@@ -1880,6 +1916,8 @@ def smart_search():
     query = data.get("query", "").strip()
     if not query:
         return jsonify({"error": "query is required"}), 400
+    if len(query) > 2000:
+        return jsonify({"error": "query must be at most 2000 characters"}), 400
     program_id = data.get("program_id")
     if not program_id:
         return jsonify({"error": "program_id is required"}), 400
@@ -1890,6 +1928,7 @@ def smart_search():
 
 
 @ai_bp.route("/programs/<int:program_id>/flaky-tests", methods=["GET"])
+@require_permission("ai.view")
 @_ai_query_limit
 def flaky_tests(program_id):
     """F4: Detect flaky tests in a program via execution oscillation analysis."""
@@ -1902,6 +1941,7 @@ def flaky_tests(program_id):
 
 
 @ai_bp.route("/programs/<int:program_id>/predictive-coverage", methods=["GET"])
+@require_permission("ai.view")
 @_ai_query_limit
 def predictive_coverage(program_id):
     """F4: Risk heat-map from defect density + change frequency + execution gaps."""
@@ -1913,6 +1953,7 @@ def predictive_coverage(program_id):
 
 
 @ai_bp.route("/testing/cycles/<int:cycle_id>/optimize-suite", methods=["POST"])
+@require_permission("ai.generate")
 @_ai_generate_limit
 def optimize_suite(cycle_id):
     """F4: Risk-based test suite optimisation for a cycle."""
@@ -1928,6 +1969,7 @@ def optimize_suite(cycle_id):
 
 
 @ai_bp.route("/programs/<int:program_id>/tc-maintenance", methods=["GET"])
+@require_permission("ai.view")
 @_ai_query_limit
 def tc_maintenance(program_id):
     """F4: Stale / deprecated test case detection and maintenance advice."""

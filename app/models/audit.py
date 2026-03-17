@@ -199,10 +199,11 @@ def write_audit(
                         (request.view_args or {}).get("program_id")
                         or request.args.get("program_id", type=int)
                     )
-                # Note: project_id is NOT auto-populated from request args
-                # because explore endpoints use "project_id" to reference
-                # programs.id (legacy naming), while audit_logs.project_id
-                # FK → projects.id. Callers must pass project_id explicitly.
+                # Only trust g.project_id from resolved auth/context middleware.
+                # Do not read request.args["project_id"] here because several
+                # legacy routes still use that param as a program alias.
+                if project_id is None:
+                    project_id = getattr(g, "project_id", None)
         except Exception:
             # Never block business flow on audit context enrichment.
             pass

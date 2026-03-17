@@ -34,6 +34,8 @@ from app.services.user_service import (
     list_active_tenants,
     update_last_login,
 )
+from app.services.permission_service import get_user_permissions as get_scoped_user_permissions
+from app.services.permission_service import get_user_role_names as get_scoped_user_role_names
 from app.utils.crypto import verify_password
 
 auth_bp = Blueprint("auth_bp", __name__, url_prefix="/api/v1/auth")
@@ -269,6 +271,50 @@ def me():
         "user": user.to_dict(include_roles=True),
         "tenant": user.tenant.to_dict() if user.tenant else None,
         "permissions": _get_user_permissions(user),
+    }), 200
+
+
+@auth_bp.route("/permission-snapshot", methods=["GET"])
+def permission_snapshot():
+    """Return a scoped RBAC permission snapshot for the current JWT user."""
+    if not hasattr(g, "jwt_user_id") or not g.jwt_user_id:
+        return jsonify({"error": "Authentication required"}), 401
+
+    user = get_user_by_id(g.jwt_user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    program_id = request.args.get("program_id", type=int)
+    project_id = request.args.get("project_id", type=int)
+    tenant_id = request.args.get("tenant_id", type=int)
+    if tenant_id is None and (program_id is not None or project_id is not None):
+        tenant_id = getattr(g, "jwt_tenant_id", None) or user.tenant_id
+
+    try:
+        roles = get_scoped_user_role_names(
+            user.id,
+            tenant_id=tenant_id,
+            program_id=program_id,
+            project_id=project_id,
+        )
+        permissions = sorted(
+            get_scoped_user_permissions(
+                user.id,
+                tenant_id=tenant_id,
+                program_id=program_id,
+                project_id=project_id,
+            )
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify({
+        "user_id": user.id,
+        "tenant_id": tenant_id,
+        "program_id": program_id,
+        "project_id": project_id,
+        "roles": roles,
+        "permissions": permissions,
     }), 200
 
 

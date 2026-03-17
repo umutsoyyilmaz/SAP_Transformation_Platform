@@ -90,7 +90,7 @@ class FeedbackPipeline:
             db.session.add(metric)
             saved += 1
 
-        db.session.flush()
+        db.session.commit()
         return {"saved_metrics": saved, "assistant_types": [s["assistant_type"] for s in scores]}
 
     def get_feedback_stats(self, assistant_type: str | None = None) -> list[dict]:

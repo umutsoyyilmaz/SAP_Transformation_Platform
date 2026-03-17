@@ -23,8 +23,19 @@ from flask import jsonify, request
 
 from app.blueprints.explore import explore_bp
 from app.services import process_catalog_service
+from app.utils.errors import E, api_error
 
 logger = logging.getLogger(__name__)
+
+
+def _require_project_setup_mutation_context(data: dict | None = None):
+    context = (data or {}).get("mutation_context") or request.args.get("mutation_context")
+    if context == "project_setup":
+        return None
+    return api_error(
+        E.FORBIDDEN,
+        "Hierarchy baseline mutations are only allowed from Project Setup",
+    )
 
 
 @explore_bp.route("/catalog/modules", methods=["GET"])
@@ -82,6 +93,10 @@ def seed_project_from_catalog(project_id: int):
 
     if errors:
         return jsonify({"error": "Validation failed", "details": errors}), 400
+
+    policy_error = _require_project_setup_mutation_context(data)
+    if policy_error:
+        return policy_error
 
     # Sanitize: strip whitespace, uppercase
     clean_modules = [str(m).strip().upper() for m in modules if str(m).strip()]

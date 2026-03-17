@@ -65,7 +65,12 @@ def check_signoff_readiness(l3_id: str, project_id: int | None = None) -> dict:
     # 1. Check all L4 children assessed
     l4_children = (
         ProcessLevel.query
-        .filter_by(parent_id=l3.id, level=4, scope_status="in_scope")
+        .filter_by(
+            project_id=l3.project_id,
+            parent_id=l3.id,
+            level=4,
+            scope_status="in_scope",
+        )
         .all()
     )
     total_l4 = len(l4_children)
@@ -84,6 +89,7 @@ def check_signoff_readiness(l3_id: str, project_id: int | None = None) -> dict:
     p1_open = (
         ExploreOpenItem.query
         .filter(
+            ExploreOpenItem.project_id == l3.project_id,
             ExploreOpenItem.process_level_id == l3.id,
             ExploreOpenItem.priority == "P1",
             ExploreOpenItem.status.in_(["open", "in_progress", "blocked"]),
@@ -96,6 +102,7 @@ def check_signoff_readiness(l3_id: str, project_id: int | None = None) -> dict:
         p1_open_via_l4 = (
             ExploreOpenItem.query
             .filter(
+                ExploreOpenItem.project_id == l3.project_id,
                 ExploreOpenItem.process_level_id.in_(l4_ids),
                 ExploreOpenItem.priority == "P1",
                 ExploreOpenItem.status.in_(["open", "in_progress", "blocked"]),
@@ -115,6 +122,7 @@ def check_signoff_readiness(l3_id: str, project_id: int | None = None) -> dict:
     unapproved = (
         ExploreRequirement.query
         .filter(
+            ExploreRequirement.project_id == l3.project_id,
             ExploreRequirement.scope_item_id == l3.id,
             ExploreRequirement.status.in_(["draft", "under_review"]),
         )
@@ -274,7 +282,7 @@ def get_consolidated_view(l3_id: str, project_id: int | None = None) -> dict:
     # L4 breakdown
     l4_children = (
         ProcessLevel.query
-        .filter_by(parent_id=l3.id, level=4)
+        .filter_by(project_id=l3.project_id, parent_id=l3.id, level=4)
         .order_by(ProcessLevel.sort_order)
         .all()
     )
@@ -290,7 +298,7 @@ def get_consolidated_view(l3_id: str, project_id: int | None = None) -> dict:
         })
 
     # Readiness check
-    readiness = check_signoff_readiness(l3_id)
+    readiness = check_signoff_readiness(l3_id, project_id=l3.project_id)
 
     return {
         "l3": l3.to_dict(),

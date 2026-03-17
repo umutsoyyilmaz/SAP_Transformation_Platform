@@ -74,11 +74,60 @@ def _get_program_or_404(program_id: int):
     return _get_or_404(Program, program_id)
 
 
+def _entity_belongs_to_tenant(entity, tenant_id: int) -> bool:
+    """Validate tenant ownership, including legacy rows with NULL tenant_id.
+
+    Legacy backlog rows may still have tenant_id=NULL. Those rows are only
+    accessible when their parent program/project/item chain belongs to the
+    current tenant.
+    """
+    direct_tenant = getattr(entity, "tenant_id", None)
+    if direct_tenant is not None:
+        return int(direct_tenant) == int(tenant_id)
+
+    program_id = getattr(entity, "program_id", None)
+    if program_id is not None:
+        program = get_scoped_or_none(Program, program_id, tenant_id=tenant_id)
+        return program is not None
+
+    backlog_item = getattr(entity, "backlog_item", None)
+    if backlog_item is not None:
+        return _entity_belongs_to_tenant(backlog_item, tenant_id)
+
+    config_item = getattr(entity, "config_item", None)
+    if config_item is not None:
+        return _entity_belongs_to_tenant(config_item, tenant_id)
+
+    functional_spec = getattr(entity, "functional_spec", None)
+    if functional_spec is not None:
+        return _entity_belongs_to_tenant(functional_spec, tenant_id)
+
+    return False
+
+
 def _get_entity_or_404(model, entity_id: int):
+    """Fetch a model instance by PK, enforcing tenant scope when a JWT tenant is present.
+
+    BacklogItem.tenant_id (and similar sibling models) is nullable — items created
+    before tenant stamping was enforced have NULL there.  For those legacy rows the
+    strict `WHERE tenant_id = X` query returns nothing, causing spurious 404s.
+    We fall back to a plain PK lookup and accept the row when its tenant_id IS NULL
+    (legacy) or matches the caller's tenant.  Tenant isolation for BacklogItems is
+    also enforced through the program chain: Program.tenant_id provides the outer
+    scope, so allowing NULL-tenant items here is safe in practice.
+    """
     tenant_id = getattr(g, "jwt_tenant_id", None)
     if tenant_id is not None:
         entity = get_scoped_or_none(model, entity_id, tenant_id=tenant_id)
-        if not entity:
+        if entity:
+            return entity, None
+        # Backward-compat: some legacy rows still have tenant_id=NULL.
+        # Accept them only when their parent ownership chain resolves back to
+        # the current tenant's program/project scope.
+        entity, err = _get_or_404(model, entity_id)
+        if err:
+            return None, err
+        if not _entity_belongs_to_tenant(entity, tenant_id):
             return None, (jsonify({"error": f"{model.__name__} not found"}), 404)
         return entity, None
     return _get_or_404(model, entity_id)
@@ -123,13 +172,17 @@ def list_backlog(program_id):
 
 @backlog_bp.route("/programs/<int:program_id>/backlog", methods=["POST"])
 def create_backlog_item(program_id):
-    """Create a backlog item under a program."""
+    """Create a backlog item under a program.
+
+    Canonical linkage uses `explore_requirement_id`.
+    """
     program, err = _get_program_or_404(program_id)
     if err:
         return err
 
     data = request.get_json(silent=True) or {}
-    item, svc_err = backlog_service.create_backlog_item(program_id, data)
+    tenant_id = getattr(g, "jwt_tenant_id", None)
+    item, svc_err = backlog_service.create_backlog_item(program_id, data, tenant_id=tenant_id)
     if svc_err:
         return jsonify({"error": svc_err["error"]}), svc_err["status"]
 
@@ -151,7 +204,10 @@ def get_backlog_item(item_id):
 
 @backlog_bp.route("/backlog/<int:item_id>", methods=["PUT"])
 def update_backlog_item(item_id):
-    """Update a backlog item."""
+    """Update a backlog item.
+
+    Canonical linkage uses `explore_requirement_id`.
+    """
     item, err = _get_entity_or_404(BacklogItem, item_id)
     if err:
         return err
@@ -669,9 +725,9 @@ def traceability_chain(entity_type, entity_id):
     return jsonify(result), 200
 
 
-@backlog_bp.route("/requirements/<int:req_id>/linked-items", methods=["GET"])
+@backlog_bp.route("/requirements/<req_id>/linked-items", methods=["GET"])
 def requirement_linked_items(req_id):
-    """Get all WRICEF and Config items linked to a requirement."""
+    """Get all WRICEF and Config items linked to an explore or legacy requirement."""
     from app.services.traceability import get_requirement_links
 
     result = get_requirement_links(req_id)

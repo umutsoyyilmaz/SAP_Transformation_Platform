@@ -7,11 +7,41 @@ const PWA = (() => {
     let _deferredPrompt = null;
     let _swRegistration = null;
 
+    function _isLocalRuntime() {
+        const host = window.location.hostname || '';
+        return host === 'localhost' || host === '127.0.0.1';
+    }
+
+    async function _clearDevServiceWorkers() {
+        if (!('serviceWorker' in navigator)) return;
+        try {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map((registration) => registration.unregister()));
+        } catch (err) {
+            console.warn('[PWA] Failed to unregister service workers:', err);
+        }
+
+        if (!('caches' in window)) return;
+        try {
+            const keys = await caches.keys();
+            const pwaKeys = keys.filter((key) => key.startsWith('sap-transform-'));
+            await Promise.all(pwaKeys.map((key) => caches.delete(key)));
+        } catch (err) {
+            console.warn('[PWA] Failed to clear local PWA caches:', err);
+        }
+    }
+
     // ── Service Worker Registration ────────────────────────────────────
 
     async function register() {
         if (!('serviceWorker' in navigator)) {
             console.log('[PWA] Service workers not supported');
+            return;
+        }
+
+        if (_isLocalRuntime()) {
+            await _clearDevServiceWorkers();
+            console.log('[PWA] Local runtime detected; service worker disabled');
             return;
         }
 

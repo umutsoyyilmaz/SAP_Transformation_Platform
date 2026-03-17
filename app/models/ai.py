@@ -17,14 +17,34 @@ Models:
 """
 
 import hashlib
+import json
 from datetime import datetime, timezone
 
 from app.models import db
 
 
+# ── Tenant Query Mixin ───────────────────────────────────────────────────────
+
+
+class _TenantQueryMixin:
+    """Adds ``query_for_tenant()`` to models that carry a nullable tenant_id.
+
+    Unlike :class:`TenantModel` (which enforces NOT NULL + CASCADE),
+    AI models use ``nullable=True, ondelete='SET NULL'`` so they can be
+    created before a tenant context is available (e.g. system-level
+    embeddings).  This mixin provides the standard query helper without
+    altering the column contract.
+    """
+
+    @classmethod
+    def query_for_tenant(cls, tenant_id):
+        """Return a query pre-filtered by *tenant_id*."""
+        return cls.query.filter_by(tenant_id=tenant_id)
+
+
 # ── Constants ────────────────────────────────────────────────────────────────
 
-AI_PROVIDERS = {"anthropic", "openai", "local"}
+AI_PROVIDERS = {"anthropic", "openai", "gemini", "local"}
 AI_MODELS = {
     "claude-3-5-haiku-20241022", "claude-3-5-sonnet-20241022", "claude-3-opus-20240229",
     "gpt-4o-mini", "gpt-4o", "gpt-4-turbo",
@@ -106,7 +126,7 @@ def calculate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> fl
 
 # ── AIUsageLog ────────────────────────────────────────────────────────────────
 
-class AIUsageLog(db.Model):
+class AIUsageLog(_TenantQueryMixin, db.Model):
     """
     Tracks token usage and cost for every LLM API call.
     Aggregated for usage dashboards and cost monitoring.
@@ -167,7 +187,7 @@ class AIUsageLog(db.Model):
 
 # ── AIEmbedding ───────────────────────────────────────────────────────────────
 
-class AIEmbedding(db.Model):
+class AIEmbedding(_TenantQueryMixin, db.Model):
     """
     Vector store for RAG retrieval.
 
@@ -313,7 +333,7 @@ def compute_content_hash(text: str) -> str:
 
 # ── AISuggestion ──────────────────────────────────────────────────────────────
 
-class AISuggestion(db.Model):
+class AISuggestion(_TenantQueryMixin, db.Model):
     """
     AI-generated suggestion queue.
 
@@ -401,7 +421,7 @@ class AISuggestion(db.Model):
 
 # ── AIAuditLog ────────────────────────────────────────────────────────────────
 
-class AIAuditLog(db.Model):
+class AIAuditLog(_TenantQueryMixin, db.Model):
     """
     Immutable audit trail for every AI operation.
     Used for compliance, debugging, and cost attribution.
@@ -510,7 +530,7 @@ class AIResponseCache(db.Model):
 
 # ── AITokenBudget (Sprint 20 — Cost Control) ─────────────────────────────────
 
-class AITokenBudget(db.Model):
+class AITokenBudget(_TenantQueryMixin, db.Model):
     """
     Per-program token/cost budget enforcement.
     Gateway checks budget before making LLM calls.
@@ -592,7 +612,7 @@ class AITokenBudget(db.Model):
 
 # ── AIConversation (Sprint 19 — Multi-turn) ──────────────────────────────────
 
-class AIConversation(db.Model):
+class AIConversation(_TenantQueryMixin, db.Model):
     """
     Multi-turn conversation session.
     Supports any assistant type — users can continue interacting with context.
@@ -637,6 +657,10 @@ class AIConversation(db.Model):
     )
 
     def to_dict(self, include_messages=False):
+        try:
+            context = json.loads(self.context_json or "{}")
+        except Exception:
+            context = {}
         d = {
             "id": self.id,
             "title": self.title,
@@ -644,6 +668,7 @@ class AIConversation(db.Model):
             "status": self.status,
             "program_id": self.program_id,
             "user": self.user,
+            "context": context,
             "message_count": self.message_count,
             "total_tokens": self.total_tokens,
             "total_cost_usd": round(self.total_cost_usd or 0, 6),
@@ -658,7 +683,7 @@ class AIConversation(db.Model):
         return f"<AIConversation {self.id} [{self.assistant_type}] msgs={self.message_count}>"
 
 
-class AIConversationMessage(db.Model):
+class AIConversationMessage(_TenantQueryMixin, db.Model):
     """Individual message within a multi-turn conversation."""
 
     __tablename__ = "ai_conversation_messages"
@@ -764,7 +789,7 @@ class AIFeedbackMetric(db.Model):
         return f"<AIFeedbackMetric assistant={self.assistant_type} acc={self.accuracy_score:.2f}>"
 
 
-class AITask(db.Model):
+class AITask(_TenantQueryMixin, db.Model):
     """Async AI task tracking with progress (Sprint 21)."""
     __tablename__ = "ai_tasks"
 
@@ -786,7 +811,7 @@ class AITask(db.Model):
 
     # Context
     user = db.Column(db.String(100), nullable=True)
-    program_id = db.Column(db.Integer, db.ForeignKey("programs.id"), nullable=True)
+    program_id = db.Column(db.Integer, db.ForeignKey("programs.id", ondelete="SET NULL"), nullable=True)
     workflow_name = db.Column(db.String(100), nullable=True)
 
     # Timing

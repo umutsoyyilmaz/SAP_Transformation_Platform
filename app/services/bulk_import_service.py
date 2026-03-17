@@ -448,62 +448,62 @@ def execute_project_assignment_import(
     failed = []
     for row in validated_rows:
         try:
-            with db.session.begin_nested():
-                user = User.query.filter_by(tenant_id=tenant_id, email=row["email"]).first()
-                user_created = False
-                if not user:
-                    if not auto_create_users:
-                        raise BulkImportError(f"User not found for email: {row['email']}")
-                    user = User(
-                        tenant_id=tenant_id,
-                        email=row["email"],
-                        full_name=row.get("full_name", ""),
-                        status="active",
-                        auth_provider="csv_import",
-                    )
-                    db.session.add(user)
-                    db.session.flush()
-                    user_created = True
-
-                # Membership (idempotent behavior: skip if already member).
-                if not UserRole.query.filter_by(
-                    user_id=user.id,
+            user = User.query.filter_by(tenant_id=tenant_id, email=row["email"]).first()
+            user_created = False
+            if not user:
+                if not auto_create_users:
+                    raise BulkImportError(f"User not found for email: {row['email']}")
+                user = User(
                     tenant_id=tenant_id,
-                    program_id=row["program_id"],
-                    project_id=row["project_id"],
-                ).first():
-                    try:
-                        assign_to_project(
-                            user.id,
-                            row["project_id"],
-                            role_in_project=row["role"],
-                            assigned_by=actor_user_id,
-                        )
-                    except UserServiceError as exc:
-                        if "already assigned" not in exc.message.lower():
-                            raise
-
-                assign_role(
-                    user.id,
-                    row["role"],
-                    assigned_by=actor_user_id,
-                    tenant_id=tenant_id,
-                    program_id=row["program_id"],
-                    project_id=row["project_id"],
-                    starts_at=row.get("starts_at"),
-                    ends_at=row.get("ends_at"),
+                    email=row["email"],
+                    full_name=row.get("full_name", ""),
+                    status="active",
+                    auth_provider="csv_import",
                 )
+                db.session.add(user)
+                db.session.flush()
+                user_created = True
 
-                created.append({
-                    "row_num": row["row_num"],
-                    "email": row["email"],
-                    "user_id": user.id,
-                    "created_user": user_created,
-                    "program_id": row["program_id"],
-                    "project_id": row["project_id"],
-                    "role": row["role"],
-                })
+            # Membership (idempotent behavior: skip if already member).
+            if not UserRole.query.filter_by(
+                user_id=user.id,
+                tenant_id=tenant_id,
+                program_id=row["program_id"],
+                project_id=row["project_id"],
+            ).first():
+                try:
+                    assign_to_project(
+                        user.id,
+                        row["project_id"],
+                        role_in_project=row["role"],
+                        assigned_by=actor_user_id,
+                    )
+                except UserServiceError as exc:
+                    if "already assigned" not in exc.message.lower():
+                        raise
+
+            assign_role(
+                user.id,
+                row["role"],
+                assigned_by=actor_user_id,
+                tenant_id=tenant_id,
+                program_id=row["program_id"],
+                project_id=row["project_id"],
+                starts_at=row.get("starts_at"),
+                ends_at=row.get("ends_at"),
+            )
+
+            created.append({
+                "row_num": row["row_num"],
+                "email": row["email"],
+                "user_id": user.id,
+                "created_user": user_created,
+                "program_id": row["program_id"],
+                "project_id": row["project_id"],
+                "role": row["role"],
+            })
         except Exception as exc:
+            db.session.rollback()
             failed.append({
                 "row_num": row["row_num"],
                 "email": row["email"],

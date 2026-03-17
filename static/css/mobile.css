@@ -241,16 +241,22 @@ body.is-offline .main-content {
         font-size: 16px;
     }
     .shell-header__program-badge {
-        max-width: 160px;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        max-width: 200px;
+        padding: 5px 8px;
+    }
+    .shell-context-summary__program {
         font-size: 12px;
     }
-    .shell-header__program-switch {
-        display: none;
+    .shell-context-summary__project {
+        font-size: 10.5px;
     }
     .shell-context-selector {
-        display: none;
+        position: fixed;
+        top: calc(var(--pg-header-height, 48px) + 8px);
+        left: 12px;
+        right: 12px;
+        width: auto;
+        max-width: none;
     }
 
     /* Cards/grids go single-column */
@@ -364,7 +370,20 @@ body.is-offline .main-content {
         padding: 0 10px;
     }
     .shell-header__program-badge {
-        display: none;
+        display: flex;
+        max-width: 170px;
+        padding: 5px 8px;
+    }
+    .shell-header__program-icon {
+        width: 24px;
+        height: 24px;
+        font-size: 13px;
+    }
+    .shell-context-summary {
+        gap: 4px;
+    }
+    .shell-context-summary__project::before {
+        margin-right: 4px;
     }
 
     /* Modal: near-full-screen */

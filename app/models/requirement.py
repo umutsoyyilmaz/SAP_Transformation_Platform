@@ -68,10 +68,10 @@ class Requirement(db.Model):
     )
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
-        comment="Faz 3: project scope (nullable during transition)",
+        comment="Sprint 7: project scope (required)",
     )
     process_id = db.Column(
         db.Integer, db.ForeignKey("processes.id", ondelete="SET NULL"),

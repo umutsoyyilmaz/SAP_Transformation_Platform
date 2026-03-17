@@ -20,11 +20,18 @@ Extracted operations:
     - TS approved  → auto-move backlog item to build
 """
 import logging
+from textwrap import dedent
 
 from app.models import db
 from app.models.backlog import (
     BacklogItem, ConfigItem, FunctionalSpec, TechnicalSpec, Sprint,
     BACKLOG_STATUSES, BACKLOG_TRANSITIONS, WRICEF_TYPES,
+)
+from app.models.explore.requirement import ExploreRequirement
+from app.services.helpers.project_owned_scope import (
+    normalize_member_scope,
+    normalize_project_scope,
+    resolve_project_scope,
 )
 from app.utils.helpers import parse_date
 
@@ -32,6 +39,24 @@ logger = logging.getLogger(__name__)
 
 VALID_WRICEF = WRICEF_TYPES
 VALID_STATUSES = BACKLOG_STATUSES
+
+
+def _normalize_requirement_links(program_id: int, data: dict) -> dict:
+    """Normalize payload to canonical explore requirement linkage."""
+    normalized = dict(data or {})
+    explore_requirement_id = normalized.get("explore_requirement_id")
+    legacy_requirement_id = normalized.get("requirement_id")
+
+    if legacy_requirement_id not in (None, ""):
+        raise ValueError("requirement_id is no longer accepted; use explore_requirement_id")
+
+    if explore_requirement_id not in (None, ""):
+        explore_req = db.session.get(ExploreRequirement, str(explore_requirement_id))
+        if not explore_req or explore_req.program_id != program_id:
+            raise ValueError("explore_requirement_id not found in this program")
+        normalized["explore_requirement_id"] = explore_req.id
+
+    return normalized
 
 
 def validate_sprint_id(program_id, sprint_id):
@@ -53,17 +78,24 @@ def validate_sprint_id(program_id, sprint_id):
     return sprint_id, None
 
 
-def create_backlog_item(program_id, data):
+def create_backlog_item(program_id: int, data: dict, *, tenant_id: int | None = None):
     """Create a backlog item under a program.
 
     Args:
         program_id: ID of the parent program.
         data: Dict with item fields.
+        tenant_id: Tenant scope from the calling request context.
+            Stamped onto the item so single-item lookups can be tenant-scoped.
 
     Returns:
         (BacklogItem, None) on success
         (None, error_dict) on validation failure — error_dict has 'error' and 'status' keys.
     """
+    try:
+        data = _normalize_requirement_links(program_id, data)
+    except ValueError as exc:
+        return None, {"error": str(exc), "status": 400}
+
     title = data.get("title", "").strip()
     if not title:
         return None, {"error": "Backlog item title is required", "status": 400}
@@ -89,11 +121,25 @@ def create_backlog_item(program_id, data):
     if err:
         return None, {"error": err, "status": 400}
 
+    try:
+        project_id = resolve_project_scope(program_id, data.get("project_id"))
+        if project_id is None:
+            raise ValueError("project_id is required")
+        assigned_to_id = normalize_member_scope(
+            program_id,
+            data.get("assigned_to_id"),
+            field_name="assigned_to_id",
+            project_id=project_id,
+        )
+    except ValueError as exc:
+        return None, {"error": str(exc), "status": 400}
+
     item = BacklogItem(
         program_id=program_id,
-        project_id=data.get("project_id"),
+        tenant_id=tenant_id,
+        project_id=project_id,
         sprint_id=sprint_id,
-        requirement_id=data.get("requirement_id"),
+        explore_requirement_id=data.get("explore_requirement_id"),
         code=data.get("code", ""),
         title=title,
         description=data.get("description", ""),
@@ -106,7 +152,7 @@ def create_backlog_item(program_id, data):
         status=status,
         priority=data.get("priority", "medium"),
         assigned_to=data.get("assigned_to", ""),
-        assigned_to_id=data.get("assigned_to_id"),
+        assigned_to_id=assigned_to_id,
         story_points=data.get("story_points"),
         estimated_hours=data.get("estimated_hours"),
         actual_hours=data.get("actual_hours"),
@@ -128,11 +174,30 @@ def update_backlog_item(item, data):
         (BacklogItem, None) on success
         (None, error_dict) on validation failure.
     """
+    try:
+        data = _normalize_requirement_links(item.program_id, data)
+    except ValueError as exc:
+        return None, {"error": str(exc), "status": 400}
+
     if "status" in data and data["status"] not in VALID_STATUSES:
         return None, {
             "error": f"status must be one of: {', '.join(sorted(VALID_STATUSES))}",
             "status": 400,
         }
+
+    try:
+        target_project_id = normalize_project_scope(item.program_id, data.get("project_id", item.project_id))
+        assigned_to_id = (
+            normalize_member_scope(
+                item.program_id,
+                data.get("assigned_to_id"),
+                field_name="assigned_to_id",
+                project_id=target_project_id,
+            )
+            if "assigned_to_id" in data else item.assigned_to_id
+        )
+    except ValueError as exc:
+        return None, {"error": str(exc), "status": 400}
 
     for field in [
         "code", "title", "description", "sub_type", "module",
@@ -153,7 +218,7 @@ def update_backlog_item(item, data):
             }
         item.wricef_type = wt
 
-    for nullable in ["sprint_id", "requirement_id"]:
+    for nullable in ["sprint_id", "explore_requirement_id"]:
         if nullable in data:
             value = data[nullable]
             if nullable == "sprint_id":
@@ -166,7 +231,7 @@ def update_backlog_item(item, data):
 
     for num in ["story_points", "estimated_hours", "actual_hours", "board_order", "assigned_to_id"]:
         if num in data:
-            setattr(item, num, data[num])
+            setattr(item, num, assigned_to_id if num == "assigned_to_id" else data[num])
 
     if not item.title:
         return None, {"error": "Backlog item title cannot be empty", "status": 400}
@@ -311,42 +376,53 @@ def move_backlog_item(item, data):
 
 def _generate_fs_template(item):
     """Generate a Markdown functional spec template for a WRICEF item."""
-    return f"""# Functional Specification: {item.code or 'TBD'}
+    wricef_type = (item.wricef_type or "enhancement").upper()
+    return dedent(
+        f"""\
+        # Functional Specification
+        ## {item.code or 'TBD'} — {item.title}
 
-## 1. Overview
-**Title:** {item.title}
-**WRICEF Type:** {item.wricef_type.upper()}
-**Module:** {item.module or 'TBD'}
-**Priority:** {item.priority}
+        ## 1. Document Control
+        | Field | Value |
+        |---|---|
+        | **Type** | {wricef_type} |
+        | **Module** | {item.module or 'TBD'} |
+        | **Priority** | {item.priority or 'medium'} |
+        | **Status** | {item.status or 'new'} |
 
-## 2. Business Requirement
-{item.description or '_To be documented_'}
+        ## 2. Business Context & Scope
+        {item.description or '_To be documented_'}
 
-## 3. Acceptance Criteria
-{item.acceptance_criteria or '_To be documented_'}
+        ## 3. Traceability & Upstream References
+        - Requirement / backlog reference: {item.code or 'TBD'}
+        - Process / scenario reference: _To be documented_
+        - Related dependencies: _To be documented_
 
-## 4. Functional Design
-_To be documented — describe the functional solution design._
+        ## 4. Functional Design
+        _Describe the target SAP process, user journey, business rules, and exception handling._
 
-## 5. Process Flow
-_To be documented — describe the process flow / decision logic._
+        ## 5. Assumptions & Dependencies
+        {item.technical_notes or '_To be documented_'}
 
-## 6. Test Scenarios
-_Define test steps that will be used for Unit Test case generation:_
+        ## 6. Security & Authorization
+        _Identify business roles, approvals, segregation-of-duties, and audit expectations._
 
-1. _Test step 1 — expected result_
-2. _Test step 2 — expected result_
-3. _Test step 3 — expected result_
+        ## 7. Test Scenarios & Acceptance Coverage
+        _Define business scenarios that will drive later unit, SIT, and UAT coverage._
 
-## 7. Dependencies & Interfaces
-{item.technical_notes or '_To be documented_'}
+        1. _Primary business scenario — expected result_
+        2. _Negative / exception scenario — expected result_
+        3. _Data or authorization boundary — expected result_
 
-## 8. Open Items
-_None_
+        ## 8. Review & Sign-Off
+        - Functional owner: _Pending_
+        - Solution architect: _Pending_
+        - Delivery lead: _Pending_
 
----
-_AI FS Generator: Ready — content can be auto-generated in future releases._
-"""
+        ---
+        *Fallback SAP-aligned FS template generated because no persisted template was available.*
+        """
+    ).strip()
 
 
 def _generate_ts_template(fs, item):
@@ -354,43 +430,47 @@ def _generate_ts_template(fs, item):
     item_title = item.title if item else "N/A"
     item_code = item.code if item else "N/A"
     module = (item.module if item else "") or "TBD"
-    return f"""# Technical Specification: {item_code}
+    return dedent(
+        f"""\
+        # Technical Specification
+        ## {item_code} — {item_title}
 
-## 1. Overview
-**FS Reference:** {fs.title}
-**Title:** {item_title}
-**Module:** {module}
+        ## 1. Technical Document Control
+        | Field | Value |
+        |---|---|
+        | **FS Reference** | {fs.title} |
+        | **Module** | {module} |
+        | **Status** | {getattr(fs, 'status', 'draft')} |
 
-## 2. Technical Design
-_To be documented — describe the technical approach, objects, classes, function modules._
+        ## 2. Solution Overview & Architecture
+        _Describe the target implementation architecture, integration boundaries, and execution flow._
 
-## 3. Object List
-_List all ABAP / BTP objects to be created or modified:_
+        ## 3. Technical Object Inventory
+        | Object Type | Object Name | Purpose |
+        |---|---|---|
+        | _e.g. Class_ | _ZCL_EXAMPLE_ | _Description_ |
 
-| Object Type | Object Name | Description |
-|---|---|---|
-| _e.g. Class_ | _ZCL_EXAMPLE_ | _Description_ |
+        ## 4. Data Model, Mapping & Interfaces
+        _Document data structures, field mapping, persistence changes, and interface payload considerations._
 
-## 4. Data Model Changes
-_To be documented_
+        ## 5. Security & Authorization
+        _Document roles, technical users, authorization checks, and audit requirements._
 
-## 5. Authorization Concept
-_To be documented_
+        ## 6. Error Handling, Monitoring & Operations
+        _Describe logging, alerting, retry behavior, support ownership, and reconciliation controls._
 
-## 6. Error Handling
-_To be documented_
+        ## 7. Deployment & Transport
+        _List transport sequencing, cutover prerequisites, rollback expectations, and environment dependencies._
 
-## 7. Unit Test Plan
-_Define unit test scenarios that will be auto-generated as test cases:_
+        ## 8. Unit Test & Technical Verification
+        1. _Positive path — expected technical result_
+        2. _Negative / error path — expected technical result_
+        3. _Boundary / volume path — expected technical result_
 
-1. _Positive scenario — expected result_
-2. _Negative scenario — expected result_
-3. _Boundary condition — expected result_
-
----
-_AI TS Generator: Ready — content can be auto-generated in future releases._
-_ABAP AI Generator: Ready — code stubs can be auto-generated in future releases._
-"""
+        ---
+        *Fallback SAP-aligned TS template generated because no persisted template was available.*
+        """
+    ).strip()
 
 
 def _auto_generate_unit_tests(item):
@@ -441,7 +521,6 @@ def _auto_generate_unit_tests(item):
         status="draft",
         priority="medium",
         backlog_item_id=item.id,
-        requirement_id=item.requirement_id,
         explore_requirement_id=getattr(item, "explore_requirement_id", None),
     )
     db.session.add(tc)
@@ -673,10 +752,13 @@ def create_sprint(program_id, data):
     name = data.get("name", "").strip()
     if not name:
         return None, {"error": "Sprint name is required", "status": 400}
+    project_id = resolve_project_scope(program_id, data.get("project_id"))
+    if project_id is None:
+        return None, {"error": "project_id is required", "status": 400}
 
     sprint = Sprint(
         program_id=program_id,
-        project_id=data.get("project_id"),
+        project_id=project_id,
         name=name,
         goal=data.get("goal", ""),
         status=data.get("status", "planning"),
@@ -732,6 +814,11 @@ def create_config_item(program_id, data):
         (ConfigItem, None) on success
         (None, error_dict) on validation failure.
     """
+    try:
+        data = _normalize_requirement_links(program_id, data)
+    except ValueError as exc:
+        return None, {"error": str(exc), "status": 400}
+
     title = data.get("title", "").strip()
     if not title:
         return None, {"error": "Config item title is required", "status": 400}
@@ -743,10 +830,23 @@ def create_config_item(program_id, data):
             "status": 400,
         }
 
+    try:
+        project_id = resolve_project_scope(program_id, data.get("project_id"))
+        if project_id is None:
+            raise ValueError("project_id is required")
+        assigned_to_id = normalize_member_scope(
+            program_id,
+            data.get("assigned_to_id"),
+            field_name="assigned_to_id",
+            project_id=project_id,
+        )
+    except ValueError as exc:
+        return None, {"error": str(exc), "status": 400}
+
     item = ConfigItem(
         program_id=program_id,
-        project_id=data.get("project_id"),
-        requirement_id=data.get("requirement_id"),
+        project_id=project_id,
+        explore_requirement_id=data.get("explore_requirement_id"),
         code=data.get("code", ""),
         title=title,
         description=data.get("description", ""),
@@ -757,7 +857,7 @@ def create_config_item(program_id, data):
         status=status,
         priority=data.get("priority", "medium"),
         assigned_to=data.get("assigned_to", ""),
-        assigned_to_id=data.get("assigned_to_id"),
+        assigned_to_id=assigned_to_id,
         complexity=data.get("complexity", "low"),
         estimated_hours=data.get("estimated_hours"),
         actual_hours=data.get("actual_hours"),
@@ -776,6 +876,11 @@ def update_config_item(item, data):
         (ConfigItem, None) on success
         (None, error_dict) on validation failure.
     """
+    try:
+        data = _normalize_requirement_links(item.program_id, data)
+    except ValueError as exc:
+        return None, {"error": str(exc), "status": 400}
+
     if "status" in data and data["status"] not in VALID_STATUSES:
         return None, {
             "error": f"status must be one of: {', '.join(sorted(VALID_STATUSES))}",
@@ -791,13 +896,13 @@ def update_config_item(item, data):
             val = data[field].strip() if isinstance(data[field], str) else data[field]
             setattr(item, field, val)
 
-    for nullable in ["requirement_id"]:
+    for nullable in ["explore_requirement_id"]:
         if nullable in data:
             setattr(item, nullable, data[nullable])
 
     for num in ["estimated_hours", "actual_hours", "assigned_to_id"]:
         if num in data:
-            setattr(item, num, data[num])
+            setattr(item, num, assigned_to_id if num == "assigned_to_id" else data[num])
 
     if not item.title:
         return None, {"error": "Config item title cannot be empty", "status": 400}
@@ -859,3 +964,16 @@ def create_technical_spec(fs_id, data):
     db.session.add(ts)
     db.session.flush()
     return ts, None
+    try:
+        target_project_id = normalize_project_scope(item.program_id, data.get("project_id", item.project_id))
+        assigned_to_id = (
+            normalize_member_scope(
+                item.program_id,
+                data.get("assigned_to_id"),
+                field_name="assigned_to_id",
+                project_id=target_project_id,
+            )
+            if "assigned_to_id" in data else item.assigned_to_id
+        )
+    except ValueError as exc:
+        return None, {"error": str(exc), "status": 400}

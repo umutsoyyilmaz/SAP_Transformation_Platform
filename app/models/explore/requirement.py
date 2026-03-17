@@ -15,6 +15,10 @@ from app.models import db
 
 __all__ = [
     "REQUIREMENT_TRANSITIONS",
+    "REQUIREMENT_CLASSES",
+    "DELIVERY_PATTERNS",
+    "TRIGGER_REASONS",
+    "DELIVERY_STATUSES",
     "ExploreDecision",
     "ExploreOpenItem",
     "ExploreRequirement",
@@ -303,6 +307,49 @@ REQUIREMENT_TRANSITIONS = {
     "unconvert": {"from": ["approved", "in_backlog", "realized"], "to": "approved"},
 }
 
+REQUIREMENT_CLASSES = {
+    "business",
+    "functional",
+    "non_functional",
+    "regulatory",
+    "reporting",
+    "security",
+    "integration",
+    "data",
+}
+
+DELIVERY_PATTERNS = {
+    "configuration",
+    "wricef",
+    "interface",
+    "migration",
+    "authorization",
+    "report",
+    "form",
+    "workflow",
+    "master_data",
+    "process_change",
+}
+
+TRIGGER_REASONS = {
+    "gap",
+    "partial_fit",
+    "regulatory_delta",
+    "local_template_gap",
+    "control_gap",
+    "data_gap",
+    "standard_observation",
+}
+
+DELIVERY_STATUSES = {
+    "not_mapped",
+    "mapped",
+    "in_build",
+    "ready_for_test",
+    "validated",
+    "deployed",
+}
+
 
 class ExploreRequirement(db.Model):
     """
@@ -479,6 +526,30 @@ class ExploreRequirement(db.Model):
         index=True,
         comment="requirements.id of the migrated legacy row — for backward trace",
     )
+    requirement_class = db.Column(
+        db.String(32),
+        nullable=True,
+        index=True,
+        comment="Canonical requirement domain: business | functional | regulatory | reporting | security | integration | data",
+    )
+    delivery_pattern = db.Column(
+        db.String(32),
+        nullable=True,
+        index=True,
+        comment="Canonical downstream solution pattern: configuration | wricef | interface | migration | authorization | report | form | workflow | master_data | process_change",
+    )
+    trigger_reason = db.Column(
+        db.String(32),
+        nullable=True,
+        index=True,
+        comment="Why this requirement exists: gap | partial_fit | regulatory_delta | local_template_gap | control_gap | data_gap",
+    )
+    delivery_status = db.Column(
+        db.String(24),
+        nullable=True,
+        index=True,
+        comment="Downstream delivery progress: not_mapped | mapped | in_build | ready_for_test | validated | deployed",
+    )
 
     # Backlog linkage — REMOVED (ADR: WRICEF traces via BacklogItem.explore_requirement_id)
     # Canonical direction: BacklogItem.explore_requirement_id → ExploreRequirement.id (N:1)
@@ -557,6 +628,53 @@ class ExploreRequirement(db.Model):
     def is_converted(self):
         """Check if this requirement has been converted to backlog/config items."""
         return bool(self.linked_backlog_items or self.linked_config_items)
+
+    @property
+    def effective_requirement_class(self):
+        """Canonical requirement class with safe fallback for older rows."""
+        return self.requirement_class or self.requirement_type or "functional"
+
+    @property
+    def effective_delivery_pattern(self):
+        """Canonical delivery pattern with fallback from legacy type."""
+        if self.delivery_pattern:
+            return self.delivery_pattern
+        legacy_type_map = {
+            "development": "wricef",
+            "configuration": "configuration",
+            "integration": "interface",
+            "migration": "migration",
+            "enhancement": "wricef",
+            "workaround": "process_change",
+            "functional": "configuration",
+        }
+        return legacy_type_map.get(self.type, "configuration")
+
+    @property
+    def effective_trigger_reason(self):
+        """Trigger reason fallback while older data is being backfilled."""
+        if self.trigger_reason:
+            return self.trigger_reason
+        fit_map = {
+            "gap": "gap",
+            "partial_fit": "partial_fit",
+            "fit": "standard_observation",
+            "standard": "standard_observation",
+        }
+        return fit_map.get(self.fit_status)
+
+    @property
+    def effective_delivery_status(self):
+        """Delivery progress tracked independently from requirement approval flow."""
+        if self.delivery_status:
+            return self.delivery_status
+        if self.status == "verified":
+            return "validated"
+        if self.status == "realized":
+            return "ready_for_test"
+        if self.status == "in_backlog" or self.is_converted:
+            return "mapped"
+        return "not_mapped"
 
     @property
     def backlog_item_id(self):
@@ -643,6 +761,10 @@ class ExploreRequirement(db.Model):
             "parent_id": self.parent_id,
             "external_id": self.external_id,
             "legacy_requirement_id": self.legacy_requirement_id,
+            "requirement_class": self.effective_requirement_class,
+            "delivery_pattern": self.effective_delivery_pattern,
+            "trigger_reason": self.effective_trigger_reason,
+            "delivery_status": self.effective_delivery_status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             # Resolved detail fields

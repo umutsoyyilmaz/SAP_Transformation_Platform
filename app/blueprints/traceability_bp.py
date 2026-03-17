@@ -18,8 +18,10 @@ functions — does NOT modify them.
 from flask import Blueprint, jsonify, request
 
 from app.services.traceability import (
+    _resolve_migrated_explore_requirement,
     build_explore_lateral,
     build_lateral_links,
+    build_traceability_matrix_summary,
     get_chain,
     trace_explore_requirement,
     trace_config_item,
@@ -28,6 +30,7 @@ from app.services.traceability import (
     trace_upstream_from_defect,
     trace_defects_by_process,
 )
+from app.services.helpers.scoped_queries import get_scoped_or_none
 
 traceability_bp = Blueprint("traceability", __name__, url_prefix="/api/v1")
 
@@ -52,10 +55,12 @@ def unified_trace(entity_type, entity_id):
         max_depth = 10
 
     include_lateral = request.args.get("include_lateral", "true").lower() == "true"
+    project_id = request.args.get("project_id", type=int)
+    program_id = request.args.get("program_id", type=int)
 
     # ── ExploreRequirement (string IDs like "REQ-014") ───────────────────
     if entity_type == "explore_requirement":
-        return _handle_explore_requirement(entity_id, include_lateral)
+        return _handle_explore_requirement(entity_id, include_lateral, project_id=project_id)
 
     # ── Standard entities (integer IDs) ──────────────────────────────────
     try:
@@ -63,17 +68,37 @@ def unified_trace(entity_type, entity_id):
     except (ValueError, TypeError):
         return jsonify({"error": f"Invalid entity_id: {entity_id}"}), 400
 
-    chain = get_chain(entity_type, eid)
+    if entity_type == "requirement":
+        migrated = _resolve_migrated_explore_requirement(
+            eid,
+            project_id=project_id,
+            program_id=program_id,
+        )
+        if migrated is not None:
+            return _handle_explore_requirement(
+                migrated.id,
+                include_lateral,
+                project_id=getattr(migrated, "project_id", project_id),
+                requested_entity_type="requirement",
+                requested_entity_id=eid,
+            )
+
+    chain = get_chain(entity_type, eid, project_id=project_id, program_id=program_id)
     if chain is None:
         return jsonify({"error": f"{entity_type} with id {eid} not found"}), 404
 
     # ── Backlog Item: enrich upstream with ExploreRequirement chain ───────
     if entity_type in ("backlog_item", "config_item"):
-        _enrich_backlog_upstream(entity_type, eid, chain)
+        _enrich_backlog_upstream(entity_type, eid, chain, project_id=project_id, program_id=program_id)
 
     # Enhance with lateral links
     if include_lateral:
-        chain["lateral"] = _build_lateral_links(entity_type, eid)
+        chain["lateral"] = _build_lateral_links(
+            entity_type,
+            eid,
+            project_id=project_id,
+            program_id=program_id,
+        )
 
     # Chain depth & gap detection
     chain["chain_depth"] = _calculate_chain_depth(chain)
@@ -86,23 +111,34 @@ def unified_trace(entity_type, entity_id):
 # Explore Requirement handler
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _handle_explore_requirement(requirement_id, include_lateral):
+def _handle_explore_requirement(
+    requirement_id,
+    include_lateral,
+    *,
+    project_id: int | None = None,
+    requested_entity_type: str = "explore_requirement",
+    requested_entity_id: str | int | None = None,
+):
     """Handle explore_requirement trace with upstream + lateral enrichment."""
     try:
-        graph = trace_explore_requirement(requirement_id)
+        graph = trace_explore_requirement(requirement_id, project_id=project_id)
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
 
     # Enrich with upstream context (Workshop → ProcessLevel → Scenario)
-    graph["upstream"] = _build_explore_upstream(requirement_id)
+    graph["upstream"] = _build_explore_upstream(requirement_id, project_id=project_id)
 
     # Lateral links
     if include_lateral:
-        graph["lateral"] = _build_explore_lateral(requirement_id)
+        graph["lateral"] = _build_explore_lateral(requirement_id, project_id=project_id)
 
     # Full chain depth & gap detection
     graph["chain_depth"] = _calculate_explore_depth(graph)
     graph["gaps"] = _find_explore_gaps(graph)
+    graph["requested_entity_type"] = requested_entity_type
+    graph["canonical_entity_type"] = "explore_requirement"
+    if requested_entity_id is not None and requested_entity_type != "explore_requirement":
+        graph["requested_entity_id"] = requested_entity_id
 
     return jsonify(graph), 200
 
@@ -111,7 +147,7 @@ def _handle_explore_requirement(requirement_id, include_lateral):
 # Backlog → Explore Requirement upstream enrichment
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _enrich_backlog_upstream(entity_type, eid, chain):
+def _enrich_backlog_upstream(entity_type, eid, chain, *, project_id: int | None = None, program_id: int | None = None):
     """
     If a BacklogItem/ConfigItem has an explore_requirement_id, prepend the full
     Explore upstream chain: Requirement → Workshop → ProcessStep → L4→L3→L2→L1.
@@ -124,7 +160,11 @@ def _enrich_backlog_upstream(entity_type, eid, chain):
     from app.models.explore import ExploreRequirement
 
     Model = BacklogItem if entity_type == "backlog_item" else ConfigItem
-    item = db.session.get(Model, eid)
+    item = (
+        get_scoped_or_none(Model, eid, project_id=project_id, program_id=program_id)
+        if project_id is not None or program_id is not None
+        else db.session.get(Model, eid)
+    )
     if not item:
         return
 
@@ -132,7 +172,7 @@ def _enrich_backlog_upstream(entity_type, eid, chain):
     if not req_id:
         return
 
-    req = db.session.get(ExploreRequirement, req_id)
+    req = get_scoped_or_none(ExploreRequirement, req_id, project_id=item.project_id)
     if not req:
         return
 
@@ -148,7 +188,7 @@ def _enrich_backlog_upstream(entity_type, eid, chain):
     }]
 
     # Build the workshop → process level hierarchy
-    explore_upstream.extend(_build_explore_upstream(req.id))
+    explore_upstream.extend(_build_explore_upstream(req.id, project_id=req.project_id))
 
     # Prepend explore chain before existing upstream
     existing_upstream = chain.get("upstream", [])
@@ -159,7 +199,7 @@ def _enrich_backlog_upstream(entity_type, eid, chain):
 # Upstream builder — ExploreRequirement → Workshop → ProcessLevel hierarchy
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _build_explore_upstream(requirement_id):
+def _build_explore_upstream(requirement_id, *, project_id: int | None = None):
     """
     Build upstream context for an ExploreRequirement.
 
@@ -171,15 +211,20 @@ def _build_explore_upstream(requirement_id):
     from app.models import db
     from app.models.explore import ExploreRequirement, ExploreWorkshop, ProcessStep, ProcessLevel
 
-    req = db.session.get(ExploreRequirement, requirement_id)
+    req = (
+        get_scoped_or_none(ExploreRequirement, requirement_id, project_id=project_id)
+        if project_id is not None
+        else db.session.get(ExploreRequirement, requirement_id)
+    )
     if not req:
         return []
+    active_project_id = req.project_id
 
     upstream = []
 
     # ── Workshop link ────────────────────────────────────────────────────
     if req.workshop_id:
-        ws = db.session.get(ExploreWorkshop, req.workshop_id)
+        ws = get_scoped_or_none(ExploreWorkshop, req.workshop_id, project_id=active_project_id)
         if ws:
             upstream.append({
                 "type": "workshop",
@@ -192,7 +237,7 @@ def _build_explore_upstream(requirement_id):
 
     # ── Process Step → Process Level hierarchy ───────────────────────────
     if req.process_step_id:
-        ps = db.session.get(ProcessStep, req.process_step_id)
+        ps = get_scoped_or_none(ProcessStep, req.process_step_id, project_id=active_project_id)
         if ps:
             upstream.append({
                 "type": "process_step",
@@ -202,15 +247,15 @@ def _build_explore_upstream(requirement_id):
             })
             # Walk up ProcessLevel hierarchy: L4 → L3 → L2 → L1
             if ps.process_level_id:
-                _walk_process_level_hierarchy(ps.process_level_id, upstream)
+                _walk_process_level_hierarchy(ps.process_level_id, upstream, project_id=active_project_id)
 
     elif req.process_level_id:
         # Direct L4 link (no process step)
-        _walk_process_level_hierarchy(req.process_level_id, upstream)
+        _walk_process_level_hierarchy(req.process_level_id, upstream, project_id=active_project_id)
 
     # ── Scope Item (L3 denormalized) ─────────────────────────────────────
     if req.scope_item_id and req.scope_item_id != req.process_level_id:
-        pl = db.session.get(ProcessLevel, req.scope_item_id)
+        pl = get_scoped_or_none(ProcessLevel, req.scope_item_id, project_id=active_project_id)
         if pl:
             # Only add if not already in upstream
             existing_ids = {item.get("id") for item in upstream}
@@ -227,7 +272,7 @@ def _build_explore_upstream(requirement_id):
     return upstream
 
 
-def _walk_process_level_hierarchy(process_level_id, upstream):
+def _walk_process_level_hierarchy(process_level_id, upstream, *, project_id: int | None = None):
     """Walk up Process Level tree: L4 → L3 → L2 → L1."""
     from app.models import db
     from app.models.explore import ProcessLevel
@@ -237,7 +282,11 @@ def _walk_process_level_hierarchy(process_level_id, upstream):
 
     while current_id and current_id not in seen:
         seen.add(current_id)
-        pl = db.session.get(ProcessLevel, current_id)
+        pl = (
+            get_scoped_or_none(ProcessLevel, current_id, project_id=project_id)
+            if project_id is not None
+            else db.session.get(ProcessLevel, current_id)
+        )
         if not pl:
             break
 
@@ -260,14 +309,14 @@ def _walk_process_level_hierarchy(process_level_id, upstream):
 # Lateral links — Open Items, Decisions, Interfaces
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _build_explore_lateral(requirement_id):
+def _build_explore_lateral(requirement_id, *, project_id: int | None = None):
     """Delegate to service layer — kept for backward-compatibility with existing callers."""
-    return build_explore_lateral(requirement_id)
+    return build_explore_lateral(requirement_id, project_id=project_id)
 
 
-def _build_lateral_links(entity_type, entity_id):
+def _build_lateral_links(entity_type, entity_id, *, project_id: int | None = None, program_id: int | None = None):
     """Delegate to service layer — kept for backward-compatibility with existing callers."""
-    return build_lateral_links(entity_type, entity_id)
+    return build_lateral_links(entity_type, entity_id, project_id=project_id, program_id=program_id)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -448,6 +497,20 @@ def config_coverage_summary(project_id: int):
     """Config-item test coverage summary broken down by SAP module."""
     pid, tid = _project_tenant(project_id)
     return jsonify(get_config_coverage_summary(pid, tid)), 200
+
+
+@traceability_bp.route(
+    "/projects/<int:project_id>/trace/matrix-summary",
+    methods=["GET"],
+)
+def traceability_matrix_summary(project_id: int):
+    """Aggregated requirement → test case → defect coverage for the full matrix.
+
+    All counts are strictly project-scoped.  Returns:
+        total_requirements, requirements_with_tests, requirements_without_tests,
+        unlinked_test_cases, total_defects, coverage_pct.
+    """
+    return jsonify(build_traceability_matrix_summary(project_id)), 200
 
 
 @traceability_bp.route(

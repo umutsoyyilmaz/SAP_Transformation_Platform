@@ -69,6 +69,27 @@
     --pg-radius-lg:  10px;
     --pg-radius-xl:  16px;
 
+    /* ── Density / Shell Rhythm ───────────────────────────── */
+    --pg-shell-gap:                20px;
+    --pg-shell-title-size:         19px;
+    --pg-shell-card-radius:        14px;
+    --pg-shell-card-pad:           16px;
+    --pg-shell-header-pad-y:       12px;
+    --pg-shell-header-pad-x:       16px;
+    --pg-shell-toolbar-pad-y:      10px;
+    --pg-shell-toolbar-pad-x:      14px;
+    --pg-shell-toolbar-gap:        8px;
+    --pg-shell-summary-pad-y:      14px;
+    --pg-shell-summary-pad-x:      16px;
+    --pg-shell-summary-value-size: 24px;
+    --pg-shell-hero-pad-y:         18px;
+    --pg-shell-hero-pad-x:         20px;
+    --pg-shell-hero-title-size:    clamp(24px, 2.4vw, 30px);
+    --pg-shell-hero-copy-size:     14px;
+    --pg-shell-chip-height:        32px;
+    --pg-shell-chip-pad-x:         12px;
+    --pg-shell-chip-font-size:     11px;
+
     /* ── Shadow ────────────────────────────────────────────── */
     --pg-shadow-sm:  0 1px 2px rgba(15,23,42,0.06);
     --pg-shadow-md:  0 4px 14px rgba(15,23,42,0.08);

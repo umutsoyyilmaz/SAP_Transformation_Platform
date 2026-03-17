@@ -98,10 +98,15 @@ def create_report(program_id: int, tenant_id: int, data: dict) -> ProgramReport:
     """
     _parse_date_fields(data, ("reporting_period_start", "reporting_period_end", "report_date"))
 
+    initial_status = data.get("status")
+    if initial_status not in ("draft", "in_review"):
+        initial_status = "draft"
+
     report = ProgramReport(
         program_id=program_id,
         tenant_id=tenant_id,
         title=data["title"],
+        status=initial_status,
         reporting_period_start=data.get("reporting_period_start"),
         reporting_period_end=data.get("reporting_period_end"),
         report_date=data.get("report_date"),

@@ -16,6 +16,7 @@ const Auth = (() => {
     const TOKEN_KEY     = 'sap_access_token';
     const REFRESH_KEY   = 'sap_refresh_token';
     const USER_KEY      = 'sap_user';
+    const SHELL_CONFIG  = (typeof window !== 'undefined' && window.__APP_CONFIG) ? window.__APP_CONFIG : {};
 
     // Refresh access token 2 minutes before expiry
     const REFRESH_MARGIN_MS = 2 * 60 * 1000;
@@ -33,7 +34,18 @@ const Auth = (() => {
 
     function getUser() {
         try {
-            return JSON.parse(localStorage.getItem(USER_KEY) || 'null');
+            const stored = JSON.parse(localStorage.getItem(USER_KEY) || 'null');
+            if (stored) return stored;
+            if (_isAuthDisabled()) {
+                return {
+                    id: 0,
+                    full_name: 'Local User',
+                    email: 'local@example.com',
+                    tenant_id: 1,
+                    roles: ['admin'],
+                };
+            }
+            return null;
         } catch { return null; }
     }
 
@@ -88,14 +100,20 @@ const Auth = (() => {
     // ── Auth Check ─────────────────────────────────────────────────
 
     function isAuthenticated() {
+        if (_isAuthDisabled()) return true;
         const token = getAccessToken();
         if (!token) return false;
         return !isTokenExpired(token);
     }
 
+    function _isAuthDisabled() {
+        return SHELL_CONFIG.apiAuthEnabled === false;
+    }
+
     // ── Token Refresh ──────────────────────────────────────────────
 
     function _scheduleRefresh(accessToken) {
+        if (_isAuthDisabled()) return;
         if (_refreshTimer) clearTimeout(_refreshTimer);
 
         const expiryMs = _getTokenExpiry(accessToken);
@@ -106,6 +124,7 @@ const Auth = (() => {
     }
 
     async function _doRefresh() {
+        if (_isAuthDisabled()) return;
         const refreshToken = getRefreshToken();
         if (!refreshToken) {
             _handleSessionExpired();
@@ -134,12 +153,19 @@ const Auth = (() => {
 
     function _handleSessionExpired() {
         clearTokens();
+        if (_isAuthDisabled()) return;
         window.location.href = '/login';
     }
 
     // ── Logout ─────────────────────────────────────────────────────
 
     async function logout() {
+        if (_isAuthDisabled()) {
+            clearTokens();
+            sessionStorage.clear();
+            window.location.href = '/';
+            return;
+        }
         const refreshToken = getRefreshToken();
 
         // Call logout API (best-effort)
@@ -165,6 +191,12 @@ const Auth = (() => {
     // ── Fetch User Profile ─────────────────────────────────────────
 
     async function fetchUserProfile() {
+        if (_isAuthDisabled()) {
+            return {
+                user: getUser(),
+                tenant: null,
+            };
+        }
         const token = getAccessToken();
         if (!token) return null;
 
@@ -185,6 +217,7 @@ const Auth = (() => {
     // ── Auth Guard (call on SPA load) ─────────────────────────────
 
     function guard() {
+        if (_isAuthDisabled()) return true;
         const token = getAccessToken();
         if (!token) {
             window.location.href = '/login';

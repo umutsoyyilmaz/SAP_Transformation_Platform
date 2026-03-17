@@ -77,7 +77,10 @@ def _is_auth_enabled() -> bool:
         return env_val.lower() not in ("false", "0", "no", "off")
     # Fall back to Flask app config
     try:
-        return current_app.config.get("API_AUTH_ENABLED", "true").lower() not in ("false", "0", "no", "off")
+        cfg_val = current_app.config.get("API_AUTH_ENABLED", "true")
+        if isinstance(cfg_val, bool):
+            return cfg_val
+        return str(cfg_val).lower() not in ("false", "0", "no", "off")
     except RuntimeError:
         # Outside app context
         return True

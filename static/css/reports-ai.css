@@ -1,0 +1,94 @@
+.reports-ai-modal {
+    max-width: 900px;
+}
+
+.reports-ai-modal--padded {
+    padding: 24px;
+}
+
+.reports-ai-modal__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.reports-ai-modal__title {
+    margin: 0;
+}
+
+.reports-ai-modal__form {
+    display: grid;
+    gap: 12px;
+}
+
+.reports-ai-modal__field-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.reports-ai-modal__actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.reports-ai-result {
+    margin-top: 16px;
+}
+
+.reports-ai-result--loading {
+    min-height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.reports-ai-result__badges {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.reports-ai-result__summary {
+    margin-top: 16px;
+    padding: 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.reports-ai-result__summary-label {
+    font-size: 12px;
+    color: #64748b;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.reports-ai-result__summary-text {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.reports-ai-result__list {
+    margin-top: 16px;
+}
+
+.reports-ai-result__list-title {
+    margin: 0 0 8px;
+}
+
+.reports-ai-result__list-items {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 6px;
+}
+
+.reports-ai-result__error {
+    padding: 16px;
+    color: #E74C3C;
+}

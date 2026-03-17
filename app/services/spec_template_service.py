@@ -8,6 +8,7 @@ Caller (route handler) is responsible for db.session.commit().
 import logging
 import re
 from datetime import datetime, timezone
+from textwrap import dedent
 
 from app.models import db
 from app.models.backlog import (
@@ -22,16 +23,34 @@ logger = logging.getLogger(__name__)
 # TEMPLATE LOOKUP
 # ═══════════════════════════════════════════════════════════════════
 
+def _ensure_default_templates_available() -> None:
+    """Seed defaults on demand when the current database has no active templates."""
+    try:
+        has_active_templates = SpecTemplate.query.filter_by(is_active=True).first() is not None
+    except Exception:
+        logger.debug("Spec template availability check failed", exc_info=True)
+        return
+
+    if has_active_templates:
+        return
+
+    created = seed_default_templates()
+    if created > 0:
+        db.session.flush()
+        logger.info("Seeded %s default spec templates on demand", created)
+
 def find_active_template(wricef_type: str, spec_kind: str) -> SpecTemplate | None:
     """Find the active template for a given WRICEF type + spec kind (FS/TS).
 
     Falls back to 'enhancement' type if no exact match found.
     """
+    _ensure_default_templates_available()
+
     tpl = SpecTemplate.query.filter_by(
         wricef_type=wricef_type.lower(),
         spec_kind=spec_kind.upper(),
         is_active=True,
-    ).first()
+    ).order_by(SpecTemplate.id.desc()).first()
 
     # Fallback: use enhancement template as generic default
     if tpl is None and wricef_type.lower() != "enhancement":
@@ -40,7 +59,7 @@ def find_active_template(wricef_type: str, spec_kind: str) -> SpecTemplate | Non
             wricef_type="enhancement",
             spec_kind=spec_kind.upper(),
             is_active=True,
-        ).first()
+        ).order_by(SpecTemplate.id.desc()).first()
 
     return tpl
 
@@ -392,1201 +411,843 @@ def seed_default_templates():
     return created
 
 
-def _get_default_templates() -> list[dict]:
-    """Return all 12 default templates with SAP-specific content."""
+DEFAULT_TEMPLATE_VERSION = "2.0"
+
+
+def _render_numbered_sections(sections: list[tuple[str, str]]) -> str:
+    """Render numbered markdown sections from ordered tuples."""
+    rendered: list[str] = []
+    for index, (title, body) in enumerate(sections, start=1):
+        rendered.append(f"## {index}. {title}\n\n{dedent(body).strip()}")
+    rendered.append("---\n*Generated from default SAP-aligned template — complete every section before review or sign-off.*")
+    return "\n\n".join(rendered)
+
+
+def _fs_header() -> str:
+    return dedent(
+        """\
+        # Functional Specification
+        ## {{code}} — {{title}}
+
+        | Field | Value |
+        |---|---|
+        | **Type** | {{wricef_type_full}} |
+        | **Module** | {{module}} |
+        | **Priority** | {{priority}} |
+        | **Date** | {{date_generated}} |
+        | **Author** | {{assigned_to}} |
+        """
+    ).strip()
+
+
+def _ts_header() -> str:
+    return dedent(
+        """\
+        # Technical Specification
+        ## {{code}} — {{title}}
+
+        | Field | Value |
+        |---|---|
+        | **Type** | {{wricef_type_full}} |
+        | **Module** | {{module}} |
+        | **Priority** | {{priority}} |
+        | **Date** | {{date_generated}} |
+        """
+    ).strip()
+
+
+def _common_fs_sections() -> list[tuple[str, str]]:
     return [
-        # ════════════════════════════════════════════
-        # INTERFACE (I) — FS
-        # ════════════════════════════════════════════
+        (
+            "Document Control",
+            """
+            | Item | Value |
+            |---|---|
+            | Document ID | {{code}} |
+            | Version | """ + DEFAULT_TEMPLATE_VERSION + """ |
+            | Status | Draft |
+            | Functional Owner | {{assigned_to}} |
+            | Reviewer | |
+            | Planned Approval Date | |
+            """,
+        ),
+        (
+            "Business Context & Scope",
+            """
+            **Business Purpose:**
+            {{description}}
+
+            **In Scope:**
+            - Business process step(s) covered by this specification
+            - Required user roles and organizational units
+            - Required master data, transactional triggers, and reporting outputs
+
+            **Out of Scope:**
+            - Legacy workaround retirement tasks not required for this design
+            - Non-approved process deviations or local variants without sign-off
+            """,
+        ),
+        (
+            "Traceability & Upstream References",
+            """
+            | Reference | Value |
+            |---|---|
+            | Requirement | {{requirement_code}} — {{requirement_title}} |
+            | Classification | {{requirement_classification}} |
+            | Process Path | {{process_path}} |
+            | SAP Transaction / App | {{transaction_code}} |
+            | Related Notes | {{notes}} |
+            """,
+        ),
+        (
+            "Assumptions & Dependencies",
+            """
+            | Type | Description | Owner | Status |
+            |---|---|---|---|
+            | Assumption | | | Open |
+            | Dependency | | | Open |
+            | Upstream Decision | | | Open |
+            """,
+        ),
+    ]
+
+
+def _common_fs_tail_sections() -> list[tuple[str, str]]:
+    return [
+        (
+            "Security & Authorization",
+            """
+            | Topic | Detail |
+            |---|---|
+            | Business Role(s) | |
+            | SAP Authorization Objects | |
+            | Sensitive Data / Compliance Notes | |
+            | Audit / Logging Requirement | |
+            """,
+        ),
+        (
+            "Non-Functional Requirements",
+            """
+            | Requirement | Target |
+            |---|---|
+            | Performance / Response Time | |
+            | Volume / Throughput | |
+            | Availability Window | |
+            | Support / Monitoring Expectation | |
+            """,
+        ),
+        (
+            "Test Scenarios & Acceptance Coverage",
+            """
+            _Capture representative business scenarios that will later drive SIT, UAT, or unit-test derivation._
+
+            1. _Happy path — expected business outcome_
+            2. _Negative / validation scenario — expected control behavior_
+            3. _Exception or high-volume scenario — expected business outcome_
+
+            **Acceptance Criteria:**
+            {{acceptance_criteria}}
+            """,
+        ),
+        (
+            "Open Points & Risks",
+            """
+            | # | Description | Owner | Due Date | Type | Status |
+            |---|---|---|---|---|---|
+            | 1 | | | | Open Point / Risk | Open |
+            """,
+        ),
+        (
+            "Review & Sign-Off",
+            """
+            | Role | Name | Date | Decision |
+            |---|---|---|---|
+            | Functional Consultant | | | |
+            | Business Process Owner | | | |
+            | Solution Architect / Lead | | | |
+            """,
+        ),
+    ]
+
+
+def _common_ts_sections() -> list[tuple[str, str]]:
+    return [
+        (
+            "Technical Document Control",
+            """
+            | Item | Value |
+            |---|---|
+            | Document ID | {{code}} |
+            | Version | """ + DEFAULT_TEMPLATE_VERSION + """ |
+            | Status | Draft |
+            | Technical Owner | {{assigned_to}} |
+            | Reviewer | |
+            | Linked Functional Spec | {{requirement_code}} / {{title}} |
+            """,
+        ),
+        (
+            "Solution Overview & Architecture",
+            """
+            **Technical Purpose:**
+            _Summarize how the approved functional design will be realized in SAP / BTP / middleware._
+
+            **Landscape / Components:**
+            - Source system(s):
+            - Target system(s):
+            - Middleware / Runtime:
+            - Key integration or extension pattern:
+            """,
+        ),
+        (
+            "Technical Object Inventory",
+            """
+            | Object Type | Object Name | Package / Namespace | Description | New / Change |
+            |---|---|---|---|---|
+            | ABAP Class / Program | | {{package}} | | |
+            | CDS / Table / Structure | | {{package}} | | |
+            | Fiori / UI / Workflow Object | | | | |
+            | Integration / Middleware Object | | | | |
+            """,
+        ),
+    ]
+
+
+def _common_ts_tail_sections() -> list[tuple[str, str]]:
+    return [
+        (
+            "Error Handling, Monitoring & Operations",
+            """
+            | Topic | Design |
+            |---|---|
+            | Error Detection | |
+            | Logging / SLG1 / AIF / Monitoring Tool | |
+            | Alerting & Notification | |
+            | Restart / Reprocessing Strategy | |
+            """,
+        ),
+        (
+            "Security & Authorization",
+            """
+            | Topic | Detail |
+            |---|---|
+            | Technical User / Communication User | |
+            | Authorization Object(s) | |
+            | Secrets / Certificates / OAuth | |
+            | Audit Requirement | |
+            """,
+        ),
+        (
+            "Performance & Volume",
+            """
+            | Parameter | Target |
+            |---|---|
+            | Expected Volume | |
+            | Peak Load | |
+            | Batch Size / Parallelism | |
+            | Timeout / SLA | |
+            """,
+        ),
+        (
+            "Deployment & Transport",
+            """
+            | Item | Value |
+            |---|---|
+            | Transport Request | {{transport_request}} |
+            | Package | {{package}} |
+            | Target Landscape | DEV → QAS → PRD |
+            | Activation / Post-Deploy Steps | |
+            | Rollback Considerations | |
+            """,
+        ),
+        (
+            "Unit Test & Technical Verification",
+            """
+            | Test # | Scenario | Input / Preconditions | Expected Result | Evidence |
+            |---|---|---|---|---|
+            | UT-01 | Happy path | | | |
+            | UT-02 | Negative / error path | | | |
+            | UT-03 | Volume / edge condition | | | |
+
+            **Technical Evidence Reference:**
+            {{technical_notes}}
+            """,
+        ),
+        (
+            "Open Points",
+            """
+            | # | Description | Owner | Due Date | Status |
+            |---|---|---|---|---|
+            | 1 | | | | Open |
+            """,
+        ),
+    ]
+
+
+def _build_fs_template(type_sections: list[tuple[str, str]]) -> str:
+    sections = _common_fs_sections() + type_sections + _common_fs_tail_sections()
+    return f"{_fs_header()}\n\n---\n\n{_render_numbered_sections(sections)}"
+
+
+def _build_ts_template(type_sections: list[tuple[str, str]]) -> str:
+    sections = _common_ts_sections() + type_sections + _common_ts_tail_sections()
+    return f"{_ts_header()}\n\n---\n\n{_render_numbered_sections(sections)}"
+
+
+def _get_default_templates() -> list[dict]:
+    """Return SAP-aligned WRICEF FS/TS defaults.
+
+    Version 2.0 normalizes every template around a common document-control shell
+    so lifecycle-driven drafts and manual template generation stay consistent.
+    """
+    return [
         {
             "wricef_type": "interface",
             "spec_kind": "FS",
-            "version": "1.0",
-            "title": "Interface — FS Template v1.0",
+            "version": DEFAULT_TEMPLATE_VERSION,
+            "title": "Interface — FS Template v2.0",
             "is_active": True,
-            "content_template": """# Functional Specification
-## {{code}} — {{title}}
+            "content_template": _build_fs_template([
+                (
+                    "Interface Business Context",
+                    """
+                    **Trigger / Frequency:**
+                    - [ ] Real-time
+                    - [ ] Scheduled / batch
+                    - [ ] On-demand
 
-| Field | Value |
-|---|---|
-| **Type** | {{wricef_type_full}} |
-| **Module** | {{module}} |
-| **Priority** | {{priority}} |
-| **Date** | {{date_generated}} |
-| **Author** | {{assigned_to}} |
+                    **Direction:**
+                    - [ ] Inbound
+                    - [ ] Outbound
+                    - [ ] Bidirectional
 
----
+                    **Business Event / Driver:**
+                    _Describe the event, document, or process milestone that starts the interface._
+                    """,
+                ),
+                (
+                    "Source & Target Systems",
+                    """
+                    | Attribute | Source System | Target System |
+                    |---|---|---|
+                    | System Name | | |
+                    | Technology | | |
+                    | Middleware / Tenant | | |
+                    | Protocol | | |
+                    | Message Format | | |
+                    """,
+                ),
+                (
+                    "Business Mapping & Validation Rules",
+                    """
+                    | # | Source Field / Concept | Target Field / Concept | Business Rule | Mandatory |
+                    |---|---|---|---|---|
+                    | 1 | | | | |
+                    | 2 | | | | |
 
-## 1. Executive Summary
-
-{{description}}
-
-## 2. Traceability
-
-| Link | Reference |
-|---|---|
-| Requirement | {{requirement_code}} — {{requirement_title}} |
-| Process Path | {{process_path}} |
-| Classification | {{requirement_classification}} |
-
-## 3. Business Context & Trigger
-
-**Business Purpose:**
-_Describe the business need for this interface._
-
-**Trigger / Scheduling:**
-- [ ] Real-time (event-driven)
-- [ ] Scheduled (batch) — Frequency: ___
-- [ ] On-demand (manual trigger)
-
-**Direction:**
-- [ ] Inbound (external → SAP)
-- [ ] Outbound (SAP → external)
-- [ ] Bidirectional
-
-## 4. Source & Target Systems
-
-| Attribute | Source System | Target System |
-|---|---|---|
-| System Name | | |
-| Technology | | |
-| Middleware | | |
-| Protocol | | |
-| Format | | |
-
-## 5. Interface Mapping (Field-Level)
-
-| # | Source Field | Source Type | Target Field | Target Type | Transformation Rule | Mandatory |
-|---|---|---|---|---|---|---|
-| 1 | | | | | | |
-| 2 | | | | | | |
-| 3 | | | | | | |
-
-_Add rows as needed._
-
-## 6. Business Validation Rules
-
-| Rule # | Description | Action on Failure |
-|---|---|---|
-| BV-01 | | |
-| BV-02 | | |
-
-## 7. Error Handling (Business)
-
-**Reconciliation Approach:**
-_How will data completeness be verified?_
-
-**Business Error Notifications:**
-_Who gets notified and how?_
-
-## 8. Volume & Performance Expectations
-
-| Metric | Expected Value |
-|---|---|
-| Records per run | |
-| Frequency | |
-| Peak volume | |
-| Max acceptable latency | |
-
-## 9. Security & Authorization
-
-_Describe any authorization requirements, RFC users, or communication channels._
-
-## 10. Non-Functional Requirements
-
-_SLA expectations, availability, retry policy, monitoring needs._
-
-## 11. Acceptance Criteria
-
-{{acceptance_criteria}}
-
-## 12. Open Points
-
-| # | Description | Owner | Due Date | Status |
-|---|---|---|---|---|
-| 1 | | | | Open |
-
----
-*Generated from template — review and complete all sections.*
-""",
+                    | Validation Rule | Description | Action on Failure |
+                    |---|---|---|
+                    | BV-01 | | |
+                    | BV-02 | | |
+                    """,
+                ),
+                (
+                    "Reconciliation & Business Exception Handling",
+                    """
+                    | Topic | Detail |
+                    |---|---|
+                    | Reconciliation Method | |
+                    | Business Notification Recipient | |
+                    | Manual Recovery Procedure | |
+                    | Audit Requirement | |
+                    """,
+                ),
+            ]),
         },
-
-        # ════════════════════════════════════════════
-        # INTERFACE (I) — TS
-        # ════════════════════════════════════════════
         {
             "wricef_type": "interface",
             "spec_kind": "TS",
-            "version": "1.0",
-            "title": "Interface — TS Template v1.0",
+            "version": DEFAULT_TEMPLATE_VERSION,
+            "title": "Interface — TS Template v2.0",
             "is_active": True,
-            "content_template": """# Technical Specification
-## {{code}} — {{title}}
+            "content_template": _build_ts_template([
+                (
+                    "Integration Pattern & Runtime Design",
+                    """
+                    | Topic | Detail |
+                    |---|---|
+                    | Technology Stack | CPI / PI-PO / AIF / RFC / OData / REST / File |
+                    | Communication Channel | |
+                    | Message Protocol | |
+                    | Scheduling / Event Handling | |
+                    """,
+                ),
+                (
+                    "Message Structure & Technical Mapping",
+                    """
+                    **Message Structure / Segment Design:**
+                    _Define the envelope, payload structure, mandatory segments, and occurrence rules._
 
-| Field | Value |
-|---|---|
-| **Type** | {{wricef_type_full}} |
-| **Module** | {{module}} |
-| **Priority** | {{priority}} |
-| **Date** | {{date_generated}} |
-
----
-
-## 1. Technical Overview
-
-**Technology Stack:**
-_CPI / PI/PO / AIF / RFC / BAPI / IDoc / File / OData / REST_
-
-**Communication Channel:**
-_SFTP / HTTP / RFC / SOAP / REST / IDoc / etc._
-
-**Message Protocol:**
-_JSON / XML / Flat File / IDoc / CSV_
-
-## 2. Object Inventory
-
-| Object Type | Object Name | Package | Description |
-|---|---|---|---|
-| CPI iFlow | | | |
-| RFC Function Module | | | |
-| Custom Table | | | |
-| ABAP Class | | | |
-
-## 3. Detailed Design
-
-### 3.1 Message Structure
-
-_Define the message structure (segments, fields, types)._
-
-### 3.2 Field Mapping (Technical)
-
-| # | Source Field | Source Type/Length | Mapping Logic | Target Field | Target Type/Length |
-|---|---|---|---|---|---|
-| 1 | | | | | |
-| 2 | | | | | |
-
-### 3.3 Transformation Logic
-
-_XSLT / Groovy / Graphical Mapping details._
-
-### 3.4 Conversion Routines
-
-_Any domain/value mapping, date format conversions, unit conversions._
-
-## 4. Error Handling (Technical)
-
-**Error Detection:**
-- Message-level: _validation, schema checks_
-- Record-level: _individual record failure handling_
-
-**Error Processing:**
-- AIF monitoring: _Yes / No_
-- Custom error log table: _table name_
-- Alert emails: _recipient(s)_
-- Retry strategy: _auto-retry count, interval_
-- Dead letter queue: _Yes / No_
-
-**Error Codes:**
-
-| Error Code | Description | Resolution |
-|---|---|---|
-| ERR-01 | | |
-| ERR-02 | | |
-
-## 5. Security & Authorization
-
-| Aspect | Detail |
-|---|---|
-| RFC User (Technical) | |
-| Authorization Object | |
-| Communication Arrangement | |
-| Certificate/OAuth | |
-
-## 6. Performance & Volume
-
-| Metric | Design Target |
-|---|---|
-| Max records per message | |
-| Parallel processing | |
-| Timeout setting | |
-| Batch size | |
-
-## 7. Monitoring
-
-**Runtime Monitoring:**
-_CPI monitoring / AIF / SXMB_MONI / WE02 / SM58 / SLG1_
-
-**Alerting Setup:**
-_Alert rules, thresholds, notification channels._
-
-## 8. Deployment & Transport
-
-| Item | Value |
-|---|---|
-| Transport Request | {{transport_request}} |
-| Package | {{package}} |
-| Target System(s) | |
-| Deploy Sequence | |
-| Activation Steps | |
-
-## 9. Unit Test Plan
-
-| Test # | Scenario | Input | Expected Output | Pass/Fail |
-|---|---|---|---|---|
-| UT-01 | Happy path | | | |
-| UT-02 | Error/invalid data | | | |
-| UT-03 | Empty/no data | | | |
-| UT-04 | Large volume | | | |
-
-## 10. Open Points
-
-| # | Description | Owner | Due Date | Status |
-|---|---|---|---|---|
-| 1 | | | | Open |
-
----
-*Generated from template — review and complete all sections.*
-""",
+                    | # | Source Field | Source Type/Length | Mapping Logic | Target Field | Target Type/Length |
+                    |---|---|---|---|---|---|
+                    | 1 | | | | | |
+                    | 2 | | | | | |
+                    """,
+                ),
+                (
+                    "Transformation, Validation & Reprocessing Logic",
+                    """
+                    | Topic | Detail |
+                    |---|---|
+                    | Transformation Routine / Groovy / XSLT | |
+                    | Lookup / Value Mapping Tables | |
+                    | Technical Validation | |
+                    | Reprocessing / Dead Letter Queue | |
+                    """,
+                ),
+            ]),
         },
-
-        # ════════════════════════════════════════════
-        # REPORT (R) — FS
-        # ════════════════════════════════════════════
         {
             "wricef_type": "report",
             "spec_kind": "FS",
-            "version": "1.0",
-            "title": "Report — FS Template v1.0",
+            "version": DEFAULT_TEMPLATE_VERSION,
+            "title": "Report — FS Template v2.0",
             "is_active": True,
-            "content_template": """# Functional Specification
-## {{code}} — {{title}}
+            "content_template": _build_fs_template([
+                (
+                    "Report Purpose & Consumers",
+                    """
+                    **Business Question:**
+                    _What operational or management question does this report answer?_
 
-| Field | Value |
-|---|---|
-| **Type** | {{wricef_type_full}} |
-| **Module** | {{module}} |
-| **Priority** | {{priority}} |
-| **Date** | {{date_generated}} |
-| **Author** | {{assigned_to}} |
+                    **Target Users / Roles:**
+                    _Who consumes it, how often, and what decisions depend on it?_
+                    """,
+                ),
+                (
+                    "Selection Parameters & Variants",
+                    """
+                    | Parameter | Description | Type | Mandatory | Default / Variant |
+                    |---|---|---|---|---|
+                    | | | | | |
+                    | | | | | |
+                    """,
+                ),
+                (
+                    "Output Layout & Business Rules",
+                    """
+                    | # | Column / KPI | Source | Aggregation / Formula | Format |
+                    |---|---|---|---|---|
+                    | 1 | | | | |
+                    | 2 | | | | |
 
----
-
-## 1. Executive Summary
-
-{{description}}
-
-## 2. Traceability
-
-| Link | Reference |
-|---|---|
-| Requirement | {{requirement_code}} — {{requirement_title}} |
-| Process Path | {{process_path}} |
-
-## 3. Report Purpose & Business Context
-
-**Business Need:**
-_What question does this report answer?_
-
-**Target Users / Roles:**
-_Who will run this report and how often?_
-
-**Frequency:**
-- [ ] Daily
-- [ ] Weekly
-- [ ] Monthly
-- [ ] On-demand
-
-## 4. Selection Screen Parameters
-
-| Parameter | Description | Type | Mandatory | Default Value |
-|---|---|---|---|---|
-| | | | | |
-| | | | | |
-| | | | | |
-
-## 5. Output Layout
-
-### 5.1 Columns / KPIs
-
-| # | Column Header | Source Table.Field | Aggregation | Format |
-|---|---|---|---|---|
-| 1 | | | | |
-| 2 | | | | |
-| 3 | | | | |
-
-### 5.2 Sorting & Grouping
-
-_Default sort order, subtotals, grouping criteria._
-
-### 5.3 Drilldown Behavior
-
-_What happens when user clicks a line item?_
-
-## 6. Data Sources
-
-| Source | Table / CDS View | Join Condition |
-|---|---|---|
-| Primary | | |
-| Secondary | | |
-
-## 7. Business Rules & Calculations
-
-| Rule # | Description | Formula / Logic |
-|---|---|---|
-| BR-01 | | |
-| BR-02 | | |
-
-## 8. Variants
-
-| Variant Name | Parameters | Purpose |
-|---|---|---|
-| | | |
-
-## 9. Authorization Requirements
-
-_Authorization objects, org-level checks, data visibility rules._
-
-## 10. Non-Functional Requirements
-
-_Performance expectations (max execution time), volume estimates._
-
-## 11. Acceptance Criteria
-
-{{acceptance_criteria}}
-
-## 12. Open Points
-
-| # | Description | Owner | Due Date | Status |
-|---|---|---|---|---|
-| 1 | | | | Open |
-
----
-*Generated from template — review and complete all sections.*
-""",
+                    **Sorting / Grouping / Drilldown:**
+                    _Describe default sort order, subtotaling, and drilldown behavior._
+                    """,
+                ),
+                (
+                    "Data Sources & Reconciliation",
+                    """
+                    | Source | Table / CDS / API | Join / Selection Logic |
+                    |---|---|---|
+                    | Primary | | |
+                    | Secondary | | |
+                    """,
+                ),
+            ]),
         },
-
-        # ════════════════════════════════════════════
-        # REPORT (R) — TS
-        # ════════════════════════════════════════════
         {
             "wricef_type": "report",
             "spec_kind": "TS",
-            "version": "1.0",
-            "title": "Report — TS Template v1.0",
+            "version": DEFAULT_TEMPLATE_VERSION,
+            "title": "Report — TS Template v2.0",
             "is_active": True,
-            "content_template": """# Technical Specification
-## {{code}} — {{title}}
+            "content_template": _build_ts_template([
+                (
+                    "Report Technology & Delivery Pattern",
+                    """
+                    - [ ] CDS Analytical Query + Fiori Elements
+                    - [ ] Classic ALV / ABAP Report
+                    - [ ] SAC / Datasphere / BW output
+                    - [ ] Other: ___
+                    """,
+                ),
+                (
+                    "Data Model, Selection Logic & Query Design",
+                    """
+                    **Base Objects / CDS Design:**
+                    _Document source tables, joins, associations, and derivations._
 
-| Field | Value |
-|---|---|
-| **Type** | {{wricef_type_full}} |
-| **Module** | {{module}} |
-| **Date** | {{date_generated}} |
-
----
-
-## 1. Technical Overview
-
-**Report Technology:**
-- [ ] CDS Analytical Query + Fiori Elements
-- [ ] ALV Grid Report (classic)
-- [ ] SAP Analytics Cloud (SAC)
-- [ ] Adobe Form (list report)
-- [ ] Other: ___
-
-## 2. Object Inventory
-
-| Object Type | Object Name | Package | Description |
-|---|---|---|---|
-| CDS View | | | |
-| ABAP Report / Class | | | |
-| Fiori App | | | |
-| Authorization Object | | | |
-
-## 3. Data Model & Query Design
-
-### 3.1 CDS / Data Source
-
-_CDS view definition, base tables, associations._
-
-### 3.2 Selection Logic
-
-_WHERE clauses, filters, aggregations._
-
-### 3.3 Performance Strategy
-
-_Indexes, buffering, pagination, CDS annotations for optimization._
-
-## 4. Authorization Checks
-
-| Auth Object | Field | Check Logic |
-|---|---|---|
-| | | |
-
-## 5. Error Handling
-
-_No data found handling, timeout handling, large dataset warning._
-
-## 6. Deployment & Transport
-
-| Item | Value |
-|---|---|
-| Transport Request | {{transport_request}} |
-| Package | {{package}} |
-| Activation Sequence | |
-
-## 7. Unit Test Plan
-
-| Test # | Scenario | Selection Params | Expected Rows | Pass/Fail |
-|---|---|---|---|---|
-| UT-01 | Happy path | | | |
-| UT-02 | No data | | | |
-| UT-03 | Large volume | | | |
-| UT-04 | Auth restriction | | | |
-
----
-*Generated from template — review and complete all sections.*
-""",
+                    **Selection Logic:**
+                    _Document filter logic, selection-screen behavior, pagination, and aggregation rules._
+                    """,
+                ),
+                (
+                    "Authorization & Performance Design",
+                    """
+                    | Topic | Detail |
+                    |---|---|
+                    | Authorization Object / DCL | |
+                    | Row / Org-Level Restriction | |
+                    | Performance Strategy / Index Use | |
+                    | Scheduling / Background Execution | |
+                    """,
+                ),
+            ]),
         },
-
-        # ════════════════════════════════════════════
-        # ENHANCEMENT (E) — FS
-        # ════════════════════════════════════════════
         {
             "wricef_type": "enhancement",
             "spec_kind": "FS",
-            "version": "1.0",
-            "title": "Enhancement — FS Template v1.0",
+            "version": DEFAULT_TEMPLATE_VERSION,
+            "title": "Enhancement — FS Template v2.0",
             "is_active": True,
-            "content_template": """# Functional Specification
-## {{code}} — {{title}}
+            "content_template": _build_fs_template([
+                (
+                    "Current SAP Standard Behavior",
+                    """
+                    **Current Process / Transaction:** {{transaction_code}}
 
-| Field | Value |
-|---|---|
-| **Type** | {{wricef_type_full}} |
-| **Module** | {{module}} |
-| **Priority** | {{priority}} |
-| **Date** | {{date_generated}} |
-| **Author** | {{assigned_to}} |
+                    _Describe the standard SAP behavior, user interaction, and current control points._
+                    """,
+                ),
+                (
+                    "Target Business Behavior",
+                    """
+                    _Describe what must change, which condition triggers the enhancement, and the intended business outcome._
+                    """,
+                ),
+                (
+                    "Business Rules, Messages & User Impact",
+                    """
+                    | Rule # | Condition | Action | Exception / Message |
+                    |---|---|---|---|
+                    | BR-01 | | | |
+                    | BR-02 | | | |
 
----
-
-## 1. Executive Summary
-
-{{description}}
-
-## 2. Traceability
-
-| Link | Reference |
-|---|---|
-| Requirement | {{requirement_code}} — {{requirement_title}} |
-| Process Path | {{process_path}} |
-
-## 3. Current Behavior (As-Is)
-
-_Describe the standard SAP behavior being enhanced._
-
-**Transaction:** {{transaction_code}}
-
-## 4. Desired Behavior (To-Be)
-
-_Describe what should change and under what conditions._
-
-## 5. Business Rules
-
-| Rule # | Condition | Action | Exception |
-|---|---|---|---|
-| BR-01 | | | |
-| BR-02 | | | |
-
-## 6. Affected Processes & Impact
-
-_Which processes are affected? What is the regression risk?_
-
-## 7. User Interface Changes
-
-_Any screen changes, additional fields, messages, or popups?_
-
-## 8. Error Handling (Business)
-
-| Error Scenario | Message Text | Severity |
-|---|---|---|
-| | | Error / Warning / Info |
-
-## 9. Authorization Requirements
-
-_Any new or changed authorization checks?_
-
-## 10. Non-Functional Requirements
-
-_Performance impact, volume considerations._
-
-## 11. Acceptance Criteria
-
-{{acceptance_criteria}}
-
-## 12. Open Points
-
-| # | Description | Owner | Due Date | Status |
-|---|---|---|---|---|
-| 1 | | | | Open |
-
----
-*Generated from template — review and complete all sections.*
-""",
+                    **UI / User Impact:**
+                    _Any screen changes, new fields, or user decisions introduced by the enhancement._
+                    """,
+                ),
+                (
+                    "Regression & Process Impact",
+                    """
+                    _Identify impacted transactions, interfaces, reports, or downstream controls that must be regression-tested._
+                    """,
+                ),
+            ]),
         },
-
-        # ════════════════════════════════════════════
-        # ENHANCEMENT (E) — TS
-        # ════════════════════════════════════════════
         {
             "wricef_type": "enhancement",
             "spec_kind": "TS",
-            "version": "1.0",
-            "title": "Enhancement — TS Template v1.0",
+            "version": DEFAULT_TEMPLATE_VERSION,
+            "title": "Enhancement — TS Template v2.0",
             "is_active": True,
-            "content_template": """# Technical Specification
-## {{code}} — {{title}}
+            "content_template": _build_ts_template([
+                (
+                    "Enhancement Technique & Entry Point",
+                    """
+                    - [ ] BAdI (New)
+                    - [ ] BAdI (Classic)
+                    - [ ] User Exit / Customer Exit
+                    - [ ] Enhancement Spot / Section
+                    - [ ] BRFplus Rule
+                    - [ ] Custom Program / RAP Logic
 
-| Field | Value |
-|---|---|
-| **Type** | {{wricef_type_full}} |
-| **Module** | {{module}} |
-| **Date** | {{date_generated}} |
+                    **Enhancement Point:**
+                    _Document the BAdI, exit, enhancement spot, or rule object._
+                    """,
+                ),
+                (
+                    "Detailed Logic Design",
+                    """
+                    **Pseudo Code / Processing Logic:**
+                    _Document validations, branching, database access, and update behavior._
 
----
-
-## 1. Technical Overview
-
-**Enhancement Technique:**
-- [ ] BAdI (New)
-- [ ] BAdI (Classic)
-- [ ] User Exit
-- [ ] Enhancement Spot / Section
-- [ ] BRFplus Rule
-- [ ] Custom Code (new program)
-- [ ] Other: ___
-
-**Enhancement Point:**
-_BAdI name, User Exit name, or Enhancement Spot._
-
-## 2. Object Inventory
-
-| Object Type | Object Name | Package | Description |
-|---|---|---|---|
-| BAdI Implementation | | | |
-| ABAP Class | | | |
-| Function Module | | | |
-| Custom Table | | | |
-| Data Element | | | |
-| Domain | | | |
-
-## 3. Detailed Design
-
-### 3.1 Enhancement Point Details
-
-_BAdI/Exit interface, importing/exporting parameters._
-
-### 3.2 Pseudo-Code / Logic
-
-```abap
-* Enhancement logic
-IF <condition>.
-  " Business rule implementation
-ENDIF.
-```
-
-### 3.3 Custom Tables / Structures
-
-_Any new Z-tables or structures required._
-
-## 4. Error Handling (Technical)
-
-| Error Code | Message Class | Number | Text | Type |
-|---|---|---|---|---|
-| | | | | E / W / I |
-
-## 5. Regression Risk Assessment
-
-| Risk | Affected Area | Mitigation |
-|---|---|---|
-| | | |
-
-## 6. Deployment & Transport
-
-| Item | Value |
-|---|---|
-| Transport Request | {{transport_request}} |
-| Package | {{package}} |
-| Activation Sequence | |
-
-## 7. Unit Test Plan
-
-| Test # | Scenario | Pre-condition | Steps | Expected Result | Pass/Fail |
-|---|---|---|---|---|---|
-| UT-01 | Happy path | | | | |
-| UT-02 | Edge case | | | | |
-| UT-03 | Negative test | | | | |
-| UT-04 | Regression | | | | |
-
----
-*Generated from template — review and complete all sections.*
-""",
+                    **Custom Data Structures / Tables:**
+                    _List any new tables, structures, domains, or data elements._
+                    """,
+                ),
+                (
+                    "Regression, Logging & Supportability",
+                    """
+                    | Topic | Detail |
+                    |---|---|
+                    | Regression Risk Area | |
+                    | Message Class / Error Handling | |
+                    | Debug / Trace Point | |
+                    | Support Ownership | |
+                    """,
+                ),
+            ]),
         },
-
-        # ════════════════════════════════════════════
-        # CONVERSION (C) — FS
-        # ════════════════════════════════════════════
         {
             "wricef_type": "conversion",
             "spec_kind": "FS",
-            "version": "1.0",
-            "title": "Conversion — FS Template v1.0",
+            "version": DEFAULT_TEMPLATE_VERSION,
+            "title": "Conversion — FS Template v2.0",
             "is_active": True,
-            "content_template": """# Functional Specification
-## {{code}} — {{title}}
+            "content_template": _build_fs_template([
+                (
+                    "Migration Scope & Source Landscape",
+                    """
+                    | Topic | Detail |
+                    |---|---|
+                    | Data Object Type | Master / Transaction / Historical / Configuration |
+                    | Source System / Version | |
+                    | Business Cutover Window | |
+                    | Record Volume Estimate | |
+                    """,
+                ),
+                (
+                    "Legacy to SAP Mapping & Business Rules",
+                    """
+                    | # | Legacy Field | Legacy Meaning | S/4HANA Field | Transformation Rule | Default / Derivation |
+                    |---|---|---|---|---|---|
+                    | 1 | | | | | |
+                    | 2 | | | | | |
 
-| Field | Value |
-|---|---|
-| **Type** | {{wricef_type_full}} |
-| **Module** | {{module}} |
-| **Priority** | {{priority}} |
-| **Date** | {{date_generated}} |
-| **Author** | {{assigned_to}} |
-
----
-
-## 1. Executive Summary
-
-{{description}}
-
-## 2. Traceability
-
-| Link | Reference |
-|---|---|
-| Requirement | {{requirement_code}} — {{requirement_title}} |
-| Process Path | {{process_path}} |
-
-## 3. Migration Scope
-
-**Data Object:**
-_Master data / Transactional data / Configuration / Historical_
-
-**Source System:**
-_Legacy system name and version_
-
-**Volume Estimates:**
-
-| Object | Estimated Records | Notes |
-|---|---|---|
-| | | |
-
-## 4. Legacy → S/4HANA Field Mapping
-
-| # | Legacy Field | Legacy Format | S/4HANA Field | S/4 Format | Transformation Rule | Default |
-|---|---|---|---|---|---|---|
-| 1 | | | | | | |
-| 2 | | | | | | |
-| 3 | | | | | | |
-
-## 5. Business Validation Rules
-
-| Rule # | Description | Action on Failure |
-|---|---|---|
-| BV-01 | Mandatory field check | Reject record |
-| BV-02 | | |
-
-## 6. Data Cleansing Requirements
-
-_What data cleansing must happen before or during migration?_
-
-## 7. Reconciliation Strategy
-
-**Reconciliation Approach:**
-
-| Check | Source Count | Target Count | Delta Tolerance |
-|---|---|---|---|
-| Record count | | | |
-| Key value totals | | | |
-
-## 8. Cutover Dependencies
-
-_Sequence constraints, prerequisites, freeze periods._
-
-## 9. Acceptance Criteria
-
-{{acceptance_criteria}}
-
-## 10. Open Points
-
-| # | Description | Owner | Due Date | Status |
-|---|---|---|---|---|
-| 1 | | | | Open |
-
----
-*Generated from template — review and complete all sections.*
-""",
+                    | Validation Rule | Description | Action on Failure |
+                    |---|---|---|
+                    | BV-01 | Mandatory field check | Reject record |
+                    | BV-02 | | |
+                    """,
+                ),
+                (
+                    "Data Cleansing, Reconciliation & Mock Load Strategy",
+                    """
+                    | Topic | Detail |
+                    |---|---|
+                    | Data Cleansing Requirement | |
+                    | Reconciliation Control | |
+                    | Mock / Dress Rehearsal Expectation | |
+                    | Business Sign-Off Condition | |
+                    """,
+                ),
+                (
+                    "Cutover Dependencies",
+                    """
+                    _List sequencing constraints, business freeze windows, prerequisite transports, and downstream handover dependencies._
+                    """,
+                ),
+            ]),
         },
-
-        # ════════════════════════════════════════════
-        # CONVERSION (C) — TS
-        # ════════════════════════════════════════════
         {
             "wricef_type": "conversion",
             "spec_kind": "TS",
-            "version": "1.0",
-            "title": "Conversion — TS Template v1.0",
+            "version": DEFAULT_TEMPLATE_VERSION,
+            "title": "Conversion — TS Template v2.0",
             "is_active": True,
-            "content_template": """# Technical Specification
-## {{code}} — {{title}}
-
-| Field | Value |
-|---|---|
-| **Type** | {{wricef_type_full}} |
-| **Module** | {{module}} |
-| **Date** | {{date_generated}} |
-
----
-
-## 1. Technical Overview
-
-**Migration Tooling:**
-- [ ] LTMC (Legacy Transfer Migration Cockpit)
-- [ ] SAP Data Services
-- [ ] LSMW
-- [ ] Custom ABAP Program
-- [ ] S/4HANA Migration Cockpit — Staging Tables
-- [ ] Other: ___
-
-## 2. Object Inventory
-
-| Object Type | Object Name | Package | Description |
-|---|---|---|---|
-| Migration Object | | | |
-| Staging Table | | | |
-| ABAP Program | | | |
-| Mapping Table | | | |
-
-## 3. Detailed Design
-
-### 3.1 Extract Logic
-
-_How data is extracted from source system._
-
-### 3.2 Transform Logic
-
-_Transformation rules, value mapping, derivation logic._
-
-### 3.3 Load Logic
-
-_Load method (direct insert / BAPI / IDoc / staging), batch size, error handling._
-
-### 3.4 Restartability
-
-_How to restart after failure — checkpoint logic, resume from last successful record._
-
-## 4. Error Handling & Logging
-
-| Error Type | Handling | Log Location |
-|---|---|---|
-| Validation failure | | |
-| Duplicate record | | |
-| Reference data missing | | |
-| System error | | |
-
-**Error Log Table:**
-_Z-table or SLG1 object for error tracking._
-
-## 5. Performance & Batch Strategy
-
-| Parameter | Value |
-|---|---|
-| Batch size (records per commit) | |
-| Parallel threads | |
-| Estimated runtime per 1000 records | |
-| Total estimated runtime | |
-
-## 6. Deployment & Transport
-
-| Item | Value |
-|---|---|
-| Transport Request | {{transport_request}} |
-| Package | {{package}} |
-| Dry Run Environment | |
-| Mock Run Date | |
-
-## 7. Unit Test Plan
-
-| Test # | Scenario | Records | Expected Result | Pass/Fail |
-|---|---|---|---|---|
-| UT-01 | Small set (10 records) | | | |
-| UT-02 | Validation failures | | | |
-| UT-03 | Duplicate handling | | | |
-| UT-04 | Large volume | | | |
-| UT-05 | Restart after failure | | | |
-
----
-*Generated from template — review and complete all sections.*
-""",
+            "content_template": _build_ts_template([
+                (
+                    "Migration Tooling & Execution Pattern",
+                    """
+                    - [ ] SAP Migration Cockpit
+                    - [ ] SAP Data Services
+                    - [ ] Custom ABAP Program
+                    - [ ] Staging Tables / Direct Transfer
+                    - [ ] Other: ___
+                    """,
+                ),
+                (
+                    "Extract, Transform & Load Design",
+                    """
+                    | Phase | Design |
+                    |---|---|
+                    | Extract Logic | |
+                    | Transform / Mapping Logic | |
+                    | Load Method (BAPI / Staging / IDoc) | |
+                    | Commit / Restart Strategy | |
+                    """,
+                ),
+                (
+                    "Batch Control, Logging & Recovery",
+                    """
+                    | Topic | Detail |
+                    |---|---|
+                    | Batch Size | |
+                    | Parallel Processing | |
+                    | Error Log Table / SLG1 Object | |
+                    | Restart / Resume Rule | |
+                    """,
+                ),
+            ]),
         },
-
-        # ════════════════════════════════════════════
-        # WORKFLOW (W) — FS
-        # ════════════════════════════════════════════
         {
             "wricef_type": "workflow",
             "spec_kind": "FS",
-            "version": "1.0",
-            "title": "Workflow — FS Template v1.0",
+            "version": DEFAULT_TEMPLATE_VERSION,
+            "title": "Workflow — FS Template v2.0",
             "is_active": True,
-            "content_template": """# Functional Specification
-## {{code}} — {{title}}
+            "content_template": _build_fs_template([
+                (
+                    "Workflow Trigger & Business Scope",
+                    """
+                    **Triggering Event:**
+                    _Describe the document, exception, or approval milestone that starts the workflow._
 
-| Field | Value |
-|---|---|
-| **Type** | {{wricef_type_full}} |
-| **Module** | {{module}} |
-| **Priority** | {{priority}} |
-| **Date** | {{date_generated}} |
-| **Author** | {{assigned_to}} |
+                    **Trigger Object / Transaction:**
+                    {{transaction_code}}
+                    """,
+                ),
+                (
+                    "Approval / Decision Flow",
+                    """
+                    | Step # | Approver Role | Entry Condition | Action on Approve | Action on Reject | SLA |
+                    |---|---|---|---|---|---|
+                    | 1 | | | | | |
+                    | 2 | | | | | |
+                    | 3 | | | | | |
+                    """,
+                ),
+                (
+                    "Escalation, Delegation & Notification Rules",
+                    """
+                    | Rule | Condition | Action |
+                    |---|---|---|
+                    | Timeout | | |
+                    | Delegation | | |
 
----
-
-## 1. Executive Summary
-
-{{description}}
-
-## 2. Traceability
-
-| Link | Reference |
-|---|---|
-| Requirement | {{requirement_code}} — {{requirement_title}} |
-| Process Path | {{process_path}} |
-
-## 3. Workflow Trigger
-
-**Triggering Event:**
-_What business event starts this workflow?_
-
-**Trigger Object:**
-_Document type, transaction, or event._
-
-## 4. Approval Steps
-
-| Step # | Approver Role | Condition | Action on Approve | Action on Reject | SLA |
-|---|---|---|---|---|---|
-| 1 | | | | | |
-| 2 | | | | | |
-| 3 | | | | | |
-
-## 5. Escalation Rules
-
-| Rule | Condition | Action |
-|---|---|---|
-| Timeout | No action in ___ hours | Escalate to ___ |
-| Delegation | Approver absent | Forward to ___ |
-
-## 6. Notification Requirements
-
-| Event | Recipient | Channel | Template |
-|---|---|---|---|
-| New item | Approver | Email + Fiori | |
-| Approved | Requester | Email | |
-| Rejected | Requester | Email | |
-
-## 7. Business Rules
-
-| Rule # | Condition | Action |
-|---|---|---|
-| BR-01 | | |
-
-## 8. Acceptance Criteria
-
-{{acceptance_criteria}}
-
-## 9. Open Points
-
-| # | Description | Owner | Due Date | Status |
-|---|---|---|---|---|
-| 1 | | | | Open |
-
----
-*Generated from template — review and complete all sections.*
-""",
+                    | Event | Recipient | Channel | Template |
+                    |---|---|---|---|
+                    | New work item | | | |
+                    | Approved | | | |
+                    | Rejected | | | |
+                    """,
+                ),
+            ]),
         },
-
-        # ════════════════════════════════════════════
-        # WORKFLOW (W) — TS
-        # ════════════════════════════════════════════
         {
             "wricef_type": "workflow",
             "spec_kind": "TS",
-            "version": "1.0",
-            "title": "Workflow — TS Template v1.0",
+            "version": DEFAULT_TEMPLATE_VERSION,
+            "title": "Workflow — TS Template v2.0",
             "is_active": True,
-            "content_template": """# Technical Specification
-## {{code}} — {{title}}
-
-| Field | Value |
-|---|---|
-| **Type** | {{wricef_type_full}} |
-| **Module** | {{module}} |
-| **Date** | {{date_generated}} |
-
----
-
-## 1. Technical Overview
-
-**Workflow Technology:**
-- [ ] SAP Flexible Workflow
-- [ ] SAP Business Workflow (WS prefix)
-- [ ] BRFplus + Workflow
-- [ ] SAP BPA (Build Process Automation)
-- [ ] Custom ABAP
-- [ ] Other: ___
-
-## 2. Object Inventory
-
-| Object Type | Object Name | Description |
-|---|---|---|
-| Workflow Template | | |
-| Task (TS) | | |
-| BOR Object | | |
-| BRFplus Application | | |
-| ABAP Class | | |
-
-## 3. Detailed Design
-
-### 3.1 Workflow Definition
-
-_Step-by-step workflow structure with decision points._
-
-### 3.2 Agent Determination
-
-| Step | Agent Rule | Rule Type | Details |
-|---|---|---|---|
-| | | Org unit / Role / Expression | |
-
-### 3.3 BRFplus Rules (if applicable)
-
-_Decision table, formula, or rule logic._
-
-### 3.4 Fiori Inbox Integration
-
-_My Inbox app configuration, custom task UI, approve/reject actions._
-
-## 4. Error Handling
-
-_Workflow error handling, orphaned work items, restart strategy._
-
-## 5. Deployment & Transport
-
-| Item | Value |
-|---|---|
-| Transport Request | {{transport_request}} |
-| Workflow activation | SWDD / SWU3 |
-| Event linkage | SWE2 |
-
-## 6. Unit Test Plan
-
-| Test # | Scenario | Steps | Expected Result | Pass/Fail |
-|---|---|---|---|---|
-| UT-01 | Normal approval | | | |
-| UT-02 | Rejection flow | | | |
-| UT-03 | Timeout escalation | | | |
-| UT-04 | Delegation | | | |
-
----
-*Generated from template — review and complete all sections.*
-""",
+            "content_template": _build_ts_template([
+                (
+                    "Workflow Platform & Runtime",
+                    """
+                    - [ ] SAP Flexible Workflow
+                    - [ ] SAP Business Workflow
+                    - [ ] BRFplus + Workflow
+                    - [ ] SAP Build Process Automation
+                    - [ ] Custom ABAP / RAP Flow
+                    """,
+                ),
+                (
+                    "Workflow Definition, Agents & Rules",
+                    """
+                    | Topic | Detail |
+                    |---|---|
+                    | Workflow Template / WS Object | |
+                    | Task / Approval Step Objects | |
+                    | Agent Determination Logic | |
+                    | BRFplus / Rule Service | |
+                    """,
+                ),
+                (
+                    "Inbox, Event Linkage & Recovery",
+                    """
+                    | Topic | Detail |
+                    |---|---|
+                    | Fiori My Inbox / UI Integration | |
+                    | Event Linkage | |
+                    | Error / Orphan Work Item Handling | |
+                    | Restart / Admin Recovery | |
+                    """,
+                ),
+            ]),
         },
-
-        # ════════════════════════════════════════════
-        # FORM (F) — FS
-        # ════════════════════════════════════════════
         {
             "wricef_type": "form",
             "spec_kind": "FS",
-            "version": "1.0",
-            "title": "Form — FS Template v1.0",
+            "version": DEFAULT_TEMPLATE_VERSION,
+            "title": "Form — FS Template v2.0",
             "is_active": True,
-            "content_template": """# Functional Specification
-## {{code}} — {{title}}
+            "content_template": _build_fs_template([
+                (
+                    "Form Purpose, Trigger & Output Channels",
+                    """
+                    **Form Type / Business Use:**
+                    _Invoice, PO, delivery note, payment advice, label, etc._
 
-| Field | Value |
-|---|---|
-| **Type** | {{wricef_type_full}} |
-| **Module** | {{module}} |
-| **Priority** | {{priority}} |
-| **Date** | {{date_generated}} |
-| **Author** | {{assigned_to}} |
+                    **Trigger Transaction / App:** {{transaction_code}}
 
----
+                    **Output Channel:**
+                    - [ ] Print
+                    - [ ] Email PDF
+                    - [ ] EDI / XML
+                    - [ ] Archive / Portal
+                    """,
+                ),
+                (
+                    "Layout, Languages & Branding",
+                    """
+                    | Section | Content / Rule |
+                    |---|---|
+                    | Header | |
+                    | Body | |
+                    | Footer | |
 
-## 1. Executive Summary
+                    | Language | Required |
+                    |---|---|
+                    | EN | |
+                    | TR | |
+                    | Other | |
+                    """,
+                ),
+                (
+                    "Data Fields & Output Determination",
+                    """
+                    | # | Field | Source | Format / Rule | Mandatory |
+                    |---|---|---|---|---|
+                    | 1 | | | | |
+                    | 2 | | | | |
 
-{{description}}
-
-## 2. Traceability
-
-| Link | Reference |
-|---|---|
-| Requirement | {{requirement_code}} — {{requirement_title}} |
-| Process Path | {{process_path}} |
-
-## 3. Form Purpose & Usage
-
-**Form Type:**
-- [ ] Invoice / Billing document
-- [ ] Purchase Order
-- [ ] Delivery Note
-- [ ] Payment Advice
-- [ ] Label / Barcode
-- [ ] Other: ___
-
-**Trigger Transaction:** {{transaction_code}}
-
-**Output Channel:**
-- [ ] Print
-- [ ] Email (PDF attachment)
-- [ ] EDI
-- [ ] Fax
-
-## 4. Layout Requirements
-
-### 4.1 Page Structure
-
-| Section | Content |
-|---|---|
-| Header | Company logo, address, document number, date |
-| Body | Line items table |
-| Footer | Totals, signatures, legal text |
-
-### 4.2 Language Requirements
-
-| Language | Required |
-|---|---|
-| EN | [ ] |
-| TR | [ ] |
-| DE | [ ] |
-| Other | |
-
-### 4.3 Paper Size & Orientation
-
-_A4 / Letter / Custom — Portrait / Landscape_
-
-## 5. Data Fields
-
-| # | Field | Source Table.Field | Format | Notes |
-|---|---|---|---|---|
-| 1 | | | | |
-| 2 | | | | |
-| 3 | | | | |
-
-## 6. Print Conditions / Output Determination
-
-| Condition | Output Type | Medium | Timing |
-|---|---|---|---|
-| | | Print / Email / Fax | Immediate / Batch |
-
-## 7. Acceptance Criteria
-
-{{acceptance_criteria}}
-
-## 8. Open Points
-
-| # | Description | Owner | Due Date | Status |
-|---|---|---|---|---|
-| 1 | | | | Open |
-
----
-*Generated from template — review and complete all sections.*
-""",
+                    | Condition | Output Type | Medium | Timing |
+                    |---|---|---|---|
+                    | | | | |
+                    """,
+                ),
+            ]),
         },
-
-        # ════════════════════════════════════════════
-        # FORM (F) — TS
-        # ════════════════════════════════════════════
         {
             "wricef_type": "form",
             "spec_kind": "TS",
-            "version": "1.0",
-            "title": "Form — TS Template v1.0",
+            "version": DEFAULT_TEMPLATE_VERSION,
+            "title": "Form — TS Template v2.0",
             "is_active": True,
-            "content_template": """# Technical Specification
-## {{code}} — {{title}}
-
-| Field | Value |
-|---|---|
-| **Type** | {{wricef_type_full}} |
-| **Module** | {{module}} |
-| **Date** | {{date_generated}} |
-
----
-
-## 1. Technical Overview
-
-**Form Technology:**
-- [ ] Adobe Forms (Interactive)
-- [ ] Adobe Forms (Print)
-- [ ] SmartForms
-- [ ] SAPscript
-- [ ] RAP-based Output Management
-- [ ] Other: ___
-
-## 2. Object Inventory
-
-| Object Type | Object Name | Package | Description |
-|---|---|---|---|
-| Form Template | | | |
-| Form Interface | | | |
-| Print Program | | | |
-| Output Type (NACE) | | | |
-| Custom Table | | | |
-
-## 3. Detailed Design
-
-### 3.1 Form Interface
-
-_Import / export parameters, global definitions._
-
-### 3.2 Form Layout
-
-_Windows, pages, text elements, graphic elements._
-
-### 3.3 Data Binding
-
-| Form Field | Interface Parameter | Formatting |
-|---|---|---|
-| | | |
-
-### 3.4 Spool & Output Configuration
-
-_Spool parameters, device type, output configuration._
-
-## 4. Error Handling
-
-_Missing data handling, spool errors, email bounce handling._
-
-## 5. Deployment & Transport
-
-| Item | Value |
-|---|---|
-| Transport Request | {{transport_request}} |
-| Package | {{package}} |
-| NACE Configuration | |
-
-## 6. Unit Test Plan
-
-| Test # | Scenario | Expected Output | Pass/Fail |
-|---|---|---|---|
-| UT-01 | Print preview | | |
-| UT-02 | Email output | | |
-| UT-03 | Multi-language | | |
-| UT-04 | Edge case (empty lines) | | |
-
----
-*Generated from template — review and complete all sections.*
-""",
+            "content_template": _build_ts_template([
+                (
+                    "Form Technology & Output Stack",
+                    """
+                    - [ ] Adobe Forms
+                    - [ ] SmartForms
+                    - [ ] SAPscript
+                    - [ ] Output Management / BRFplus
+                    - [ ] Other: ___
+                    """,
+                ),
+                (
+                    "Form Interface, Layout & Binding",
+                    """
+                    | Topic | Detail |
+                    |---|---|
+                    | Form Interface | |
+                    | Layout / Window Structure | |
+                    | Data Binding Rules | |
+                    | Device / Spool Configuration | |
+                    """,
+                ),
+                (
+                    "Output Management & Operational Controls",
+                    """
+                    | Topic | Detail |
+                    |---|---|
+                    | Output Type / BRFplus Rule | |
+                    | NAST / NACE / Output Parameter Determination | |
+                    | Email / Archive Integration | |
+                    | Error Handling / Reprint Strategy | |
+                    """,
+                ),
+            ]),
         },
     ]

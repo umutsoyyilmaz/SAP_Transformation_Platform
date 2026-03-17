@@ -28,30 +28,52 @@ branch_labels = None
 depends_on = None
 
 
+def _fk_names(table_name):
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    return {
+        fk.get("name")
+        for fk in inspector.get_foreign_keys(table_name)
+        if fk.get("name")
+    }
+
+
+def _column_names(table_name):
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    return {col["name"] for col in inspector.get_columns(table_name)}
+
+
 def upgrade():
     # 1. Remove BacklogItem.process_id — WRICEF must NOT link directly to L3 Process
     with op.batch_alter_table("backlog_items") as batch_op:
-        batch_op.drop_constraint(
-            "fk_backlog_items_process_id_processes",
-            type_="foreignkey",
-        )
-        batch_op.drop_column("process_id")
+        if "fk_backlog_items_process_id_processes" in _fk_names("backlog_items"):
+            batch_op.drop_constraint(
+                "fk_backlog_items_process_id_processes",
+                type_="foreignkey",
+            )
+        if "process_id" in _column_names("backlog_items"):
+            batch_op.drop_column("process_id")
 
     # 2. Remove ExploreRequirement.backlog_item_id — use BacklogItem.explore_requirement_id (1:N)
     with op.batch_alter_table("explore_requirements") as batch_op:
-        batch_op.drop_constraint(
-            "fk_explore_requirements_backlog_item_id_backlog_items",
-            type_="foreignkey",
-        )
-        batch_op.drop_column("backlog_item_id")
+        if "fk_explore_requirements_backlog_item_id_backlog_items" in _fk_names("explore_requirements"):
+            batch_op.drop_constraint(
+                "fk_explore_requirements_backlog_item_id_backlog_items",
+                type_="foreignkey",
+            )
+        if "backlog_item_id" in _column_names("explore_requirements"):
+            batch_op.drop_column("backlog_item_id")
 
     # 3. Remove ExploreRequirement.config_item_id — use ConfigItem.explore_requirement_id (1:N)
     with op.batch_alter_table("explore_requirements") as batch_op:
-        batch_op.drop_constraint(
-            "fk_explore_requirements_config_item_id_config_items",
-            type_="foreignkey",
-        )
-        batch_op.drop_column("config_item_id")
+        if "fk_explore_requirements_config_item_id_config_items" in _fk_names("explore_requirements"):
+            batch_op.drop_constraint(
+                "fk_explore_requirements_config_item_id_config_items",
+                type_="foreignkey",
+            )
+        if "config_item_id" in _column_names("explore_requirements"):
+            batch_op.drop_column("config_item_id")
 
 
 def downgrade():

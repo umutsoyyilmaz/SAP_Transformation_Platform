@@ -178,6 +178,7 @@ def transition_requirement(
     # 4. Execute transition
     now = datetime.now(timezone.utc)
     previous_status = req.status
+    previous_delivery_status = req.effective_delivery_status
     req.status = validation["to"]
 
     # 5. Side effects
@@ -185,6 +186,7 @@ def transition_requirement(
         req.approved_by_id = user_id
         req.approved_by_name = approved_by_name
         req.approved_at = now
+        req.delivery_status = req.delivery_status or "not_mapped"
     elif action == "reject":
         req.rejection_reason = rejection_reason
     elif action == "defer":
@@ -201,10 +203,11 @@ def transition_requirement(
                 "Use the Convert button first."
             )
         req.alm_sync_status = "pending"
+        req.delivery_status = "mapped"
     elif action == "mark_realized":
-        pass  # alm_sync_status update handled by CloudALM service
+        req.delivery_status = "ready_for_test"
     elif action == "verify":
-        pass
+        req.delivery_status = "validated"
 
     # 6. Audit log
     _diff = {"status": {"old": previous_status, "new": req.status}}
@@ -220,7 +223,8 @@ def transition_requirement(
             entity_id=req.id,
             action=f"requirement.{action}",
             actor=user_id,
-            program_id=project_id,
+            program_id=req.program_id,
+            project_id=req.project_id,
             diff=_diff,
         )
     except Exception:
@@ -231,6 +235,8 @@ def transition_requirement(
         "code": req.code,
         "previous_status": previous_status,
         "new_status": req.status,
+        "previous_delivery_status": previous_delivery_status,
+        "delivery_status": req.effective_delivery_status,
         "action": action,
     }
 
@@ -294,7 +300,8 @@ def _ensure_backlog_item(req: ExploreRequirement, *, target_type=None, wricef_ty
     if is_config:
         code = generate_config_item_code(req.project_id)
         config = ConfigItem(
-            program_id=req.project_id,
+            program_id=req.program_id,
+            project_id=req.project_id,
             title=title,
             description=description,
             module=module,
@@ -309,7 +316,8 @@ def _ensure_backlog_item(req: ExploreRequirement, *, target_type=None, wricef_ty
         wricef = wricef_type if wricef_type else _map_wricef_type(req.type, title, description)
         code = generate_backlog_item_code(req.project_id, wricef)
         backlog = BacklogItem(
-            program_id=req.project_id,
+            program_id=req.program_id,
+            project_id=req.project_id,
             title=title,
             description=description,
             module=module,
@@ -361,6 +369,8 @@ def convert_requirement(requirement_id: str, user_id: str, project_id: int,
 
     # Refresh relationship cache after flush
     db.session.expire(req)
+    req.delivery_status = "mapped"
+    db.session.flush()
     backlog_ids = [bi.id for bi in req.linked_backlog_items]
     config_ids = [ci.id for ci in req.linked_config_items]
 
@@ -368,6 +378,7 @@ def convert_requirement(requirement_id: str, user_id: str, project_id: int,
         "requirement_id": req.id,
         "code": req.code,
         "status": "converted",
+        "delivery_status": req.effective_delivery_status,
         "backlog_item_id": backlog_ids[0] if backlog_ids else None,
         "config_item_id": config_ids[0] if config_ids else None,
         "backlog_item_ids": backlog_ids,
@@ -569,6 +580,7 @@ def unconvert_requirement(
     # No backlog_item_id/config_item_id columns to clear — items are already deleted
     req.status = "approved"
     req.alm_sync_status = None
+    req.delivery_status = "not_mapped"
 
     # Capture deleted item info for audit log
     deleted_backlog_ids = [item.id for item in linked_backlog]
@@ -581,7 +593,8 @@ def unconvert_requirement(
             entity_id=req.id,
             action="requirement.unconvert",
             actor=user_id,
-            program_id=project_id,
+            program_id=req.program_id,
+            project_id=req.project_id,
             diff={
                 "status": {"old": previous_status, "new": "approved"},
                 "deleted_backlog_ids": deleted_backlog_ids,
@@ -599,6 +612,7 @@ def unconvert_requirement(
         "code": req.code,
         "previous_status": previous_status,
         "new_status": "approved",
+        "delivery_status": req.effective_delivery_status,
         "deleted_items": deleted_items,
         "force_used": force,
         "cascade_deleted": cascade_deleted,

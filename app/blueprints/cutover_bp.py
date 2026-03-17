@@ -43,6 +43,7 @@ from app.models.cutover import (
 )
 from app.models.program import Program
 from app.services import cutover_service
+from app.services.helpers.testing_operational_roles import require_operational_permission
 from app.utils.helpers import get_or_404 as _get_or_404
 
 cutover_bp = Blueprint(
@@ -121,7 +122,10 @@ def create_plan():
     if req_tenant_id is not None and program.tenant_id != req_tenant_id:
         return _scope_404("Program")
 
-    plan = cutover_service.create_plan(data)
+    try:
+        plan = cutover_service.create_plan(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify(plan.to_dict()), 201
 
 
@@ -148,7 +152,10 @@ def update_plan(plan_id):
     pid = data.get("program_id")
     if not _plan_in_scope(plan, program_id=pid):
         return _scope_404("CutoverPlan")
-    cutover_service.update_plan(plan, data)
+    try:
+        cutover_service.update_plan(plan, data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify(plan.to_dict())
 
 
@@ -226,7 +233,10 @@ def create_scope_item(plan_id):
     if not data.get("name"):
         return jsonify({"error": "name is required"}), 400
 
-    si = cutover_service.create_scope_item(plan_id, data)
+    try:
+        si = cutover_service.create_scope_item(plan_id, data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify(si.to_dict()), 201
 
 
@@ -251,7 +261,10 @@ def update_scope_item(si_id):
     data = request.get_json(silent=True) or {}
     if not _plan_in_scope(si.cutover_plan, program_id=data.get("program_id")):
         return _scope_404("CutoverScopeItem")
-    cutover_service.update_scope_item(si, data)
+    try:
+        cutover_service.update_scope_item(si, data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify(si.to_dict())
 
 
@@ -298,12 +311,15 @@ def create_task(si_id):
 
     # Pass program_id to scope the plan lookup inside generate_task_code
     # si.cutover_plan.program_id lazy-loads plan once
-    task = cutover_service.create_task(
-        si_id,
-        si.cutover_plan_id,
-        data,
-        program_id=si.cutover_plan.program_id if si.cutover_plan else None,
-    )
+    try:
+        task = cutover_service.create_task(
+            si_id,
+            si.cutover_plan_id,
+            data,
+            program_id=si.cutover_plan.program_id if si.cutover_plan else None,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify(task.to_dict(include_dependencies=True)), 201
 
 
@@ -327,7 +343,10 @@ def update_task(task_id):
     data = request.get_json(silent=True) or {}
     if not _plan_in_scope(task.scope_item.cutover_plan, program_id=data.get("program_id")):
         return _scope_404("RunbookTask")
-    cutover_service.update_task(task, data)
+    try:
+        cutover_service.update_task(task, data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify(task.to_dict(include_dependencies=True))
 
 
@@ -539,6 +558,9 @@ def list_go_no_go(plan_id):
 @cutover_bp.route("/plans/<int:plan_id>/go-no-go", methods=["POST"])
 def create_go_no_go(plan_id):
     """Create a Go/No-Go checklist item."""
+    permission_error = require_operational_permission("release_decide")
+    if permission_error:
+        return permission_error
     plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
     if err:
         return err
@@ -566,6 +588,9 @@ def get_go_no_go(item_id):
 @cutover_bp.route("/go-no-go/<int:item_id>", methods=["PUT"])
 def update_go_no_go(item_id):
     """Update a Go/No-Go item (verdict, evidence, etc.)."""
+    permission_error = require_operational_permission("release_decide")
+    if permission_error:
+        return permission_error
     item, err = _get_or_404(GoNoGoItem, item_id, "GoNoGoItem")
     if err:
         return err
@@ -579,6 +604,9 @@ def update_go_no_go(item_id):
 @cutover_bp.route("/go-no-go/<int:item_id>", methods=["DELETE"])
 def delete_go_no_go(item_id):
     """Delete a Go/No-Go item."""
+    permission_error = require_operational_permission("release_decide")
+    if permission_error:
+        return permission_error
     item, err = _get_or_404(GoNoGoItem, item_id, "GoNoGoItem")
     if err:
         return err
@@ -591,6 +619,9 @@ def delete_go_no_go(item_id):
 @cutover_bp.route("/plans/<int:plan_id>/go-no-go/seed", methods=["POST"])
 def seed_go_no_go(plan_id):
     """Seed the standard 7 Go/No-Go items for a plan."""
+    permission_error = require_operational_permission("release_decide")
+    if permission_error:
+        return permission_error
     plan, err = _get_or_404(CutoverPlan, plan_id, "CutoverPlan")
     if err:
         return err

@@ -10,6 +10,7 @@
     <!-- pg-tokens MUST load first — source of truth for --pg-* variables -->
     <link rel="stylesheet" href="/static/css/pg-tokens.css">
     <link rel="stylesheet" href="/static/css/design-tokens.css">
+    <!-- D2: main.css is now the single compatibility entrypoint for split domain CSS -->
     <link rel="stylesheet" href="/static/css/main.css">
     <link rel="stylesheet" href="/static/css/pg-button.css">
     <link rel="stylesheet" href="/static/css/pg-layout.css">
@@ -27,6 +28,8 @@
     <link rel="stylesheet" href="/static/css/pg-steps.css">
     <link rel="stylesheet" href="/static/css/pg-animations.css">
     <link rel="stylesheet" href="/static/css/mobile.css">
+    <link rel="stylesheet" href="/static/css/discover.css">
+    <link rel="stylesheet" href="/static/css/chatbot-widget.css">
 
     <!-- PWA -->
     <link rel="manifest" href="/static/manifest.json">
@@ -53,25 +56,45 @@
                 </svg>
                 <span class="pg-header__brand-name">Perga</span>
             </div>
-            <!-- Active program badge -->
-            <div id="activeProgramBadge" class="shell-header__program-badge" onclick="App.navigate('programs')" title="Click to switch program">
-                <span class="shell-header__program-icon">📋</span>
-                <span id="activeProgramName">No program selected</span>
-                <span class="shell-header__program-switch">⟳</span>
-            </div>
-            <div class="shell-context-selector" id="shellContextSelector">
-                <label class="shell-context-selector__field" for="headerProgramSelect">
-                    <span class="shell-context-selector__label">Program</span>
-                    <select id="headerProgramSelect" class="shell-context-selector__select">
-                        <option value="">Select program</option>
-                    </select>
-                </label>
-                <label class="shell-context-selector__field" for="headerProjectSelect">
-                    <span class="shell-context-selector__label">Project</span>
-                    <select id="headerProjectSelect" class="shell-context-selector__select">
-                        <option value="">Select project</option>
-                    </select>
-                </label>
+            <div class="shell-context-switcher" id="shellContextSwitcher">
+                <button
+                    id="activeProgramBadge"
+                    class="shell-header__program-badge"
+                    type="button"
+                    aria-expanded="false"
+                    aria-controls="shellContextSelector"
+                    title="Open context switcher"
+                    onclick="App.toggleContextSelector(event)"
+                >
+                    <span class="shell-header__program-icon">◎</span>
+                    <span class="shell-context-summary">
+                        <span class="shell-context-summary__eyebrow">Context</span>
+                        <span id="activeProgramName" class="shell-context-summary__program">No program selected</span>
+                        <span id="activeProjectName" class="shell-context-summary__project">Select a project when needed</span>
+                    </span>
+                    <span class="shell-header__program-switch">▾</span>
+                </button>
+                <div class="shell-context-selector" id="shellContextSelector" hidden>
+                    <div class="shell-context-selector__header">
+                        <div class="shell-context-selector__title">Working Context</div>
+                        <div class="shell-context-selector__hint">Keep this focused to the program and project you are actively steering.</div>
+                    </div>
+                    <label class="shell-context-selector__field" for="headerProgramSelect">
+                        <span class="shell-context-selector__label">Program</span>
+                        <select id="headerProgramSelect" class="shell-context-selector__select">
+                            <option value="">Select program</option>
+                        </select>
+                    </label>
+                    <label class="shell-context-selector__field" for="headerProjectSelect">
+                        <span class="shell-context-selector__label">Project</span>
+                        <select id="headerProjectSelect" class="shell-context-selector__select">
+                            <option value="">Select project</option>
+                        </select>
+                    </label>
+                    <div class="shell-context-selector__footer">
+                        <button class="pg-btn pg-btn--ghost pg-btn--sm" type="button" onclick="App.closeContextSelector(); App.navigate('programs')">Manage Programs</button>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="pg-header__center">
@@ -123,132 +146,77 @@
         <button class="sidebar__collapse-btn" id="sidebarCollapseBtn" title="Toggle sidebar">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
-        <div class="sidebar__context" id="sidebarContextPanel">
-            <div class="sidebar__context-row">
-                <span class="sidebar__context-key">Program</span>
-                <span class="sidebar__context-value" id="sidebarActiveProgramName">—</span>
-            </div>
-            <div class="sidebar__context-row">
-                <span class="sidebar__context-key">Project</span>
-                <span class="sidebar__context-value" id="sidebarActiveProjectName">—</span>
-            </div>
-        </div>
-
         <div class="sidebar__section-title">Workspace</div>
-        <div class="sidebar__item" data-view="dashboard">
+        <div class="sidebar__item" data-view="dashboard" title="Dashboard">
             <span class="sidebar__item-icon" data-pg-icon="dashboard"></span>
             <span class="sidebar__label">Dashboard</span>
         </div>
-        <div class="sidebar__item" data-view="executive-cockpit">
-            <span class="sidebar__item-icon" data-pg-icon="cockpit"></span>
-            <span class="sidebar__label">Executive Cockpit</span>
-        </div>
 
-        <div class="sidebar__section-title">Program Management</div>
-        <div class="sidebar__item active" data-view="programs">
+        <div class="sidebar__section-title">Portfolio</div>
+        <div class="sidebar__item active" data-view="programs" title="Programs">
             <span class="sidebar__item-icon" data-pg-icon="programs"></span>
             <span class="sidebar__label">Programs</span>
         </div>
-        <div class="sidebar__item" data-view="my-projects">
+        <div class="sidebar__item" data-view="my-projects" title="My Projects">
             <span class="sidebar__item-icon" data-pg-icon="projects"></span>
             <span class="sidebar__label">My Projects</span>
         </div>
-        <div class="sidebar__item" data-view="project-setup">
+        <div class="sidebar__item" data-view="project-setup" title="Project Setup">
             <span class="sidebar__item-icon" data-pg-icon="setup"></span>
             <span class="sidebar__label">Project Setup</span>
         </div>
 
         <div class="sidebar__section-title">Governance</div>
-        <div class="sidebar__item" data-view="raid">
+        <div class="sidebar__item" data-view="raid" title="RAID">
             <span class="sidebar__item-icon" data-pg-icon="raid"></span>
             <span class="sidebar__label">RAID</span>
         </div>
-        <div class="sidebar__item" data-view="reports">
+        <div class="sidebar__item" data-view="reports" title="Reports">
             <span class="sidebar__item-icon" data-pg-icon="reports"></span>
             <span class="sidebar__label">Reports</span>
         </div>
-        <div class="sidebar__section-title">Discover Phase</div>
-        <div class="sidebar__item" data-view="discover">
+        <div class="sidebar__item" data-view="change-management" title="Change Mgmt">
+            <span class="sidebar__item-icon" data-pg-icon="cockpit"></span>
+            <span class="sidebar__label">Change Mgmt</span>
+        </div>
+        <div class="sidebar__section-title">Delivery Lifecycle</div>
+        <div class="sidebar__item" data-view="discover" title="Discover">
             <span class="sidebar__item-icon" data-pg-icon="setup"></span>
-            <span>Discover</span>
+            <span class="sidebar__label">Discover</span>
         </div>
-        <div class="sidebar__item" data-view="timeline">
-            <span class="sidebar__item-icon" data-pg-icon="dashboard"></span>
-            <span>Timeline</span>
-        </div>
-        <div class="sidebar__item" data-view="raci">
-            <span class="sidebar__item-icon" data-pg-icon="teams"></span>
-            <span>RACI Matrix</span>
-        </div>
-
-        <div class="sidebar__section-title">Explore Phase</div>
-        <div class="sidebar__item" data-view="explore-dashboard">
+        <div class="sidebar__item" data-view="explore-overview" title="Explore">
             <span class="sidebar__item-icon" data-pg-icon="explore"></span>
-            <span class="sidebar__label">Explore Dashboard</span>
+            <span class="sidebar__label">Explore</span>
         </div>
-        <div class="sidebar__item" data-view="explore-hierarchy">
-            <span class="sidebar__item-icon" data-pg-icon="hierarchy"></span>
-            <span class="sidebar__label">Process Hierarchy</span>
-        </div>
-        <div class="sidebar__item" data-view="explore-workshops">
-            <span class="sidebar__item-icon" data-pg-icon="workshops"></span>
-            <span class="sidebar__label">Workshops</span>
-        </div>
-        <div class="sidebar__item" data-view="explore-requirements">
-            <span class="sidebar__item-icon" data-pg-icon="requirements"></span>
-            <span class="sidebar__label">Requirements &amp; OIs</span>
-        </div>
-
-        <div class="sidebar__section-title">Delivery</div>
-        <div class="sidebar__item" data-view="backlog">
+        <div class="sidebar__item" data-view="backlog" title="Build">
             <span class="sidebar__item-icon" data-pg-icon="backlog"></span>
             <span class="sidebar__label">Build</span>
         </div>
-        <div class="sidebar__item" data-view="test-planning">
+        <div class="sidebar__item" data-view="test-overview" title="Test">
             <span class="sidebar__item-icon" data-pg-icon="test"></span>
-            <span class="sidebar__label">Test Planning</span>
+            <span class="sidebar__label">Test</span>
         </div>
-        <div class="sidebar__item" data-view="test-execution">
-            <span class="sidebar__item-icon" data-pg-icon="test_execute"></span>
-            <span class="sidebar__label">Test Execution</span>
-        </div>
-        <div class="sidebar__item" data-view="defect-management">
-            <span class="sidebar__item-icon" data-pg-icon="defect"></span>
-            <span class="sidebar__label">Defect Management</span>
-        </div>
-        <div class="sidebar__item" data-view="approvals">
-            <span class="sidebar__item-icon" data-pg-icon="approvals"></span>
-            <span class="sidebar__label">Approvals</span>
-        </div>
-        <div class="sidebar__item" data-view="integration">
-            <span class="sidebar__item-icon" data-pg-icon="integration"></span>
-            <span class="sidebar__label">Integration Factory</span>
-        </div>
-        <div class="sidebar__item" data-view="data-factory">
-            <span class="sidebar__item-icon" data-pg-icon="data"></span>
-            <span class="sidebar__label">Data Factory</span>
+        <div class="sidebar__item" data-view="cutover" title="Release">
+            <span class="sidebar__item-icon" data-pg-icon="cutover"></span>
+            <span class="sidebar__label">Release</span>
         </div>
 
-        <div class="sidebar__section-title">Go-Live &amp; Run</div>
-        <div class="sidebar__item" data-view="cutover">
-            <span class="sidebar__item-icon" data-pg-icon="cutover"></span>
-            <span class="sidebar__label">Cutover Hub</span>
-        </div>
-        <div class="sidebar__item" data-view="hypercare">
+        <div class="sidebar__section-title">Run</div>
+        <div class="sidebar__item" data-view="hypercare" title="Hypercare">
             <span class="sidebar__item-icon" data-pg-icon="radar"></span>
             <span class="sidebar__label">Hypercare</span>
         </div>
 
         <div class="sidebar__section-title">AI Assistant</div>
-        <div class="sidebar__item" data-view="ai-insights">
+        <div class="sidebar__item" data-view="ai-insights" title="AI Insights">
             <span class="sidebar__item-icon" data-pg-icon="ai"></span>
             <span class="sidebar__label">AI Insights</span>
         </div>
-        <div class="sidebar__item" data-view="ai-query">
+        <div class="sidebar__item" data-view="ai-query" title="AI Query">
             <span class="sidebar__item-icon" data-pg-icon="ai"></span>
             <span class="sidebar__label">AI Query</span>
         </div>
-        <div class="sidebar__item" data-view="ai-admin">
+        <div class="sidebar__item" data-view="ai-admin" title="AI Admin">
             <span class="sidebar__item-icon" data-pg-icon="setup"></span>
             <span class="sidebar__label">AI Admin</span>
         </div>
@@ -274,88 +242,109 @@
     <script src="/static/vendor/chart.umd.min.js" defer></script>
     <!-- frappe-gantt (MIT) — program timeline view -->
     <script src="/static/vendor/frappe-gantt.min.js" defer></script>
+    <script>
+        window.__APP_CONFIG = {
+            apiAuthEnabled: {{ 'true' if api_auth_enabled else 'false' }},
+        };
+    </script>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/api.js"></script>
     <!-- pg-* components load before views so all views can use them -->
-    <script src="/static/js/components/pg_status_registry.js"></script>
-    <script src="/static/js/components/pg_button.js"></script>
-    <script src="/static/js/components/pg_icon.js"></script>
-    <script src="/static/js/components/pg_form.js"></script>
-    <script src="/static/js/components/pg_empty_state.js"></script>
-    <script src="/static/js/components/pg_skeleton.js"></script>
-    <script src="/static/js/components/pg_breadcrumb.js"></script>
-    <script src="/static/js/components/pg_panel.js"></script>
-    <script src="/static/js/components/pg_command_palette.js"></script>
-    <script src="/static/js/components/pg_shortcuts.js"></script>
-    <script src="/static/js/components/pg_shortcut_help.js"></script>
-    <script src="/static/js/components/pg_a11y.js"></script>
-    <script src="/static/js/views/program.js"></script>
-    <script src="/static/js/views/backlog.js"></script>
-    <script src="/static/js/views/testing_shared.js"></script>
-    <script src="/static/js/views/test_planning.js"></script>
-    <script src="/static/js/views/test_case_detail.js"></script>
-    <script src="/static/js/views/test_execution.js"></script>
-    <script src="/static/js/views/test_plan_detail.js"></script>
-    <script src="/static/js/views/defect_management.js"></script>
-    <script src="/static/js/views/approvals.js"></script>
-    <script src="/static/js/views/raid.js"></script>
-    <script src="/static/js/views/integration.js"></script>
-    <script src="/static/js/views/data_factory.js"></script>
-    <script src="/static/js/views/cutover.js"></script>
-    <script src="/static/js/views/knowledge_base.js"></script>
-    <script src="/static/js/components/notification.js"></script>
-    <script src="/static/js/components/suggestion-badge.js"></script>
-    <script src="/static/js/components/trace-view.js"></script>
-    <script src="/static/js/components/trace-chain.js"></script>
-    <script src="/static/js/components/demo-flow.js"></script>
-    <script src="/static/js/components/role-nav.js"></script>
-    <script src="/static/js/components/explore-shared.js"></script>
-    <script src="/static/js/components/team-member-picker.js"></script>
-    <script src="/static/js/components/tm_data_grid.js"></script>
-    <script src="/static/js/components/tm_tree_panel.js"></script>
-    <script src="/static/js/components/tm_split_pane.js"></script>
-    <script src="/static/js/components/tm_tab_bar.js"></script>
-    <script src="/static/js/components/tm_toolbar.js"></script>
-    <script src="/static/js/components/tm_property_panel.js"></script>
-    <script src="/static/js/components/tm_status_badge.js"></script>
-    <script src="/static/js/components/tm_context_menu.js"></script>
-    <script src="/static/js/components/tm_toast.js"></script>
-    <script src="/static/js/components/tm_modal.js"></script>
-    <script src="/static/js/components/tm_dropdown_select.js"></script>
-    <script src="/static/js/components/tm_chart_widget.js"></script>
-    <script src="/static/js/components/tm_step_editor.js"></script>
-    <script src="/static/js/components/tm_rich_text_editor.js"></script>
-    <script src="/static/js/components/tm_breadcrumb.js"></script>
+    <script src="/static/js/components/design-system/pg_status_registry.js"></script>
+    <script src="/static/js/components/design-system/pg_button.js"></script>
+    <script src="/static/js/components/design-system/pg_icon.js"></script>
+    <script src="/static/js/components/design-system/pg_form.js"></script>
+    <script src="/static/js/components/design-system/pg_empty_state.js"></script>
+    <script src="/static/js/components/design-system/pg_skeleton.js"></script>
+    <script src="/static/js/components/design-system/pg_breadcrumb.js"></script>
+    <script src="/static/js/components/design-system/pg_panel.js"></script>
+    <script src="/static/js/components/design-system/pg_command_palette.js"></script>
+    <script src="/static/js/components/design-system/pg_shortcuts.js"></script>
+    <script src="/static/js/components/design-system/pg_shortcut_help.js"></script>
+    <script src="/static/js/components/design-system/pg_a11y.js"></script>
+    <script src="/static/js/components/shared/pg_markdown.js"></script>
+    <script src="/static/js/views/portfolio/program.js"></script>
+    <script src="/static/js/views/delivery/backlog_ai.js"></script>
+    <script src="/static/js/views/delivery/backlog.js"></script>
+    <script src="/static/js/views/testing/testing_shared.js"></script>
+    <script src="/static/js/views/testing/test_planning.js"></script>
+    <script src="/static/js/views/testing/test_case_detail.js"></script>
+    <script src="/static/js/views/testing/test_execution.js"></script>
+    <script src="/static/js/views/testing/test_plan_detail.js"></script>
+    <script src="/static/js/views/testing/defect_management.js"></script>
+    <script src="/static/js/views/governance/approvals.js"></script>
+    <script src="/static/js/views/governance/raid.js"></script>
+    <script src="/static/js/views/integration/integration.js"></script>
+    <script src="/static/js/views/testing/data_factory.js"></script>
+    <script src="/static/js/views/operations/cutover.js"></script>
+    <script src="/static/js/views/operations/knowledge_base.js"></script>
+    <script src="/static/js/components/shared/notification.js"></script>
+    <script src="/static/js/components/shared/suggestion-badge.js"></script>
+    <script src="/static/js/components/trace/trace-view.js"></script>
+    <script src="/static/js/components/trace/trace-chain.js"></script>
+    <script src="/static/js/components/shared/demo-flow.js"></script>
+    <script src="/static/js/components/shared/role-nav.js"></script>
+    <script src="/static/js/components/explore/explore-shared.js"></script>
+    <script src="/static/js/components/shared/delivery-hub-shared.js"></script>
+    <script src="/static/js/components/shared/workspace-shared.js"></script>
+    <script src="/static/js/components/governance/governance-shared.js"></script>
+    <script src="/static/js/components/hierarchy/hierarchy-shared.js"></script>
+    <script src="/static/js/components/hierarchy/hierarchy-widgets.js"></script>
+    <script src="/static/js/components/hierarchy/hierarchy-renderers.js"></script>
+    <script src="/static/js/components/shared/team-member-picker.js"></script>
+    <script src="/static/js/components/testing/tm_data_grid.js"></script>
+    <script src="/static/js/components/testing/tm_tree_panel.js"></script>
+    <script src="/static/js/components/testing/tm_split_pane.js"></script>
+    <script src="/static/js/components/testing/tm_tab_bar.js"></script>
+    <script src="/static/js/components/testing/tm_toolbar.js"></script>
+    <script src="/static/js/components/testing/tm_property_panel.js"></script>
+    <script src="/static/js/components/testing/tm_status_badge.js"></script>
+    <script src="/static/js/components/testing/tm_context_menu.js"></script>
+    <script src="/static/js/components/testing/tm_toast.js"></script>
+    <script src="/static/js/components/testing/tm_modal.js"></script>
+    <script src="/static/js/components/testing/tm_dropdown_select.js"></script>
+    <script src="/static/js/components/testing/tm_chart_widget.js"></script>
+    <script src="/static/js/components/testing/tm_step_editor.js"></script>
+    <script src="/static/js/components/testing/tm_rich_text_editor.js"></script>
+    <script src="/static/js/components/testing/tm_breadcrumb.js"></script>
     <script src="/static/js/explore-api.js"></script>
-    <script src="/static/js/views/explore_hierarchy.js"></script>
-    <script src="/static/js/views/explore_workshops.js"></script>
-    <script src="/static/js/views/explore_workshop_detail.js"></script>
-    <script src="/static/js/views/explore_requirements.js"></script>
-    <script src="/static/js/views/explore_dashboard.js"></script>
-    <script src="/static/js/views/ai_admin.js"></script>
-    <script src="/static/js/views/ai_insights.js"></script>
-    <script src="/static/js/views/ai_query.js"></script>
-    <script src="/static/js/views/executive_cockpit.js"></script>
-    <script src="/static/js/views/reports.js"></script>
-    <script src="/static/js/views/dashboard.js"></script>
-    <script src="/static/js/views/suite_folders.js"></script>
-    <script src="/static/js/views/env_matrix.js"></script>
-    <script src="/static/js/views/bdd_editor.js"></script>
-    <script src="/static/js/views/data_driven.js"></script>
-    <script src="/static/js/views/exploratory.js"></script>
-    <script src="/static/js/views/evidence_capture.js"></script>
-    <script src="/static/js/views/custom_fields.js"></script>
-    <script src="/static/js/views/integrations.js"></script>
-    <script src="/static/js/views/process_mining.js"></script>  <!-- S8-01 FDD-I05 Phase B -->
-    <script src="/static/js/views/observability.js"></script>
-    <script src="/static/js/views/gate_criteria.js"></script>
-    <script src="/static/js/views/discover.js"></script>
-    <script src="/static/js/views/timeline.js"></script>
-    <script src="/static/js/views/raci.js"></script>
-    <script src="/static/js/views/hypercare.js"></script>
-    <script src="/static/js/views/project_setup.js"></script>
-    <script src="/static/js/views/my_projects.js"></script>
+    <script src="/static/js/views/testing/test_overview.js"></script>
+    <script src="/static/js/views/explore/explore_hierarchy.js"></script>
+    <script src="/static/js/views/explore/explore_workshops.js"></script>
+    <script src="/static/js/views/explore/explore_workshop_detail.js"></script>
+    <script src="/static/js/views/explore/explore_requirements.js"></script>
+    <script src="/static/js/views/explore/explore_outcomes.js"></script>
+    <script src="/static/js/views/explore/explore_dashboard.js"></script>
+    <script src="/static/js/views/ai/ai_admin.js"></script>
+    <script src="/static/js/views/ai/ai_insights.js"></script>
+    <script src="/static/js/views/ai/ai_query.js"></script>
+    <script src="/static/js/views/governance/executive_cockpit.js"></script>
+    <script src="/static/js/views/governance/reports_ai.js"></script>
+    <script src="/static/js/views/governance/reports.js"></script>
+    <script src="/static/js/views/workspace/dashboard.js"></script>
+    <script src="/static/js/views/testing/suite_folders.js"></script>
+    <script src="/static/js/views/testing/env_matrix.js"></script>
+    <script src="/static/js/views/testing/bdd_editor.js"></script>
+    <script src="/static/js/views/testing/data_driven.js"></script>
+    <script src="/static/js/views/testing/exploratory.js"></script>
+    <script src="/static/js/views/testing/evidence_capture.js"></script>
+    <script src="/static/js/views/setup/custom_fields.js"></script>
+    <script src="/static/js/views/integration/integrations.js"></script>
+    <script src="/static/js/views/governance/process_mining.js"></script>  <!-- S8-01 FDD-I05 Phase B -->
+    <script src="/static/js/views/governance/observability.js"></script>
+    <script src="/static/js/views/governance/gate_criteria.js"></script>
+    <script src="/static/js/views/discover/discover_charter.js"></script>
+    <script src="/static/js/views/discover/discover.js"></script>
+    <script src="/static/js/views/portfolio/timeline.js"></script>
+    <script src="/static/js/views/governance/raci.js"></script>
+    <script src="/static/js/views/operations/hypercare.js"></script>
+    <script src="/static/js/views/governance/change_management.js"></script>
+    <script src="/static/js/views/setup/project_setup_shell.js"></script>
+    <script src="/static/js/views/setup/project_setup_info.js"></script>
+    <script src="/static/js/views/setup/project_setup.js"></script>
+    <script src="/static/js/views/workspace/my_projects.js"></script>
     <script src="/static/js/app.js"></script>
+    <script src="/static/js/components/shared/chatbot-widget.js"></script>
     <script src="/static/js/pwa.js"></script>
     <script src="/static/js/mobile.js"></script>
 
@@ -367,6 +356,9 @@
             });
         }());
     </script>
+
+    <!-- Perga Copilot floating chatbot widget -->
+    <div id="chatbot-root"></div>
 
 </body>
 </html>

@@ -27,6 +27,10 @@ VALID_ENTITY_TYPES = frozenset({
     "explore_requirement",
     "backlog_item",
     "hypercare_exit",          # FDD-B03-Phase-2: formal hypercare exit sign-off
+    "change_request",
+    "cab_decision",
+    "freeze_exception",
+    "change_pir",
 })
 
 VALID_ACTIONS = frozenset({"approved", "revoked", "override_approved"})

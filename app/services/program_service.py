@@ -10,6 +10,7 @@ Provides:
 - Audit trail for all write operations
 """
 import logging
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from app.models import db
@@ -22,6 +23,7 @@ from app.models.program import (
     TeamMember,
     Workstream,
 )
+from app.models.project import Project
 from app.utils.helpers import parse_date
 
 logger = logging.getLogger(__name__)
@@ -34,6 +36,8 @@ PROGRAM_STATUSES = {"planning", "active", "on_hold", "completed", "cancelled"}
 PROGRAM_PRIORITIES = {"low", "medium", "high", "critical"}
 PROGRAM_SAP_PRODUCTS = {"S/4HANA", "SuccessFactors", "Ariba", "BTP", "Other"}
 PROGRAM_DEPLOYMENT_OPTIONS = {"on_premise", "cloud", "hybrid"}
+PROGRAM_STEERCO_FREQUENCIES = {"weekly", "biweekly", "monthly", "quarterly"}
+PROGRAM_OVERALL_RAGS = {"green", "amber", "red"}
 
 PHASE_STATUSES = {"not_started", "in_progress", "completed", "skipped"}
 GATE_TYPES = {"quality_gate", "milestone", "decision_point"}
@@ -70,6 +74,81 @@ def _validate_length(value: str, max_len: int, field_name: str) -> str | None:
     if value and len(value) > max_len:
         return f"{field_name} exceeds maximum length of {max_len} characters"
     return None
+
+
+def _clean_decimal(value, *, field_name: str) -> tuple[Decimal | None, dict | None]:
+    """Parse optional decimal form values."""
+    if value in (None, ""):
+        return None, None
+    try:
+        return Decimal(str(value)), None
+    except (InvalidOperation, ValueError):
+        return None, {"error": f"{field_name} must be a valid number", "status": 400}
+
+
+def _validate_project_scope(
+    *,
+    program_id: int,
+    tenant_id: int,
+    project_id: int | None,
+    required: bool = False,
+) -> tuple[Project | None, dict | None]:
+    """Validate that a project belongs to the same tenant and program."""
+    if project_id in (None, ""):
+        if required:
+            return None, {"error": "project_id is required", "status": 400}
+        return None, None
+
+    try:
+        project_id = int(project_id)
+    except (TypeError, ValueError):
+        return None, {"error": "project_id must be an integer", "status": 400}
+
+    project = Project.query.filter_by(
+        id=project_id,
+        tenant_id=tenant_id,
+        program_id=program_id,
+    ).first()
+    if not project:
+        return None, {
+            "error": "project_id does not belong to this tenant-scoped program",
+            "status": 400,
+        }
+    return project, None
+
+
+def _validate_workstream_scope(
+    *,
+    program_id: int,
+    tenant_id: int,
+    workstream_id: int | None,
+    project_id: int,
+) -> tuple[Workstream | None, dict | None]:
+    """Validate that a workstream belongs to the same tenant/program/project scope."""
+    if workstream_id in (None, ""):
+        return None, None
+
+    try:
+        workstream_id = int(workstream_id)
+    except (TypeError, ValueError):
+        return None, {"error": "workstream_id must be an integer", "status": 400}
+
+    workstream = Workstream.query.filter_by(
+        id=workstream_id,
+        tenant_id=tenant_id,
+        program_id=program_id,
+    ).first()
+    if not workstream:
+        return None, {
+            "error": "workstream_id does not belong to this tenant-scoped program",
+            "status": 400,
+        }
+    if workstream.project_id != project_id:
+        return None, {
+            "error": "workstream_id is outside the active project scope",
+            "status": 400,
+        }
+    return workstream, None
 
 
 # ── SAP Activate Phase Template ──────────────────────────────────────────
@@ -248,6 +327,25 @@ def create_program(data: dict[str, Any], *, tenant_id: int) -> tuple[Program | N
     if err := _validate_enum(deployment_option, PROGRAM_DEPLOYMENT_OPTIONS, "deployment_option"):
         return None, {"error": err, "status": 400}
 
+    steerco_frequency = (data.get("steerco_frequency") or "monthly").strip() or "monthly"
+    if err := _validate_enum(steerco_frequency, PROGRAM_STEERCO_FREQUENCIES, "steerco_frequency"):
+        return None, {"error": err, "status": 400}
+
+    overall_rag = (data.get("overall_rag") or "").strip().lower() or None
+    if overall_rag and (err := _validate_enum(overall_rag, PROGRAM_OVERALL_RAGS, "overall_rag")):
+        return None, {"error": err, "status": 400}
+
+    total_budget, budget_err = _clean_decimal(data.get("total_budget"), field_name="total_budget")
+    if budget_err:
+        return None, budget_err
+
+    code = (data.get("code") or "").strip() or None
+    if code and (err := _validate_length(code, 20, "Program code")):
+        return None, {"error": err, "status": 400}
+    currency = ((data.get("currency") or "EUR").strip().upper() or "EUR")
+    if len(currency) != 3:
+        return None, {"error": "currency must be a 3-letter code", "status": 400}
+
     program = Program(
         tenant_id=tenant_id,
         name=name,
@@ -261,9 +359,34 @@ def create_program(data: dict[str, Any], *, tenant_id: int) -> tuple[Program | N
         go_live_date=parse_date(data.get("go_live_date")),
         sap_product=sap_product,
         deployment_option=deployment_option,
+        code=code,
+        customer_name=(data.get("customer_name") or "").strip() or None,
+        customer_industry=(data.get("customer_industry") or "").strip() or None,
+        customer_country=(data.get("customer_country") or "").strip() or None,
+        sponsor_name=(data.get("sponsor_name") or "").strip() or None,
+        sponsor_title=(data.get("sponsor_title") or "").strip() or None,
+        program_director=(data.get("program_director") or "").strip() or None,
+        steerco_frequency=steerco_frequency,
+        total_budget=total_budget,
+        currency=currency,
+        overall_rag=overall_rag,
+        strategic_objectives=(data.get("strategic_objectives") or "").strip() or None,
+        success_criteria=(data.get("success_criteria") or "").strip() or None,
+        key_assumptions=(data.get("key_assumptions") or "").strip() or None,
     )
     db.session.add(program)
     db.session.flush()
+
+    # Faz 3 / Sprint 7 schema slice: create the default project before any
+    # project-owned seed entities (for example SAP Activate phases).
+    from app.services.project_service import create_project
+    _proj, _proj_err = create_project(
+        tenant_id=tenant_id,
+        program_id=program.id,
+        data={"code": "DEFAULT", "name": f"{name} - Default", "is_default": True},
+    )
+    if _proj:
+        logger.info("Default project auto-created id=%s program=%s", _proj.id, program.id)
 
     if program.methodology == "sap_activate":
         _create_sap_activate_phases(program)
@@ -276,16 +399,6 @@ def create_program(data: dict[str, Any], *, tenant_id: int) -> tuple[Program | N
         program_id=program.id,
         diff={"name": {"old": None, "new": name}},
     )
-
-    # Faz 3: Auto-create default project so operational entities have a target
-    from app.services.project_service import create_project
-    _proj, _proj_err = create_project(
-        tenant_id=tenant_id,
-        program_id=program.id,
-        data={"code": "DEFAULT", "name": f"{name} - Default", "is_default": True},
-    )
-    if _proj:
-        logger.info("Default project auto-created id=%s program=%s", _proj.id, program.id)
 
     db.session.commit()
     logger.info("Program created id=%s tenant=%s", program.id, tenant_id)
@@ -313,9 +426,14 @@ def update_program(
     for field in [
         "name", "description", "project_type", "methodology",
         "status", "priority", "sap_product", "deployment_option",
+        "code", "customer_name", "customer_industry", "customer_country",
+        "sponsor_name", "sponsor_title", "program_director",
+        "strategic_objectives", "success_criteria", "key_assumptions",
     ]:
         if field in data:
             value = data[field].strip() if isinstance(data[field], str) else data[field]
+            if isinstance(value, str):
+                value = value or None
             old_value = getattr(program, field)
             if old_value != value:
                 changes[field] = {"old": old_value, "new": value}
@@ -340,6 +458,34 @@ def update_program(
     if "deployment_option" in data:
         if err := _validate_enum(program.deployment_option, PROGRAM_DEPLOYMENT_OPTIONS, "deployment_option"):
             return None, {"error": err, "status": 400}
+    if "steerco_frequency" in data:
+        value = (data.get("steerco_frequency") or "").strip() or None
+        if value and (err := _validate_enum(value, PROGRAM_STEERCO_FREQUENCIES, "steerco_frequency")):
+            return None, {"error": err, "status": 400}
+        if program.steerco_frequency != value:
+            changes["steerco_frequency"] = {"old": program.steerco_frequency, "new": value}
+        program.steerco_frequency = value
+    if "overall_rag" in data:
+        value = (data.get("overall_rag") or "").strip().lower() or None
+        if value and (err := _validate_enum(value, PROGRAM_OVERALL_RAGS, "overall_rag")):
+            return None, {"error": err, "status": 400}
+        if program.overall_rag != value:
+            changes["overall_rag"] = {"old": program.overall_rag, "new": value}
+        program.overall_rag = value
+    if "currency" in data:
+        value = ((data.get("currency") or "").strip().upper() or None)
+        if value and len(value) != 3:
+            return None, {"error": "currency must be a 3-letter code", "status": 400}
+        if program.currency != value:
+            changes["currency"] = {"old": program.currency, "new": value}
+        program.currency = value
+    if "total_budget" in data:
+        budget, budget_err = _clean_decimal(data.get("total_budget"), field_name="total_budget")
+        if budget_err:
+            return None, budget_err
+        if program.total_budget != budget:
+            changes["total_budget"] = {"old": program.total_budget, "new": budget}
+        program.total_budget = budget
 
     for date_field in ["start_date", "end_date", "go_live_date"]:
         if date_field in data:
@@ -348,6 +494,8 @@ def update_program(
     if not program.name:
         return None, {"error": "Program name cannot be empty", "status": 400}
     if err := _validate_length(program.name, 200, "Program name"):
+        return None, {"error": err, "status": 400}
+    if program.code and (err := _validate_length(program.code, 20, "Program code")):
         return None, {"error": err, "status": 400}
 
     if changes:
@@ -391,12 +539,13 @@ def delete_program(program: Program, *, tenant_id: int) -> None:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-def list_phases(*, program_id: int, tenant_id: int | None = None) -> list[Phase]:
+def list_phases(*, program_id: int, tenant_id: int | None = None, project_id: int | None = None) -> list[Phase]:
     """List phases for a program, ordered by display sequence.
 
     Args:
         program_id: Parent program PK.
         tenant_id: If provided, enforces tenant scope.
+        project_id: If provided, filters to phases assigned to this project.
 
     Returns:
         List of Phase instances.
@@ -404,6 +553,8 @@ def list_phases(*, program_id: int, tenant_id: int | None = None) -> list[Phase]
     query = Phase.query.filter_by(program_id=program_id)
     if tenant_id is not None:
         query = query.filter_by(tenant_id=tenant_id)
+    if project_id is not None:
+        query = query.filter_by(project_id=project_id)
     return query.order_by(Phase.order).all()
 
 
@@ -432,10 +583,19 @@ def create_phase(
     status = data.get("status", "not_started")
     if err := _validate_enum(status, PHASE_STATUSES, "status"):
         return None, {"error": err, "status": 400}
+    _project, project_err = _validate_project_scope(
+        program_id=program_id,
+        tenant_id=tenant_id,
+        project_id=data.get("project_id"),
+        required=True,
+    )
+    if project_err:
+        return None, project_err
 
     phase = Phase(
         program_id=program_id,
         tenant_id=tenant_id,
+        project_id=_project.id,
         name=name,
         description=data.get("description", ""),
         order=data.get("order", 0),
@@ -455,6 +615,7 @@ def create_phase(
         action="create",
         tenant_id=tenant_id,
         program_id=program_id,
+        project_id=phase.project_id,
         diff={"name": {"old": None, "new": name}},
     )
 
@@ -476,6 +637,23 @@ def update_phase(phase: Phase, data: dict[str, Any], *, tenant_id: int) -> Phase
     if "status" in data:
         if err := _validate_enum(data["status"], PHASE_STATUSES, "status"):
             raise ValueError(err)
+    if "project_id" in data:
+        _project, project_err = _validate_project_scope(
+            program_id=phase.program_id,
+            tenant_id=tenant_id,
+            project_id=data.get("project_id"),
+        )
+        if project_err:
+            raise ValueError(project_err["error"])
+    else:
+        _project, project_err = _validate_project_scope(
+            program_id=phase.program_id,
+            tenant_id=tenant_id,
+            project_id=phase.project_id,
+            required=True,
+        )
+        if project_err:
+            raise ValueError(project_err["error"])
 
     for field in ["name", "description", "status"]:
         if field in data:
@@ -486,6 +664,8 @@ def update_phase(phase: Phase, data: dict[str, Any], *, tenant_id: int) -> Phase
         phase.order = data["order"]
     if "completion_pct" in data:
         phase.completion_pct = max(0, min(100, int(data["completion_pct"])))
+    if "project_id" in data:
+        phase.project_id = _project.id
 
     for date_field in ["planned_start", "planned_end", "actual_start", "actual_end"]:
         if date_field in data:
@@ -508,6 +688,7 @@ def delete_phase(phase: Phase, *, tenant_id: int) -> None:
         action="delete",
         tenant_id=tenant_id,
         program_id=phase.program_id,
+        project_id=phase.project_id,
         diff={"name": {"old": phase.name, "new": None}},
     )
     db.session.delete(phase)
@@ -645,12 +826,13 @@ def delete_gate(gate: Gate, *, tenant_id: int) -> None:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-def list_workstreams(*, program_id: int, tenant_id: int | None = None) -> list[Workstream]:
+def list_workstreams(*, program_id: int, tenant_id: int | None = None, project_id: int | None = None) -> list[Workstream]:
     """List workstreams for a program, ordered by name.
 
     Args:
         program_id: Parent program PK.
         tenant_id: If provided, enforces tenant scope.
+        project_id: If provided, filters to workstreams assigned to this project.
 
     Returns:
         List of Workstream instances.
@@ -658,6 +840,8 @@ def list_workstreams(*, program_id: int, tenant_id: int | None = None) -> list[W
     query = Workstream.query.filter_by(program_id=program_id)
     if tenant_id is not None:
         query = query.filter_by(tenant_id=tenant_id)
+    if project_id is not None:
+        query = query.filter_by(project_id=project_id)
     return query.order_by(Workstream.name).all()
 
 
@@ -690,10 +874,19 @@ def create_workstream(
     status = data.get("status", "active")
     if err := _validate_enum(status, WORKSTREAM_STATUSES, "status"):
         return None, {"error": err, "status": 400}
+    _project, project_err = _validate_project_scope(
+        program_id=program_id,
+        tenant_id=tenant_id,
+        project_id=data.get("project_id"),
+        required=True,
+    )
+    if project_err:
+        return None, project_err
 
     ws = Workstream(
         program_id=program_id,
         tenant_id=tenant_id,
+        project_id=_project.id,
         name=name,
         description=data.get("description", ""),
         ws_type=ws_type,
@@ -709,6 +902,7 @@ def create_workstream(
         action="create",
         tenant_id=tenant_id,
         program_id=program_id,
+        project_id=ws.project_id,
         diff={"name": {"old": None, "new": name}},
     )
 
@@ -733,11 +927,30 @@ def update_workstream(ws: Workstream, data: dict[str, Any], *, tenant_id: int) -
     if "status" in data:
         if err := _validate_enum(data["status"], WORKSTREAM_STATUSES, "status"):
             raise ValueError(err)
+    if "project_id" in data:
+        _project, project_err = _validate_project_scope(
+            program_id=ws.program_id,
+            tenant_id=tenant_id,
+            project_id=data.get("project_id"),
+        )
+        if project_err:
+            raise ValueError(project_err["error"])
+    else:
+        _project, project_err = _validate_project_scope(
+            program_id=ws.program_id,
+            tenant_id=tenant_id,
+            project_id=ws.project_id,
+            required=True,
+        )
+        if project_err:
+            raise ValueError(project_err["error"])
 
     for field in ["name", "description", "ws_type", "lead_name", "status"]:
         if field in data:
             setattr(ws, field,
                     data[field].strip() if isinstance(data[field], str) else data[field])
+    if "project_id" in data:
+        ws.project_id = _project.id
     db.session.commit()
     return ws
 
@@ -755,6 +968,7 @@ def delete_workstream(ws: Workstream, *, tenant_id: int) -> None:
         action="delete",
         tenant_id=tenant_id,
         program_id=ws.program_id,
+        project_id=ws.project_id,
         diff={"name": {"old": ws.name, "new": None}},
     )
     db.session.delete(ws)
@@ -766,12 +980,13 @@ def delete_workstream(ws: Workstream, *, tenant_id: int) -> None:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-def list_team_members(*, program_id: int, tenant_id: int | None = None) -> list[TeamMember]:
+def list_team_members(*, program_id: int, tenant_id: int | None = None, project_id: int | None = None) -> list[TeamMember]:
     """List team members for a program.
 
     Args:
         program_id: Parent program PK.
         tenant_id: If provided, enforces tenant scope.
+        project_id: If provided, filters to members assigned to this project.
 
     Returns:
         List of TeamMember instances.
@@ -779,6 +994,8 @@ def list_team_members(*, program_id: int, tenant_id: int | None = None) -> list[
     query = TeamMember.query.filter_by(program_id=program_id)
     if tenant_id is not None:
         query = query.filter_by(tenant_id=tenant_id)
+    if project_id is not None:
+        query = query.filter_by(project_id=project_id)
     return query.all()
 
 
@@ -811,15 +1028,32 @@ def create_team_member(
     raci = data.get("raci", "informed")
     if err := _validate_enum(raci, RACI_VALUES, "raci"):
         return None, {"error": err, "status": 400}
+    _project, project_err = _validate_project_scope(
+        program_id=program_id,
+        tenant_id=tenant_id,
+        project_id=data.get("project_id"),
+        required=True,
+    )
+    if project_err:
+        return None, project_err
+    _workstream, workstream_err = _validate_workstream_scope(
+        program_id=program_id,
+        tenant_id=tenant_id,
+        workstream_id=data.get("workstream_id"),
+        project_id=_project.id,
+    )
+    if workstream_err:
+        return None, workstream_err
 
     member = TeamMember(
         program_id=program_id,
         tenant_id=tenant_id,
+        project_id=_project.id,
         name=name,
         email=data.get("email", ""),
         role=role,
         raci=raci,
-        workstream_id=data.get("workstream_id"),
+        workstream_id=_workstream.id if _workstream else None,
         organization=data.get("organization", ""),
         is_active=data.get("is_active", True),
     )
@@ -832,6 +1066,7 @@ def create_team_member(
         action="create",
         tenant_id=tenant_id,
         program_id=program_id,
+        project_id=member.project_id,
         diff={"name": {"old": None, "new": name}},
     )
 
@@ -856,6 +1091,41 @@ def update_team_member(member: TeamMember, data: dict[str, Any], *, tenant_id: i
     if "raci" in data:
         if err := _validate_enum(data["raci"], RACI_VALUES, "raci"):
             raise ValueError(err)
+    if "project_id" in data:
+        _project, project_err = _validate_project_scope(
+            program_id=member.program_id,
+            tenant_id=tenant_id,
+            project_id=data.get("project_id"),
+        )
+        if project_err:
+            raise ValueError(project_err["error"])
+    else:
+        _project, project_err = _validate_project_scope(
+            program_id=member.program_id,
+            tenant_id=tenant_id,
+            project_id=member.project_id,
+            required=True,
+        )
+        if project_err:
+            raise ValueError(project_err["error"])
+    if "workstream_id" in data:
+        _workstream, workstream_err = _validate_workstream_scope(
+            program_id=member.program_id,
+            tenant_id=tenant_id,
+            workstream_id=data.get("workstream_id"),
+            project_id=_project.id,
+        )
+        if workstream_err:
+            raise ValueError(workstream_err["error"])
+    else:
+        _workstream, workstream_err = _validate_workstream_scope(
+            program_id=member.program_id,
+            tenant_id=tenant_id,
+            workstream_id=member.workstream_id,
+            project_id=_project.id,
+        )
+        if workstream_err:
+            raise ValueError(workstream_err["error"])
 
     for field in ["name", "email", "role", "raci", "organization"]:
         if field in data:
@@ -863,7 +1133,9 @@ def update_team_member(member: TeamMember, data: dict[str, Any], *, tenant_id: i
                     data[field].strip() if isinstance(data[field], str) else data[field])
 
     if "workstream_id" in data:
-        member.workstream_id = data["workstream_id"]
+        member.workstream_id = _workstream.id if _workstream else None
+    if "project_id" in data:
+        member.project_id = _project.id
     if "is_active" in data:
         member.is_active = bool(data["is_active"])
 
@@ -884,6 +1156,7 @@ def delete_team_member(member: TeamMember, *, tenant_id: int) -> None:
         action="delete",
         tenant_id=tenant_id,
         program_id=member.program_id,
+        project_id=member.project_id,
         diff={"name": {"old": member.name, "new": None}},
     )
     db.session.delete(member)
@@ -895,12 +1168,13 @@ def delete_team_member(member: TeamMember, *, tenant_id: int) -> None:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
-def list_committees(*, program_id: int, tenant_id: int | None = None) -> list[Committee]:
+def list_committees(*, program_id: int, tenant_id: int | None = None, project_id: int | None = None) -> list[Committee]:
     """List committees for a program.
 
     Args:
         program_id: Parent program PK.
         tenant_id: If provided, enforces tenant scope.
+        project_id: If provided, filters to committees scoped to this project.
 
     Returns:
         List of Committee instances.
@@ -908,6 +1182,8 @@ def list_committees(*, program_id: int, tenant_id: int | None = None) -> list[Co
     query = Committee.query.filter_by(program_id=program_id)
     if tenant_id is not None:
         query = query.filter_by(tenant_id=tenant_id)
+    if project_id is not None:
+        query = query.filter_by(project_id=project_id)
     return query.all()
 
 
@@ -940,10 +1216,19 @@ def create_committee(
     meeting_frequency = data.get("meeting_frequency", "weekly")
     if err := _validate_enum(meeting_frequency, MEETING_FREQUENCIES, "meeting_frequency"):
         return None, {"error": err, "status": 400}
+    _project, project_err = _validate_project_scope(
+        program_id=program_id,
+        tenant_id=tenant_id,
+        project_id=data.get("project_id"),
+        required=True,
+    )
+    if project_err:
+        return None, project_err
 
     comm = Committee(
         program_id=program_id,
         tenant_id=tenant_id,
+        project_id=_project.id,
         name=name,
         description=data.get("description", ""),
         committee_type=committee_type,
@@ -959,6 +1244,7 @@ def create_committee(
         action="create",
         tenant_id=tenant_id,
         program_id=program_id,
+        project_id=comm.project_id,
         diff={"name": {"old": None, "new": name}},
     )
 
@@ -983,11 +1269,30 @@ def update_committee(comm: Committee, data: dict[str, Any], *, tenant_id: int) -
     if "meeting_frequency" in data:
         if err := _validate_enum(data["meeting_frequency"], MEETING_FREQUENCIES, "meeting_frequency"):
             raise ValueError(err)
+    if "project_id" in data:
+        _project, project_err = _validate_project_scope(
+            program_id=comm.program_id,
+            tenant_id=tenant_id,
+            project_id=data.get("project_id"),
+        )
+        if project_err:
+            raise ValueError(project_err["error"])
+    else:
+        _project, project_err = _validate_project_scope(
+            program_id=comm.program_id,
+            tenant_id=tenant_id,
+            project_id=comm.project_id,
+            required=True,
+        )
+        if project_err:
+            raise ValueError(project_err["error"])
 
     for field in ["name", "description", "committee_type", "meeting_frequency", "chair_name"]:
         if field in data:
             setattr(comm, field,
                     data[field].strip() if isinstance(data[field], str) else data[field])
+    if "project_id" in data:
+        comm.project_id = _project.id
     db.session.commit()
     return comm
 
@@ -1005,6 +1310,7 @@ def delete_committee(comm: Committee, *, tenant_id: int) -> None:
         action="delete",
         tenant_id=tenant_id,
         program_id=comm.program_id,
+        project_id=comm.project_id,
         diff={"name": {"old": comm.name, "new": None}},
     )
     db.session.delete(comm)

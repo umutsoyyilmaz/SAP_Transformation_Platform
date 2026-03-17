@@ -55,6 +55,13 @@ raid_bp = Blueprint("raid", __name__, url_prefix="/api/v1")
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
+def _with_request_project_scope(data):
+    scoped = dict(data or {})
+    if scoped.get("project_id") in (None, "") and getattr(g, "project_id", None) is not None:
+        scoped["project_id"] = g.project_id
+    return scoped
+
+
 def _get_program_or_404(pid):
     tenant_id = getattr(g, "jwt_tenant_id", None)
     if tenant_id is not None:
@@ -66,12 +73,43 @@ def _get_program_or_404(pid):
     return prog, None
 
 
+def _entity_belongs_to_tenant(entity, tenant_id: int) -> bool:
+    """Validate tenant ownership, including legacy RAID rows with NULL tenant_id.
+
+    Some older RAID records were created before tenant stamping was enforced.
+    Those rows are still safe to expose when their parent program belongs to
+    the caller's tenant, but strict `tenant_id = X` scoped lookups return a
+    false 404. This helper preserves tenant isolation while allowing that
+    legacy data to remain usable in the UI.
+    """
+    direct_tenant = getattr(entity, "tenant_id", None)
+    if direct_tenant is not None:
+        return int(direct_tenant) == int(tenant_id)
+
+    program_id = getattr(entity, "program_id", None)
+    if program_id is not None:
+        program = get_scoped_or_none(Program, program_id, tenant_id=tenant_id)
+        return program is not None
+
+    return False
+
+
 def _get_entity_or_404(model, entity_id: int):
     tenant_id = getattr(g, "jwt_tenant_id", None)
     if tenant_id is not None:
         entity = get_scoped_or_none(model, entity_id, tenant_id=tenant_id)
-    else:
+        if entity:
+            return entity, None
+
+        # Backward-compat: legacy RAID rows may still have tenant_id=NULL.
+        # Accept them only when their parent program resolves to the caller's
+        # tenant; otherwise keep returning an indistinguishable 404.
         entity = db.session.get(model, entity_id)
+        if not entity or not _entity_belongs_to_tenant(entity, tenant_id):
+            return None, (jsonify({"error": f"{model.__name__} not found"}), 404)
+        return entity, None
+
+    entity = db.session.get(model, entity_id)
     if not entity:
         return None, (jsonify({"error": f"{model.__name__} not found"}), 404)
     return entity, None
@@ -118,11 +156,14 @@ def create_risk(pid):
     if err:
         return err
 
-    data = request.get_json(silent=True) or {}
+    data = _with_request_project_scope(request.get_json(silent=True) or {})
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
 
-    risk = raid_service.create_risk(pid, data)
+    try:
+        risk = raid_service.create_risk(pid, data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     err = db_commit_or_error()
     if err:
         return err
@@ -146,7 +187,10 @@ def update_risk(rid):
 
     data = request.get_json(silent=True) or {}
 
-    raid_service.update_risk(risk, data)
+    try:
+        raid_service.update_risk(risk, data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     err = db_commit_or_error()
     if err:
         return err
@@ -217,11 +261,14 @@ def create_action(pid):
     if err:
         return err
 
-    data = request.get_json(silent=True) or {}
+    data = _with_request_project_scope(request.get_json(silent=True) or {})
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
 
-    action = raid_service.create_action(pid, data)
+    try:
+        action = raid_service.create_action(pid, data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     err = db_commit_or_error()
     if err:
         return err
@@ -244,7 +291,10 @@ def update_action(aid):
 
     data = request.get_json(silent=True) or {}
 
-    raid_service.update_action(action, data)
+    try:
+        raid_service.update_action(action, data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     err = db_commit_or_error()
     if err:
         return err
@@ -317,11 +367,14 @@ def create_issue(pid):
     if err:
         return err
 
-    data = request.get_json(silent=True) or {}
+    data = _with_request_project_scope(request.get_json(silent=True) or {})
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
 
-    issue = raid_service.create_issue(pid, data)
+    try:
+        issue = raid_service.create_issue(pid, data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     err = db_commit_or_error()
     if err:
         return err
@@ -345,7 +398,10 @@ def update_issue(iid):
 
     data = request.get_json(silent=True) or {}
 
-    raid_service.update_issue(issue, data)
+    try:
+        raid_service.update_issue(issue, data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     err = db_commit_or_error()
     if err:
         return err
@@ -415,11 +471,14 @@ def create_decision(pid):
     if err:
         return err
 
-    data = request.get_json(silent=True) or {}
+    data = _with_request_project_scope(request.get_json(silent=True) or {})
     if not data.get("title"):
         return jsonify({"error": "title is required"}), 400
 
-    decision = raid_service.create_decision(pid, data)
+    try:
+        decision = raid_service.create_decision(pid, data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     err = db_commit_or_error()
     if err:
         return err
@@ -442,7 +501,10 @@ def update_decision(did):
 
     data = request.get_json(silent=True) or {}
 
-    raid_service.update_decision(decision, data)
+    try:
+        raid_service.update_decision(decision, data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     err = db_commit_or_error()
     if err:
         return err

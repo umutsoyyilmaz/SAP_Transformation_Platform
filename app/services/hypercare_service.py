@@ -41,6 +41,7 @@ from app.models.cutover import (
     ESCALATION_LEVEL_ORDER,
 )
 from app.models.run_sustain import HypercareExitCriteria
+from app.services import change_management_service
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +166,16 @@ def _evaluate_sla_breaches(incident: HypercareIncident, now: datetime) -> bool:
         changed = True
 
     return changed
+
+
+def _attach_canonical_change_reference(payload: dict, legacy_cr_id: int) -> dict:
+    """Augment legacy CR payload with canonical change-management reference."""
+    reference = change_management_service.get_canonical_reference_for_legacy(
+        "post_golive_change_request",
+        legacy_cr_id,
+    )
+    payload["canonical_change_request"] = reference
+    return payload
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -670,6 +681,10 @@ def create_change_request(tenant_id: int, plan_id: int, data: dict) -> dict:
     )
     db.session.add(cr)
     db.session.commit()
+    try:
+        change_management_service.sync_post_golive_change_request(cr.id, plan_id=plan_id)
+    except Exception:  # pragma: no cover - compatibility mirror must not break legacy flow
+        logger.exception("Failed to sync canonical change request for legacy CR %s", cr.id)
     logger.info(
         "Change request created",
         extra={
@@ -679,7 +694,7 @@ def create_change_request(tenant_id: int, plan_id: int, data: dict) -> dict:
             "program_id": plan.program_id,
         },
     )
-    return cr.to_dict()
+    return _attach_canonical_change_reference(cr.to_dict(), cr.id)
 
 
 def list_change_requests(
@@ -716,7 +731,7 @@ def list_change_requests(
         stmt = stmt.where(PostGoliveChangeRequest.status == status)
 
     rows = db.session.execute(stmt).scalars().all()
-    return [r.to_dict() for r in rows]
+    return [_attach_canonical_change_reference(r.to_dict(), r.id) for r in rows]
 
 
 def get_change_request(tenant_id: int, plan_id: int, cr_id: int) -> dict:
@@ -737,7 +752,7 @@ def get_change_request(tenant_id: int, plan_id: int, cr_id: int) -> dict:
     cr = db.session.execute(stmt).scalar_one_or_none()
     if not cr:
         raise ValueError("Change request not found")
-    return cr.to_dict()
+    return _attach_canonical_change_reference(cr.to_dict(), cr.id)
 
 
 def approve_change_request(
@@ -777,6 +792,15 @@ def approve_change_request(
     cr.approved_by_id = approver_id
     cr.approved_at = datetime.now(timezone.utc)
     db.session.commit()
+    try:
+        change_management_service.sync_post_golive_change_request(cr.id, plan_id=plan_id)
+        change_management_service.mirror_post_golive_decision(
+            cr.id,
+            approved=True,
+            approver_id=approver_id,
+        )
+    except Exception:  # pragma: no cover - preserve legacy approval path
+        logger.exception("Failed to mirror legacy CR approval into canonical change request %s", cr.id)
     logger.info(
         "Change request approved",
         extra={
@@ -785,7 +809,7 @@ def approve_change_request(
             "approver_id": approver_id,
         },
     )
-    return cr.to_dict()
+    return _attach_canonical_change_reference(cr.to_dict(), cr.id)
 
 
 def reject_change_request(
@@ -823,11 +847,20 @@ def reject_change_request(
     cr.status = "rejected"
     cr.rejection_reason = rejection_reason
     db.session.commit()
+    try:
+        change_management_service.sync_post_golive_change_request(cr.id, plan_id=plan_id)
+        change_management_service.mirror_post_golive_decision(
+            cr.id,
+            approved=False,
+            rejection_reason=rejection_reason,
+        )
+    except Exception:  # pragma: no cover - preserve legacy rejection path
+        logger.exception("Failed to mirror legacy CR rejection into canonical change request %s", cr.id)
     logger.info(
         "Change request rejected",
         extra={"tenant_id": tenant_id, "cr_id": cr.id},
     )
-    return cr.to_dict()
+    return _attach_canonical_change_reference(cr.to_dict(), cr.id)
 
 
 # ═════════════════════════════════════════════════════════════════════════════

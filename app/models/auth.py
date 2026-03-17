@@ -240,7 +240,7 @@ class UserRole(db.Model):
     )
     starts_at = db.Column(db.DateTime(timezone=True), nullable=True)
     ends_at = db.Column(db.DateTime(timezone=True), nullable=True)
-    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=db.text("1"))
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=db.text("true"))
     revoked_at = db.Column(db.DateTime(timezone=True), nullable=True)
     revoke_reason = db.Column(db.String(255), nullable=True)
     assigned_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)

@@ -131,13 +131,23 @@ def upgrade():
 
     with op.batch_alter_table("test_cases") as batch_op:
         batch_op.add_column(sa.Column("transaction_code", sa.String(20), default=""))
-        batch_op.add_column(
-            sa.Column("data_set_id", sa.Integer, sa.ForeignKey("test_data_sets.id", ondelete="SET NULL"), nullable=True)
+        batch_op.add_column(sa.Column("data_set_id", sa.Integer, nullable=True))
+        batch_op.create_foreign_key(
+            "fk_test_cases_data_set_id_test_data_sets",
+            "test_data_sets",
+            ["data_set_id"],
+            ["id"],
+            ondelete="SET NULL",
         )
 
     with op.batch_alter_table("defects") as batch_op:
-        batch_op.add_column(
-            sa.Column("found_in_cycle_id", sa.Integer, sa.ForeignKey("test_cycles.id", ondelete="SET NULL"), nullable=True)
+        batch_op.add_column(sa.Column("found_in_cycle_id", sa.Integer, nullable=True))
+        batch_op.create_foreign_key(
+            "fk_defects_found_in_cycle_id_test_cycles",
+            "test_cycles",
+            ["found_in_cycle_id"],
+            ["id"],
+            ondelete="SET NULL",
         )
         batch_op.create_index("ix_defects_found_in_cycle_id", ["found_in_cycle_id"])
 
@@ -145,9 +155,17 @@ def upgrade():
 def downgrade():
     with op.batch_alter_table("defects") as batch_op:
         batch_op.drop_index("ix_defects_found_in_cycle_id")
+        batch_op.drop_constraint(
+            "fk_defects_found_in_cycle_id_test_cycles",
+            type_="foreignkey",
+        )
         batch_op.drop_column("found_in_cycle_id")
 
     with op.batch_alter_table("test_cases") as batch_op:
+        batch_op.drop_constraint(
+            "fk_test_cases_data_set_id_test_data_sets",
+            type_="foreignkey",
+        )
         batch_op.drop_column("data_set_id")
         batch_op.drop_column("transaction_code")
 

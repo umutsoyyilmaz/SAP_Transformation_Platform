@@ -62,10 +62,10 @@ class Sprint(db.Model):
     )
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
-        comment="Faz 3: project scope (nullable during transition)",
+        comment="Sprint 7: project scope (required)",
     )
     name = db.Column(db.String(100), nullable=False, comment="e.g. Sprint 1, Iteration 2.3")
     goal = db.Column(db.Text, default="", comment="Sprint goal / objective")
@@ -155,17 +155,13 @@ class BacklogItem(db.Model):
     )
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
-        comment="Faz 3: project scope (nullable during transition)",
+        comment="Sprint 7: project scope (required)",
     )
     sprint_id = db.Column(
         db.Integer, db.ForeignKey("sprints.id", ondelete="SET NULL"), nullable=True
-    )
-    requirement_id = db.Column(
-        db.Integer, db.ForeignKey("requirements.id", ondelete="SET NULL"),
-        nullable=True, comment="Link to source requirement",
     )
     explore_requirement_id = db.Column(
         db.String(36),
@@ -274,7 +270,6 @@ class BacklogItem(db.Model):
             "program_id": self.program_id,
             "project_id": self.project_id,
             "sprint_id": self.sprint_id,
-            "requirement_id": self.requirement_id,
             "explore_requirement_id": self.explore_requirement_id,
             "code": self.code,
             "title": self.title,
@@ -334,14 +329,10 @@ class ConfigItem(db.Model):
     )
     project_id = db.Column(
         db.Integer,
-        db.ForeignKey("projects.id", ondelete="SET NULL"),
-        nullable=True,
+        db.ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
-        comment="Faz 3: project scope (nullable during transition)",
-    )
-    requirement_id = db.Column(
-        db.Integer, db.ForeignKey("requirements.id", ondelete="SET NULL"),
-        nullable=True, comment="Link to source requirement",
+        comment="Sprint 7: project scope (required)",
     )
     explore_requirement_id = db.Column(
         db.String(36),
@@ -427,7 +418,6 @@ class ConfigItem(db.Model):
             "id": self.id,
             "program_id": self.program_id,
             "project_id": self.project_id,
-            "requirement_id": self.requirement_id,
             "explore_requirement_id": self.explore_requirement_id,
             "code": self.code,
             "title": self.title,

@@ -36,7 +36,7 @@ discover_bp = Blueprint("discover", __name__, url_prefix="/api/v1")
 
 # ── Valid value sets (blueprint-level validation) ─────────────────────────────
 
-VALID_PROJECT_TYPES = {"greenfield", "brownfield", "selective_migration", "cloud_move"}
+VALID_PROJECT_TYPES = {"greenfield", "brownfield", "bluefield", "selective_data_transition"}
 VALID_SYSTEM_TYPES = {"sap_erp", "s4hana", "non_sap", "middleware", "cloud", "legacy"}
 VALID_ROLES = {"source", "target", "interface", "decommission", "keep"}
 VALID_ENVIRONMENTS = {"dev", "test", "q", "prod"}
@@ -151,8 +151,14 @@ def approve_charter(program_id: int):
 
     data = request.get_json(silent=True) or {}
     approver_id = data.get("approver_id")
-    if not approver_id or not isinstance(approver_id, int):
-        return jsonify({"error": "approver_id (integer) is required"}), 400
+    # approver_id is optional when auth is disabled (dev/demo mode);
+    # when auth is enabled it should always be present from the JWT session.
+    if approver_id is not None and not isinstance(approver_id, int):
+        return jsonify({"error": "approver_id must be an integer"}), 400
+
+    # Fall back to the JWT user if the frontend didn't send an explicit id
+    if approver_id is None and hasattr(g, "jwt_user_id") and g.jwt_user_id:
+        approver_id = g.jwt_user_id
 
     notes = str(data.get("notes", "") or "")[:2000] or None
 

@@ -17,7 +17,7 @@ import re
 from app.models import db
 from app.models.program import Program
 from app.models.testing import TestCase
-from app.models.integration import Interface
+from app.models.interface_factory import Interface
 from app.models.backlog import BacklogItem, ConfigItem
 from app.models.requirement import Requirement
 from app.models.explore import ProcessLevel, ProcessStep
