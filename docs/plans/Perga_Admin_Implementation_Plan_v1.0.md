@@ -1,6 +1,6 @@
 # PERGA — Multi-Tenant Admin Panel Implementation Project Plan
 
-**Mimari Doküman Referansı:** Perga_Admin_Architecture_v1.2.md (10 ADR Confirmed)
+**Mimari Doküman Referansı:** docs/archive/Perga_Admin_Architecture_v1.2.md (10 ADR Confirmed)
 
 **Versiyon:** 1.0 — Şubat 2026
 
@@ -82,7 +82,7 @@ Perga platformunu tek kullanıcılı/Basic Auth yapısından, endüstri standart
 | `app/models/testing.py` | 11 | ❌ | TestPlan, TestCycle, TestCase, Defect, TestRun, TestSuite |
 | `app/models/requirement.py` | ~3 | ❌ | Requirements domain |
 | `app/models/scope.py` | 3 | ❌ | Process (L2/L3/L4), Analysis |
-| `app/models/integration.py` | 5 | ❌ | Interface, Wave, ConnectivityTest, SwitchPlan |
+| `app/models/interface_factory.py` | 5 | ❌ | Interface, Wave, ConnectivityTest, SwitchPlan |
 | `app/models/audit.py` | 1 | ❌ | AuditLog (actor = string) |
 | `app/models/backlog.py` | ~2 | ❌ | Backlog items |
 | `app/models/raid.py` | ~4 | ❌ | Risk, Action, Issue, Decision |
@@ -121,7 +121,7 @@ Perga platformunu tek kullanıcılı/Basic Auth yapısından, endüstri standart
 
 ```
 program_bp      backlog_bp      testing_bp      raid_bp
-ai_bp           integration_bp  health_bp       metrics_bp
+ai_bp           interface_factory_bp  health_bp       metrics_bp
 explore_bp      data_factory_bp reporting_bp    audit_bp
 cutover_bp      notification_bp run_sustain_bp  pwa_bp
 traceability_bp
@@ -139,7 +139,7 @@ traceability_bp
 | Migration | Alembic (17 versiyon, auth ile ilgili yok) | Alembic + auto-add-columns |
 | Cache | Yok | Redis (hazır ama kullanılmıyor) |
 | CI/CD | — | Railway auto-deploy (git push) |
-| Test | pytest (35+ test dosyası) | Playwright E2E + smoke_test_production.sh |
+| Test | pytest (35+ test dosyası) | Playwright E2E + scripts/deploy/smoke_test_production.sh |
 
 ---
 
@@ -323,7 +323,7 @@ JWT Token Payload:
   │
   ├─ Authorization: Bearer <JWT>  → JWT parse → g.user_id, g.tenant_id, g.roles
   ├─ X-API-Key: <key>             → API key lookup → g.role (fallback)
-  ├─ Authorization: Basic <b64>   → Basic auth verify → g.role (fallback)  
+  ├─ Authorization: Basic <b64>   → Basic auth verify → g.role (fallback)
   └─ Same-origin SPA              → Auto-grant (dev only)
 ```
 
@@ -439,7 +439,7 @@ JWT Token Payload:
 | 2.2.4 | Platform Admin UI: dashboard | Toplam tenant, aktif kullanıcı, API kullanım | 1 gün | ✅ Done |
 | 2.2.5 | Platform Admin UI: sistem sağlığı | DB performansı, hata logları (mevcut /health entegrasyonu) | 1 gün | ✅ Done |
 | 2.2.6 | Blueprint'lere permission ekleme — Batch 1 | program_bp, explore_bp, testing_bp (yoğun blueprint'ler) | 2 gün | ✅ Done — app.before_request hook |
-| 2.2.7 | Blueprint'lere permission ekleme — Batch 2 | backlog_bp, raid_bp, integration_bp, cutover_bp, data_factory_bp, reporting_bp, run_sustain_bp, traceability_bp, audit_bp | 2 gün | ✅ Done — 12 blueprint korunuyor |
+| 2.2.7 | Blueprint'lere permission ekleme — Batch 2 | backlog_bp, raid_bp, interface_factory_bp, cutover_bp, data_factory_bp, reporting_bp, run_sustain_bp, traceability_bp, audit_bp | 2 gün | ✅ Done — 12 blueprint korunuyor |
 | 2.2.8 | Test suite oluşturma | Platform admin + blueprint permission + legacy fallthrough + superuser bypass testleri | 2 gün | ✅ Done — 65/65 PASSED |
 
 **Sprint 6 Metrikleri:**
@@ -723,29 +723,29 @@ app/
 ```
 Step 1: Yeni tablolar oluştur (tenants, users, roles, permissions, ...)
         → Mevcut sisteme dokunmaz, uygulanabilir
-        
+
 Step 2: Program → Tenant 1:1 migration
         → Her Program kaydı için bir Tenant kaydı yarat
         → program_tenant_mapping tablosu tut (geçiş dönemi)
-        
+
 Step 3: Mevcut tablolara tenant_id ekleme (nullable)
         → ALTER TABLE ... ADD COLUMN tenant_id INT REFERENCES tenants(id)
         → Her tablo için ayrı migration
-        
+
 Step 4: tenant_id backfill
-        → UPDATE projects SET tenant_id = (SELECT t.id FROM tenants t 
-           JOIN program_tenant_mapping m ON m.tenant_id = t.id 
+        → UPDATE projects SET tenant_id = (SELECT t.id FROM tenants t
+           JOIN program_tenant_mapping m ON m.tenant_id = t.id
            WHERE m.program_id = projects.program_id)
         → Diğer tablolar: project.tenant_id üzerinden zincirleme
-        
+
 Step 5: tenant_id NOT NULL + index
         → ALTER TABLE ... ALTER COLUMN tenant_id SET NOT NULL
         → CREATE INDEX idx_<table>_tenant ON <table>(tenant_id)
-        
+
 Step 6: TeamMember.user_id FK ekleme
         → Nullable FK, mevcut veri korunur
         → Eşleşen email'ler üzerinden opsiyonel backfill
-        
+
 Step 7: ProjectRole.user_id tip değişikliği
         → String → Integer FK (nullable, kademeli)
 ```
@@ -798,7 +798,7 @@ Step 7: ProjectRole.user_id tip değişikliği
 
 Her sprint sonunda:
 - Mevcut 35+ test dosyası çalıştırılır (`pytest tests/`)
-- Smoke test production script (`./smoke_test_production.sh`)
+- Smoke test production script (`./scripts/deploy/smoke_test_production.sh`)
 - E2E admin panel testleri (`npx playwright test`)
 
 ---
@@ -926,4 +926,4 @@ Her sprint sonunda doldurulacak:
 ---
 
 *— End of Document — v1.0 — Perga Admin Implementation Plan —*
-*Kaynak: Perga_Admin_Architecture_v1.2.md (10 ADR Confirmed)*
+*Kaynak: docs/archive/Perga_Admin_Architecture_v1.2.md (10 ADR Confirmed)*

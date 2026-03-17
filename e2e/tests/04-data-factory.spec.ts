@@ -2,20 +2,20 @@
  * E2E Flow 4: Data Factory — CRUD cycle for data objects.
  */
 import { test, expect } from '@playwright/test'
+import { createProgramContext } from './helpers/seed-factory'
 
 let programId: number
 
 test.beforeAll(async ({ request }) => {
-  const res = await request.post('/api/v1/programs', {
-    data: {
-      name: 'E2E DF Test',
+  const context = await createProgramContext(request, {
+    namePrefix: 'E2E DF Test',
+    methodology: 'sap_activate',
+    programData: {
       project_type: 'greenfield',
-      methodology: 'sap_activate',
       sap_product: 'S/4HANA',
     },
   })
-  const body = await res.json()
-  programId = body.id
+  programId = context.program.id
 })
 
 test('create data object', async ({ request }) => {

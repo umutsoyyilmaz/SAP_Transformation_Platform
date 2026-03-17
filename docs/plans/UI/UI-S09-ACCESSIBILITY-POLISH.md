@@ -258,7 +258,7 @@ Kısa vadeli çözüm (bu sprint scope'u — modul bundler değil):
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         const deferred = [
-            '/static/js/components/tm_data_grid.js',
+            '/static/js/components/testing/tm_data_grid.js',
             '/static/js/components/tm_modal.js',
             '/static/js/components/pg_command_palette.js',
             // ... view script'leri

@@ -90,12 +90,12 @@ TestPlan modelinin ALTINA şu yeni modeli ekle:
 
 class PlanScope(db.Model):
     """Links TestPlan to source entities for scope definition.
-    
+
     source_type values: process_l3, scenario, requirement, backlog_item, config_item
     SAP Activate: Plan → Scope Items → trace to TCs
     """
     __tablename__ = 'plan_scopes'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     plan_id = db.Column(db.Integer, db.ForeignKey('test_plans.id', ondelete='CASCADE'), nullable=False)
     source_type = db.Column(db.String(30), nullable=False,
@@ -115,15 +115,15 @@ class PlanScope(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='CASCADE'), nullable=False)
     created_at = db.Column(db.DateTime, default=db.func.now())
     updated_at = db.Column(db.DateTime, default=db.func.now(), onupdate=db.func.now())
-    
+
     # Relationships
     plan = db.relationship('TestPlan', backref=db.backref('scopes', lazy='dynamic', cascade='all, delete-orphan'))
-    
+
     # Unique constraint: same source can't be added to same plan twice
     __table_args__ = (
         db.UniqueConstraint('plan_id', 'source_type', 'source_id', name='uq_plan_scope_source'),
     )
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -147,14 +147,14 @@ PlanScope modelinin ALTINA şu modeli ekle:
 
 class PlanTestCase(db.Model):
     """Links TestCase to TestPlan with plan-specific metadata.
-    
+
     Suite = catalog (reusable across plans)
     PlanTestCase = planning decision (plan-specific: priority, tester, effort)
     Same TC can be in SIT Plan (high priority) and UAT Plan (medium priority).
     ADR-TP-01: PlanTestCase vs Suite separation.
     """
     __tablename__ = 'plan_test_cases'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     plan_id = db.Column(db.Integer, db.ForeignKey('test_plans.id', ondelete='CASCADE'), nullable=False)
     test_case_id = db.Column(db.Integer, db.ForeignKey('test_cases.id', ondelete='CASCADE'), nullable=False)
@@ -175,16 +175,16 @@ class PlanTestCase(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='CASCADE'), nullable=False)
     created_at = db.Column(db.DateTime, default=db.func.now())
     updated_at = db.Column(db.DateTime, default=db.func.now(), onupdate=db.func.now())
-    
+
     # Relationships
     plan = db.relationship('TestPlan', backref=db.backref('plan_test_cases', lazy='dynamic', cascade='all, delete-orphan'))
     test_case = db.relationship('TestCase', backref=db.backref('plan_entries', lazy='dynamic'))
-    
+
     # Unique: same TC can't be in same plan twice
     __table_args__ = (
         db.UniqueConstraint('plan_id', 'test_case_id', name='uq_plan_test_case'),
     )
-    
+
     def to_dict(self):
         tc = self.test_case
         return {
@@ -216,7 +216,7 @@ class PlanDataSet(db.Model):
     ADR-TP-02: Test data lives in Data Factory, consumed via bridge.
     """
     __tablename__ = 'plan_data_sets'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     plan_id = db.Column(db.Integer, db.ForeignKey('test_plans.id', ondelete='CASCADE'), nullable=False)
     data_set_id = db.Column(db.Integer, db.ForeignKey('test_data_sets.id', ondelete='CASCADE'), nullable=False)
@@ -224,13 +224,13 @@ class PlanDataSet(db.Model):
         comment='If true, cycle cannot start without this data set being ready')
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='CASCADE'), nullable=False)
     created_at = db.Column(db.DateTime, default=db.func.now())
-    
+
     plan = db.relationship('TestPlan', backref=db.backref('plan_data_sets', lazy='dynamic', cascade='all, delete-orphan'))
-    
+
     __table_args__ = (
         db.UniqueConstraint('plan_id', 'data_set_id', name='uq_plan_data_set'),
     )
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -248,13 +248,13 @@ Mevcut modellerin ALTINA şu modeli ekle:
 
 class TestDataSet(db.Model):
     """Named, versioned data package for test execution.
-    
+
     Groups DataObjects into a test-consumable set.
     E.g. "SIT Cycle 1 Data" = {Customers: 50, Materials: 200, SOs: 100}
     ADR-TP-02: Lives in Data Factory module.
     """
     __tablename__ = 'test_data_sets'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False,
         comment='Descriptive name, e.g. SIT Cycle 1 Data Package')
@@ -272,10 +272,10 @@ class TestDataSet(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='CASCADE'), nullable=False)
     created_at = db.Column(db.DateTime, default=db.func.now())
     updated_at = db.Column(db.DateTime, default=db.func.now(), onupdate=db.func.now())
-    
+
     # Relationship to items
     items = db.relationship('TestDataSetItem', backref='data_set', lazy='dynamic', cascade='all, delete-orphan')
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -300,13 +300,13 @@ TestDataSet modelinin ALTINA:
 
 class TestDataSetItem(db.Model):
     """Links TestDataSet to individual DataObjects with filtering.
-    
+
     E.g. DataSet "SIT Cycle 1" has:
       - DataObject "Customer Master" → filter: "Country=DE", expected: 50 records
       - DataObject "Material Master" → filter: "Plant=1000", expected: 200 records
     """
     __tablename__ = 'test_data_set_items'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     data_set_id = db.Column(db.Integer, db.ForeignKey('test_data_sets.id', ondelete='CASCADE'), nullable=False)
     data_object_id = db.Column(db.Integer, db.ForeignKey('data_objects.id', ondelete='SET NULL'), nullable=True,
@@ -326,7 +326,7 @@ class TestDataSetItem(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='CASCADE'), nullable=False)
     created_at = db.Column(db.DateTime, default=db.func.now())
     updated_at = db.Column(db.DateTime, default=db.func.now(), onupdate=db.func.now())
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -445,7 +445,7 @@ git push
 
 SAP Transformation Platform — Flask + PostgreSQL + Alembic
 - TP-Sprint 1 TAMAMLANDI — 5 yeni tablo + 9 field addition
-- Mevcut blueprint: app/blueprints/testing_bp.py (TestPlan, TestCycle, TestCase, TestExecution CRUD)
+- Mevcut blueprint paketi: app/blueprints/testing/ (TestPlan, TestCycle, TestCase, TestExecution CRUD)
 - Mevcut blueprint: app/blueprints/data_factory_bp.py (DataObject, LoadCycle CRUD)
 - Models: app/models/testing.py (PlanScope, PlanTestCase, PlanDataSet — YENİ)
 - Models: app/models/data_factory.py (TestDataSet, TestDataSetItem — YENİ)
@@ -464,7 +464,7 @@ Mevcut endpoint pattern'i (testing_bp.py'den):
 
 ### TP-2.01: PlanScope CRUD (4 endpoint)
 
-Dosya: app/blueprints/testing_bp.py
+Dosya: app/blueprints/testing/__init__.py
 Mevcut test plan endpoint'lerinin ALTINA ekle:
 
 # --- PLAN SCOPE ENDPOINTS ---
@@ -483,18 +483,18 @@ def create_plan_scope(plan_id):
     """
     plan = TestPlan.query.get_or_404(plan_id)
     data = request.get_json()
-    
+
     # Validate required fields
     if not data.get('source_type') or not data.get('source_id'):
         return jsonify({'error': 'source_type and source_id are required'}), 400
-    
+
     # Check duplicate
     existing = PlanScope.query.filter_by(
         plan_id=plan_id, source_type=data['source_type'], source_id=data['source_id']
     ).first()
     if existing:
         return jsonify({'error': 'This scope item is already in the plan'}), 409
-    
+
     scope = PlanScope(
         plan_id=plan_id,
         project_id=plan.project_id,
@@ -547,20 +547,20 @@ def add_test_case_to_plan(plan_id):
     """
     plan = TestPlan.query.get_or_404(plan_id)
     data = request.get_json()
-    
+
     if not data.get('test_case_id'):
         return jsonify({'error': 'test_case_id is required'}), 400
-    
+
     # Verify TC exists
     tc = TestCase.query.get(data['test_case_id'])
     if not tc:
         return jsonify({'error': f"TestCase {data['test_case_id']} not found"}), 404
-    
+
     # Check duplicate
     existing = PlanTestCase.query.filter_by(plan_id=plan_id, test_case_id=data['test_case_id']).first()
     if existing:
         return jsonify({'error': 'This test case is already in the plan'}), 409
-    
+
     ptc = PlanTestCase(
         plan_id=plan_id,
         project_id=plan.project_id,
@@ -625,7 +625,7 @@ def create_test_data_set():
     data = request.get_json()
     if not data.get('name') or not data.get('project_id'):
         return jsonify({'error': 'name and project_id are required'}), 400
-    
+
     ds = TestDataSet(
         name=data['name'],
         project_id=data['project_id'],
@@ -683,7 +683,7 @@ def add_data_set_item(ds_id):
     """
     ds = TestDataSet.query.get_or_404(ds_id)
     data = request.get_json()
-    
+
     item = TestDataSetItem(
         data_set_id=ds_id,
         project_id=ds.project_id,
@@ -719,7 +719,7 @@ def delete_data_set_item(item_id):
 
 ### TP-2.05: PlanDataSet CRUD (3 endpoint)
 
-Dosya: app/blueprints/testing_bp.py
+Dosya: app/blueprints/testing/__init__.py
 
 @testing_bp.route('/plans/<int:plan_id>/data-sets', methods=['GET'])
 def list_plan_data_sets(plan_id):
@@ -745,14 +745,14 @@ def link_data_set_to_plan(plan_id):
     """
     plan = TestPlan.query.get_or_404(plan_id)
     data = request.get_json()
-    
+
     if not data.get('data_set_id'):
         return jsonify({'error': 'data_set_id is required'}), 400
-    
+
     existing = PlanDataSet.query.filter_by(plan_id=plan_id, data_set_id=data['data_set_id']).first()
     if existing:
         return jsonify({'error': 'Data set already linked to plan'}), 409
-    
+
     pds = PlanDataSet(
         plan_id=plan_id,
         data_set_id=data['data_set_id'],
@@ -865,7 +865,7 @@ SAP Transformation Platform — Flask + PostgreSQL + Alembic
 - TP-Sprint 2 TAMAMLANDI — 27 CRUD endpoint
 - Models: PlanScope, PlanTestCase, PlanDataSet, TestDataSet, TestDataSetItem (tümü çalışıyor)
 - Services dizini: app/services/ (traceability.py, requirement_lifecycle.py mevcut pattern'ler)
-- Blueprint: app/blueprints/testing_bp.py
+- Blueprint: app/blueprints/testing/__init__.py
 
 ## GÖREV: TP-SPRINT 3 — Smart Services
 
@@ -896,33 +896,33 @@ from datetime import datetime
 def suggest_test_cases(plan_id):
     """
     Auto-suggest test cases based on plan scope items.
-    
+
     Traversal logic per source_type:
     - process_l3: Process(L3) → RequirementProcessMapping → Requirement → backlog_item/config_item → TestCase
     - scenario: Scenario → Workshop → ExploreRequirement → BacklogItem → TestCase
     - requirement: Requirement → backlog_item/config_item → TestCase
     - backlog_item: BacklogItem → TestCase (direct, via source_type='backlog_item')
     - config_item: ConfigItem → TestCase (direct, via source_type='config_item')
-    
+
     Returns: list of {test_case_id, test_case_code, test_case_title, source_scope_id, reason}
     Already-in-plan TCs are excluded but flagged.
     """
     plan = TestPlan.query.get(plan_id)
     if not plan:
         return {'error': 'Plan not found'}, 404
-    
+
     scopes = PlanScope.query.filter_by(plan_id=plan_id).all()
     if not scopes:
         return {'suggestions': [], 'message': 'No scope items defined'}, 200
-    
+
     # Get already-in-plan TC IDs
     existing_tc_ids = set(
         ptc.test_case_id for ptc in PlanTestCase.query.filter_by(plan_id=plan_id).all()
     )
-    
+
     suggestions = []
     seen_tc_ids = set()
-    
+
     for scope in scopes:
         candidate_tcs = _trace_scope_to_test_cases(scope)
         for tc_info in candidate_tcs:
@@ -930,12 +930,12 @@ def suggest_test_cases(plan_id):
             if tc_id in seen_tc_ids:
                 continue
             seen_tc_ids.add(tc_id)
-            
+
             tc_info['scope_id'] = scope.id
             tc_info['scope_code'] = scope.source_code
             tc_info['already_in_plan'] = tc_id in existing_tc_ids
             suggestions.append(tc_info)
-    
+
     return {
         'suggestions': suggestions,
         'total': len(suggestions),
@@ -947,7 +947,7 @@ def suggest_test_cases(plan_id):
 def _trace_scope_to_test_cases(scope):
     """Trace a single scope item to its linked test cases."""
     results = []
-    
+
     if scope.source_type == 'backlog_item':
         # Direct: BacklogItem → TestCase
         tcs = TestCase.query.filter_by(source_type='backlog_item', source_id=scope.source_id).all()
@@ -956,7 +956,7 @@ def _trace_scope_to_test_cases(scope):
                 'test_case_id': tc.id, 'code': tc.code, 'title': tc.title,
                 'test_type': tc.test_type, 'reason': f'Direct link from {scope.source_code}'
             })
-    
+
     elif scope.source_type == 'config_item':
         tcs = TestCase.query.filter_by(source_type='config_item', source_id=scope.source_id).all()
         for tc in tcs:
@@ -964,12 +964,12 @@ def _trace_scope_to_test_cases(scope):
                 'test_case_id': tc.id, 'code': tc.code, 'title': tc.title,
                 'test_type': tc.test_type, 'reason': f'Direct link from {scope.source_code}'
             })
-    
+
     elif scope.source_type == 'requirement':
         # Requirement → BacklogItem/ConfigItem → TestCase
         from app.models.requirement import Requirement
         from app.models.backlog import BacklogItem, ConfigItem
-        
+
         req = db.session.get(Requirement, scope.source_id)
         if req:
             # Via backlog items
@@ -992,13 +992,13 @@ def _trace_scope_to_test_cases(scope):
                         'test_type': tc.test_type,
                         'reason': f'Requirement {scope.source_code} → {ci.code} → TC'
                     })
-    
+
     elif scope.source_type == 'process_l3':
         # Process(L3) → RequirementProcessMapping → Requirement → ...
         from app.models.scope import RequirementProcessMapping
         from app.models.requirement import Requirement
         from app.models.backlog import BacklogItem, ConfigItem
-        
+
         mappings = RequirementProcessMapping.query.filter_by(process_id=scope.source_id).all()
         for mapping in mappings:
             req = db.session.get(Requirement, mapping.requirement_id)
@@ -1022,13 +1022,13 @@ def _trace_scope_to_test_cases(scope):
                         'test_type': tc.test_type,
                         'reason': f'L3 {scope.source_code} → Req → {ci.code} → TC'
                     })
-    
+
     elif scope.source_type == 'scenario':
         # Scenario → Workshop → ExploreRequirement → BacklogItem → TestCase
         from app.models.scenario import Workshop
         from app.models.explore import ExploreRequirement
         from app.models.backlog import BacklogItem
-        
+
         workshops = Workshop.query.filter_by(scenario_id=scope.source_id).all()
         for ws in workshops:
             reqs = ExploreRequirement.query.filter_by(workshop_id=ws.id).all()
@@ -1041,7 +1041,7 @@ def _trace_scope_to_test_cases(scope):
                             'test_type': tc.test_type,
                             'reason': f'Scenario {scope.source_code} → WS → Req → TC'
                         })
-    
+
     return results
 
 
@@ -1052,18 +1052,18 @@ def import_from_suite(plan_id, suite_id):
     plan = TestPlan.query.get(plan_id)
     if not plan:
         return {'error': 'Plan not found'}, 404
-    
+
     suite = TestCycleSuite.query.get(suite_id)
     if not suite:
         return {'error': 'Suite not found'}, 404
-    
+
     # Get TCs in suite (via suite.test_cases relationship or M:N table)
     suite_tcs = TestCase.query.filter_by(suite_id=suite_id).all()
-    
+
     existing_tc_ids = set(
         ptc.test_case_id for ptc in PlanTestCase.query.filter_by(plan_id=plan_id).all()
     )
-    
+
     added = 0
     skipped = 0
     for tc in suite_tcs:
@@ -1079,7 +1079,7 @@ def import_from_suite(plan_id, suite_id):
         )
         db.session.add(ptc)
         added += 1
-    
+
     db.session.commit()
     return {'added': added, 'skipped': skipped, 'suite_name': suite.name}, 200
 
@@ -1091,18 +1091,18 @@ def populate_cycle_from_plan(cycle_id):
     cycle = TestCycle.query.get(cycle_id)
     if not cycle:
         return {'error': 'Cycle not found'}, 404
-    
+
     plan = TestPlan.query.get(cycle.plan_id)
     if not plan:
         return {'error': 'Plan not found for this cycle'}, 404
-    
+
     # Get plan TCs (optionally filtered by planned_cycle)
     ptcs = PlanTestCase.query.filter_by(plan_id=plan.id).all()
-    
+
     existing_exec_tc_ids = set(
         ex.test_case_id for ex in TestExecution.query.filter_by(test_cycle_id=cycle_id).all()
     )
-    
+
     created = 0
     for ptc in ptcs:
         if ptc.test_case_id in existing_exec_tc_ids:
@@ -1118,7 +1118,7 @@ def populate_cycle_from_plan(cycle_id):
         )
         db.session.add(execution)
         created += 1
-    
+
     db.session.commit()
     return {'created': created, 'cycle_id': cycle_id, 'plan_id': plan.id}, 200
 
@@ -1127,14 +1127,14 @@ def populate_cycle_from_plan(cycle_id):
 
 def populate_cycle_from_previous(cycle_id, prev_cycle_id, filter_status='failed'):
     """Carry forward failed/blocked executions from previous cycle.
-    
+
     filter_status: 'failed' | 'blocked' | 'failed_blocked' | 'all'
     """
     cycle = TestCycle.query.get(cycle_id)
     prev_cycle = TestCycle.query.get(prev_cycle_id)
     if not cycle or not prev_cycle:
         return {'error': 'Cycle not found'}, 404
-    
+
     status_filter = []
     if filter_status == 'failed':
         status_filter = ['fail']
@@ -1144,16 +1144,16 @@ def populate_cycle_from_previous(cycle_id, prev_cycle_id, filter_status='failed'
         status_filter = ['fail', 'blocked']
     elif filter_status == 'all':
         status_filter = None  # No filter
-    
+
     prev_execs = TestExecution.query.filter_by(test_cycle_id=prev_cycle_id)
     if status_filter:
         prev_execs = prev_execs.filter(TestExecution.result.in_(status_filter))
     prev_execs = prev_execs.all()
-    
+
     existing_tc_ids = set(
         ex.test_case_id for ex in TestExecution.query.filter_by(test_cycle_id=cycle_id).all()
     )
-    
+
     created = 0
     for prev_ex in prev_execs:
         if prev_ex.test_case_id in existing_tc_ids:
@@ -1168,7 +1168,7 @@ def populate_cycle_from_previous(cycle_id, prev_cycle_id, filter_status='failed'
         )
         db.session.add(execution)
         created += 1
-    
+
     db.session.commit()
     return {
         'created': created,
@@ -1182,7 +1182,7 @@ def populate_cycle_from_previous(cycle_id, prev_cycle_id, filter_status='failed'
 
 def calculate_scope_coverage(plan_id):
     """Calculate test coverage per scope item.
-    
+
     For each PlanScope:
     1. Trace to linked TestCases (same logic as suggest)
     2. Check which are in PlanTestCase
@@ -1192,41 +1192,41 @@ def calculate_scope_coverage(plan_id):
     plan = TestPlan.query.get(plan_id)
     if not plan:
         return {'error': 'Plan not found'}, 404
-    
+
     scopes = PlanScope.query.filter_by(plan_id=plan_id).all()
     plan_tc_ids = set(ptc.test_case_id for ptc in PlanTestCase.query.filter_by(plan_id=plan_id).all())
-    
+
     # Get all executions for this plan's cycles
     cycles = TestCycle.query.filter_by(plan_id=plan_id).all()
     cycle_ids = [c.id for c in cycles]
-    
+
     all_executions = []
     if cycle_ids:
         all_executions = TestExecution.query.filter(TestExecution.test_cycle_id.in_(cycle_ids)).all()
-    
+
     exec_by_tc = {}
     for ex in all_executions:
         if ex.test_case_id not in exec_by_tc:
             exec_by_tc[ex.test_case_id] = []
         exec_by_tc[ex.test_case_id].append(ex)
-    
+
     coverage_results = []
     for scope in scopes:
         traced_tcs = _trace_scope_to_test_cases(scope)
         traced_tc_ids = set(tc['test_case_id'] for tc in traced_tcs)
-        
+
         in_plan_ids = traced_tc_ids & plan_tc_ids
         executed_ids = set(tc_id for tc_id in in_plan_ids if tc_id in exec_by_tc)
         passed_ids = set(
             tc_id for tc_id in executed_ids
             if any(ex.result == 'pass' for ex in exec_by_tc.get(tc_id, []))
         )
-        
+
         total = len(traced_tc_ids)
         coverage_pct = round(len(in_plan_ids) / total * 100, 1) if total > 0 else 0
         exec_pct = round(len(executed_ids) / len(in_plan_ids) * 100, 1) if in_plan_ids else 0
         pass_rate = round(len(passed_ids) / len(executed_ids) * 100, 1) if executed_ids else 0
-        
+
         # Update cached coverage_status
         if coverage_pct == 100:
             scope.coverage_status = 'full'
@@ -1234,7 +1234,7 @@ def calculate_scope_coverage(plan_id):
             scope.coverage_status = 'partial'
         else:
             scope.coverage_status = 'none'
-        
+
         coverage_results.append({
             'scope_id': scope.id,
             'source_type': scope.source_type,
@@ -1248,9 +1248,9 @@ def calculate_scope_coverage(plan_id):
             'execution_pct': exec_pct,
             'pass_rate': pass_rate,
         })
-    
+
     db.session.commit()  # Save coverage_status updates
-    
+
     return {
         'plan_id': plan_id,
         'scopes': coverage_results,
@@ -1268,7 +1268,7 @@ def calculate_scope_coverage(plan_id):
 def check_data_readiness(plan_id):
     """Check if all mandatory data sets for a plan are ready."""
     plan_datasets = PlanDataSet.query.filter_by(plan_id=plan_id).all()
-    
+
     results = []
     all_ready = True
     for pds in plan_datasets:
@@ -1286,7 +1286,7 @@ def check_data_readiness(plan_id):
             'is_mandatory': pds.is_mandatory,
             'is_ready': is_ready,
         })
-    
+
     return {
         'plan_id': plan_id,
         'all_mandatory_ready': all_ready,
@@ -1298,7 +1298,7 @@ def check_data_readiness(plan_id):
 
 def evaluate_exit_criteria(plan_id):
     """Automated evaluation of plan exit criteria.
-    
+
     Checks:
     1. Pass rate threshold (default 95%)
     2. Open S1/S2 defects = 0
@@ -1308,38 +1308,38 @@ def evaluate_exit_criteria(plan_id):
     plan = TestPlan.query.get(plan_id)
     if not plan:
         return {'error': 'Plan not found'}, 404
-    
+
     # Get all cycles and executions
     cycles = TestCycle.query.filter_by(plan_id=plan_id).all()
     cycle_ids = [c.id for c in cycles]
-    
+
     executions = TestExecution.query.filter(TestExecution.test_cycle_id.in_(cycle_ids)).all() if cycle_ids else []
-    
+
     total_execs = len(executions)
     passed = sum(1 for e in executions if e.result == 'pass')
     failed = sum(1 for e in executions if e.result == 'fail')
     not_run = sum(1 for e in executions if e.result == 'not_run')
     blocked = sum(1 for e in executions if e.result == 'blocked')
-    
+
     pass_rate = round(passed / (passed + failed) * 100, 1) if (passed + failed) > 0 else 0
     completion_rate = round((total_execs - not_run) / total_execs * 100, 1) if total_execs > 0 else 0
-    
+
     # Open critical/high defects
     open_s1 = Defect.query.filter(
         Defect.project_id == plan.project_id,
         Defect.severity == 'critical',
         Defect.status.notin_(['closed', 'cancelled', 'deferred'])
     ).count()
-    
+
     open_s2 = Defect.query.filter(
         Defect.project_id == plan.project_id,
         Defect.severity == 'high',
         Defect.status.notin_(['closed', 'cancelled', 'deferred'])
     ).count()
-    
+
     # Data readiness
     data_check, _ = check_data_readiness(plan_id)
-    
+
     # Evaluate gates
     gates = [
         {'name': 'Pass Rate ≥ 95%', 'value': f'{pass_rate}%', 'passed': pass_rate >= 95},
@@ -1348,9 +1348,9 @@ def evaluate_exit_criteria(plan_id):
         {'name': 'Completion ≥ 95%', 'value': f'{completion_rate}%', 'passed': completion_rate >= 95},
         {'name': 'Data Sets Ready', 'value': str(data_check['all_mandatory_ready']), 'passed': data_check['all_mandatory_ready']},
     ]
-    
+
     all_passed = all(g['passed'] for g in gates)
-    
+
     return {
         'plan_id': plan_id,
         'overall': 'PASS' if all_passed else 'FAIL',
@@ -1366,7 +1366,7 @@ def evaluate_exit_criteria(plan_id):
 
 ### Service Endpoint'leri Blueprint'e Ekle
 
-Dosya: app/blueprints/testing_bp.py
+Dosya: app/blueprints/testing/__init__.py
 Import ekle ve route'ları bağla:
 
 from app.services.test_planning_service import (
@@ -1463,7 +1463,7 @@ SAP Transformation Platform — Flask + PostgreSQL
 
 ### TP-4.01: Plan Detail View — 4 Tab Yapısı
 
-Dosya: static/js/views/test_planning.js (MEVCUT dosyayı genişlet veya YENİ oluştur)
+Dosya: static/js/views/testing/test_planning.js (MEVCUT dosyayı genişlet veya YENİ oluştur)
 
 Plan detail view açıldığında 4 tab göster:
 1. **Scope** — PlanScope items (kaynak entity'ler)
@@ -1475,7 +1475,7 @@ Tab yapısı mevcut test_execution.js'teki tab pattern'ini takip et:
 
 async function renderPlanDetail(planId) {
     const plan = await API.get(`/test-plans/${planId}`);
-    
+
     const container = document.getElementById('content-area');
     container.innerHTML = `
         <div class="page-header">
@@ -1483,7 +1483,7 @@ async function renderPlanDetail(planId) {
             <span class="badge badge-${plan.plan_type}">${plan.plan_type.toUpperCase()}</span>
             <span class="badge badge-${plan.status}">${plan.status}</span>
         </div>
-        
+
         <div class="tab-bar">
             <button class="tab-btn active" onclick="switchPlanTab('scope', ${planId})">
                 📋 Scope
@@ -1498,10 +1498,10 @@ async function renderPlanDetail(planId) {
                 🔄 Cycles
             </button>
         </div>
-        
+
         <div id="plan-tab-content"></div>
     `;
-    
+
     // Default: Scope tab
     await renderScopeTab(planId);
 }
@@ -1511,7 +1511,7 @@ async function renderPlanDetail(planId) {
 async function renderScopeTab(planId) {
     const scopes = await API.get(`/plans/${planId}/scopes`);
     const container = document.getElementById('plan-tab-content');
-    
+
     container.innerHTML = `
         <div class="tab-actions">
             <button class="btn btn-primary" onclick="openAddScopeModal(${planId})">
@@ -1563,7 +1563,7 @@ function renderCoverageBadge(status) {
 async function renderTestCasesTab(planId) {
     const ptcs = await API.get(`/plans/${planId}/test-cases`);
     const container = document.getElementById('plan-tab-content');
-    
+
     container.innerHTML = `
         <div class="tab-actions">
             <button class="btn btn-primary" onclick="openAddTCModal(${planId})">
@@ -1576,12 +1576,12 @@ async function renderTestCasesTab(planId) {
                 📥 Import Suite
             </button>
         </div>
-        
+
         <div class="stats-bar">
             <span>Total: ${ptcs.length}</span>
             <span>Effort: ${ptcs.reduce((sum, p) => sum + (p.estimated_effort || 0), 0)} min</span>
         </div>
-        
+
         <table class="data-table">
             <thead>
                 <tr>
@@ -1629,7 +1629,7 @@ async function suggestTestCases(planId) {
 async function renderDataTab(planId) {
     const planDataSets = await API.get(`/plans/${planId}/data-sets`);
     const container = document.getElementById('plan-tab-content');
-    
+
     container.innerHTML = `
         <div class="tab-actions">
             <button class="btn btn-primary" onclick="openLinkDataSetModal(${planId})">
@@ -1687,7 +1687,7 @@ async function populateCycleFromPlan(cycleId) {
 async function renderCoverageDashboard(planId) {
     const coverage = await API.get(`/plans/${planId}/coverage`);
     const exitResult = await API.post(`/plans/${planId}/evaluate-exit`);
-    
+
     // Coverage matrix: scope × TC table
     // Exit criteria gates: pass/fail indicators
     // Progress bars per scope item

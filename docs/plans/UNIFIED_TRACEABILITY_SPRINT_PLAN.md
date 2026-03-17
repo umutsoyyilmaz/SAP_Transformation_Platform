@@ -1,9 +1,9 @@
 # 📋 Unified Traceability — Sprint Planı
 
-**Kaynak:** `unified_traceability_prompt.md`  
-**Tarih:** 2026-02-13  
-**Öncelik:** P0  
-**Toplam Tahmini Efor:** ~40 saat (5 iş günü)  
+**Kaynak:** `unified_traceability_prompt.md`
+**Tarih:** 2026-02-13
+**Öncelik:** P0
+**Toplam Tahmini Efor:** ~40 saat (5 iş günü)
 **Sprint Sayısı:** 4 Sprint
 
 ---
@@ -43,7 +43,7 @@ Lateral: Open Items, Decisions, Interfaces, Connectivity Tests, Switch Plans
 | `static/js/components/trace-chain.js` | **YENİ** — Visual chain component | S2 |
 | `static/js/views/backlog.js` | Değişiklik — TraceChain entegrasyonu | S3 |
 | `static/js/views/explore_requirements.js` | Değişiklik — TraceChain entegrasyonu | S3 |
-| `static/js/views/test_execution.js` | Değişiklik — TraceChain entegrasyonu | S3 |
+| `static/js/views/testing/test_execution.js` | Değişiklik — TraceChain entegrasyonu | S3 |
 | `templates/index.html` | Değişiklik — Script include | S2 |
 | `tests/test_traceability_unified.py` | **YENİ** — API contract tests | S4 |
 
@@ -51,8 +51,8 @@ Lateral: Open Items, Decisions, Interfaces, Connectivity Tests, Switch Plans
 
 ## 🏃 Sprint 1: Backend Altyapı (Unified Endpoint)
 
-**Süre:** 1.5 gün (~12 saat)  
-**Bağımlılık:** Yok (ilk sprint)  
+**Süre:** 1.5 gün (~12 saat)
+**Bağımlılık:** Yok (ilk sprint)
 **Çıktı:** `curl` ile test edilebilir çalışan API
 
 ### Task 1.1 — `traceability_bp.py` Blueprint Oluşturma
@@ -163,8 +163,8 @@ grep -n "BASE\|baseURL\|API_BASE" static/js/api.js
 
 ## 🏃 Sprint 2: Frontend Component (TraceChain.js)
 
-**Süre:** 1.5 gün (~12 saat)  
-**Bağımlılık:** Sprint 1 tamamlanmış olmalı  
+**Süre:** 1.5 gün (~12 saat)
+**Bağımlılık:** Sprint 1 tamamlanmış olmalı
 **Çıktı:** Çalışan modal + inline trace görselleştirme
 
 ### Task 2.1 — TraceChain Core Component
@@ -270,8 +270,8 @@ TraceChain.close()                            // Modal kapatır
 
 ## 🏃 Sprint 3: Frontend Entegrasyon (Wiring)
 
-**Süre:** 1 gün (~8 saat)  
-**Bağımlılık:** Sprint 1 + Sprint 2 tamamlanmış olmalı  
+**Süre:** 1 gün (~8 saat)
+**Bağımlılık:** Sprint 1 + Sprint 2 tamamlanmış olmalı
 **Çıktı:** Tüm view'larda çalışan trace button/tab
 
 ### Task 3.1 — Backlog Detail Traceability Tab
@@ -315,7 +315,7 @@ TraceChain.close()                            // Modal kapatır
 ### Task 3.4 — Test Execution Traceability Tab
 | Alan | Detay |
 |------|-------|
-| Dosya | `static/js/views/test_execution.js` (~line 51) |
+| Dosya | `static/js/views/testing/test_execution.js` |
 | Efor | 1.5 saat |
 | Açıklama | Traceability tab'ını TraceChain ile güncelle |
 
@@ -353,8 +353,8 @@ case 'traceability':
 
 ## 🏃 Sprint 4: Test, Validasyon & Dokümantasyon
 
-**Süre:** 1 gün (~8 saat)  
-**Bağımlılık:** Sprint 1 + 2 + 3 tamamlanmış olmalı  
+**Süre:** 1 gün (~8 saat)
+**Bağımlılık:** Sprint 1 + 2 + 3 tamamlanmış olmalı
 **Çıktı:** Tam test coverage, doğrulanmış entegrasyon
 
 ### Task 4.1 — API Contract Test Suite

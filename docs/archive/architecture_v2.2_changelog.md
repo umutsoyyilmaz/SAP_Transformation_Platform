@@ -1,9 +1,9 @@
 # Architecture Document — v1.3 → v2.2 Changelog
 
-**Kaynak:** `sap_transformation_platform_architecture (2).md` (v1.3, 2255 LOC)  
-**Hedef:** v2.2  
-**Hazırlayan:** GitHub Copilot (consolidated-review-report.md bulgularına göre)  
-**Tarih:** 2026-02-10  
+**Kaynak:** `sap_transformation_platform_architecture_v1_backup.md` (v1.3, 2255 LOC)
+**Hedef:** v2.2
+**Hazırlayan:** GitHub Copilot (consolidated-review-report.md bulgularına göre)
+**Tarih:** 2026-02-10
 **Referans:** R1 (A-001→A-007), R2 (A-006, B-006), R3 (A-001→A-014), R4 (A-001→A-014)
 
 ---
@@ -403,5 +403,5 @@ TS-Sprint 3 (planlandı):
 
 ---
 
-**Dosya:** `architecture_v2.2_changelog.md`  
+**Dosya:** `architecture_v2.2_changelog.md`
 **Oluşturan:** GitHub Copilot (Claude Opus 4.6)

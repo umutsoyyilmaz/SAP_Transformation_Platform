@@ -3,8 +3,8 @@
 Tüm önemli değişiklikler bu dosyada belgelenir.
 Format: [Conventional Commits](https://www.conventionalcommits.org/) uyumlu.
 
-> **⚠ Mega commit açıklaması:** Sprint 4-6 (`a995200`) ve Sprint 7-8 (`db9a8a8`) 
-> tek commit halinde atıldı. Aşağıda bu commit'lerin içindeki gerçek task'lar 
+> **⚠ Mega commit açıklaması:** Sprint 4-6 (`a995200`) ve Sprint 7-8 (`db9a8a8`)
+> tek commit halinde atıldı. Aşağıda bu commit'lerin içindeki gerçek task'lar
 > listesi geriye dönük belgeleme amacıyla sunulmuştur.
 
 > **📌 v2 Güncelleme (2026-02-10):** `da954ec` sonrası 33 eksik commit geriye dönük eklendi.
@@ -34,7 +34,7 @@ Format: [Conventional Commits](https://www.conventionalcommits.org/) uyumlu.
 ### Sprint S23 — Mobile PWA: Progressive Web App (Tamamlandı)
 - **PWA Manifest** (`static/manifest.json`): name, short_name, display:standalone, theme_color:#354a5f, 8 icon sizes (72-512px), 3 shortcuts (Dashboard, AI, Backlog), orientation:any
 - **Service Worker** (`static/sw.js`): Cache-first for static, network-first for API, pre-cache 12 URLs, offline fallback to `/offline`, skip-waiting + clients-claim, version-based cache invalidation
-- **PWA Icons** (`static/icons/icon-{72-512}.png`): 8 PNG icons auto-generated via `scripts/gen_icons.py`
+- **PWA Icons** (`static/icons/icon-{72-512}.png`): 8 PNG icons auto-generated via `scripts/infrastructure/gen_icons.py`
 - **Mobile CSS** (`static/css/mobile.css`, ~350 LOC): PWA install banner, offline indicator, hamburger button, sidebar mobile overlay with backdrop, bottom tab bar (56px, 5 items), pull-to-refresh indicator, touch-target 44px utility, breakpoints at 1024px/768px/480px, safe-area inset support, touch pointer optimizations, dark mode support, reduced motion, print optimization, standalone display-mode detection
 - **PWA Manager** (`static/js/pwa.js`, ~130 LOC): SW registration with update detection, beforeinstallprompt install banner, online/offline indicator with body class toggle, public API (promptInstall, dismissInstall, isOnline, isInstalled)
 - **Mobile Touch Components** (`static/js/mobile.js`, ~220 LOC): hamburger toggle for sidebar (ARIA-aware), sidebar backdrop overlay, bottom navigation bar (Dashboard, Build, Testing, AI, More), pull-to-refresh with touch events, swipe-to-navigate (left-edge swipe → open sidebar), resize handler (auto-close sidebar > 768px), onViewChange hook
@@ -126,7 +126,7 @@ Format: [Conventional Commits](https://www.conventionalcommits.org/) uyumlu.
 - **Docker:** Multi-stage optimized Dockerfile
 - **Security Headers:** `app/middleware/security_headers.py` — CSP, HSTS, X-Frame-Options
 - **Rate Limiter:** `app/middleware/rate_limiter.py` — per-blueprint limits (disabled in TESTING)
-- **Deploy:** `scripts/deploy.sh` + `Procfile` + `ruff.toml`
+- **Deploy:** `scripts/infrastructure/deploy.sh` + `Procfile` + `ruff.toml`
 - Toplam: 1046 test, 0 regresyon
 
 ### Sprint S13 — Cutover Hub + Hypercare (Tamamlandı)
@@ -346,7 +346,7 @@ Format: [Conventional Commits](https://www.conventionalcommits.org/) uyumlu.
 - Release 1/2 gate metrikleri güncellendi
 
 ### Eklenenler
-- `scripts/collect_metrics.py`: Otomatik metrik toplama + `--check` doğrulama modu
+- `scripts/analysis/collect_metrics.py`: Otomatik metrik toplama + `--check` doğrulama modu
 
 ---
 

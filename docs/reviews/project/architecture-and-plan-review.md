@@ -1,9 +1,9 @@
 # Architecture & Plan Review — SAP Transformation Platform
 
-**Tarih:** 2026-02-10  
-**Reviewer:** GitHub Copilot (Claude Opus 4.6)  
-**Referans:** project-inventory.md  
-**Son Commit:** `3c331dd` (TS-Sprint 2 tamamlandı)  
+**Tarih:** 2026-02-10
+**Reviewer:** GitHub Copilot (Claude Opus 4.6)
+**Referans:** project-inventory.md
+**Son Commit:** `3c331dd` (TS-Sprint 2 tamamlandı)
 **Gerçek Durum:** 321 route · 71 tablo · 860 test fonksiyonu (848 pytest passed) · 70 commit · 10 migration
 
 ---
@@ -46,7 +46,7 @@
 - **Kaynak:** D3, Bölüm 4.6 — Mevcut Implementasyon Durumu tablosu
 - **Tip:** Güncelleme Gerekli
 - **Severity:** P2 (önemli)
-- **Mevcut Değer:** "Implementasyon: `app/models/testing.py` (5 model, 503 LOC)" ve "API: `app/blueprints/testing_bp.py` (28 route, 1033 LOC)" yazıyor.
+- **Mevcut Değer:** "Implementasyon: `app/models/testing.py` (5 model, 503 LOC)" ve "API: `app/blueprints/testing/__init__.py` (28 route, 1033 LOC)" yazıyor.
 - **Beklenen Değer:** `testing.py` şimdi 14 model, 1,151 LOC. `testing_bp.py` şimdi 55 route, 1,667 LOC.
 - **Önerilen Aksiyon:** Bölüm 4.6'daki tüm "5 model" ve "28 route" referanslarını güncellemek. Alt modül durum tablosundaki ⬜ sembollerini TS-Sprint 1-2 kapsamındakiler için ✅ yapmak.
 
@@ -318,7 +318,7 @@
 - **Kaynak:** D7, Referans Dokümanlar
 - **Tip:** Güncelleme Gerekli
 - **Severity:** P3 (minor)
-- **Mevcut Değer:** `sap_transformation_platform_architecture (2).md` (D4 — v1.3) referans alınıyor.
+- **Mevcut Değer:** `sap_transformation_platform_architecture_v1_backup.md` (D4 — v1.3) referans alınıyor.
 - **Beklenen Değer:** `sap_transformation_platform_architecture_v2.md` (D3 — v2.1) referans alınmalı. D4 süpersede edildi.
 - **Önerilen Aksiyon:** Referans dokümanı D4→D3'e güncellemek.
 
@@ -491,6 +491,6 @@ Code ile doküman arasındaki tutarsızlık "documentation debt" kategorisindedi
 
 ---
 
-**Dosya:** `architecture-and-plan-review.md`  
-**Oluşturan:** GitHub Copilot (Claude Opus 4.6)  
+**Dosya:** `architecture-and-plan-review.md`
+**Oluşturan:** GitHub Copilot (Claude Opus 4.6)
 **Tarih:** 2026-02-10

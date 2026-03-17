@@ -1,9 +1,9 @@
 # SAP Transformation Management Platform — Proje Uygulama Planı v2.6
 
-**Versiyon:** 2.6  
-**Tarih:** 13 Şubat 2026  
-**Baz Versiyon:** v2.5 → v2.6 delta: S19–S24 tamamlandı — Platform v1.0  
-**Hazırlayan:** Umut Soyyılmaz  
+**Versiyon:** 2.6
+**Tarih:** 13 Şubat 2026
+**Baz Versiyon:** v2.5 → v2.6 delta: S19–S24 tamamlandı — Platform v1.0
+**Hazırlayan:** Umut Soyyılmaz
 **Son Commit:** S24 (Final Polish) tamamlandı
 
 > **📌 v2.6 Güncelleme Notları:**
@@ -22,7 +22,7 @@
 
 Bu plan, mevcut ProjektCoPilot prototipini baz alarak SAP Transformation Management Platform'un tam kapsamlı uygulamasını detaylandırır. Plan **7 ana Release, 28+ Sprint** üzerinden yapılandırılmıştır.
 
-**Geliştirme Yöntemi:** Claude + GitHub Copilot + Codex Agent  
+**Geliştirme Yöntemi:** Claude + GitHub Copilot + Codex Agent
 **Çalışma Modeli:** Solo developer + AI araçları. Haftada 15-20 saat geliştirme kapasitesi.
 
 ---
@@ -282,7 +282,7 @@ app/services/open_item_lifecycle.py    # write_audit hook
 app/blueprints/explore/workshops.py    # write_audit (complete + reopen)
 app/ai/gateway.py                      # general audit bridge
 app/services/traceability.py           # +160 satır trace_explore_requirement()
-scripts/seed_demo_data.py              # Section 16: audit demo data
+scripts/data/seed/seed_demo_data.py              # Section 16: audit demo data
 ```
 
 **DoD:**
@@ -350,11 +350,11 @@ scripts/seed_demo_data.py              # Section 16: audit demo data
 3. `tenants.json` — Tenant registry (default tenant)
 4. `docker/docker-compose.tenant.yml` — Multi-tenant production compose
 5. `docker/init-tenant-dbs.sh` — PostgreSQL entrypoint for tenant DB creation
-6. `scripts/migrate_tenants.py` — Tenant migration + schema verification (84 tablo)
-7. `scripts/seed_quick_demo.py` — Quick OTC+PTP demo seed (8 faz, ~700 satır)
-8. `docs/PILOT_ONBOARDING.md` — Pilot onboarding runbook (7 adım checklist)
-9. `docs/DEMO_SCRIPT.md` — 10 dk partner demo senaryosu
-10. `docs/INVESTOR_PITCH.md` — Investor pitch (10 slide + appendix)
+6. `scripts/data/migrate/migrate_tenants.py` — Tenant migration + schema verification (84 tablo)
+7. `scripts/data/seed/seed_quick_demo.py` — Quick OTC+PTP demo seed (8 faz, ~700 satır)
+8. `docs/stakeholder-assets/pilot_onboarding.md` — Pilot onboarding runbook (7 adım checklist)
+9. `docs/stakeholder-assets/partner_demo_script_10min.md` — 10 dk partner demo senaryosu
+10. `docs/stakeholder-assets/investor_pitch.md` — Investor pitch (10 slide + appendix)
 
 **Release 3.5 Gate Check Sonuçları:**
 - Testler: 969 passed, 2 failed (pre-existing traceability matrix), 2 skipped, 1 xfailed
@@ -452,7 +452,7 @@ scripts/seed_data/cutover.py       # 71 demo records
 docker/Dockerfile                   # Multi-stage optimized build
 app/middleware/security_headers.py  # CSP, HSTS, X-Frame-Options, X-Content-Type-Options
 app/middleware/rate_limiter.py      # Per-blueprint rate limits (disabled in TESTING)
-scripts/deploy.sh                   # Production deployment script
+scripts/infrastructure/deploy.sh                   # Production deployment script
 Procfile                            # Heroku/Railway deployment
 ruff.toml                           # Linter configuration
 ```
@@ -704,15 +704,15 @@ Sprint WR-3,WR-3.7,E2E Demo Test,Screenshot + test,QA,Yüksek,3h,WR-3.4,Demo scr
 Sprint WR-4,WR-4.1,DB-per-Tenant,Ayrı DB + ENV config + docker-compose,Infra,Yüksek,5h,WR-2,✅ TAMAMLANDI — tenant.py + manage_tenants.py + tenants.json + compose
 Sprint WR-4,WR-4.2,Migration Script,AuditLog etc. tenant DB'lerde,Infra,Yüksek,2h,WR-4.1,✅ TAMAMLANDI — migrate_tenants.py + verify (84 tablo)
 Sprint WR-4,WR-4.3,Demo Seed Script,make seed-demo → OTC/PTP data,Data,Yüksek,5h,WR-3,✅ TAMAMLANDI — seed_quick_demo.py (8 faz)
-Sprint WR-4,WR-4.4,Onboarding Runbook,1 sayfa pilot açılış prosedürü,Doküman,Yüksek,3h,WR-4.1,✅ TAMAMLANDI — docs/PILOT_ONBOARDING.md
-Sprint WR-4,WR-4.5,Demo Script,10 dk partner demo senaryosu,Doküman,Yüksek,3h,WR-3.7,✅ TAMAMLANDI — docs/DEMO_SCRIPT.md
-Sprint WR-4,WR-4.6,Investor Pitch,Problem→Solution→Market→Revenue,Doküman,Yüksek,6h,WR-3.2,✅ TAMAMLANDI — docs/INVESTOR_PITCH.md
+Sprint WR-4,WR-4.4,Onboarding Runbook,1 sayfa pilot açılış prosedürü,Doküman,Yüksek,3h,WR-4.1,✅ TAMAMLANDI — docs/stakeholder-assets/pilot_onboarding.md
+Sprint WR-4,WR-4.5,Demo Script,10 dk partner demo senaryosu,Doküman,Yüksek,3h,WR-3.7,✅ TAMAMLANDI — docs/stakeholder-assets/partner_demo_script_10min.md
+Sprint WR-4,WR-4.6,Investor Pitch,Problem→Solution→Market→Revenue,Doküman,Yüksek,6h,WR-3.2,✅ TAMAMLANDI — docs/stakeholder-assets/investor_pitch.md
 Sprint WR-4,WR-4.7,R3.5 Gate Check,Tüm test + demo + doküman,QA,Yüksek,3h,All,✅ TAMAMLANDI — 969 test passed + gate geçti
 ```
 
 ---
 
-**Dosya:** `SAP_Platform_Project_Plan_v2.4.md`  
-**v2.3 → v2.4 delta:** S16 Notification + Scheduling (3 model, ~19 endpoint, 81 test, email service, scheduler) tamamlandı. Release 4 Gate geçti. Toplam: 1183 test, 94 tablo, 8 AI asistan  
-**Oluşturan:** Claude Opus 4.6  
+**Dosya:** `SAP_Platform_Project_Plan_v2.5.md`
+**v2.3 → v2.4 delta:** S16 Notification + Scheduling (3 model, ~19 endpoint, 81 test, email service, scheduler) tamamlandı. Release 4 Gate geçti. Toplam: 1183 test, 94 tablo, 8 AI asistan
+**Oluşturan:** Claude Opus 4.6
 **Tarih:** 2026-02-13

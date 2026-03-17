@@ -1,7 +1,7 @@
 # Program -> Project Migration Test Strategy (Story 6.1)
 
-Date: 2026-02-24  
-Owner: QA + Platform Engineering  
+Date: 2026-02-24
+Owner: QA + Platform Engineering
 Scope: Tenant/Program/Project isolation and migration safety
 
 ## 1. Objective
@@ -23,21 +23,21 @@ Program->Project geçişinde veri izolasyonu, yetki doğruluğu ve client geriye
 
 ## 3. Suite Mapping
 ### Unit
-1. `tests/test_scoped_queries.py`
-2. `tests/test_project_scope_resolver.py`
-3. `tests/test_rbac_scope_aware.py`
+1. `tests/project_scope/test_scoped_queries.py`
+2. `tests/project_scope/test_project_scope_resolver.py`
+3. `tests/auth/test_rbac_scope_aware.py`
 
 ### Integration
-1. `tests/test_api_projects.py`
-2. `tests/test_tenant_isolation.py`
-3. `tests/test_my_projects_visibility.py`
-4. `tests/test_scope_observability_story_51.py`
-5. `tests/test_data_quality_guard_jobs.py`
+1. `tests/features/test_api_projects.py`
+2. `tests/auth/test_tenant_isolation.py`
+3. `tests/features/test_my_projects_visibility.py`
+4. `tests/project_scope/test_scope_observability_story_51.py`
+5. `tests/features/test_data_quality_guard_jobs.py`
 
 ### E2E / UI Contract
-1. `tests/test_context_url_routing_contract.py`
-2. `tests/test_program_projects_ui_contract.py`
-3. `tests/test_my_projects_ui_contract.py`
+1. `tests/ui_contracts/test_context_url_routing_contract.py`
+2. `tests/ui_contracts/test_program_projects_ui_contract.py`
+3. `tests/ui_contracts/test_my_projects_ui_contract.py`
 
 ### Security-Focused Negatives
 1. Cross-tenant read/write -> 404/403 semantics
@@ -87,14 +87,14 @@ Program->Project geçişinde veri izolasyonu, yetki doğruluğu ve client geriye
 |---|---|---|---|---|
 | PR-1 | Lint | `ruff check . && ruff format --check .` | PR/Main | 2-3 min |
 | PR-2 | Core test | existing `pytest tests/ ...` | PR/Main | 10-14 min |
-| PR-3 | Project-scope regression pack | `bash scripts/ci_project_scope_regression.sh` | PR/Main | 6-10 min |
-| Nightly-1 | Extended E2E | `python scripts/e2e_extended_test.py` | Nightly | 15-25 min |
+| PR-3 | Project-scope regression pack | `bash scripts/testing/ci_project_scope_regression.sh` | PR/Main | 6-10 min |
+| Nightly-1 | Extended E2E | `python scripts/testing/e2e_extended_test.py` | Nightly | 15-25 min |
 | Nightly-2 | Security replay (IDOR corpus) | targeted negative suite rerun | Nightly | 5-8 min |
 
 Total PR runtime estimate: 18-27 min.
 
 ## 8. Regression Pack Pipeline Integration
-1. Script: `scripts/ci_project_scope_regression.sh`
+1. Script: `scripts/testing/ci_project_scope_regression.sh`
 2. CI step: `Project-Scope Regression Pack`
 3. Fail-fast policy: any failure blocks merge.
 

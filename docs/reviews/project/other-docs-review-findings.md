@@ -1,9 +1,9 @@
 # Other Documents, AI Module & Technical Debt — Review Findings
 
-**Reviewer:** GitHub Copilot (Claude Opus 4.6)  
-**Date:** 2026-02-10  
-**Commit:** `3c331dd` (TS-Sprint 2)  
-**Scope:** D11-D16, M10, B10, T10/T11, AI katmanı (7 dosya), README (D21)  
+**Reviewer:** GitHub Copilot (Claude Opus 4.6)
+**Date:** 2026-02-10
+**Commit:** `3c331dd` (TS-Sprint 2)
+**Scope:** D11-D16, M10, B10, T10/T11, AI katmanı (7 dosya), README (D21)
 **Total Findings:** 38
 
 ---
@@ -176,7 +176,7 @@
 | Alan | Detay |
 |------|-------|
 | **Severity** | 🟢 LOW |
-| **Kaynak** | D12 footer "scripts/collect_metrics.py analysis" |
+| **Kaynak** | D12 footer "scripts/analysis/collect_metrics.py analysis" |
 | **Bulgu** | D12 metrikleri Sprint 9 tarihli. D12 başlığında approval tarihi 2026-02-10 olarak güncellenmiş ama §1 metrikleri eski. |
 | **Etki** | Küçük. |
 | **Öneri** | Approval notu ile birlikte updated metrics section ekle. |
@@ -254,8 +254,8 @@
 | Alan | Detay |
 |------|-------|
 | **Severity** | 🟢 LOW |
-| **Kaynak** | sap_transformation_platform_architecture (2).md |
-| **Bulgu** | D4 (v1.3, 2,254 LOC) hâlâ `sap_transformation_platform_architecture (2).md` olarak disk'te. D3 (v2.1) ile süpersede edilmiş. Envanter "ESKİ — v2.1 ile süpersede edildi" notu düşmüş. |
+| **Kaynak** | sap_transformation_platform_architecture_v1_backup.md |
+| **Bulgu** | D4 (v1.3, 2,254 LOC) hâlâ `sap_transformation_platform_architecture_v1_backup.md` olarak disk'te. D3 (v2.1) ile süpersede edilmiş. Envanter "ESKİ — v2.1 ile süpersede edildi" notu düşmüş. |
 | **Etki** | Yeni geliştirici yanlış dokümanı okuyabilir. Dosya adında "(2)" konfüzyona neden olur. |
 | **Öneri** | (1) Dosyayı sil ve `.gitignore`'a ekle, veya (2) `_ARCHIVED/` dizinine taşı, veya (3) Dosya başına `> ⛔ ARCHIVED — See sap_transformation_platform_architecture_v2.md` banner'ı ekle. |
 
@@ -392,6 +392,6 @@
 
 ---
 
-**Dosya:** `other-docs-review-findings.md`  
-**Oluşturan:** GitHub Copilot (Claude Opus 4.6)  
+**Dosya:** `other-docs-review-findings.md`
+**Oluşturan:** GitHub Copilot (Claude Opus 4.6)
 **Tarih:** 2026-02-10

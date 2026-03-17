@@ -82,8 +82,8 @@ jobs:
         run: |
           python -m pytest tests/ \
             -v --tb=short \
-            --deselect tests/test_api_testing.py::TestTraceabilityMatrix \
-            --deselect tests/test_reporting.py::TestTraceabilityMatrixReport \
+              --deselect tests/test_management/test_api_testing.py::TestTraceabilityMatrix \
+              --deselect tests/quality/test_reporting.py::TestTraceabilityMatrixReport \
             -m "not performance and not ai_accuracy" \
             --junitxml=test-results/results.xml
 
@@ -92,8 +92,26 @@ jobs:
           APP_ENV: testing
           GEMINI_API_KEY: ""
         run: |
-          chmod +x scripts/ci_project_scope_regression.sh
-          bash scripts/ci_project_scope_regression.sh
+          chmod +x scripts/testing/ci_project_scope_regression.sh
+          bash scripts/testing/ci_project_scope_regression.sh
+
+      - name: TM Integrity Gate
+        env:
+          APP_ENV: testing
+          GEMINI_API_KEY: ""
+        run: |
+          python -m pytest \
+            tests/test_management/test_tm_release_gate.py \
+            tests/ui_contracts/test_test_management_ui_contract.py \
+            tests/test_management/test_api_testing.py -k "overview_summary or execution_center or execution_history or TestTraceabilityMatrix or TestDashboard" \
+            -v --tb=short
+
+      - name: TM Migration Smoke
+        env:
+          APP_ENV: testing
+          GEMINI_API_KEY: ""
+        run: |
+          python scripts/testing/tm_migration_smoke.py
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -159,9 +177,9 @@ jobs:
           DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
           DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
         run: |
-          if [ -n "$DEPLOY_TOKEN" ] && [ -f scripts/deploy.sh ]; then
-            chmod +x scripts/deploy.sh
-            ./scripts/deploy.sh staging
+          if [ -n "$DEPLOY_TOKEN" ] && [ -f scripts/infrastructure/deploy.sh ]; then
+            chmod +x scripts/infrastructure/deploy.sh
+            ./scripts/infrastructure/deploy.sh staging
           else
             echo "⚠️  Deploy token not configured — skipping staging deploy"
             echo "   Set DEPLOY_TOKEN and DEPLOY_URL in GitHub Secrets to enable"

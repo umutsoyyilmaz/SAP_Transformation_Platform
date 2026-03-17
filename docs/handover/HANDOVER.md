@@ -47,9 +47,9 @@ SAP donusum projelerini yoneten, cok kiracili (multi-tenant) Flask tabanli SaaS 
 | Konu | Dosya |
 |------|-------|
 | Sistem mimarisi (detayli) | [docs/specs/sap_transformation_platform_architecture_v2.md](../specs/sap_transformation_platform_architecture_v2.md) |
-| Feature tasarimlari (FDD) | [docs/fdd/](../fdd/) — 20 FDD dosyasi |
+| Feature tasarimlari (FDD) | [docs/features/](../features/) — 20 FDD dosyasi |
 | Mimari kararlar (ADR) | [docs/plans/ADR-001.md](../plans/ADR-001.md) ... ADR-008 |
-| Sprint planlama | [docs/fdd/SPRINT-PLAN-dependency-ordered.md](../fdd/SPRINT-PLAN-dependency-ordered.md) |
+| Sprint planlama | [docs/features/SPRINT-PLAN-dependency-ordered.md](../features/SPRINT-PLAN-dependency-ordered.md) |
 | Proje yol haritasi | [docs/plans/SAP_Platform_Project_Plan_v2.5.md](../plans/SAP_Platform_Project_Plan_v2.5.md) |
 | Bilinen sorunlar | [docs/reviews/project/consolidated-review-report.md](../reviews/project/consolidated-review-report.md) |
 | Teknik borc | [docs/plans/TECHNICAL_DEBT.md](../plans/TECHNICAL_DEBT.md) |
@@ -79,10 +79,15 @@ SAP_Transformation_Platform/
 |-- migrations/versions/         # Alembic DB migration'lar (50+)
 |-- scripts/                     # Seed data, migration, CI yardimcilari
 |-- docs/                        # Dokumantasyon (125+ .md dosyasi)
-|   |-- fdd/                     #   Feature Design Documents
+|   |-- features/                #   Feature Design Documents
+|   |-- ux-design/               #   UX design artifacts
+|   |-- ui-design/               #   UI design artifacts
+|   |-- test-plans/              #   Test plan documents
 |   |-- plans/                   #   ADR'ler, standartlar, yol haritasi
 |   |-- specs/                   #   Teknik spesifikasyonlar
 |   |-- reviews/                 #   Code/project review raporlari
+|   |-- stakeholder-assets/      #   Demo, onboarding, pitch materyalleri
+|   |-- operations-guides/       #   Setup ve operasyon rehberleri
 |   +-- handover/                #   BU KLASOR — handover rehberleri
 |-- .instructions/.prompts/      # AI agent rol tanimlari (6 agent)
 +-- e2e/                         # Playwright E2E testleri
@@ -125,7 +130,7 @@ CLAUDE.md (en yuksek otorite — AI agent'lar bunu zorunlu okur)
               |
               +-- .instructions/.prompts/* (agent-ozel kurallar)
                     |
-                    +-- docs/fdd/* (feature-ozel kurallar)
+                    +-- docs/features/* (feature-ozel kurallar)
 ```
 
 Catisma durumunda ust seviye kazanir.

@@ -247,10 +247,10 @@ app (session scope)        # Flask app instance
 pytest tests/ -q
 
 # Tek dosya
-pytest tests/test_api_program.py -v
+pytest tests/features/test_api_program.py -v
 
 # Tek test
-pytest tests/test_api_program.py::test_create_program_returns_201 -v
+pytest tests/features/test_api_program.py::test_create_program_returns_201 -v
 
 # Paralel (hizli)
 pytest tests/ -n auto

@@ -1,9 +1,9 @@
 # 🚩 GATE CHECK RAPORU — Release 1–6 (Sprint 1–24 + Explore + TS-Sprint 1–3 + WR-0–4)
 
-**Tarih:** Şubat 2026  
-**Referans Dokümanlar:**  
-- `SAP_Platform_Project_Plan_v2.6.md` (Proje Planı)  
-- `sap_transformation_platform_architecture_v2.md` (Mimari Doküman v2.3+)  
+**Tarih:** Şubat 2026
+**Referans Dokümanlar:**
+- `SAP_Platform_Project_Plan_v2.6.md` (Proje Planı)
+- `sap_transformation_platform_architecture_v2.md` (Mimari Doküman v2.3+)
 
 **Durum:** Release 1 ✅ + Release 2 ✅ + Release 3 ✅ + Release 3.5 ✅ + Release 4 ✅ + Release 5 ✅ + Release 6 ✅ — **Platform v1.0**
 
@@ -213,7 +213,7 @@ Requirement (doğrudan Program'a bağlı)
 
 ## 🏗 MİMARİ UYUMLULUK KONTROLÜ
 
-### Doküman: `sap_transformation_platform_architecture (2).md`
+### Doküman: `sap_transformation_platform_architecture_v1_backup.md`
 
 | Mimari Bileşen | Plan Bölümü | Durum | Açıklama |
 |----------------|-------------|-------|----------|

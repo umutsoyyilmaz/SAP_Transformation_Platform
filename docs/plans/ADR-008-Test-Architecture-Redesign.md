@@ -1,11 +1,14 @@
 # ADR-008: Test Management Architecture Redesign
 ## Full SAP Activate Traceability
 
-**Status:** Approved  
-**Date:** 2026-02-18  
-**Author:** Umut Soyyılmaz + Claude  
-**Scope:** TestCase, TestSuite, TestPlan, TestCycle, TestExecution  
+**Status:** Approved (Historical Design Record)
+**Date:** 2026-02-18
+**Author:** Umut Soyyılmaz + Claude
+**Scope:** TestCase, TestSuite, TestPlan, TestCycle, TestExecution
 **Impact:** Model changes, new service layer, migration, frontend updates
+
+> Historical note: this document captures the approved redesign at decision time.
+> The current runtime has already completed the migration and now uses junction-based suite membership with no active `TestCase.suite_id` field.
 
 ---
 
@@ -169,7 +172,7 @@ tc = TestCase(
 ```
 1. CATALOG CREATION
    SA consultant creates TCs in catalog, each linked to L3:
-   
+
    TC-SD-0012 "Create Standard Order"  → L3: OTC-010 (Order to Cash)
    TC-SD-0013 "Create Return Order"    → L3: OTC-010
    TC-FI-0045 "Post Invoice"           → L3: OTC-010 (cross-module)
@@ -177,14 +180,14 @@ tc = TestCase(
 
 2. SUITE ORGANIZATION
    Test lead groups TCs into reusable suites:
-   
+
    "OTC E2E Flow"     = {TC-SD-0012, TC-SD-0013, TC-FI-0045}
    "SD Regression"    = {TC-SD-0012, TC-SD-0013}           ← TC-SD-0012 in BOTH
    "FI Period Close"  = {TC-FI-0045, TC-FI-0046}           ← TC-FI-0045 in BOTH
 
 3. PLAN CREATION
    Test manager creates SIT Plan:
-   
+
    SIT Plan — Wave 1
      Scope: L3-OTC-010, L3-FI-020
      Import Suite "OTC E2E Flow"     → 3 TCs added to pool
@@ -198,11 +201,11 @@ tc = TestCase(
      TC-SD-0013: Fail → DEF-001
      TC-FI-0045: Pass
      TC-FI-0046: Blocked (DEF-001 blocks FI close)
-   
+
    SIT Cycle 2: carry forward failed+blocked → 2 TestExecutions
      TC-SD-0013: Pass (DEF-001 fixed)
      TC-FI-0046: Pass (unblocked)
-   
+
    → SIT EXIT ✅
 
 5. COVERAGE REPORT (L3-based)
@@ -222,7 +225,7 @@ tc = TestCase(
 ```python
 class TestCaseSuiteLink(db.Model):
     """N:M junction: a test case can belong to multiple suites.
-    
+
     Replaces the direct TestCase.suite_id FK (1:N) pattern.
     Tracks how the TC was added to the suite for audit purposes.
     """
@@ -331,7 +334,7 @@ def test_cases_via_links(self):
     """All TCs in this suite via N:M junction."""
     return [link.test_case for link in self.case_links]
 
-@property 
+@property
 def case_count_via_links(self):
     """Count of TCs via junction (replaces old suite_id-based count)."""
     return self.case_links.count()
@@ -387,14 +390,14 @@ L3_OPTIONAL_LAYERS = {"performance", "cutover_rehearsal"}
 def resolve_l3_for_tc(tc_data: dict) -> str | None:
     """
     Given TC creation/update data, resolve the L3 scope item ID.
-    
+
     Resolution order (first match wins):
     1. Explicit process_level_id (if it IS an L3)
     2. process_level_id is L4 → walk up to parent L3
     3. backlog_item_id → ExploreRequirement.scope_item_id
     4. config_item_id → ExploreRequirement.scope_item_id
     5. explore_requirement_id → ExploreRequirement.scope_item_id
-    
+
     Returns L3 process_level_id (string UUID) or None.
     """
     # Path 1: Explicit process_level_id
@@ -431,7 +434,7 @@ def resolve_l3_for_tc(tc_data: dict) -> str | None:
 def validate_l3_for_layer(test_layer: str, process_level_id: str | None) -> tuple[bool, str]:
     """
     Validate L3 requirement based on test layer.
-    
+
     Returns (is_valid, error_message).
     """
     if test_layer in L3_REQUIRED_LAYERS:
@@ -536,7 +539,7 @@ def _resolve_from_process_step(process_step_id: str) -> str | None:
 
 ### 5.5 Endpoint Changes — create_test_case
 
-**File:** `app/blueprints/testing_bp.py`
+**File:** `app/blueprints/testing/catalog.py`
 
 ```python
 from app.services.scope_resolution import resolve_l3_for_tc, validate_l3_for_layer
@@ -568,12 +571,12 @@ def create_test_case(pid):
         }), 400
 
     # ... rest of creation logic unchanged ...
-    
+
     # ── Suite assignment via junction (if suite_ids provided) ──
     suite_ids = data.get("suite_ids", [])
     if data.get("suite_id"):
         suite_ids.append(data["suite_id"])  # backward compat
-    
+
     for sid in set(suite_ids):
         link = TestCaseSuiteLink(
             test_case_id=tc.id,
@@ -582,7 +585,7 @@ def create_test_case(pid):
             tenant_id=tc.tenant_id,
         )
         db.session.add(link)
-    
+
     err = db_commit_or_error()
     if err:
         return err
@@ -594,19 +597,19 @@ def create_test_case(pid):
 ```python
 def generate_from_wricef(suite, wricef_ids=None, config_ids=None, scope_item_id=None):
     from app.services.scope_resolution import resolve_l3_for_tc
-    
+
     # ... existing item gathering logic ...
-    
+
     for item in items:
         is_backlog = isinstance(item, BacklogItem)
-        
+
         # ── NEW: Resolve L3 from WRICEF → Requirement chain ──
         tc_data = {
             "backlog_item_id": item.id if is_backlog else None,
             "config_item_id": item.id if not is_backlog else None,
         }
         resolved_l3 = resolve_l3_for_tc(tc_data)
-        
+
         tc = TestCase(
             program_id=suite.program_id,
             # ... existing fields ...
@@ -617,7 +620,7 @@ def generate_from_wricef(suite, wricef_ids=None, config_ids=None, scope_item_id=
         )
         db.session.add(tc)
         db.session.flush()
-        
+
         # ── NEW: Create suite link via junction ──
         link = TestCaseSuiteLink(
             test_case_id=tc.id,
@@ -626,7 +629,7 @@ def generate_from_wricef(suite, wricef_ids=None, config_ids=None, scope_item_id=
             tenant_id=suite.tenant_id,
         )
         db.session.add(link)
-        
+
         # ... existing step generation ...
 ```
 
@@ -655,13 +658,13 @@ def add_case_to_suite(suite_id):
     tc_id = data.get("test_case_id")
     if not tc_id:
         return jsonify({"error": "test_case_id is required"}), 400
-    
+
     existing = TestCaseSuiteLink.query.filter_by(
         test_case_id=tc_id, suite_id=suite_id
     ).first()
     if existing:
         return jsonify({"error": "Test case already in this suite"}), 409
-    
+
     link = TestCaseSuiteLink(
         test_case_id=tc_id,
         suite_id=suite_id,
@@ -707,14 +710,14 @@ def list_tc_suites(case_id):
 
 ### 5.8 L3 Scope Coverage Endpoint (New)
 
-**File:** `app/blueprints/testing_bp.py`
+**File:** `app/blueprints/testing/analytics.py`
 
 ```python
 @testing_bp.route("/programs/<int:pid>/testing/scope-coverage/<string:l3_id>", methods=["GET"])
 def l3_scope_coverage(pid, l3_id):
     """
     Full test coverage view for a single L3 scope item.
-    
+
     Returns:
     - Standard process steps and their TC coverage
     - Requirements (gap/partial) and their WRICEF/Config → TC chains
@@ -724,7 +727,7 @@ def l3_scope_coverage(pid, l3_id):
     from app.models.explore.process import ProcessLevel, ProcessStep
     from app.models.explore.requirement import ExploreRequirement
     from app.models.backlog import BacklogItem, ConfigItem
-    from app.models.integration import Interface
+    from app.models.interface_factory import Interface
 
     l3 = db.session.get(ProcessLevel, str(l3_id))
     if not l3 or l3.level != 3:
@@ -742,7 +745,7 @@ def l3_scope_coverage(pid, l3_id):
     l4_children = ProcessLevel.query.filter_by(parent_id=l3.id, level=4).all()
     total_steps = 0
     covered_steps = 0
-    
+
     for l4 in l4_children:
         steps = ProcessStep.query.filter_by(process_level_id=l4.id).order_by(ProcessStep.sort_order).all()
         for step in steps:
@@ -750,7 +753,7 @@ def l3_scope_coverage(pid, l3_id):
             # Find TCs linked to this L3 that cover this step area
             tcs = TestCase.query.filter_by(process_level_id=l3.id).all()
             step_tcs = [tc for tc in tcs if not tc.backlog_item_id and not tc.config_item_id]
-            
+
             latest_result = _get_latest_execution_result(step_tcs)
             if latest_result in ("pass",):
                 covered_steps += 1
@@ -771,16 +774,16 @@ def l3_scope_coverage(pid, l3_id):
     explore_reqs = ExploreRequirement.query.filter_by(scope_item_id=l3.id).all()
     total_reqs = len(explore_reqs)
     covered_reqs = 0
-    
+
     for ereq in explore_reqs:
         req_entry = {
             "id": ereq.id, "code": ereq.code, "title": ereq.title,
             "fit_status": ereq.fit_status, "status": ereq.status,
             "backlog_items": [], "config_items": [],
         }
-        
+
         req_covered = True
-        
+
         # WRICEF items
         for bi in (ereq.linked_backlog_items or []):
             bi_tcs = TestCase.query.filter_by(backlog_item_id=bi.id).all()
@@ -795,7 +798,7 @@ def l3_scope_coverage(pid, l3_id):
                     for tc in bi_tcs
                 ],
             })
-        
+
         # Config items
         for ci in (ereq.linked_config_items or []):
             ci_tcs = TestCase.query.filter_by(config_item_id=ci.id).all()
@@ -809,13 +812,13 @@ def l3_scope_coverage(pid, l3_id):
                     for tc in ci_tcs
                 ],
             })
-        
+
         if not req_entry["backlog_items"] and not req_entry["config_items"]:
             req_covered = False  # No items to test
-        
+
         if req_covered:
             covered_reqs += 1
-        
+
         result["requirements"].append(req_entry)
 
     # ── 3. Interfaces ──
@@ -927,15 +930,15 @@ def downgrade():
 
 def backfill_tc_scope():
     from app.services.scope_resolution import resolve_l3_for_tc
-    
+
     orphan_tcs = TestCase.query.filter(
         TestCase.process_level_id.is_(None),
         TestCase.test_layer.in_(["unit", "sit", "uat"]),
     ).all()
-    
+
     resolved = 0
     unresolved = []
-    
+
     for tc in orphan_tcs:
         tc_data = {
             "backlog_item_id": tc.backlog_item_id,
@@ -949,9 +952,9 @@ def backfill_tc_scope():
             resolved += 1
         else:
             unresolved.append({"id": tc.id, "code": tc.code, "title": tc.title})
-    
+
     db.session.commit()
-    
+
     return {
         "total_orphans": len(orphan_tcs),
         "resolved": resolved,

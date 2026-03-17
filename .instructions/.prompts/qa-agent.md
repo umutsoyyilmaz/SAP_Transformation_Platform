@@ -346,7 +346,7 @@ Test the same business rule at multiple layers:
 ### Handoff to Coder Agent
 ```markdown
 ## Coder Agent Test Handoff
-- TPD location: docs/tpd/TPD-XXX.md
+- TPD location: docs/test-plans/TPD-XXX.md
 - Total automated scenarios: [count]
 - P0 (must pass): [count] — focus here first
 - P1 (should pass): [count]

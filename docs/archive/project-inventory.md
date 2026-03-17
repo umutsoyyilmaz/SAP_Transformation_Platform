@@ -1,9 +1,9 @@
 # SAP Transformation Platform — Project Inventory
 
-**Oluşturulma Tarihi:** 2026-02-11  
-**Son Commit:** `h7c8d9e` (TS-Sprint 3 tamamlandı)  
-**Branch:** main  
-**Toplam Dosya:** ~140 (kaynak + doküman + config)  
+**Oluşturulma Tarihi:** 2026-02-11
+**Son Commit:** `h7c8d9e` (TS-Sprint 3 tamamlandı)
+**Branch:** main
+**Toplam Dosya:** ~140 (kaynak + doküman + config)
 **Toplam LOC:** ~76,100
 
 ---
@@ -41,7 +41,7 @@
 | # | Dosya | Tip | Versiyon | Tarih | LOC | Dil | Açıklama |
 |---|-------|-----|----------|-------|-----|-----|----------|
 | D3 | [sap_transformation_platform_architecture_v2.md](sap_transformation_platform_architecture_v2.md) | Architecture | v2.1 | 2026-02-10 | 2,435 | TR | **AKTİF** — Ana mimari doküman. Explore + Test entegre, 7 tasarım ilkesi |
-| D4 | [sap_transformation_platform_architecture (2).md](sap_transformation_platform_architecture%20(2).md) | Architecture | v1.3 | 2025-06 | 2,254 | TR | **ESKİ** — v2.1 ile süpersede edildi. 65 tablo, 295 route dönemi |
+| D4 | [sap_transformation_platform_architecture_v1_backup.md](../plans/sap_transformation_platform_architecture_v1_backup.md) | Architecture | v1.3 | 2025-06 | 2,254 | TR | **ESKİ** — v2.1 ile süpersede edildi. 65 tablo, 295 route dönemi |
 
 ### 2.3 Proje Yönetimi
 
@@ -69,10 +69,10 @@
 
 | # | Dosya | Tip | Versiyon | Tarih | LOC | Dil | Açıklama |
 |---|-------|-----|----------|-------|-----|-----|----------|
-| D17 | [User Guide/explore-phase-user-guide.md](User%20Guide/explore-phase-user-guide.md) | User Guide | v1.0 | — | 1,047 | TR | Explore Phase — 5 ekran, 13 bölüm, rol bazlı rehber |
-| D18 | [User Guide/explore-phase-user-guide-en.md](User%20Guide/explore-phase-user-guide-en.md) | User Guide | v1.0 | — | 1,047 | EN | D17'nin İngilizce çevirisi |
-| D19 | [User Guide/test-management-user-guide.md](User%20Guide/test-management-user-guide.md) | User Guide | v1.0 | 2026-02-10 | 950 | TR | Test Management — 6 modül (T1-T6), rol bazlı rehber |
-| D20 | [User Guide/test-management-user-guide-en.md](User%20Guide/test-management-user-guide-en.md) | User Guide | v1.0 | 2026-02-10 | 950 | EN | D19'un İngilizce çevirisi |
+| D17 | [docs/user-guides/explore-phase-user-guide.md](../user-guides/explore-phase-user-guide.md) | User Guide | v1.0 | — | 1,047 | TR | Explore Phase — 5 ekran, 13 bölüm, rol bazlı rehber |
+| D18 | [docs/user-guides/explore-phase-user-guide-en.md](../user-guides/explore-phase-user-guide-en.md) | User Guide | v1.0 | — | 1,047 | EN | D17'nin İngilizce çevirisi |
+| D19 | [docs/user-guides/test-management-user-guide.md](../user-guides/test-management-user-guide.md) | User Guide | v1.0 | 2026-02-10 | 950 | TR | Test Management — 6 modül (T1-T6), rol bazlı rehber |
+| D20 | [docs/user-guides/test-management-user-guide-en.md](../user-guides/test-management-user-guide-en.md) | User Guide | v1.0 | 2026-02-10 | 950 | EN | D19'un İngilizce çevirisi |
 
 ### 2.6 Diğer
 
@@ -315,7 +315,7 @@ sap_transformation_platform_architecture_v2.md (D3) — ANA MİMARİ
   ├──► SIGNAVIO_DRAFT.md (D13) — Signavio entegrasyon
   └──► DB_CONSISTENCY.md (D15) — DB analiz
 
-sap_transformation_platform_architecture (2).md (D4) — ESKİ
+sap_transformation_platform_architecture_v1_backup.md (D4) — ESKİ
   └──► ❌ Süpersede edildi (D3 v2.1 ile)
 
 CHANGELOG.md (D8)
@@ -397,6 +397,6 @@ Tüm .bak dosyaları TD-Sprint 1 kapsamında silinmiştir (2026-02-10).
 
 ---
 
-**Dosya:** `project-inventory.md`  
-**Oluşturan:** GitHub Copilot (Claude Opus 4.6)  
+**Dosya:** `project-inventory.md`
+**Oluşturan:** GitHub Copilot (Claude Opus 4.6)
 **Tarih:** 2026-02-10

@@ -1,7 +1,7 @@
 # Perga — Teknik Borç Çözüm Planı
 
-**Tarih:** 2026-02-14  
-**Kaynak:** perga_technical_debt_analysis_v1.2.md  
+**Tarih:** 2026-02-14
+**Kaynak:** docs/archive/perga_technical_debt_analysis_v1.2.md
 **Yaklaşım:** 5 sprint, artan karmaşıklık sırasıyla, her sprint bağımsız olarak deploy edilebilir
 
 ---
@@ -41,16 +41,16 @@ from app.models.explore import db
 
 def get_or_404(model, pk, label=None):
     """Fetch a model instance by primary key or return a 404 error tuple.
-    
+
     Mevcut codebase pattern'ini birebir korur:
     - Başarılı: (obj, None)
     - Başarısız: (None, (jsonify_response, 404))
-    
+
     Tüm 8 kopyada bu pattern kullanılıyor:
         obj, err = get_or_404(Program, pid)
         if err:
             return err
-    
+
     NOT: abort(404) kullanılmıyor — mevcut pattern tuple-return.
     Bu pattern'i değiştirmek 8 dosyada ~200+ çağrı noktasını etkiler.
     Dolayısıyla mevcut davranış aynen korunuyor.
@@ -64,7 +64,7 @@ def get_or_404(model, pk, label=None):
 
 def parse_date(value):
     """Parse a date string (ISO or DD.MM.YYYY) to a date object.
-    
+
     Returns None for empty/invalid input. Supports:
     - YYYY-MM-DD (ISO format)
     - DD.MM.YYYY (Turkish/European format)
@@ -88,11 +88,11 @@ def parse_date(value):
 
 | # | Dosya | Silinecek fonksiyon | Import eklenecek |
 |---|-------|-------------------|-----------------|
-| 1 | `app/blueprints/testing_bp.py` | `_get_or_404()`, `_parse_date()` | `from app.utils.helpers import get_or_404, parse_date` |
+| 1 | `app/blueprints/testing/__init__.py` | `_get_or_404()`, `_parse_date()` | `from app.utils.helpers import get_or_404, parse_date` |
 | 2 | `app/blueprints/backlog_bp.py` | `_get_or_404()`, `_parse_date()` | `from app.utils.helpers import get_or_404, parse_date` |
 | 3 | `app/blueprints/cutover_bp.py` | `_get_or_404()` | `from app.utils.helpers import get_or_404` |
 | 4 | `app/blueprints/data_factory_bp.py` | `_get_or_404()` | `from app.utils.helpers import get_or_404` |
-| 5 | `app/blueprints/integration_bp.py` | `_get_or_404()`, `_parse_date()` | `from app.utils.helpers import get_or_404, parse_date` |
+| 5 | `app/blueprints/interface_factory_bp.py` | `_get_or_404()`, `_parse_date()` | `from app.utils.helpers import get_or_404, parse_date` |
 | 6 | `app/blueprints/program_bp.py` | `_get_or_404()`, `_parse_date()` | `from app.utils.helpers import get_or_404, parse_date` |
 | 7 | `app/blueprints/raid_bp.py` | `_parse_date()` | `from app.utils.helpers import parse_date` |
 | 8 | `app/blueprints/explore/workshops.py` | `_parse_date_input()` | `from app.utils.helpers import parse_date` |
@@ -105,7 +105,7 @@ def parse_date(value):
 > - `_parse_date()` (5 dosya): kötü girdide `None` döndürür
 > - `_parse_date()` (RAID): `datetime.fromisoformat` kullanır, sonra `.date()` çağırır
 > - `_parse_date_input()` (explore): kötü girdide `ValueError` fırlatır + `DD.MM.YYYY` formatını destekler
-> 
+>
 > Yeni `parse_date()` tüm formatları destekler ve `None` döndürür. Explore dosyalarında `_parse_date_input`'un `ValueError` fırlatma davranışı korunmalı mı karar verilmeli. **Öneri:** `None` döndüren versiyon kullanılsın, explore route handler'ları zaten kendi validation'larını yapıyor.
 
 ### 0.2 — Ölü Kod Temizliği
@@ -195,7 +195,7 @@ class TestingService:
 ```python
 def bulk_import(project_id, items: list) -> dict:
     """Bulk import — manages its own transaction (partial-success semantics).
-    
+
     WARNING: Caller must NOT call db.session.commit() after this method.
     """
 ```
@@ -222,27 +222,27 @@ from app.models.testing import (
 
 class TestingService:
     """Encapsulates testing business logic independent of Flask request context."""
-    
+
     @staticmethod
     def create_cycle(project_id: int, data: dict) -> TestCycle:
         """Create a new test cycle with auto-generated code."""
         ...
-    
+
     @staticmethod
     def clone_test_case(source_id: int, target_cycle_id: int) -> TestCase:
         """Clone a test case into a different cycle."""
         ...
-    
+
     @staticmethod
     def execute_run(run_id: int, result: str, evidence: dict) -> TestRun:
         """Record a test run execution result."""
         ...
-    
+
     @staticmethod
     def calculate_coverage(cycle_id: int) -> dict:
         """Calculate test coverage metrics for a cycle."""
         ...
-    
+
     @staticmethod
     def evaluate_go_nogo(cycle_id: int) -> dict:
         """Evaluate Go/No-Go criteria for a test cycle."""
@@ -256,13 +256,13 @@ class TestingService:
 ```
 Adım 1: En basit CRUD'dan başla (GET /test-cycles → list_cycles)
          Route handler → validation + TestingService.list_cycles() + response
-         
+
 Adım 2: Create/Update operasyonları (POST /test-cycles)
          Inline db.session → TestingService.create_cycle()
-         
+
 Adım 3: Karmaşık iş mantığı (clone, coverage calc, go-nogo)
          Bu operasyonlar birden fazla model etkileşimi içeriyor
-         
+
 Adım 4: Toplu işlemler (bulk update, bulk delete)
 ```
 
@@ -279,10 +279,10 @@ from app.services.testing_service import TestingService
 class TestCycleCreation:
     def test_create_cycle_generates_auto_code(self, db_session):
         ...
-    
+
     def test_create_cycle_validates_required_fields(self, db_session):
         ...
-    
+
     def test_create_cycle_with_duplicate_code_raises(self, db_session):
         ...
 
@@ -290,10 +290,10 @@ class TestCycleCreation:
 class TestCaseCloning:
     def test_clone_preserves_steps(self, db_session):
         ...
-    
+
     def test_clone_resets_execution_status(self, db_session):
         ...
-    
+
     def test_clone_sets_cloned_from_id(self, db_session):
         ...
 ```
@@ -318,7 +318,7 @@ class TestCaseCloning:
 |---|-----------|------:|:---:|----------------------|
 | 1 | `backlog_bp.py` | 889 | ~80 | `backlog_service.py` |
 | 2 | `raid_bp.py` | 822 | ~60 | `raid_service.py` |
-| 3 | `integration_bp.py` | 731 | ~55 | `integration_service.py` |
+| 3 | `interface_factory_bp.py` | 731 | ~55 | `interface_factory_service.py` |
 | 4 | `program_bp.py` | 717 | ~50 | `program_service.py` |
 | 5 | `data_factory_bp.py` | 544 | ~40 | `data_factory_service.py` |
 
@@ -342,11 +342,11 @@ class BacklogService:
     @staticmethod
     def create_backlog_item(project_id, data) -> BacklogItem:
         """Validate, auto-code, create backlog item + traceability link."""
-    
+
     @staticmethod
     def convert_to_requirement(backlog_id) -> ExploreRequirement:
         """Convert backlog item to explore requirement — critical business flow."""
-    
+
     @staticmethod
     def bulk_import(project_id, items: list) -> dict:
         """Bulk import backlog items from Excel/CSV."""
@@ -359,11 +359,11 @@ class RAIDService:
     @staticmethod
     def create_risk(project_id, data) -> Risk:
         """Create risk with auto-notification to project manager."""
-    
+
     @staticmethod
     def escalate_item(item_id, reason) -> None:
         """Escalate RAID item — trigger notification chain."""
-    
+
     @staticmethod
     def calculate_risk_score(risk_id) -> dict:
         """Monte Carlo risk scoring."""
@@ -384,14 +384,14 @@ class RAIDService:
 
 ### 3.1 — explore.py Split (12-16 saat)
 
-**Mevcut:** 1 dosya, 2.158 satır, 25 model, 70 FK  
+**Mevcut:** 1 dosya, 2.158 satır, 25 model, 70 FK
 **Hedef:** 5 dosya, domain-cohesive modüller
 
 ```
 app/models/explore/
 ├── __init__.py          # Re-export tüm modeller (geriye dönük uyumluluk)
 ├── workshop.py          # ExploreWorkshop, WorkshopScopeItem, WorkshopAttendee,
-│                        # WorkshopAgendaItem, WorkshopDependency, 
+│                        # WorkshopAgendaItem, WorkshopDependency,
 │                        # WorkshopRevisionLog, ExploreWorkshopDocument
 ├── requirement.py       # ExploreRequirement, RequirementOpenItemLink,
 │                        # RequirementDependency, ExploreOpenItem,
@@ -428,7 +428,7 @@ __all__ = [
     'ExploreWorkshopDocument',
 ]
 
-# app/models/explore/requirement.py  
+# app/models/explore/requirement.py
 __all__ = [
     'ExploreRequirement', 'RequirementOpenItemLink', 'RequirementDependency',
     'ExploreOpenItem', 'OpenItemComment', 'ExploreDecision',
@@ -464,7 +464,7 @@ __all__ = ['CloudALMSyncLog', 'Attachment', 'DailySnapshot']
 ```python
 class Requirement(db.Model):
     """DEPRECATED — Use ExploreRequirement instead.
-    
+
     This model is retained for backward compatibility during migration.
     All new code should use ExploreRequirement from app.models.explore.
     Migration target: Sprint 3 (2026-Q1)
@@ -548,15 +548,15 @@ Aşama A (Sprint 4): Decorator'ları ekle — Basic Auth bypass aktif
 
 Aşama B (Multi-tenant ile): Basic Auth bypass'ı kaldır
     → permission_required.py'de bypass satırını değiştir:
-    
+
     # ÖNCEKİ:
     if user_id is None:
         return f(*args, **kwargs)  # bypass
-    
+
     # YENİ:
     if user_id is None:
         return jsonify({"error": "Authentication required"}), 401
-    
+
     → Tüm kullanıcılar JWT auth'a geçmeli
     → Tenant isolation bu noktada zorunlu hale gelir
 
@@ -579,7 +579,7 @@ Mevcut durum: 45/570 route korumalı. Hedef: 120+ route korumalı.
 | `backlog_bp` | 15+ | `backlog.create`, `backlog.update`, `backlog.convert` |
 | `explore/*` | 20+ | `explore.workshop.create`, `explore.requirement.update` |
 | `cutover_bp` | 10+ | `cutover.create`, `cutover.execute` |
-| `integration_bp` | 10+ | `integration.create` |
+| `interface_factory_bp` | 10+ | `integration.create` |
 | `raid_bp` | 10+ | `raid.create`, `raid.escalate` |
 
 **Uygulama deseni:**
@@ -689,7 +689,7 @@ except Exception as e:
 
 ### 5.2 — Dokümantasyon Güncellemesi
 
-- [ ] `perga_technical_debt_analysis_v1.2.md` → v2.0 olarak güncelle (kapanmış maddeler işaretle)
+- [ ] `docs/archive/perga_technical_debt_analysis_v1.2.md` → v2.0 olarak güncelle (kapanmış maddeler işaretle)
 - [ ] `docs/archive/` altındaki eskimiş dokümanları arşiv branch'ine taşı
 - [ ] README.md'ye mimari güncelleme ekle (service katmanı, model yapısı)
 

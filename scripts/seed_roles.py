@@ -1,5 +1,5 @@
 """
-Seed Roles & Permissions — 8 system roles + 42 permissions.
+Seed Roles & Permissions — 8 system roles + enterprise change permissions.
 
 Usage:
     python scripts/seed_roles.py              # Uses development DB
@@ -28,7 +28,7 @@ from app.models.auth import (
 from app.utils.crypto import hash_password
 
 # ═══════════════════════════════════════════════════════════════
-# PERMISSIONS — 43 permissions across 11 categories
+# PERMISSIONS — 50 permissions across 12 categories
 # ═══════════════════════════════════════════════════════════════
 PERMISSIONS = [
     # Requirements (5)
@@ -87,6 +87,14 @@ PERMISSIONS = [
     ("data.view", "data", "View Data", "View data objects"),
     ("data.create", "data", "Create Data", "Create data migration objects"),
     ("data.migrate", "data", "Migrate Data", "Execute data migration"),
+    # Change Management (7)
+    ("change.view", "change", "View Changes", "View enterprise change records"),
+    ("change.create", "change", "Create Changes", "Create RFCs and standard changes"),
+    ("change.assess", "change", "Assess Changes", "Assess risk, impact, and CAB readiness"),
+    ("change.approve", "change", "Approve Changes", "Record CAB/ECAB decisions and freeze approvals"),
+    ("change.schedule", "change", "Schedule Changes", "Manage calendars, windows, and exceptions"),
+    ("change.execute", "change", "Execute Changes", "Run implementations, validation, and rollback"),
+    ("change.audit", "change", "Audit Changes", "Manage PIR closure and change analytics"),
 ]
 
 
@@ -123,6 +131,7 @@ ROLES = {
             "integration.*",
             "cutover.*",
             "data.*",
+            "change.*",
         ],
     },
     "project_manager": {
@@ -145,6 +154,7 @@ ROLES = {
             "integration.*",
             "cutover.*",
             "data.*",
+            "change.*",
         ],
     },
     "functional_consultant": {
@@ -177,6 +187,10 @@ ROLES = {
             "cutover.edit",
             "data.view",
             "data.create",
+            "change.view",
+            "change.create",
+            "change.assess",
+            "change.schedule",
         ],
     },
     "technical_consultant": {
@@ -201,6 +215,9 @@ ROLES = {
             "data.view",
             "data.create",
             "data.migrate",
+            "change.view",
+            "change.create",
+            "change.execute",
         ],
     },
     "tester": {
@@ -214,6 +231,7 @@ ROLES = {
             "tests.execute",
             "projects.view",
             "reports.view",
+            "change.view",
         ],
     },
     "viewer": {
@@ -231,6 +249,7 @@ ROLES = {
             "integration.view",
             "cutover.view",
             "data.view",
+            "change.view",
         ],
     },
 }
@@ -253,7 +272,7 @@ def _expand_permissions(perm_spec, all_codenames):
 
 
 def seed_permissions():
-    """Create or update all 42 permissions."""
+    """Create or update all permissions."""
     created = 0
     for codename, category, display_name, description in PERMISSIONS:
         existing = Permission.query.filter_by(codename=codename).first()

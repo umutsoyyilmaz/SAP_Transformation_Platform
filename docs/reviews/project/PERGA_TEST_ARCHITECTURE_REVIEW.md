@@ -252,7 +252,7 @@ Defect
 |-----------|--------|-------------|----------------------|
 | explore_bp | `/api/v1/explore` | test_explore.py (192) | ~60 |
 | backlog_bp | `/api/v1` | test_api_backlog.py (79) | ~30 |
-| integration_bp | `/api/v1` | test_api_integration.py (76) | ~40 |
+| interface_factory_bp | `/api/v1` | test_api_integration.py (76) | ~40 |
 | cutover_bp | `/api/v1` | test_api_cutover.py (79) | ~35 |
 | raid_bp | `/api/v1` | test_api_raid.py (46) | ~20 |
 | data_factory_bp | `/api/v1` | test_api_data_factory.py (44) | ~25 |
@@ -755,16 +755,16 @@ class TestingConfig:
 pytest tests/ -q
 
 # Sadece testing modülü
-pytest tests/test_api_testing.py -q
+pytest tests/test_management/test_api_testing.py -q
 
 # Spesifik class
-pytest tests/test_api_testing.py::TestDefects -q
+pytest tests/test_management/test_api_testing.py::TestDefects -q
 
 # Verbose + kısa traceback
-pytest tests/test_api_testing.py -v --tb=short
+pytest tests/test_management/test_api_testing.py -v --tb=short
 
 # İlk hata'da dur
-pytest tests/test_api_testing.py -x
+pytest tests/test_management/test_api_testing.py -x
 
 # Performans (süre)
 pytest tests/ -q --durations=20

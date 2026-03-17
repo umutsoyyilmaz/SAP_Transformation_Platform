@@ -12,5 +12,5 @@ test('health endpoint returns ok', async ({ request }) => {
 
 test('SPA index loads', async ({ page }) => {
   await page.goto('/')
-  await expect(page).toHaveTitle(/SAP/)
+  await expect(page).toHaveTitle(/Perga|SAP/)
 })

@@ -1,6 +1,6 @@
 # SAP Transformation Management Platform
 
-**Repository:** `SAP_TRANSFORMATION_PLATFORM`  
+**Repository:** `SAP_TRANSFORMATION_PLATFORM`
 **Version:** 1.0 | **Date:** February 2026
 
 ---
@@ -78,7 +78,7 @@ This project follows a **governance-first** execution model:
 
 - All work is driven by **sprint-tracked tasks**.
 - The authoritative execution roadmap is defined in
-  [`SAP_Platform_Project_Plan_v2.md`](docs/plans/SAP_Platform_Project_Plan_v2.md).
+  [`SAP_Platform_Project_Plan_v2.5.md`](docs/plans/SAP_Platform_Project_Plan_v2.5.md).
 - Every change maps to a specific **Release → Sprint → Task** in the plan.
 - No files, dependencies, or patterns are introduced outside of task scope.
 
@@ -260,8 +260,8 @@ Seed script gerçekçi bir Türk otomotiv şirketi SAP dönüşüm projesi oluş
 | — | Mobile PWA (S23) | ✅ Complete |
 | — | Final Polish v1.0 (S24) | ✅ Complete |
 
-Detaylı ilerleme raporu: [`PROGRESS_REPORT.md`](docs/plans/PROGRESS_REPORT.md)  
-Teknik borç: [`perga_technical_debt_analysis_v2.0.md`](docs/plans/perga_technical_debt_analysis_v2.0.md)  
+Detaylı ilerleme raporu: [`PROGRESS_REPORT.md`](docs/plans/PROGRESS_REPORT.md)
+Teknik borç: [`perga_technical_debt_analysis_v2.0.md`](docs/plans/perga_technical_debt_analysis_v2.0.md)
 Değişiklik geçmişi: [`CHANGELOG.md`](docs/plans/CHANGELOG.md)
 
 ---
@@ -270,11 +270,17 @@ Değişiklik geçmişi: [`CHANGELOG.md`](docs/plans/CHANGELOG.md)
 
 | Directory | Contents |
 |-----------|----------|
+| `docs/features/` | Feature design documents and dependency-ordered planning artifacts |
+| `docs/ux-design/` | UX design documents and flow-level interaction design |
+| `docs/ui-design/` | UI design specs, V0 prompts, and design-system material |
+| `docs/test-plans/` | Test plan documents and coverage strategy |
 | `docs/specs/` | Functional & technical specifications |
 | `docs/reviews/` | Review findings and audit reports |
 | `docs/plans/` | Project plans, changelog, task lists |
+| `docs/operations-guides/` | Operational and setup guides |
+| `docs/stakeholder-assets/` | Demo scripts, onboarding, and stakeholder-facing material |
+| `docs/user-guides/` | End-user documentation (EN + TR) |
 | `docs/archive/` | Superseded documents |
-| `User Guide/` | End-user documentation (EN + TR) |
 
 ---
 

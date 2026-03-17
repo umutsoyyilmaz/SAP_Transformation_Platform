@@ -22,7 +22,13 @@ PORT     := 5001
 .PHONY: help setup venv deps db-init db-migrate db-upgrade seed seed-verbose seed-demo \
 	run run-debug test test-verbose lint lint-architecture format reset clean deploy status \
 	tenant-list tenant-create tenant-init tenant-seed tenant-status \
-	demo-reset demo-snapshot demo-restore vendor-assets
+	demo-reset demo-snapshot demo-restore vendor-assets \
+	project-scope-audit project-scope-audit-all project-scope-backfill project-scope-readiness \
+	project-scope-apply-setup-slice project-scope-apply-explore-core-slice project-scope-apply-wave-slice project-scope-apply-operational-slice \
+	project-scope-apply-secondary-slice \
+	alembic-drift-status alembic-drift-reconcile \
+	ui-dialog-audit ui-contract-critical ui-smoke-critical ui-regression-critical \
+	tm-integrity-gate tm-migration-smoke tm-ui-smoke tm-release-gate tm-perf-gate
 
 # ── Default ──────────────────────────────────────────────────────────────
 help:
@@ -34,7 +40,7 @@ help:
 	@echo "    make setup          Full setup (venv + dependencies + DB + seed data)"
 	@echo ""
 	@echo "  Daily Usage:"
-	@echo "    make run            Start the application (http://localhost:$(PORT))"
+	@echo "    make run            Start with auto-reload (http://localhost:$(PORT))"
 	@echo "    make run-debug      Start with Flask debugger (no auto-reload)"
 	@echo "    make test           Run all tests"
 	@echo "    make test-verbose   Verbose test output"
@@ -66,6 +72,28 @@ help:
 	@echo "  Maintenance:"
 	@echo "    make db-migrate     Create a new migration"
 	@echo "    make db-upgrade     Apply migrations"
+	@echo "    make project-scope-audit    Dry-run inventory for NULL project_id rows"
+	@echo "    make project-scope-audit-all Dry-run inventory across all discovered scoped tables"
+	@echo "    make project-scope-backfill Apply default-project backfill for NULL project_id rows"
+	@echo "    make project-scope-readiness Report NOT NULL / FK hardening readiness"
+	@echo "    make project-scope-apply-setup-slice Apply NOT NULL + FK + index hardening for core setup tables"
+	@echo "    make project-scope-apply-explore-core-slice Apply NOT NULL + FK + project-owned index hardening for explore hierarchy core"
+	@echo "    make project-scope-apply-wave-slice Apply NOT NULL + FK + index hardening for wave/interface/test plan"
+	@echo "    make project-scope-apply-operational-slice Apply NOT NULL + FK + index hardening for operational core tables"
+	@echo "    make project-scope-apply-secondary-slice Apply NOT NULL + FK + index hardening for secondary project-scoped tables"
+	@echo "    make contextual-scope-audit Audit contextual scope policy and safe backfill opportunities"
+	@echo "    make contextual-scope-backfill Apply safe contextual scope backfill"
+	@echo "    make alembic-drift-status Show schema/alembic drift status for local dev DB"
+	@echo "    make alembic-drift-reconcile Stamp local dev DB to Alembic head after schema verification"
+	@echo "    make ui-contract-critical Run critical UI contract/regression checks"
+	@echo "    make ui-dialog-audit Run repo-wide native dialog audit for Sprint 8"
+	@echo "    make ui-smoke-critical Run critical Playwright smoke pack"
+	@echo "    make ui-regression-critical Run contract checks + smoke pack"
+	@echo "    make tm-integrity-gate Run TM project-aware/FK/perf regression gate"
+	@echo "    make tm-migration-smoke Run TM migration smoke on temp SQLite DB"
+	@echo "    make tm-ui-smoke      Run isolated TM Playwright smoke pack"
+	@echo "    make tm-release-gate  Run TM integrity + migration + UI smoke gate"
+	@echo "    make tm-perf-gate   Run TM perf budget regression gate (8 endpoints × 2 volumes)"
 	@echo "    make clean          Clean DB + cache files"
 	@echo ""
 
@@ -105,33 +133,187 @@ db-upgrade: deps
 # ── Seed Data ───────────────────────────────────────────────────────────
 seed: deps
 	@echo ""
-	@$(PYTHON) scripts/seed_demo_data.py
+	@$(PYTHON) scripts/data/seed/seed_demo_data.py
 	@echo ""
 
 seed-verbose: deps
 	@echo ""
-	@$(PYTHON) scripts/seed_demo_data.py --verbose
+	@$(PYTHON) scripts/data/seed/seed_demo_data.py --verbose
 	@echo ""
 
 seed-sap: deps
 	@echo ""
-	@$(PYTHON) scripts/seed_sap_knowledge.py
+	@$(PYTHON) scripts/data/seed/seed_sap_knowledge.py
+	@echo ""
+
+# ── Project Scope Hardening ─────────────────────────────────────────────
+project-scope-audit: deps
+	@echo ""
+	@echo "🔎 Inventorying NULL project_id rows (dry-run)..."
+	@$(PYTHON) scripts/data/migrate/backfill_project_scope.py --dry-run
+	@echo ""
+
+project-scope-audit-all: deps
+	@echo ""
+	@echo "🔎 Inventorying NULL project_id rows across all discovered scoped tables..."
+	@$(PYTHON) scripts/data/migrate/backfill_project_scope.py --dry-run --all-discovered
+	@echo ""
+
+project-scope-backfill: deps
+	@echo ""
+	@echo "🛠️  Backfilling NULL project_id rows to default projects..."
+	@$(PYTHON) scripts/data/migrate/backfill_project_scope.py --apply
+	@echo ""
+
+project-scope-readiness: deps
+	@echo ""
+	@echo "📏 Reporting project_id constraint-readiness for project-owned tables..."
+	@$(PYTHON) scripts/data/migrate/project_scope_constraint_readiness.py
+	@echo ""
+
+project-scope-apply-setup-slice: deps
+	@echo ""
+	@echo "🔒 Applying controlled schema slice for core Project Setup tables..."
+	@$(PYTHON) scripts/data/migrate/apply_project_scope_schema_slice.py --apply
+	@echo ""
+
+project-scope-apply-explore-core-slice: deps
+	@echo ""
+	@echo "🔒 Applying controlled schema slice for Explore hierarchy core tables..."
+	@$(PYTHON) scripts/data/migrate/apply_explore_hierarchy_core_scope_slice.py --apply
+	@echo ""
+
+project-scope-apply-wave-slice: deps
+	@echo ""
+	@echo "🔒 Applying controlled schema slice for wave/interface/test plan tables..."
+	@$(PYTHON) scripts/data/migrate/apply_project_scope_schema_slice.py --apply --table waves --table interfaces --table test_plans
+	@echo ""
+
+project-scope-apply-operational-slice: deps
+	@echo ""
+	@echo "🔒 Applying controlled schema slice for operational core project-owned tables..."
+	@$(PYTHON) scripts/data/migrate/apply_project_scope_schema_slice.py --apply \
+		--table risks --table actions --table issues --table decisions \
+		--table sprints --table backlog_items --table config_items --table requirements \
+		--table cutover_plans --table test_cases --table defects --table test_suites
+	@echo ""
+
+project-scope-apply-secondary-slice: deps
+	@echo ""
+	@echo "🔒 Applying controlled schema slice for secondary project-scoped tables..."
+	@$(PYTHON) scripts/data/migrate/apply_project_scope_schema_slice.py --apply \
+		--table raci_activities --table raci_entries --table approval_workflows --table test_daily_snapshots
+	@echo ""
+
+contextual-scope-audit: deps
+	@echo ""
+	@echo "🧭 Auditing contextual scope policy..."
+	@$(PYTHON) scripts/data/migrate/backfill_contextual_scope.py
+	@echo ""
+
+contextual-scope-backfill: deps
+	@echo ""
+	@echo "🧼 Applying safe contextual scope backfill..."
+	@$(PYTHON) scripts/data/migrate/backfill_contextual_scope.py --apply
+	@echo ""
+
+alembic-drift-status: deps
+	@echo ""
+	@echo "🧭 Reporting Alembic drift status for local dev DB..."
+	@$(PYTHON) scripts/db/reconcile_alembic_drift.py
+	@echo ""
+
+alembic-drift-reconcile: deps
+	@echo ""
+	@echo "🧭 Reconciling local dev DB to Alembic head..."
+	@$(PYTHON) scripts/db/reconcile_alembic_drift.py --apply
+	@echo ""
+
+ui-dialog-audit: deps
+	@echo ""
+	@echo "🧭 Auditing native browser dialog usage on core user surfaces..."
+	@$(PYTHON) scripts/audit/audit_native_dialogs.py
+	@echo ""
+
+ui-contract-critical: deps
+	@echo ""
+	@echo "🧪 Running critical UI contract checks..."
+	@$(PYTHON) scripts/audit/audit_native_dialogs.py
+	@PYTHONPATH=. $(PYTEST) \
+		tests/ui_contracts/test_sprint8_ui_contract.py \
+		tests/ui_contracts/test_project_setup_ui_contract.py \
+		tests/ui_contracts/test_governance_ui_contract.py \
+		tests/ui_contracts/test_downstream_project_scope_ui_contract.py \
+		tests/ui_contracts/test_test_management_ui_contract.py -q
+	@echo ""
+
+ui-smoke-critical:
+	@echo ""
+	@echo "🎭 Running critical Playwright smoke pack..."
+	@cd e2e && NODE_PATH=$$PWD/node_modules npx playwright test \
+		tests/02-dashboard.spec.ts \
+		tests/03-explore.spec.ts \
+		tests/10-test-management-ops.spec.ts \
+		tests/11-test-management-workflows.spec.ts \
+		tests/12-cross-module-traceability.spec.ts \
+		tests/13-governance.spec.ts \
+		tests/14-project-setup.spec.ts \
+		tests/15-program-launchpad.spec.ts \
+		tests/16-cutover-integration-scope.spec.ts \
+		--project=chromium --config=playwright.config.ts
+	@echo ""
+
+ui-regression-critical: ui-contract-critical ui-smoke-critical
+
+tm-integrity-gate:
+	@echo ""
+	@echo "🧪 Running TM integrity and release-gate pytest pack..."
+	@PYTHONPATH=. APP_ENV=testing $(PYTEST) \
+		tests/test_management/test_tm_release_gate.py \
+		tests/ui_contracts/test_test_management_ui_contract.py \
+		tests/test_management/test_api_testing.py -k "overview_summary or execution_center or execution_history or TestTraceabilityMatrix or TestDashboard" -q
+	@echo ""
+
+tm-migration-smoke:
+	@echo ""
+	@echo "🧭 Running TM migration smoke..."
+	@$(PYTHON) scripts/testing/tm_migration_smoke.py
+	@echo ""
+
+tm-ui-smoke:
+	@echo ""
+	@echo "🎭 Running isolated TM Playwright smoke pack..."
+	@cd e2e && NODE_PATH=$$PWD/node_modules npx playwright test \
+		tests/10-test-management-ops.spec.ts \
+		tests/11-test-management-workflows.spec.ts \
+		--project=chromium --config=playwright.tm.config.ts
+	@echo ""
+
+tm-release-gate: tm-integrity-gate tm-migration-smoke tm-ui-smoke
+
+tm-perf-gate:
+	@echo ""
+	@echo "📊 Running TM perf budget regression gate (M + H volume × 4 endpoints)..."
+	@PYTHONPATH=. APP_ENV=testing $(PYTEST) tests/test_management/test_tm_perf_budget.py -v --tb=short
 	@echo ""
 
 # ── Run Application ─────────────────────────────────────────────────────
 run: deps
 	@echo ""
-	@echo "🚀 Starting SAP Transformation Platform..."
+	@echo "🚀 Starting SAP Transformation Platform (auto-reload)..."
 	@echo "   URL: http://localhost:$(PORT)"
+	@echo "   ℹ️  Python files are watched — Flask reloads on save"
 	@echo "   To stop: Ctrl+C"
 	@echo ""
-	@$(FLASK) run --host=0.0.0.0 --port=$(PORT)
+	@FLASK_DEBUG=1 $(FLASK) run --host=0.0.0.0 --port=$(PORT) --debug
+
+run-reload: run
 
 run-debug: deps
 	@echo ""
-	@echo "🚀 Starting SAP Transformation Platform (debug mode)..."
+	@echo "🚀 Starting SAP Transformation Platform (debug, no reload)..."
 	@echo "   URL: http://localhost:$(PORT)"
-	@echo "   Note: auto-reload disabled for filesystem-compatibility"
+	@echo "   Note: auto-reload disabled (use 'make run' for auto-reload)"
 	@echo "   To stop: Ctrl+C"
 	@echo ""
 	@$(FLASK) run --host=0.0.0.0 --port=$(PORT) --debug --no-reload
@@ -227,7 +409,7 @@ reset:
 	@echo "   🗑️  $(DB_FILE) deleted"
 	@$(FLASK) db upgrade
 	@echo "   ✅ Table structure recreated"
-	@$(PYTHON) scripts/seed_demo_data.py
+	@$(PYTHON) scripts/data/seed/seed_demo_data.py
 	@echo "   ✅ Demo data loaded"
 	@echo ""
 	@echo "   ♻️  Reset complete!"
@@ -256,14 +438,14 @@ status:
 	@echo ""
 	@if [ -f $(DB_FILE) ]; then \
 		echo "  DB Table Record Counts:"; \
-		$(PYTHON) scripts/db_status.py; \
+		$(PYTHON) scripts/db/db_status.py; \
 	fi
 	@echo ""
 
 # ── Demo Environment ────────────────────────────────────────────────────
 seed-demo: deps
 	@echo ""
-	@$(PYTHON) scripts/seed_quick_demo.py
+	@$(PYTHON) scripts/data/seed/seed_quick_demo.py
 	@echo ""
 	@echo "═══════════════════════════════════════════════════════════"
 	@echo "  ✅ DEMO ENVIRONMENT READY!"
@@ -283,7 +465,7 @@ demo-reset: deps
 	@echo "═══════════════════════════════════════════════════════════"
 	@rm -f $(DB_FILE)
 	@mkdir -p instance
-	@$(PYTHON) scripts/seed_demo_data.py
+	@$(PYTHON) scripts/data/seed/seed_demo_data.py
 	@cp $(DB_FILE) $(DB_FILE).demo-snapshot
 	@echo ""
 	@echo "═══════════════════════════════════════════════════════════"

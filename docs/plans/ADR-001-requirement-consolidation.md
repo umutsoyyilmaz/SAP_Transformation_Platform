@@ -9,6 +9,17 @@
 
 ---
 
+## Uygulama Durumu Güncellemesi — 2026-03-10
+
+- `ExploreRequirement` canonical requirement kaynağı olarak canlı kullanımda.
+- Requirement, workshop ve process hierarchy Explore endpoint’lerinde runtime `explore_legacy` fallback’leri kaldırıldı.
+- `app/services/explore_legacy/requirements_legacy.py`, `workshops_legacy.py`, `process_levels_legacy.py` ve namespace `__init__.py` silindi.
+- `backlog`, `testing`, reporting ve traceability katmanları canonical `explore_requirement_id` semantiğine taşındı.
+
+Bu ADR içindeki faz planı tarihsel karar kaydı olarak korunuyor; mevcut runtime mimari artık canonical Explore service katmanında çalışıyor.
+
+---
+
 ## 1. Karar Özeti
 
 | # | Karar | Gerekçe |
@@ -61,7 +72,7 @@ grep -rn "from app.models.requirement import" app/
   app/ai/assistants/test_case_generator.py    (1 import)
   app/ai/assistants/requirement_analyst.py    (1 import)
   app/ai/assistants/change_impact.py          (1 import)
-  app/blueprints/testing_bp.py                (1 import)
+  app/blueprints/testing/__init__.py          (1 import)
 ```
 
 `traceability.py` zaten S1-02'de ExploreRequirement'a geçirildi. Kalan 7 dosya S1-05'in konusu.
@@ -192,7 +203,7 @@ Kullanıcı hangi veriye baktığını bilemiyor; raporlarda kayıt eksikliği.
 | `app/services/testing_service.py` | Legacy import → ExploreRequirement | F3 |
 | `app/services/spec_template_service.py` | Legacy import → ExploreRequirement | F3 |
 | `app/services/traceability.py` | Kısmen zaten ExploreRequirement (S1-02); legacy trace backup kaldırılır | F3 |
-| `app/blueprints/testing_bp.py` | Legacy import → ExploreRequirement | F3 |
+| `app/blueprints/testing/__init__.py` | Legacy import → ExploreRequirement | F3 |
 | `app/ai/assistants/test_case_generator.py` | Legacy import → ExploreRequirement | F3 |
 | `app/ai/assistants/requirement_analyst.py` | Legacy import → ExploreRequirement | F3 |
 | `app/ai/assistants/change_impact.py` | Legacy import → ExploreRequirement | F3 |

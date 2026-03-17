@@ -22,14 +22,15 @@ project-root/
 │   ├── coder.md                        ← Agent 5: Implementation
 │   └── reviewer.md                     ← Agent 6: Code review
 ├── docs/
-│   ├── fdd/                            ← Functional Design Documents
-│   ├── uxd/                            ← UX Design Documents
-│   ├── uid/                            ← UI Design Documents
-│   ├── tpd/                            ← Test Plan Documents
+│   ├── features/                       ← Functional Design Documents
+│   ├── ux-design/                      ← UX Design Documents
+│   ├── ui-design/                      ← UI Design Documents
+│   ├── test-plans/                     ← Test Plan Documents
 │   ├── reviews/
 │   │   ├── project/                    ← Stratejik audit raporları
-│   │   └── code/                       ← Feature bazlı review raporları
-│   ├── business/                       ← Investor pitch, demo script
+│   │   └── code-reviews/               ← Feature bazlı review raporları
+│   ├── stakeholder-assets/             ← Demo, onboarding, pitch materyali
+│   ├── operations-guides/              ← Setup ve operasyon rehberleri
 │   ├── plans/                          ← Sprint/release planları
 │   ├── specs/                          ← Teknik spesifikasyonlar
 │   └── archive/                        ← Eski dokümanlar
@@ -118,7 +119,7 @@ FDD formatında tasarımı hazırla.
 ```
 
 ### Çıktı
-`docs/fdd/FDD-XXX-feature-name.md`
+`docs/features/FDD-XXX-feature-name.md`
 
 ### Onay Kriterlerin
 ```
@@ -145,7 +146,7 @@ Yeni Copilot Chat:
 
 Aşağıdaki dosyaları oku:
 - .instructions/.prompts/ux-agent.md (rol tanımın)
-- docs/fdd/FDD-XXX-feature-name.md (onaylanmış fonksiyonel tasarım)
+- docs/features/FDD-XXX-feature-name.md (onaylanmış fonksiyonel tasarım)
 - .github/copilot-instructions.md §13 (SAP domain context)
 
 FDD'nin §6 (UI Behavior) ve §7 (Acceptance Criteria) bölümlerini temel al.
@@ -160,7 +161,7 @@ Bu feature için UXD (UX Design Document) hazırla:
 ```
 
 ### Çıktı
-`docs/uxd/UXD-XXX-feature-name.md`
+`docs/ux-design/UXD-XXX-feature-name.md`
 
 ### Onay Kriterlerin
 ```
@@ -186,8 +187,8 @@ Yeni Copilot Chat:
 
 Aşağıdaki dosyaları oku:
 - .instructions/.prompts/ui-agent.md (rol tanımın, design system, component catalog)
-- docs/uxd/UXD-XXX-feature-name.md (onaylanmış UX tasarımı)
-- docs/fdd/FDD-XXX-feature-name.md (referans: API contract'lar)
+- docs/ux-design/UXD-XXX-feature-name.md (onaylanmış UX tasarımı)
+- docs/features/FDD-XXX-feature-name.md (referans: API contract'lar)
 
 UXD'deki wireframe'leri görsel tasarıma dönüştür:
 1. Her ekran için V0.dev prompt'u üret
@@ -204,7 +205,7 @@ UXD'deki wireframe'leri görsel tasarıma dönüştür:
 5. **Beğendiysen → bu görsel artık "visual contract"** — Coder buna göre yazacak
 
 ### Çıktı
-`docs/uid/UID-XXX-feature-name.md` (V0 prompt'ları + component spec'ler)
+`docs/ui-design/UID-XXX-feature-name.md` (V0 prompt'ları + component spec'ler)
 
 ### Onay Kriterlerin
 ```
@@ -229,9 +230,9 @@ Yeni Copilot Chat:
 
 Aşağıdaki dosyaları oku:
 - .instructions/.prompts/qa-agent.md (rol tanımın)
-- docs/fdd/FDD-XXX-feature-name.md (business rules, API contract)
-- docs/uxd/UXD-XXX-feature-name.md (user flows, edge cases)
-- docs/uid/UID-XXX-feature-name.md (component specs, interactions)
+- docs/features/FDD-XXX-feature-name.md (business rules, API contract)
+- docs/ux-design/UXD-XXX-feature-name.md (user flows, edge cases)
+- docs/ui-design/UID-XXX-feature-name.md (component specs, interactions)
 
 Bu feature için kapsamlı bir TPD (Test Plan Document) hazırla:
 - API test senaryoları (CRUD + validation + auth)
@@ -243,7 +244,7 @@ Bu feature için kapsamlı bir TPD (Test Plan Document) hazırla:
 ```
 
 ### Çıktı
-`docs/tpd/TPD-XXX-feature-name.md`
+`docs/test-plans/TPD-XXX-feature-name.md`
 
 ### Onay Kriterlerin
 ```
@@ -271,9 +272,9 @@ Yeni Copilot Chat:
 Aşağıdaki dosyaları oku:
 - .instructions/.prompts/coder.md (rol tanımın ve code template'lerin)
 - .github/copilot-instructions.md (coding standards — SENİN ANAYASAN)
-- docs/fdd/FDD-XXX-feature-name.md (ne yapılacak)
-- docs/uid/UID-XXX-feature-name.md (nasıl görünecek, component specs)
-- docs/tpd/TPD-XXX-feature-name.md (hangi testlerin geçmesi gerekiyor)
+- docs/features/FDD-XXX-feature-name.md (ne yapılacak)
+- docs/ui-design/UID-XXX-feature-name.md (nasıl görünecek, component specs)
+- docs/test-plans/TPD-XXX-feature-name.md (hangi testlerin geçmesi gerekiyor)
 
 FDD'deki Implementation Order'ı takip et.
 Phase 1 (Model) ile başla.
@@ -307,8 +308,8 @@ Yeni Copilot Chat:
 Aşağıdaki dosyaları oku:
 - .instructions/.prompts/reviewer.md (rol tanımın ve review checklist'lerin)
 - .github/copilot-instructions.md (coding standards)
-- docs/fdd/FDD-XXX-feature-name.md (onaylanmış tasarım)
-- docs/tpd/TPD-XXX-feature-name.md (test planı — coverage kontrolü için)
+- docs/features/FDD-XXX-feature-name.md (onaylanmış tasarım)
+- docs/test-plans/TPD-XXX-feature-name.md (test planı — coverage kontrolü için)
 
 Aşağıdaki dosyaları REVIEW et:
 1. app/models/<domain>.py
@@ -332,7 +333,7 @@ Review'ında şunlara ÖZEL DİKKAT et:
 | **BLOCK** (🔴) | → Tasarım hatası → Architect'e geri. Kod hatası → Coder'a geri |
 
 ### Çıktı
-`docs/reviews/code/REVIEW-XXX-feature-name.md`
+`docs/reviews/code-reviews/REVIEW-XXX-feature-name.md`
 
 ---
 
@@ -468,7 +469,7 @@ Mini FDD formatında yaz — sadece:
 ```
 
 ### Çıktı
-`docs/fdd/FDD-XXX-complete-<domain>-bp.md`
+`docs/features/FDD-XXX-complete-<domain>-bp.md`
 
 ---
 
@@ -512,7 +513,7 @@ Kod ile uyumsuz bir şey bulursan 🟡 NOT olarak işaretle.
 ```
 
 ### Çıktı
-`docs/fdd/FDD-RET-XXX-<domain>.md` (RET = retroactive)
+`docs/features/FDD-RET-XXX-<domain>.md` (RET = retroactive)
 
 ---
 
@@ -547,7 +548,7 @@ UI Agent'ı kullanarak tam bir design system dokümanı oluştur:
 - Dark mode / light mode token'ları
 - V0.dev ile her component'in reference implementation'ı
 
-**Çıktı:** `docs/uid/DESIGN-SYSTEM.md`
+**Çıktı:** `docs/ui-design/DESIGN-SYSTEM.md`
 
 ### Faz M3: Ekran Bazlı Modernizasyon
 Her ekranı sırayla modernize et — pipeline'ın UI kolu ile:

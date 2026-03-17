@@ -145,7 +145,7 @@ def cmd_seed(args):
     # Import and run the seed script
     import subprocess
     result = subprocess.run(
-        [sys.executable, "scripts/seed_demo_data.py"],
+        [sys.executable, "scripts/data/seed/seed_demo_data.py"],
         env={**os.environ, "DATABASE_URL": db_uri},
         cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     )

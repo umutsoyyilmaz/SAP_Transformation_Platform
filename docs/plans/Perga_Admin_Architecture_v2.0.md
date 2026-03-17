@@ -693,7 +693,7 @@ Tüm 4 faz başarıyla uygulanmıştır. Aşağıda her fazın detaylı durumu:
 | 3 | testing_bp | /api/v1/testing | Sprint 1 |
 | 4 | raid_bp | /api/v1/raid | Sprint 1 |
 | 5 | ai_bp | /api/v1/ai | Sprint 1 |
-| 6 | integration_bp | /api/v1/integrations | Sprint 1 |
+| 6 | interface_factory_bp | /api/v1/integrations | Sprint 1 |
 | 7 | health_bp | /api/v1/health | Sprint 1 |
 | 8 | metrics_bp | /api/v1/metrics | Sprint 1 |
 | 9 | explore_bp | /api/v1/explore | Sprint 1 |
@@ -723,9 +723,9 @@ Tüm 4 faz başarıyla uygulanmıştır. Aşağıda her fazın detaylı durumu:
 ### Middleware Stack (İstek İşleme Sırası)
 
 ```
-Request → Basic Auth (production) → JWT Validation → Tenant Context → 
-  Security Headers → Rate Limiter → Blueprint Permissions → 
-  Permission Required → Project Access → Route Handler → 
+Request → Basic Auth (production) → JWT Validation → Tenant Context →
+  Security Headers → Rate Limiter → Blueprint Permissions →
+  Permission Required → Project Access → Route Handler →
   Timing → Response
 ```
 

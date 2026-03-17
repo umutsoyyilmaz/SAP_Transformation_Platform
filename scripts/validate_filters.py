@@ -9,7 +9,7 @@ API results for every filter field and combination.
 Pages tested:
   1. Backlog (WRICEF items) — wricef_type, status, priority, module + search
   2. Test Planning / Catalog — test_layer, status, priority, module + search
-  3. Test Planning / Suites — suite_type, status, module + search
+  3. Test Planning / Suites — purpose, status, module + search
   4. Defect Management — severity, status, module + search
   5. Integration Factory — direction, protocol, status, module + search
   6. Data Factory — status, source_system, owner + search
@@ -330,12 +330,12 @@ def test_suite_filters(pid, created):
     print("=" * 60)
 
     combos = [
-        {"name": "SIT Smoke Suite", "suite_type": "SIT", "status": "active", "module": "FI"},
-        {"name": "UAT Full Suite", "suite_type": "UAT", "status": "draft", "module": "SD"},
-        {"name": "Regression Pack", "suite_type": "Regression", "status": "active", "module": "MM"},
-        {"name": "E2E Critical Path", "suite_type": "E2E", "status": "locked", "module": "FI"},
-        {"name": "Performance Bench", "suite_type": "Performance", "status": "archived", "module": "PP"},
-        {"name": "Custom Ad-hoc", "suite_type": "Custom", "status": "draft", "module": "HR"},
+        {"name": "SIT Smoke Suite", "purpose": "SIT", "status": "active", "module": "FI"},
+        {"name": "UAT Full Suite", "purpose": "UAT", "status": "draft", "module": "SD"},
+        {"name": "Regression Pack", "purpose": "Regression", "status": "active", "module": "MM"},
+        {"name": "E2E Critical Path", "purpose": "E2E", "status": "locked", "module": "FI"},
+        {"name": "Performance Bench", "purpose": "Performance", "status": "archived", "module": "PP"},
+        {"name": "Custom Ad-hoc", "purpose": "Custom", "status": "draft", "module": "HR"},
     ]
 
     for c in combos:
@@ -349,8 +349,8 @@ def test_suite_filters(pid, created):
 
     # Type filter
     for stype in ['SIT', 'UAT', 'Regression', 'E2E', 'Performance', 'Custom']:
-        filtered = client_filter(suites, '', search_fields, {'suite_type': [stype]})
-        expected = [s for s in suites if s.get('suite_type') == stype]
+        filtered = client_filter(suites, '', search_fields, {'suite_purpose': [stype]})
+        expected = [s for s in suites if s.get('purpose') == stype]
         if len(filtered) == len(expected) and len(filtered) > 0:
             log_ok(f"Suite type '{stype}': {len(filtered)} suites")
         else:
@@ -374,8 +374,8 @@ def test_suite_filters(pid, created):
         log_fail(f"Suite module 'FI': got {len(filtered)}, expected {len(expected)}")
 
     # Multi-select type
-    filtered = client_filter(suites, '', search_fields, {'suite_type': ['SIT', 'UAT']})
-    expected = [s for s in suites if s.get('suite_type') in ('SIT', 'UAT')]
+    filtered = client_filter(suites, '', search_fields, {'suite_purpose': ['SIT', 'UAT']})
+    expected = [s for s in suites if s.get('purpose') in ('SIT', 'UAT')]
     if len(filtered) == len(expected) and len(filtered) >= 2:
         log_ok(f"Multi-type ['SIT','UAT']: {len(filtered)} suites")
     else:
@@ -663,8 +663,8 @@ def test_consistency():
 
     # Check JS files load correctly (no 404/500)
     js_files = [
-        "backlog.js", "test_planning.js", "defect_management.js",
-        "integration.js", "data_factory.js",
+        "delivery/backlog.js", "testing/test_planning.js", "testing/defect_management.js",
+        "integration/integration.js", "testing/data_factory.js",
     ]
     for js in js_files:
         r = S.get(f"{BASE}/static/js/views/{js}", timeout=10)
@@ -699,7 +699,7 @@ def test_consistency():
             log_fail(f"{js}: HTTP {r.status_code}")
 
     # Check explore-shared.js has all helper functions
-    r = S.get(f"{BASE}/static/js/components/explore-shared.js", timeout=10)
+    r = S.get(f"{BASE}/static/js/components/explore/explore-shared.js", timeout=10)
     if r.status_code == 200:
         content = r.text
         helpers = ['filterBar', '_fbToggle', '_fbShowSub', '_fbApply', '_fbClear', '_fbClearAll', '_fbFilterOptions']

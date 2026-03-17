@@ -15,21 +15,27 @@ Idempotency:
     safe to re-run after a partial failure.
 
 Reviewer Audit A2:
-    Covers backlog_items.explore_requirement_id and
-    test_cases.explore_requirement_id FK back-fill.
+    Covers backlog_items.explore_requirement_id,
+    config_items.explore_requirement_id,
+    test_cases.explore_requirement_id, and
+    defects.explore_requirement_id FK back-fill.
 
 Field Mapping:
-    requirements.id            → explore_requirements.legacy_requirement_id
-    requirements.title         → explore_requirements.title
-    requirements.description   → explore_requirements.description
-    requirements.req_type      → explore_requirements.requirement_type
-    requirements.priority      → explore_requirements.moscow_priority  (value-preserving)
-    requirements.status        → explore_requirements.status  (best-effort mapping)
-    requirements.source        → explore_requirements.source
-    requirements.program_id    → explore_requirements.project_id
-    requirements.tenant_id     → explore_requirements.tenant_id
-    requirements.code          → explore_requirements.code (deduped if conflict)
-    requirements.created_at    → explore_requirements.created_at
+    requirements.id              → explore_requirements.legacy_requirement_id
+    requirements.title           → explore_requirements.title
+    requirements.description     → explore_requirements.description
+    requirements.req_type        → explore_requirements.requirement_type
+    requirements.priority        → explore_requirements.moscow_priority  (value-preserving)
+    requirements.status          → explore_requirements.status  (best-effort mapping)
+    requirements.source          → explore_requirements.source
+    requirements.program_id      → explore_requirements.project_id
+    requirements.tenant_id       → explore_requirements.tenant_id
+    requirements.code            → explore_requirements.code (deduped if conflict)
+    requirements.created_at      → explore_requirements.created_at
+    backlog_items.requirement_id → backlog_items.explore_requirement_id
+    config_items.requirement_id  → config_items.explore_requirement_id
+    test_cases.requirement_id    → test_cases.explore_requirement_id
+    defects.linked_requirement_id → defects.explore_requirement_id
 """
 
 from __future__ import annotations
@@ -49,7 +55,7 @@ from app import create_app
 from app.models import db
 from app.models.explore.requirement import ExploreRequirement
 from app.models.requirement import Requirement
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -131,14 +137,23 @@ def migrate(app=None, dry_run: bool = False) -> dict:
         dry_run: If True, roll back at the end instead of committing.
 
     Returns:
-        Stats dict: {"migrated": N, "skipped": N, "backfilled": N, "errors": N}
+        Stats dict with migrated/skip/error counts plus per-table backfill totals.
     """
     from flask import has_app_context
 
-    if app is None:
+    if app is None and not has_app_context():
         app = create_app("development")
 
-    stats = {"migrated": 0, "skipped": 0, "backfilled": 0, "errors": 0}
+    stats = {
+        "migrated": 0,
+        "skipped": 0,
+        "backfilled": 0,
+        "backfilled_backlog": 0,
+        "backfilled_config": 0,
+        "backfilled_test_cases": 0,
+        "backfilled_defects": 0,
+        "errors": 0,
+    }
 
     # If we're already inside an app context (e.g. from tests or flask shell),
     # don't push a new one — that would create a separate session that can't see
@@ -154,6 +169,12 @@ def migrate(app=None, dry_run: bool = False) -> dict:
 
 def _run_migration(stats: dict, dry_run: bool) -> None:
     """Execute the actual migration logic inside an active app context."""
+    inspector = inspect(db.session.get_bind())
+    backlog_columns = {col["name"] for col in inspector.get_columns("backlog_items")}
+    config_columns = {col["name"] for col in inspector.get_columns("config_items")}
+    test_case_columns = {col["name"] for col in inspector.get_columns("test_cases")}
+    defect_columns = {col["name"] for col in inspector.get_columns("defects")}
+
     # ── Fetch all legacy requirements ──────────────────────────────────
     legacy_rows = db.session.execute(
         text("SELECT * FROM requirements ORDER BY id")
@@ -228,29 +249,58 @@ def _run_migration(stats: dict, dry_run: bool) -> None:
             db.session.add(explore_req)
             db.session.flush()  # get the new UUID before back-fill
 
-            # ── Back-fill BacklogItem.explore_requirement_id ──────────
-            bi_result = db.session.execute(
-                text(
-                    "UPDATE backlog_items "
-                    "SET explore_requirement_id = :new_id "
-                    "WHERE requirement_id = :old_id "
-                    "AND (explore_requirement_id IS NULL OR explore_requirement_id = '')"
-                ),
-                {"new_id": explore_req.id, "old_id": legacy_id},
-            )
-            stats["backfilled"] += bi_result.rowcount
+            # ── Back-fill canonical traceability FKs ──────────────────
+            if "requirement_id" in backlog_columns:
+                bi_result = db.session.execute(
+                    text(
+                        "UPDATE backlog_items "
+                        "SET explore_requirement_id = :new_id "
+                        "WHERE requirement_id = :old_id "
+                        "AND (explore_requirement_id IS NULL OR explore_requirement_id = '')"
+                    ),
+                    {"new_id": explore_req.id, "old_id": legacy_id},
+                )
+                stats["backfilled_backlog"] += bi_result.rowcount
+                stats["backfilled"] += bi_result.rowcount
 
-            # ── Back-fill test_cases.explore_requirement_id ───────────
-            tc_result = db.session.execute(
-                text(
-                    "UPDATE test_cases "
-                    "SET explore_requirement_id = :new_id "
-                    "WHERE requirement_id = :old_id "
-                    "AND (explore_requirement_id IS NULL OR explore_requirement_id = '')"
-                ),
-                {"new_id": explore_req.id, "old_id": legacy_id},
-            )
-            stats["backfilled"] += tc_result.rowcount
+            if "requirement_id" in config_columns:
+                ci_result = db.session.execute(
+                    text(
+                        "UPDATE config_items "
+                        "SET explore_requirement_id = :new_id "
+                        "WHERE requirement_id = :old_id "
+                        "AND (explore_requirement_id IS NULL OR explore_requirement_id = '')"
+                    ),
+                    {"new_id": explore_req.id, "old_id": legacy_id},
+                )
+                stats["backfilled_config"] += ci_result.rowcount
+                stats["backfilled"] += ci_result.rowcount
+
+            if "requirement_id" in test_case_columns:
+                tc_result = db.session.execute(
+                    text(
+                        "UPDATE test_cases "
+                        "SET explore_requirement_id = :new_id "
+                        "WHERE requirement_id = :old_id "
+                        "AND (explore_requirement_id IS NULL OR explore_requirement_id = '')"
+                    ),
+                    {"new_id": explore_req.id, "old_id": legacy_id},
+                )
+                stats["backfilled_test_cases"] += tc_result.rowcount
+                stats["backfilled"] += tc_result.rowcount
+
+            if "linked_requirement_id" in defect_columns:
+                defect_result = db.session.execute(
+                    text(
+                        "UPDATE defects "
+                        "SET explore_requirement_id = :new_id "
+                        "WHERE linked_requirement_id = :old_id "
+                        "AND (explore_requirement_id IS NULL OR explore_requirement_id = '')"
+                    ),
+                    {"new_id": explore_req.id, "old_id": legacy_id},
+                )
+                stats["backfilled_defects"] += defect_result.rowcount
+                stats["backfilled"] += defect_result.rowcount
 
             stats["migrated"] += 1
             logger.info(

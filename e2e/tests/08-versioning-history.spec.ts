@@ -5,28 +5,44 @@
  * Uses API-level requests (no browser UI navigation needed).
  */
 import { test, expect } from '@playwright/test'
+import { createProgramContext } from './helpers/seed-factory'
+import { createTestCase } from './helpers/testing-seed'
 
 const API = '/api/v1'
 
+let programId: number | null = null
+let projectId: number | null = null
 let catalogId: number | null = null
 
 test.describe.serial('Test Case Versioning (F2)', () => {
+  test('create a program for versioning', async ({ request }) => {
+    const context = await createProgramContext(request, {
+      namePrefix: 'E2E Versioning',
+      methodology: 'sap_activate',
+      status: 'active',
+    })
+    programId = context.program.id
+    projectId = context.project.id
+    expect(programId).toBeGreaterThan(0)
+    expect(projectId).toBeGreaterThan(0)
+  })
+
   test('create a test case for versioning', async ({ request }) => {
-    const res = await request.post(`${API}/programs/1/testing/catalog`, {
-      data: {
-        title: 'E2E Version Test Case',
-        description: 'Created by E2E for versioning tests',
-        priority: 'High',
-        test_type: 'Manual',
+    const testCase = await createTestCase(request, {
+      programId: programId as number,
+      title: 'E2E Version Test Case',
+      description: 'Created by E2E for versioning tests',
+      priority: 'high',
+      testLayer: 'regression',
+      testType: 'Manual',
+      extraData: {
         steps: [
           { step_no: 1, action: 'Open app', test_data: '', expected_result: 'App opens', notes: '' },
           { step_no: 2, action: 'Click button', test_data: 'btn=save', expected_result: 'Saved', notes: '' },
         ],
       },
     })
-    expect(res.ok()).toBeTruthy()
-    const body = await res.json()
-    catalogId = body.id
+    catalogId = testCase.id
     expect(catalogId).toBeGreaterThan(0)
   })
 
@@ -115,6 +131,30 @@ test.describe.serial('Test Case Versioning (F2)', () => {
   })
 
   test('History tab UI renders side-by-side diff', async ({ page }) => {
+    await page.context().addInitScript((context) => {
+      localStorage.setItem('sap_user', JSON.stringify({
+        id: 0,
+        full_name: 'E2E Version User',
+        email: 'versioning@example.com',
+        tenant_id: 1,
+        roles: ['program_manager'],
+      }))
+      localStorage.setItem('sap_active_program', JSON.stringify({
+        id: context.programId,
+        name: 'E2E Version Program',
+        status: 'active',
+        project_type: 'sap_activate',
+        tenant_id: 1,
+      }))
+      localStorage.setItem('sap_active_project', JSON.stringify({
+        id: context.projectId,
+        name: 'Default Project',
+        code: 'DEFAULT',
+        program_id: context.programId,
+        tenant_id: 1,
+      }))
+    }, { programId, projectId })
+
     // Navigate to test case detail page
     await page.goto(`/#testing/case/${catalogId}`)
     await page.waitForTimeout(1500)

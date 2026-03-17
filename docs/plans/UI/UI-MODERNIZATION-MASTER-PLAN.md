@@ -850,7 +850,7 @@ Linear tarzı global komut paleti:
 | `templates/index.html` | UI-S01/S03 | SVG icon, serif script ekle |
 | `static/js/app.js` | UI-S03/S04 | Sidebar collapse, dashboard redesign |
 | `static/js/views/backlog.js` | UI-S05 | Badge fonksiyonları kaldır, component geçiş |
-| `static/js/views/test_execution.js` | UI-S06 | Split-pane layout |
+| `static/js/views/testing/test_execution.js` | UI-S06 | Split-pane layout |
 | `static/js/components/tm_status_badge.js` | UI-S01 | pg_status_registry'den besle |
 | `static/css/main.css` | UI-S01 | Token refactor, layout çıkarma |
 

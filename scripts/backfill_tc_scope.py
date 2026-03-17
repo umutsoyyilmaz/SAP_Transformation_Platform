@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ADR-008 — Backfill process_level_id on existing test cases + suite link migration.
+ADR-008 — Backfill process_level_id on existing test cases.
 
 Usage:
   python scripts/backfill_tc_scope.py [--dry-run]
@@ -56,45 +56,6 @@ def backfill_tc_scope(dry_run=False):
     }
 
 
-def migrate_suite_links(dry_run=False):
-    """Migrate existing test_cases.suite_id values into test_case_suite_links."""
-    from app.models.testing import TestCase, TestCaseSuiteLink
-    from app.models import db
-
-    cases_with_suite = TestCase.query.filter(TestCase.suite_id.isnot(None)).all()
-
-    migrated = 0
-    skipped_duplicates = 0
-
-    for tc in cases_with_suite:
-        existing = TestCaseSuiteLink.query.filter_by(
-            test_case_id=tc.id,
-            suite_id=tc.suite_id,
-        ).first()
-
-        if existing:
-            skipped_duplicates += 1
-            continue
-
-        if not dry_run:
-            db.session.add(TestCaseSuiteLink(
-                test_case_id=tc.id,
-                suite_id=tc.suite_id,
-                added_method="migration",
-                tenant_id=tc.tenant_id,
-            ))
-        migrated += 1
-
-    if not dry_run:
-        db.session.flush()
-
-    return {
-        "total_with_suite_id": len(cases_with_suite),
-        "migrated": migrated,
-        "skipped_duplicates": skipped_duplicates,
-    }
-
-
 def main(dry_run=False):
     from app import create_app
     from app.models import db
@@ -103,23 +64,17 @@ def main(dry_run=False):
 
     with app.app_context():
         logger.info("=" * 64)
-        logger.info("ADR-008 — TestCase scope & suite-link backfill")
+        logger.info("ADR-008 — TestCase scope backfill")
         logger.info("Mode: %s", "DRY RUN" if dry_run else "LIVE")
         logger.info("=" * 64)
 
         try:
-            suite_report = migrate_suite_links(dry_run=dry_run)
             scope_report = backfill_tc_scope(dry_run=dry_run)
 
             if not dry_run:
                 db.session.commit()
             else:
                 db.session.rollback()
-
-            logger.info("\n[Suite Link Migration]")
-            logger.info("  total_with_suite_id  : %d", suite_report["total_with_suite_id"])
-            logger.info("  migrated             : %d", suite_report["migrated"])
-            logger.info("  skipped_duplicates   : %d", suite_report["skipped_duplicates"])
 
             logger.info("\n[L3 Scope Backfill]")
             logger.info("  total_orphans        : %d", scope_report["total_orphans"])

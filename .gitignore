@@ -43,6 +43,10 @@ Thumbs.db
 # --- Logs ---
 *.log
 
+# --- Local Artifacts ---
+.coverage
+.commit_msg.txt
+
 # --- Instance / Config ---
 instance/
 *.bak

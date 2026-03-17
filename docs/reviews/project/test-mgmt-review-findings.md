@@ -1,8 +1,8 @@
 # Test Management Module — End-to-End Review Findings
 
-**Review Date:** 2026-02-14  
-**Commit:** 3c331dd (TS-Sprint 2)  
-**Reviewer:** ProjektCoPilot Automated Audit  
+**Review Date:** 2026-02-14
+**Commit:** 3c331dd (TS-Sprint 2)
+**Reviewer:** ProjektCoPilot Automated Audit
 **Scope:** 8 source files — FS/TS document, model, blueprint, tests, seed data, user guides (TR/EN)
 
 ---
@@ -13,13 +13,13 @@
 |----|------|-----|-------------|
 | D2 | `test-management-fs-ts.md` | 1 559 | Functional / Technical Specification |
 | M6 | `app/models/testing.py` | 1 152 | SQLAlchemy model layer (14 classes) |
-| B6 | `app/blueprints/testing_bp.py` | 1 668 | Flask blueprint (55 routes) |
+| B6 | `app/blueprints/testing/__init__.py` | 1 668 | Flask blueprint package entrypoint (55 routes) |
 | T2 | `tests/test_api_testing.py` | 1 439 | pytest test suite (147 tests) |
 | SC2 | `scripts/seed_data/specs_testing.py` | 721 | Seed / demo data |
-| D19 | `User Guide/test-management-user-guide.md` | 951 | User guide — Turkish |
-| D20 | `User Guide/test-management-user-guide-en.md` | 951 | User guide — English |
+| D19 | `docs/user-guides/test-management-user-guide.md` | 951 | User guide — Turkish |
+| D20 | `docs/user-guides/test-management-user-guide-en.md` | 951 | User guide — English |
 
-> **Note:** `app/services/testing_service.py` referenced in session context does **not exist** on disk. All business logic lives directly in B6.
+> **Note:** `app/services/testing_service.py` referenced in session context does **not exist** on disk. Business logic now lives in `app/services/testing/`.
 
 ---
 
@@ -46,8 +46,8 @@
 | `perf_test_result` (§2.2.16) | — | **MISSING** |
 | `test_daily_snapshot` (§2.2.17) | — | **MISSING** |
 
-**Impact:** UAT BPO sign-off workflow, performance target tracking, daily-snapshot trend charts, and 3 of the 10 Go/No-Go scorecard criteria cannot function.  
-**Planned:** Likely TS-Sprint 3 — but no explicit schedule reference exists in the codebase.  
+**Impact:** UAT BPO sign-off workflow, performance target tracking, daily-snapshot trend charts, and 3 of the 10 Go/No-Go scorecard criteria cannot function.
+**Planned:** Likely TS-Sprint 3 — but no explicit schedule reference exists in the codebase.
 **Recommendation:** Add stub models now with `__abstract__ = False` + migration even if API is deferred.
 
 ---
@@ -56,7 +56,7 @@
 
 FS/TS §2 specifies UUID PKs on every table. All 14 model classes use `db.Integer` auto-increment PKs.
 
-**Impact:** Cloud ALM sync (§3.10) expects stable external references; sequential integers leak record counts and may collide if multi-tenant.  
+**Impact:** Cloud ALM sync (§3.10) expects stable external references; sequential integers leak record counts and may collide if multi-tenant.
 **Recommendation:** Defer unless Cloud ALM integration is imminent. Document as a known deviation in architecture ADR.
 
 ---
@@ -169,7 +169,7 @@ FS/TS defect_comment table includes `type` enum: `comment|status_change|assignme
 
 ### A-013 · TEST_LAYERS constant — `cutover_rehearsal` not `string` (Medium)
 
-FS/TS TestLevel enum: `unit|string|sit|uat|regression|performance`.  
+FS/TS TestLevel enum: `unit|string|sit|uat|regression|performance`.
 Model TEST_LAYERS: `unit|**cutover_rehearsal**|sit|uat|regression|performance`.
 
 User guides and FS/TS frontend spec (§4.2 SuiteLevelTabs) reference "String Test" as level 2.

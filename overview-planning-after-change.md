@@ -1,0 +1,296 @@
+- generic [active] [ref=e1]:
+  - link "Skip to main content" [ref=e2] [cursor=pointer]:
+    - /url: "#mainContent"
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - generic "Perga" [ref=e5]:
+        - img [ref=e6]
+        - generic [ref=e10]: Perga
+      - button "◎ Meridian Global Transformation ·Meridian Global Transformation - S/4 Hana ▾" [ref=e12] [cursor=pointer]:
+        - generic [ref=e13]: ◎
+        - generic [ref=e14]:
+          - generic [ref=e15]: Meridian Global Transformation
+          - generic [ref=e16]: ·Meridian Global Transformation - S/4 Hana
+        - generic [ref=e17]: ▾
+    - button "Search or jump to... ⌘K" [ref=e19] [cursor=pointer]:
+      - img [ref=e20]
+      - generic [ref=e23]: Search or jump to...
+      - generic [ref=e24]: ⌘K
+    - generic [ref=e25]:
+      - button "Switch to dark mode" [ref=e26] [cursor=pointer]:
+        - img [ref=e27]
+      - button "Notifications" [ref=e29] [cursor=pointer]:
+        - img [ref=e30]
+      - button "LU" [ref=e34] [cursor=pointer]:
+        - generic [ref=e35]: LU
+  - navigation [ref=e36]:
+    - button "Toggle sidebar" [ref=e37] [cursor=pointer]:
+      - img [ref=e38]
+    - generic [ref=e40]: Workspace
+    - generic "Dashboard" [ref=e41] [cursor=pointer]:
+      - img [ref=e43]
+      - generic [ref=e48]: Dashboard
+    - generic [ref=e49]: Portfolio
+    - generic "Programs" [ref=e50] [cursor=pointer]:
+      - img [ref=e52]
+      - generic [ref=e54]: Programs
+    - generic "My Projects" [ref=e55] [cursor=pointer]:
+      - generic [ref=e57]: My Projects
+    - generic "Project Setup" [ref=e58] [cursor=pointer]:
+      - img [ref=e60]
+      - generic [ref=e63]: Project Setup
+    - generic [ref=e64]: Governance
+    - generic "RAID" [ref=e65] [cursor=pointer]:
+      - img [ref=e67]
+      - generic [ref=e69]: RAID
+    - generic "Reports" [ref=e70] [cursor=pointer]:
+      - img [ref=e72]
+      - generic [ref=e73]: Reports
+    - generic "Change Mgmt" [ref=e74] [cursor=pointer]:
+      - img [ref=e76]
+      - generic [ref=e78]: Change Mgmt
+    - generic [ref=e79]: Delivery Lifecycle
+    - generic "Discover" [ref=e80] [cursor=pointer]:
+      - img [ref=e82]
+      - generic [ref=e85]: Discover
+    - generic "Explore" [ref=e86] [cursor=pointer]:
+      - img [ref=e88]
+      - generic [ref=e91]: Explore
+    - generic "Build" [ref=e92] [cursor=pointer]:
+      - img [ref=e94]
+      - generic [ref=e96]: Build
+    - generic "Test" [ref=e97] [cursor=pointer]:
+      - img [ref=e99]
+      - generic [ref=e101]: Test
+    - generic "Release" [ref=e102] [cursor=pointer]:
+      - img [ref=e104]
+      - generic [ref=e109]: Release
+    - generic [ref=e110]: Run
+    - generic "Hypercare" [ref=e111] [cursor=pointer]:
+      - generic [ref=e113]: Hypercare
+    - generic [ref=e114]: AI Assistant
+    - generic "AI Insights" [ref=e115] [cursor=pointer]:
+      - img [ref=e117]
+      - generic [ref=e119]: AI Insights
+    - generic "AI Query" [ref=e120] [cursor=pointer]:
+      - img [ref=e122]
+      - generic [ref=e124]: AI Query
+    - generic "AI Admin" [ref=e125] [cursor=pointer]:
+      - img [ref=e127]
+      - generic [ref=e130]: AI Admin
+  - main [ref=e131]:
+    - generic [ref=e473]:
+      - navigation "Breadcrumb" [ref=e474]:
+        - link "Backlog" [ref=e475] [cursor=pointer]:
+          - /url: "#"
+        - generic [ref=e476]: /
+        - generic [ref=e477]: BRIM_CON_BDC_Program_043
+      - generic [ref=e478]:
+        - generic [ref=e479]:
+          - generic [ref=e480]: Conversion
+          - heading "BRIM_CON_BDC_Program_043" [level=2] [ref=e481]
+          - generic [ref=e482]: Design
+        - generic [ref=e483]:
+          - button "← Back" [ref=e484] [cursor=pointer]
+          - button "AI WRICEF Spec" [ref=e485] [cursor=pointer]
+          - button "Edit" [ref=e486] [cursor=pointer]
+    - generic [ref=e487]:
+      - button "📋 Overview" [ref=e488] [cursor=pointer]
+      - button "📑 Specs (FS/TS)" [ref=e489] [cursor=pointer]
+      - button "🧪 Tests" [ref=e490] [cursor=pointer]
+      - button "🔗 Traceability" [ref=e491] [cursor=pointer]
+    - generic [ref=e493]:
+      - generic [ref=e494]:
+        - generic [ref=e495]:
+          - paragraph [ref=e496]: WRICEF Overview
+          - heading "BRIM_CON_BDC_Program_043" [level=3] [ref=e497]
+          - paragraph [ref=e498]: Keep delivery metadata, SAP object scope, and document readiness aligned before moving into detailed spec work.
+        - generic [ref=e499]:
+          - generic [ref=e500]: 🔀 Conversion
+          - generic [ref=e501]: MEDIUM
+          - generic [ref=e502]: FS + TS Ready
+      - generic [ref=e503]:
+        - article [ref=e504]:
+          - generic [ref=e505]: Module
+          - strong [ref=e506]: FI
+          - generic [ref=e507]: Functional area
+        - article [ref=e508]:
+          - generic [ref=e509]: Owner
+          - strong [ref=e510]: Gökhan Çelik
+          - generic [ref=e511]: Current delivery owner
+        - article [ref=e512]:
+          - generic [ref=e513]: Sprint
+          - strong [ref=e514]: Sprint 1
+          - generic [ref=e515]: Planned execution window
+        - article [ref=e516]:
+          - generic [ref=e517]: Spec Coverage
+          - strong [ref=e518]: FS + TS Ready
+          - generic [ref=e519]: Documentation readiness
+      - generic [ref=e520]:
+        - article [ref=e521]:
+          - generic [ref=e522]:
+            - generic [ref=e523]:
+              - paragraph [ref=e524]: Delivery Control
+              - heading "Status Progression" [level=3] [ref=e525]
+            - generic [ref=e526]: Design
+          - paragraph [ref=e527]: Cozum yaklasimi netlesiyor; functional spec ve kapsam bu asamada olgunlasir.
+          - generic [ref=e528]:
+            - button "New Completed" [disabled] [ref=e529]:
+              - generic [ref=e530]: New
+              - generic [ref=e531]: Completed
+            - button "Design Current" [disabled] [ref=e532]:
+              - generic [ref=e533]: Design
+              - generic [ref=e534]: Current
+            - button "Build Next" [ref=e535] [cursor=pointer]:
+              - generic [ref=e536]: Build
+              - generic [ref=e537]: Next
+            - button "Test Locked" [disabled] [ref=e538]:
+              - generic [ref=e539]: Test
+              - generic [ref=e540]: Locked
+            - button "Deploy Locked" [disabled] [ref=e541]:
+              - generic [ref=e542]: Deploy
+              - generic [ref=e543]: Locked
+            - button "Closed Locked" [disabled] [ref=e544]:
+              - generic [ref=e545]: Closed
+              - generic [ref=e546]: Locked
+          - generic [ref=e547]:
+            - generic [ref=e548]: Alternate actions
+            - generic [ref=e549]:
+              - button "Blocked" [ref=e550]
+              - button "Cancelled" [ref=e551]
+        - article [ref=e552]:
+          - generic [ref=e553]:
+            - generic [ref=e554]:
+              - paragraph [ref=e555]: Planning Workspace
+              - heading "Sprint & Delivery Owner" [level=3] [ref=e556]
+            - generic [ref=e557]: Inline update
+          - generic [ref=e558]:
+            - generic [ref=e559]:
+              - generic [ref=e560]: Sprint
+              - combobox "Sprint" [ref=e561]:
+                - option "Unassigned"
+                - option "Sprint 1" [selected]
+                - option "Sprint 2"
+                - option "Sprint 3"
+              - generic [ref=e562]: Execution window for the item.
+            - generic [ref=e563]:
+              - generic [ref=e564]: Delivery Owner
+              - combobox "Delivery Owner" [ref=e565]:
+                - option "— Unassigned —"
+                - option "Umut Kaya (program_manager)"
+                - option "Elif Demir (project_lead)"
+                - option "Baran Yıldız (stream_lead)"
+                - option "Canan Öztürk (stream_lead)"
+                - option "Deniz Arslan (stream_lead)"
+                - option "Emre Koç (stream_lead)"
+                - option "Fatma Güneş (consultant)"
+                - option "Gökhan Çelik (stream_lead)" [selected]
+                - option "Hande Şahin (stream_lead)"
+                - option "İbrahim Aydın (developer)"
+                - option "Jale Kara (stream_lead)"
+                - option "Kerem Polat (stream_lead)"
+                - option "Leyla Erdoğan (stream_lead)"
+                - option "Mert Yılmaz (team_member)"
+              - generic [ref=e566]: Primary accountable person for delivery follow-up.
+          - generic [ref=e567]:
+            - generic [ref=e568]: No planning changes pending.
+            - button "Apply Planning" [disabled] [ref=e569]
+      - generic [ref=e570]:
+        - article [ref=e571]:
+          - generic [ref=e573]:
+            - paragraph [ref=e574]: Design Context
+            - heading "Classification" [level=3] [ref=e575]
+          - generic [ref=e576]:
+            - generic [ref=e577]:
+              - term [ref=e578]: WRICEF Type
+              - definition [ref=e579]:
+                - generic [ref=e580]: 🔀 Conversion
+            - generic [ref=e581]:
+              - term [ref=e582]: Sub Type
+              - definition [ref=e583]: —
+            - generic [ref=e584]:
+              - term [ref=e585]: Complexity
+              - definition [ref=e586]: medium
+            - generic [ref=e587]:
+              - term [ref=e588]: Priority
+              - definition [ref=e589]:
+                - generic [ref=e590]: medium
+        - article [ref=e591]:
+          - generic [ref=e593]:
+            - paragraph [ref=e594]: Delivery Planning
+            - heading "Execution Snapshot" [level=3] [ref=e595]
+          - generic [ref=e596]:
+            - generic [ref=e597]:
+              - term [ref=e598]: Story Points
+              - definition [ref=e599]: —
+            - generic [ref=e600]:
+              - term [ref=e601]: Estimated Hours
+              - definition [ref=e602]: —
+            - generic [ref=e603]:
+              - term [ref=e604]: Actual Hours
+              - definition [ref=e605]: —
+            - generic [ref=e606]:
+              - term [ref=e607]: Status
+              - definition [ref=e608]:
+                - generic [ref=e609]: Design
+        - article [ref=e610]:
+          - generic [ref=e612]:
+            - paragraph [ref=e613]: SAP Object Scope
+            - heading "SAP Details" [level=3] [ref=e614]
+          - generic [ref=e615]:
+            - generic [ref=e616]:
+              - term [ref=e617]: Transaction Code
+              - definition [ref=e618]: —
+            - generic [ref=e619]:
+              - term [ref=e620]: Package
+              - definition [ref=e621]: —
+            - generic [ref=e622]:
+              - term [ref=e623]: Transport Request
+              - definition [ref=e624]: —
+            - generic [ref=e625]:
+              - term [ref=e626]: Code
+              - definition [ref=e627]: —
+        - article [ref=e628]:
+          - generic [ref=e630]:
+            - paragraph [ref=e631]: Document Readiness
+            - heading "Spec Status" [level=3] [ref=e632]
+          - generic [ref=e633]:
+            - generic [ref=e634]:
+              - term [ref=e635]: Functional Spec
+              - definition [ref=e636]:
+                - generic [ref=e637]: FS • approved
+            - generic [ref=e638]:
+              - term [ref=e639]: Technical Spec
+              - definition [ref=e640]:
+                - generic [ref=e641]: TS • in_review
+            - generic [ref=e642]:
+              - term [ref=e643]: Current Version
+              - definition [ref=e644]: "0.1"
+            - generic [ref=e645]:
+              - term [ref=e646]: Reviewer
+              - definition [ref=e647]: —
+      - article [ref=e649]:
+        - generic [ref=e651]:
+          - paragraph [ref=e652]: Functional Summary
+          - heading "Description" [level=3] [ref=e653]
+        - paragraph [ref=e654]: No description.
+  - generic:
+    - button "Open Perga Copilot" [ref=e314] [cursor=pointer]:
+      - img [ref=e315]
+    - dialog "Perga Copilot":
+      - generic:
+        - generic: Perga Copilot
+        - generic:
+          - button "New Chat": ⟳
+          - button "Close Copilot": ✕
+      - log: Ask anything about your SAP project…
+      - generic:
+        - textbox "Your message":
+          - /placeholder: Ask anything about your SAP project…
+        - button "Send"
+  - generic [ref=e317]: ⚡ Offline Mode
+  - generic [ref=e319]:
+    - generic [ref=e320]: 📱
+    - generic [ref=e321]: Install this app for quick access
+    - button "Install" [ref=e322] [cursor=pointer]
+    - button "✕" [ref=e323] [cursor=pointer]

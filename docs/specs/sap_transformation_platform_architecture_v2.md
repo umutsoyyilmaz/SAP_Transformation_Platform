@@ -1,8 +1,8 @@
 # SAP Transformation Management Platform — Uygulama Mimarisi
 
-**Versiyon:** 2.4  
-**Tarih:** 2026-02-13  
-**Hazırlayan:** Umut Soyyılmaz  
+**Versiyon:** 2.4
+**Tarih:** 2026-02-13
+**Hazırlayan:** Umut Soyyılmaz
 **Kaynak:** SAP Transformation PM Playbook (S/4HANA + Public Cloud)
 
 ### Revizyon Geçmişi
@@ -189,7 +189,7 @@ Project → Scenario → Analysis → Requirement (Fit/Partial Fit/Gap)
 │                                                                                  │
 │  ► FS/TS Detay: test-management-fs-ts.md                                        │
 │  ► Implementasyon: app/models/testing.py (14 model, ~1200 LOC)                  │
-│  ► API: app/blueprints/testing_bp.py (55 route, ~2500 LOC)                      │
+│  ► API: app/blueprints/testing/__init__.py (55 route, package entrypoint)        │
 │                                                                                  │
 │  ═══ IMPLEMENT EDİLEN TABLOLAR (14) ═══════════════════════════════════════════  │
 │                                                                                  │
@@ -208,10 +208,10 @@ Project → Scenario → Analysis → Requirement (Fit/Partial Fit/Gap)
 │    └── ──N:M──▶ test_suite (via test_cycle_suite junction)                     │
 │                                                                                  │
 │  test_suite (level-based grouping) ✅ TS-Sprint 1                               │
-│    ├── suite_type: sit|uat|regression|e2e|performance                           │
+│    ├── purpose: free-text reusable suite intent                                 │
 │    ├── process_area, estimated_duration, execution_order                         │
 │    ├── status: draft|ready|in_progress|completed                                │
-│    └── ──1:N──▶ test_case (via suite_id FK)                                    │
+│    └── ──N:M──▶ test_case (via test_case_suite_links)                          │
 │                                                                                  │
 │  test_cycle_suite (N:M junction: cycle ↔ suite) ✅ TS-Sprint 1                  │
 │                                                                                  │
@@ -221,7 +221,7 @@ Project → Scenario → Analysis → Requirement (Fit/Partial Fit/Gap)
 │    ├── preconditions, test_steps (TEXT), expected_result, test_data_set          │
 │    ├── status: draft|ready|approved|deprecated                                   │
 │    ├── is_regression (boolean flag for regression sets)                          │
-│    ├── suite_id FK (→ test_suite) ✅ TS-Sprint 1                                │
+│    ├── suite_ids (derived via test_case_suite_links junction)                    │
 │    ├── Traceability FKs: requirement_id, backlog_item_id, config_item_id        │
 │    ├── ──1:N──▶ test_execution                                                 │
 │    ├── ──1:N──▶ test_step                                                      │
@@ -645,7 +645,7 @@ Cycle 0 (Trial)  → Cycle 1 (Volume) → Cycle 2 (Dress Rehearsal) → Cycle 3 
 **Amaç:** 6 test seviyesinin yaşam döngüsü, defect yönetimi, Go/No-Go scorecard, traceability matrix.
 
 **FS/TS Referansı:** `test-management-fs-ts.md` v1.0 (54KB, 13 bölüm, 17 tablo hedef)
-**Implementasyon:** `app/models/testing.py` + `app/blueprints/testing_bp.py`
+**Implementasyon:** `app/models/testing.py` + `app/blueprints/testing/__init__.py`
 
 #### Mevcut Implementasyon Durumu
 
@@ -1417,14 +1417,14 @@ CREATE TABLE ai_embeddings (
 );
 
 -- HNSW indeks (hızlı similarity search)
-CREATE INDEX idx_embeddings_hnsw ON ai_embeddings 
+CREATE INDEX idx_embeddings_hnsw ON ai_embeddings
     USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
 
 -- Metadata filtreleme için
 CREATE INDEX idx_embeddings_source ON ai_embeddings (source_type, project_id, module);
 
 -- Hybrid search: full-text search indeksi
-ALTER TABLE ai_embeddings ADD COLUMN tsv tsvector 
+ALTER TABLE ai_embeddings ADD COLUMN tsv tsvector
     GENERATED ALWAYS AS (to_tsvector('simple', chunk_text)) STORED;
 CREATE INDEX idx_embeddings_fts ON ai_embeddings USING gin(tsv);
 ```
@@ -1516,7 +1516,7 @@ INTEGRATE (API):
 async def nl_query(user_question: str, user_context: dict):
     # 1. Schema context hazırla
     schema_ctx = get_relevant_tables(user_question)  # embeddings ile
-    
+
     # 2. LLM'e gönder
     response = await llm_gateway.call(
         model="claude-haiku",
@@ -1528,10 +1528,10 @@ async def nl_query(user_question: str, user_context: dict):
             "question": user_question
         }
     )
-    
+
     # 3. SQL çıktısını validate et
     sql = validate_readonly_sql(response.sql)
-    
+
     # 4. Karmaşık mı? Onay iste
     if response.complexity == "high":
         return SuggestionQueue.create(
@@ -1539,7 +1539,7 @@ async def nl_query(user_question: str, user_context: dict):
             content={"sql": sql, "explanation": response.explanation},
             auto_approve=False
         )
-    
+
     # 5. Çalıştır ve sonuç döndür
     result = await db.execute(sql)
     return format_response(result, response.explanation)
@@ -1593,24 +1593,24 @@ model: claude-sonnet
 template: |
   Sen bir SAP S/4HANA dönüşüm uzmanısın. Aşağıdaki requirement açıklamasını
   analiz et ve SAP Best Practice scope item'ı ile karşılaştır.
-  
+
   ## Scope Item Bilgisi
   {scope_item_name}: {scope_item_description}
   SAP Standard Kapsam: {scope_item_standard_coverage}
-  
+
   ## Requirement Açıklaması
   {requirement_description}
-  
+
   ## Benzer Geçmiş Requirement'lar
   {similar_requirements_from_rag}
-  
+
   ## Görevin
   1. Bu requirement'ı sınıflandır: Fit / Partial Fit / Gap
   2. Sınıflandırma gerekçeni açıkla (2-3 cümle)
   3. Partial Fit veya Gap ise: eksik olan kısmı tanımla
   4. Gap ise: WRICEF tipi öner (W/R/I/C/E/F) ve kısa gerekçe
   5. Güven skorun (0.0-1.0) ne?
-  
+
   JSON formatında yanıt ver.
 ```
 
@@ -2442,19 +2442,22 @@ INTEGRATE (API):
 
 ## 14. Implementation Status — Test Management Domain (v2.2 Snapshot)
 
-> **Tarih:** 2026-02-10 | **Kaynak:** `app/models/testing.py`, `app/blueprints/testing_bp.py`, `tests/test_api_testing.py`
+> **Tarih:** 2026-02-10 | **Kaynak:** `app/models/testing.py`, `app/blueprints/testing/__init__.py`, `tests/test_api_testing.py`
 > **Son Sprint:** TS-Sprint 2 (`3c331dd`) — 9 yeni tablo, 27 yeni route, 83 yeni test
 
 ### 14.1 Tablo Durumu
+
+> Note: sprint labels in this section are historical build markers.
+> Current runtime state is later than this snapshot and active suite membership uses `test_case_suite_links`.
 
 | # | Tablo | Durum | Model Sınıfı | Sprint | Açıklama |
 |---|-------|-------|-------------|--------|----------|
 | 1 | `test_plans` | ✅ Implement | `TestPlan` | S5 | Plan CRUD, strategy/criteria text, status lifecycle |
 | 2 | `test_cycles` | ✅ Implement | `TestCycle` | S5 | Cycle within plan, test_layer, ordering |
-| 3 | `test_cases` | ✅ Implement | `TestCase` | S5 | Catalog, auto code gen, traceability FKs, is_regression flag, suite_id |
+| 3 | `test_cases` | ✅ Implement | `TestCase` | S5 | Catalog, auto code gen, traceability FKs, is_regression flag, suite_ids via junction |
 | 4 | `test_executions` | ✅ Implement | `TestExecution` | S5 | Case-level result, evidence URL |
 | 5 | `defects` | ✅ Implement | `Defect` | S5 | 8 status lifecycle, aging_days computed, reopen tracking, linked_requirement_id |
-| 6 | `test_suites` | ✅ Implement | `TestSuite` | TS-1 | Level-based grouping, suite_type, process_area, execution_order |
+| 6 | `test_suites` | ✅ Implement | `TestSuite` | TS-1 | Level-based grouping, purpose, process_area, execution_order |
 | 7 | `test_cycle_suites` | ✅ Implement | `TestCycleSuite` | TS-1 | N:M junction (cycle ↔ suite) |
 | 8 | `test_steps` | ✅ Implement | `TestStep` | TS-1 | Per-case ordered steps (action, expected_result, test_data) |
 | 9 | `test_case_dependencies` | ✅ Implement | `TestCaseDependency` | TS-1 | blocks/requires/related_to dependency graph |
@@ -2501,7 +2504,7 @@ INTEGRATE (API):
 | Konu | Mevcut Implementasyon | FS/TS v1.0 Hedef | Durum |
 |------|----------------------|------------------|:-----:|
 | Test steps | Ayrı `test_step` tablosu (action, expected_result, test_data) | Ayrı `test_step` tablosu (action, expected_result, sap_transaction) | ✅ |
-| Suite gruplama | TestCase → TestSuite (suite_id FK) → TestCycleSuite junction | TestCase → TestSuite → TestPlan | ✅ |
+| Suite gruplama | TestCase ↔ TestSuite via `test_case_suite_links` + TestCycleSuite junction | TestCase → TestSuite → TestPlan | ✅ |
 | Execution hierarchy | Cycle → Execution + Cycle → TestRun → StepResult | Cycle → TestRun → Execution | ✅ |
 | Step-level results | `test_step_result` tablosu (per-step pass/fail/blocked/skipped) | `test_step_result` tablosu (per-step) | ✅ |
 | Defect lifecycle | 8 status (new, open, in_progress, fixed, retest, closed, rejected, reopened) | 9 status (+ assigned, deferred; resolved→fixed) | 🟡 TS-3 |
@@ -2521,7 +2524,7 @@ INTEGRATE (API):
 | Unit test sayısı (`test_api_testing.py`) | 147 test (64 base + 37 TS-1 + 46 TS-2) |
 | Toplam platform testi | 860 test (848 passed + 11 deselected + 1 xfail) |
 | Model dosyası | `app/models/testing.py` — ~1200 LOC (14 model) |
-| Blueprint dosyası | `app/blueprints/testing_bp.py` — ~2500 LOC (55 route) |
+| Blueprint dosyası | `app/blueprints/testing/__init__.py` — package entrypoint |
 | Dashboard KPI'ları | pass_rate, severity_dist, aging, velocity, layer_summary, coverage, env_stability |
 
 ---

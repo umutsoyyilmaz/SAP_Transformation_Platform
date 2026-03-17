@@ -1,9 +1,9 @@
 # Explore Phase — End-to-End Review Findings
 
-**Tarih:** 2025-02-11  
-**Scope:** Explore Phase modülünün 9 kaynak dosyası üzerinde uçtan uca tutarlılık analizi  
-**Yöntem:** D1 (FS/TS) ↔ M9 (Model) ↔ B9 (Blueprint) ↔ S (Services×8) ↔ T1 (Tests) ↔ D9 (Task List) ↔ Seed Data ↔ User Guide (TR+EN)  
-**Reviewer:** Architecture Review Agent  
+**Tarih:** 2025-02-11
+**Scope:** Explore Phase modülünün 9 kaynak dosyası üzerinde uçtan uca tutarlılık analizi
+**Yöntem:** D1 (FS/TS) ↔ M9 (Model) ↔ B9 (Blueprint) ↔ S (Services×8) ↔ T1 (Tests) ↔ D9 (Task List) ↔ Seed Data ↔ User Guide (TR+EN)
+**Reviewer:** Architecture Review Agent
 **Commit:** `3c331dd` (TS-Sprint 2)
 
 ---
@@ -26,10 +26,10 @@
 | T1 | `tests/test_explore.py` | 2 091 | 192 test (4 grup) |
 | D9 | `EXPLORE_PHASE_TASK_LIST.md` | 1 217 | 175/179 görev (%98) |
 | Seed | `scripts/seed_data/explore.py` | 504 | 12/25 tablo |
-| UG-TR | `User Guide/explore-phase-user-guide.md` | 1 048 | 13 bölüm, Türkçe |
-| UG-EN | `User Guide/explore-phase-user-guide-en.md` | 1 048 | 13 bölüm, İngilizce |
+| UG-TR | `docs/user-guides/explore-phase-user-guide.md` | 1 048 | 13 bölüm, Türkçe |
+| UG-EN | `docs/user-guides/explore-phase-user-guide-en.md` | 1 048 | 13 bölüm, İngilizce |
 
-**Toplam incelenen LOC:** ~13 835  
+**Toplam incelenen LOC:** ~13 835
 **Not:** Proje dokümanlarında referans verilen `app/services/explore_service.py (S7 — 423 LOC)` dosyası mevcut değildir. Explore servis katmanı 8 ayrı dosyaya (~1 974 LOC) bölünmüştür.
 
 ---

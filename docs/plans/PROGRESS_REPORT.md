@@ -1,6 +1,6 @@
 # SAP Transformation Platform — Progress Report
-**Tarih:** 13 Şubat 2026  
-**Sprint:** 1-17 + S19-S24 Tamamlandı + FE-Sprint + Explore Phase 0 + TS-Sprint 1-3 + UI-Sprint + TD-Sprint 1 + WR-0→WR-4  
+**Tarih:** 13 Şubat 2026
+**Sprint:** 1-17 + S19-S24 Tamamlandı + FE-Sprint + Explore Phase 0 + TS-Sprint 1-3 + UI-Sprint + TD-Sprint 1 + WR-0→WR-4
 **Repo:** [umutsoyyilmaz/SAP_Transformation_Platform](https://github.com/umutsoyyilmaz/SAP_Transformation_Platform)
 
 ---
@@ -220,10 +220,10 @@
 
 | # | Task (Plan Ref) | Açıklama | Durum |
 |---|-----------------|----------|-------|
-| 2.1 | pgvector setup script | scripts/setup_pgvector.py | ✅ |
+| 2.1 | pgvector setup script | scripts/infrastructure/setup_pgvector.py | ✅ |
 | 2.2 | Phase, Gate, Workstream, TeamMember, Committee modelleri | 5 model | ✅ |
 | 2.3 | Alembic migration init + ilk migration | Sprint 1-2 migration | ✅ |
-| 2.4 | SQLite migration script | scripts/migrate_from_sqlite.py | ✅ |
+| 2.4 | SQLite migration script | scripts/data/migrate/migrate_from_sqlite.py | ✅ |
 | 2.5 | Program API genişletme | 24 endpoint | ✅ |
 | 2.6 | Program UI — tabbed detail view (5 tab) | Phases, Workstreams, Team, Committee, Gates | ✅ |
 | 2.7 | SAP Activate seed data | Faz şablonları | ✅ |

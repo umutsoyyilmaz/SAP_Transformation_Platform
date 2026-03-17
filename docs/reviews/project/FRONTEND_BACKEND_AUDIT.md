@@ -50,7 +50,7 @@
 | 11 | explore_requirements.js | Explore Phase | `ExploreAPI.requirements.*`, `ExploreAPI.openItems.*` | explore_bp | ✅ Düzeltildi |
 | 12 | backlog.js | Delivery | `/programs/{pid}/backlog/*`, `/config-items/*`, `/sprints/*`, `/traceability/*` | backlog_bp | ✅ Çalışıyor |
 | 13 | testing.js | Delivery | `/programs/{pid}/testing/catalog`, `/testing/plans/*`, `/testing/cycles/*`, `/testing/executions/*`, `/testing/defects/*`, `/testing/dashboard`, `/testing/traceability-matrix` | testing_bp | ⚠️ Eski (Sprint 1-2-3 yok) |
-| 14 | integration.js | Delivery | `/programs/{pid}/interfaces`, `/interfaces/*`, `/waves/*`, `/checklist/*`, `/switch-plans/*` | integration_bp | ✅ Düzeltildi |
+| 14 | integration.js | Delivery | `/programs/{pid}/interfaces`, `/interfaces/*`, `/waves/*`, `/checklist/*`, `/switch-plans/*` | interface_factory_bp | ✅ Düzeltildi |
 | 15 | raid.js | Go-Live | `/programs/{pid}/raid/*`, `/risks`, `/actions`, `/issues`, `/decisions` | raid_bp | ✅ Çalışıyor |
 | 16 | ai_query.js | AI | `/ai/query/natural-language`, `/ai/query/execute-sql` | ai_bp | ✅ Çalışıyor |
 | 17 | ai_admin.js | AI | `/ai/admin/dashboard`, `/ai/suggestions`, `/ai/usage`, `/ai/audit-log`, `/ai/embeddings/*`, `/ai/prompts` | ai_bp | ✅ Çalışıyor |

@@ -23,7 +23,7 @@ The Program → Project 1:N hierarchy backlog (6 EPICs, 20 stories, 4 full-refac
 | 4 | Migration: project scope flag | `migrations/versions/039_add_project_scope_flag.py` | EXISTS |
 | 5 | Migration: project_id indexes | `migrations/versions/040_add_project_id_indexes.py` | EXISTS |
 | 6 | Backfill Script | `scripts/backfill_default_projects.py` | EXISTS |
-| 7 | CI Regression Script | `scripts/ci_project_scope_regression.sh` | EXISTS |
+| 7 | CI Regression Script | `scripts/testing/ci_project_scope_regression.sh` | EXISTS |
 | 8 | Project Scope Resolver | `app/services/project_scope_resolver.py` | EXISTS |
 | 9 | Scoped Query Helpers | `app/services/helpers/scoped_queries.py` | EXISTS |
 | 10 | Project CRUD (in program_bp) | `app/blueprints/program_bp.py` (PROJECTS section) | EXISTS |
@@ -131,7 +131,7 @@ The Program → Project 1:N hierarchy backlog (6 EPICs, 20 stories, 4 full-refac
 
 ### Project-Scope Regression Suite
 ```
-bash scripts/ci_project_scope_regression.sh → 144 PASS
+bash scripts/testing/ci_project_scope_regression.sh → 144 PASS
 
 Suite A: Unit (scope resolver + RBAC)           — 27 passed
 Suite B: Integration (ownership + isolation)     — 93 passed

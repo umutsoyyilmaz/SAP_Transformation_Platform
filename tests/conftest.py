@@ -17,10 +17,11 @@ from app import create_app
 from app.models import db as _db
 from app.services.permission_service import invalidate_all_cache
 
-# Faz 6 partial: FK enforcement deferred — explore module tests still use
-# legacy project_id=program_id pattern.  Auto-sync upgraded to real Project
-# lookup, but full enforcement requires updating all explore test fixtures.
-# TODO(Faz 6.5): Enable after explore fixture migration.
+# E1 (low-priority): FK enforcement deferred — legacy project_id=program_id pattern
+# is widespread across explore/workshop/session test fixtures (247+ tests affected).
+# Partial progress: test_requirement_consolidation.py + test_api_test_planning_services.py
+# corrected to use program_id column. Full migration requires a dedicated fixture overhaul.
+# TODO(E1-full): Enable after all explore/workshop fixtures are migrated.
 _app_module._SQLITE_FK_ENFORCEMENT = False
 
 
@@ -122,3 +123,14 @@ def project(program):
     ).first()
     assert proj is not None, "Default project should have been auto-created by create_program"
     return proj
+
+
+@pytest.fixture()
+def explore_program(program, project):
+    """Program + default project pair for explore/workshop tests.
+
+    Returns (program_dict, Project) tuple. Use project.id for project_id FK,
+    program['id'] for program_id FK.
+    """
+    return program, project
+

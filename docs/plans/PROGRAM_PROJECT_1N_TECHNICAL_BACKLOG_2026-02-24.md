@@ -1,7 +1,7 @@
 # Program (1) -> Project (N) Technical Backlog
 
-Date: 2026-02-24  
-Owner: Architecture + Platform Team  
+Date: 2026-02-24
+Owner: Architecture + Platform Team
 Scope: Multi-tenant SAP Transformation Platform
 
 ## 1. Objective
@@ -360,7 +360,7 @@ Requirements:
 Status: completed (2026-02-24)
 Artifacts:
 - `docs/specs/PROGRAM_PROJECT_MIGRATION_TEST_STRATEGY_2026-02-24.md`
-- `scripts/ci_project_scope_regression.sh`
+- `scripts/testing/ci_project_scope_regression.sh`
 - `.github/workflows/ci.yml` (`Project-Scope Regression Pack` step)
 Tasks:
 1. Unit: scope resolver + RBAC evaluator.
@@ -424,14 +424,14 @@ Include go/no-go checklist and ownership matrix.
 Validation Snapshot (2026-02-24):
 | Gate | Status | Evidence |
 |---|---|---|
-| 1. Context mismatch defects = 0 (P1/P0) | PASS (test scope) | `tests/test_project_scope_resolver.py`, `tests/test_context_url_routing_contract.py` |
-| 2. Unauthorized access tests = 100% pass | PASS | `tests/test_tenant_isolation.py`, `tests/test_api_projects.py`, `tests/test_scope_observability_story_51.py`, `scripts/ci_project_scope_regression.sh` |
-| 3. Backfill completeness = 100% mapped | PASS (fixture scope) | `tests/test_backfill_default_projects.py` |
+| 1. Context mismatch defects = 0 (P1/P0) | PASS (test scope) | `tests/project_scope/test_project_scope_resolver.py`, `tests/ui_contracts/test_context_url_routing_contract.py` |
+| 2. Unauthorized access tests = 100% pass | PASS | `tests/auth/test_tenant_isolation.py`, `tests/features/test_api_projects.py`, `tests/project_scope/test_scope_observability_story_51.py`, `scripts/testing/ci_project_scope_regression.sh` |
+| 3. Backfill completeness = 100% mapped | PASS (fixture scope) | `tests/project_scope/test_backfill_default_projects.py` |
 | 4. Fallback usage metric target = 0 | TRACKING (release sonrası) | `app/services/project_scope_resolver.py` fallback telemetry + release dashboard takibi |
-| 5. Dashboards + alerts active | PASS (implementation + test) | `docs/reviews/project/SCOPE_SECURITY_OBSERVABILITY_RUNBOOK_2026-02-24.md`, `tests/test_scope_observability_story_51.py`, `/api/v1/metrics/security/alerts` |
+| 5. Dashboards + alerts active | PASS (implementation + test) | `docs/reviews/project/SCOPE_SECURITY_OBSERVABILITY_RUNBOOK_2026-02-24.md`, `tests/project_scope/test_scope_observability_story_51.py`, `/api/v1/metrics/security/alerts` |
 
 Executed Verification Command (2026-02-24):
-`PYTHONPATH=. python3 -m pytest -q tests/test_backfill_default_projects.py tests/test_tenant_isolation.py tests/test_api_projects.py tests/test_project_scope_resolver.py tests/test_scope_observability_story_51.py tests/test_data_quality_guard_jobs.py tests/test_context_url_routing_contract.py tests/test_my_projects_visibility.py`
+`PYTHONPATH=. python3 -m pytest -q tests/project_scope/test_backfill_default_projects.py tests/auth/test_tenant_isolation.py tests/features/test_api_projects.py tests/project_scope/test_project_scope_resolver.py tests/project_scope/test_scope_observability_story_51.py tests/features/test_data_quality_guard_jobs.py tests/ui_contracts/test_context_url_routing_contract.py tests/features/test_my_projects_visibility.py`
 
 ## 7. Risks and Mitigations
 1. Risk: Eski endpoint bağımlılıkları. Mitigation: dual-read/dual-write + telemetry.
@@ -442,10 +442,10 @@ Executed Verification Command (2026-02-24):
 Risk Control Check (2026-02-24):
 | Risk | Related Gate(s) | Control Status | Evidence |
 |---|---|---|---|
-| Eski endpoint bağımlılıkları | Gate-1, Gate-4 | PASS / TRACKING | `tests/test_project_scope_resolver.py` (fallback flag behavior), `tests/test_api_projects.py` |
-| Migration lock/timeouts | Gate-3 | PASS (plan + dry-run path) | `scripts/backfill_default_projects.py` dry-run/apply, `tests/test_backfill_default_projects.py` |
-| Permission karmaşıklığı | Gate-1, Gate-2, Gate-5 | PASS | `app/services/permission_service.py`, `tests/test_tenant_isolation.py`, `tests/test_scope_observability_story_51.py` |
-| UI context sapması | Gate-1, Gate-4 | PASS / TRACKING | `tests/test_context_url_routing_contract.py`, `tests/test_my_projects_visibility.py` |
+| Eski endpoint bağımlılıkları | Gate-1, Gate-4 | PASS / TRACKING | `tests/project_scope/test_project_scope_resolver.py` (fallback flag behavior), `tests/features/test_api_projects.py` |
+| Migration lock/timeouts | Gate-3 | PASS (plan + dry-run path) | `scripts/backfill_default_projects.py` dry-run/apply, `tests/project_scope/test_backfill_default_projects.py` |
+| Permission karmaşıklığı | Gate-1, Gate-2, Gate-5 | PASS | `app/services/permission_service.py`, `tests/auth/test_tenant_isolation.py`, `tests/project_scope/test_scope_observability_story_51.py` |
+| UI context sapması | Gate-1, Gate-4 | PASS / TRACKING | `tests/ui_contracts/test_context_url_routing_contract.py`, `tests/features/test_my_projects_visibility.py` |
 
 ## 8. Immediate Next Actions
 1. Story 1.1 için migration taslağını çıkar.
@@ -488,8 +488,8 @@ Rollback Checkpoints:
 11. `.rollback_checkpoints/2026-02-24_phase1_program_mgmt/integration_bp.py.phase4_scope.bak`
 
 Validation (post-hotfix):
-1. `PYTHONPATH=. python3 -m pytest -q tests/test_frontend_context_guard_contract.py tests/test_context_url_routing_contract.py tests/test_program_projects_ui_contract.py tests/test_my_projects_visibility.py tests/test_api_projects.py tests/test_project_scope_resolver.py` → PASS
-2. `bash scripts/ci_project_scope_regression.sh` → PASS
+1. `PYTHONPATH=. python3 -m pytest -q tests/ui_contracts/test_frontend_context_guard_contract.py tests/ui_contracts/test_context_url_routing_contract.py tests/ui_contracts/test_program_projects_ui_contract.py tests/features/test_my_projects_visibility.py tests/features/test_api_projects.py tests/project_scope/test_project_scope_resolver.py` → PASS
+2. `bash scripts/testing/ci_project_scope_regression.sh` → PASS
 
 ## 10. Full Refactor Definition (Next Step)
 Objective: complete Program->Project scope hardening end-to-end and remove transitional ambiguity.
@@ -508,7 +508,7 @@ Expand CI pack with negative isolation tests for all critical modules and add gu
 
 Exit Criteria:
 1. No legacy fallback usage in production telemetry for agreed observation window. — MET: `allow_fallback=False` enforced in `explore/scope.py`; `project_id=program_id` patterns eliminated from `traceability.py` and `testing_service.py`.
-2. All cross-scope isolation tests pass in full regression matrix. — MET: `bash scripts/ci_project_scope_regression.sh` → 144 PASS (4 suites).
+2. All cross-scope isolation tests pass in full regression matrix. — MET: `bash scripts/testing/ci_project_scope_regression.sh` → 144 PASS (4 suites).
 3. No unscoped `Program/Project` fetches remain in critical API paths. — MET: `reporting_bp.py` (7 routes), `sap_auth_service.py`, and all Phase/Gate/Workstream/Team/Committee mutation endpoints now tenant-scoped. `test_scoped_lookup_guard.py` (7 tests) enforces this in CI.
 4. Story 6.1 status can be moved to `completed` with production-like evidence set. — MET: All 20 stories completed. Review document at `docs/reviews/project/PROGRAM_PROJECT_BACKLOG_REVIEW_2026-02-24.md`.
 
@@ -523,10 +523,10 @@ Scope (files):
 3. `static/js/views/project_setup.js`
 4. `templates/index.html`
 Tests:
-1. `tests/test_frontend_context_guard_contract.py`
-2. `tests/test_context_url_routing_contract.py`
-3. `tests/test_program_projects_ui_contract.py`
-4. `tests/test_my_projects_ui_contract.py`
+1. `tests/ui_contracts/test_frontend_context_guard_contract.py`
+2. `tests/ui_contracts/test_context_url_routing_contract.py`
+3. `tests/ui_contracts/test_program_projects_ui_contract.py`
+4. `tests/ui_contracts/test_my_projects_ui_contract.py`
 Rollback:
 1. `.rollback_checkpoints/<date>_full_refactor/fr1_frontend_context/`
 2. `.rollback_checkpoints/2026-02-24_phase1_program_mgmt/app.js.fr1_deterministic_sidebar.bak`
@@ -535,8 +535,8 @@ Done Criteria:
 2. Project-required views are disabled/rerouted when project missing.
 3. URL + selector + localStorage context stay in sync.
 Validation:
-1. `PYTHONPATH=. python3 -m pytest -q tests/test_frontend_context_guard_contract.py tests/test_context_url_routing_contract.py tests/test_program_projects_ui_contract.py tests/test_my_projects_ui_contract.py` → PASS
-2. `bash scripts/ci_project_scope_regression.sh` → PASS
+1. `PYTHONPATH=. python3 -m pytest -q tests/ui_contracts/test_frontend_context_guard_contract.py tests/ui_contracts/test_context_url_routing_contract.py tests/ui_contracts/test_program_projects_ui_contract.py tests/ui_contracts/test_my_projects_ui_contract.py` → PASS
+2. `bash scripts/testing/ci_project_scope_regression.sh` → PASS
 
 ### Phase-FR2: Backend Scoped Access Standardization
 Status: completed (2026-02-24)
@@ -547,15 +547,15 @@ Scope (files):
 2. `app/blueprints/backlog_bp.py`
 3. `app/blueprints/raid_bp.py`
 4. `app/blueprints/discover_bp.py`
-5. `app/blueprints/integration_bp.py`
+5. `app/blueprints/interface_factory_bp.py`
 6. `app/services/helpers/scoped_queries.py`
 Tests:
-1. `tests/test_tenant_isolation.py`
-2. `tests/test_api_projects.py`
-3. `tests/test_api_backlog.py`
-4. `tests/test_api_raid.py`
-5. `tests/test_discover.py`
-6. `tests/test_api_integration.py`
+1. `tests/auth/test_tenant_isolation.py`
+2. `tests/features/test_api_projects.py`
+3. `tests/features/test_api_backlog.py`
+4. `tests/features/test_api_raid.py`
+5. `tests/features/test_discover.py`
+6. `tests/features/test_api_integration.py`
 Rollback:
 1. `.rollback_checkpoints/<date>_full_refactor/fr2_backend_scope/`
 2. `.rollback_checkpoints/2026-02-24_full_refactor/fr2_backend_scope/`
@@ -563,8 +563,8 @@ Done Criteria:
 1. No unscoped `Program/Project` access remains in critical blueprints.
 2. Cross-tenant/cross-program/cross-project isolation negatives return expected 403/404.
 Validation:
-1. `PYTHONPATH=. python3 -m pytest -q tests/test_api_backlog.py tests/test_api_raid.py tests/test_api_integration.py tests/test_tenant_isolation.py tests/test_api_projects.py tests/test_project_scope_resolver.py` → PASS
-2. `bash scripts/ci_project_scope_regression.sh` → PASS
+1. `PYTHONPATH=. python3 -m pytest -q tests/features/test_api_backlog.py tests/features/test_api_raid.py tests/features/test_api_integration.py tests/auth/test_tenant_isolation.py tests/features/test_api_projects.py tests/project_scope/test_project_scope_resolver.py` → PASS
+2. `bash scripts/testing/ci_project_scope_regression.sh` → PASS
 
 ### Phase-FR3: Legacy Fallback Decommission
 Status: completed (2026-02-24)
@@ -577,10 +577,10 @@ Scope (files):
 4. `app/blueprints/explore/open_items.py`
 5. Related legacy compatibility callers found by grep audit.
 Tests:
-1. `tests/test_project_scope_resolver.py`
-2. `tests/test_explore_service_isolation.py`
-3. `tests/test_workshop_docs_isolation.py`
-4. `tests/test_data_quality_guard_jobs.py`
+1. `tests/project_scope/test_project_scope_resolver.py`
+2. `tests/features/test_explore_service_isolation.py`
+3. `tests/features/test_workshop_docs_isolation.py`
+4. `tests/features/test_data_quality_guard_jobs.py`
 Rollback:
 1. `.rollback_checkpoints/<date>_full_refactor/fr3_legacy_fallback/`
 2. `.rollback_checkpoints/2026-02-24_full_refactor/fr3_legacy_fallback/`
@@ -588,20 +588,20 @@ Done Criteria:
 1. Fallback paths removed or fully feature-flag guarded.
 2. Telemetry event `project_scope_fallback_used` trends to 0 in target window.
 Validation:
-1. `PYTHONPATH=. python3 -m pytest -q tests/test_project_scope_resolver.py tests/test_explore_service_isolation.py tests/test_workshop_docs_isolation.py tests/test_data_quality_guard_jobs.py` → PASS
-2. `bash scripts/ci_project_scope_regression.sh` → PASS
+1. `PYTHONPATH=. python3 -m pytest -q tests/project_scope/test_project_scope_resolver.py tests/features/test_explore_service_isolation.py tests/features/test_workshop_docs_isolation.py tests/features/test_data_quality_guard_jobs.py` → PASS
+2. `bash scripts/testing/ci_project_scope_regression.sh` → PASS
 
 ### Phase-FR4: End-to-End Gate and CI Enforcement
 Status: completed (2026-02-24)
 Goal:
 1. Fail fast on regressions via complete scope regression and contract packs.
 Scope (files):
-1. `scripts/ci_project_scope_regression.sh`
+1. `scripts/testing/ci_project_scope_regression.sh`
 2. `.github/workflows/ci.yml`
 3. Scope guard tests/lint rules under `tests/`
 Tests:
 1. Full pack: unit + integration + SPA contract + security negative suites.
-2. Mandatory command: `bash scripts/ci_project_scope_regression.sh`
+2. Mandatory command: `bash scripts/testing/ci_project_scope_regression.sh`
 Rollback:
 1. `.rollback_checkpoints/<date>_full_refactor/fr4_ci_gate/`
 2. `.rollback_checkpoints/2026-02-24_full_refactor/fr4_ci_gate/`
@@ -609,8 +609,8 @@ Done Criteria:
 1. CI blocks merges on scope regressions.
 2. Release Gate Criteria section is refreshed with production-like evidence.
 Validation:
-1. `PYTHONPATH=. python3 -m pytest -q tests/test_scoped_lookup_guard.py` → PASS
-2. `bash scripts/ci_project_scope_regression.sh` → PASS
+1. `PYTHONPATH=. python3 -m pytest -q tests/project_scope/test_scoped_lookup_guard.py` → PASS
+2. `bash scripts/testing/ci_project_scope_regression.sh` → PASS
 
 Execution Order:
 1. FR1 -> FR2 -> FR3 -> FR4 (strict sequence).
