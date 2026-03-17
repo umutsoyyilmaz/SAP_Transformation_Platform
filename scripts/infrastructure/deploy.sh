@@ -107,6 +107,10 @@ health_check() {
 # ── Main ────────────────────────────────────────────────────────────────
 preflight
 
+if [ -n "${DEPLOY_TOKEN:-}" ] && [ -z "${RAILWAY_TOKEN:-}" ]; then
+    export RAILWAY_TOKEN="$DEPLOY_TOKEN"
+fi
+
 # Detect deployment method
 if [ -n "${RAILWAY_TOKEN:-}" ] || [ -n "${DEPLOY_TOKEN:-}" ]; then
     deploy_railway
