@@ -5,7 +5,16 @@ S/4HANA Greenfield | Chemical & Process Manufacturing | Turkey
 
 Usage:
     python scripts/seed_meridian_data.py
+
+Optional environment overrides:
+    MERIDIAN_TENANT_ID=2
+    MERIDIAN_PROGRAM_ID=7
+    MERIDIAN_PROJECT_ID=9
+    MERIDIAN_TENANT_NAME="Meridian Industries"
+    MERIDIAN_PROGRAM_NAME="Meridian S/4HANA Program"
+    MERIDIAN_PROJECT_NAME="Meridian Default Project"
 """
+import os
 import sys
 import uuid
 from datetime import date, datetime, timezone
@@ -15,9 +24,15 @@ sys.path.insert(0, ".")
 from app import create_app
 from app.models import db
 
-TENANT_ID = 1
-PROGRAM_ID = 1
-PROJECT_ID = 1
+TENANT_ID = int(os.getenv("MERIDIAN_TENANT_ID")) if os.getenv("MERIDIAN_TENANT_ID") else None
+PROGRAM_ID = int(os.getenv("MERIDIAN_PROGRAM_ID")) if os.getenv("MERIDIAN_PROGRAM_ID") else None
+PROJECT_ID = int(os.getenv("MERIDIAN_PROJECT_ID")) if os.getenv("MERIDIAN_PROJECT_ID") else None
+MERIDIAN_TENANT_SLUG = os.getenv("MERIDIAN_TENANT_SLUG", "meridian")
+MERIDIAN_PROGRAM_CODE = os.getenv("MERIDIAN_PROGRAM_CODE", "MERIDIAN-S4")
+MERIDIAN_PROJECT_CODE = os.getenv("MERIDIAN_PROJECT_CODE", "MERIDIAN-CORE")
+EXPECTED_TENANT_NAME = os.getenv("MERIDIAN_TENANT_NAME", "Meridian Industries")
+EXPECTED_PROGRAM_NAME = os.getenv("MERIDIAN_PROGRAM_NAME", "Meridian S/4HANA Program")
+EXPECTED_PROJECT_NAME = os.getenv("MERIDIAN_PROJECT_NAME", "Meridian Default Project")
 NOW = datetime.now(timezone.utc)
 ADMIN_USER_ID = "1"  # stored as varchar in explore tables
 
@@ -26,6 +41,231 @@ def uid():
 
 def run_sql(sql, params=()):
     db.session.execute(db.text(sql), params)
+
+
+def fetch_one(sql, params):
+    return db.session.execute(db.text(sql), params).mappings().first()
+
+
+def ensure_target_context() -> None:
+    global TENANT_ID, PROGRAM_ID, PROJECT_ID
+
+    tenant = None
+    if TENANT_ID is not None:
+        tenant = fetch_one(
+            "SELECT id, name, slug FROM tenants WHERE id = :tenant_id",
+            {"tenant_id": TENANT_ID},
+        )
+    if tenant is None:
+        tenant = fetch_one(
+            "SELECT id, name, slug FROM tenants WHERE slug = :slug",
+            {"slug": MERIDIAN_TENANT_SLUG},
+        )
+    if tenant is None:
+        db.session.execute(
+            db.text(
+                """
+                INSERT INTO tenants
+                    (name, slug, plan, max_users, max_projects, is_active, settings, created_at, updated_at)
+                VALUES
+                    (:name, :slug, :plan, :max_users, :max_projects, :is_active, CAST(:settings AS JSON), :created_at, :updated_at)
+                """
+            ),
+            {
+                "name": EXPECTED_TENANT_NAME,
+                "slug": MERIDIAN_TENANT_SLUG,
+                "plan": "premium",
+                "max_users": 250,
+                "max_projects": 25,
+                "is_active": True,
+                "settings": "{}",
+                "created_at": NOW,
+                "updated_at": NOW,
+            },
+        )
+        db.session.flush()
+        tenant = fetch_one(
+            "SELECT id, name, slug FROM tenants WHERE slug = :slug",
+            {"slug": MERIDIAN_TENANT_SLUG},
+        )
+    TENANT_ID = tenant["id"]
+
+    program = None
+    if PROGRAM_ID is not None:
+        program = fetch_one(
+            "SELECT id, name, tenant_id, code FROM programs WHERE id = :program_id",
+            {"program_id": PROGRAM_ID},
+        )
+    if program is None:
+        program = fetch_one(
+            "SELECT id, name, tenant_id, code FROM programs WHERE tenant_id = :tenant_id AND code = :code",
+            {"tenant_id": TENANT_ID, "code": MERIDIAN_PROGRAM_CODE},
+        )
+    if program is None:
+        db.session.execute(
+            db.text(
+                """
+                INSERT INTO programs
+                    (tenant_id, name, description, project_type, methodology, status, priority,
+                     sap_product, deployment_option, code, customer_name, customer_industry,
+                     customer_country, sponsor_name, sponsor_title, program_director,
+                     steerco_frequency, currency, overall_rag, created_at, updated_at)
+                VALUES
+                    (:tenant_id, :name, :description, :project_type, :methodology, :status, :priority,
+                     :sap_product, :deployment_option, :code, :customer_name, :customer_industry,
+                     :customer_country, :sponsor_name, :sponsor_title, :program_director,
+                     :steerco_frequency, :currency, :overall_rag, :created_at, :updated_at)
+                """
+            ),
+            {
+                "tenant_id": TENANT_ID,
+                "name": EXPECTED_PROGRAM_NAME,
+                "description": "Meridian Industries SAP S/4HANA greenfield transformation program.",
+                "project_type": "greenfield",
+                "methodology": "sap_activate",
+                "status": "active",
+                "priority": "high",
+                "sap_product": "S/4HANA",
+                "deployment_option": "on_premise",
+                "code": MERIDIAN_PROGRAM_CODE,
+                "customer_name": EXPECTED_TENANT_NAME,
+                "customer_industry": "Chemical & Process Manufacturing",
+                "customer_country": "Turkey",
+                "sponsor_name": "Kenan Caliskan",
+                "sponsor_title": "CEO",
+                "program_director": "Ahmet Yilmaz",
+                "steerco_frequency": "monthly",
+                "currency": "EUR",
+                "overall_rag": "Amber",
+                "created_at": NOW,
+                "updated_at": NOW,
+            },
+        )
+        db.session.flush()
+        program = fetch_one(
+            "SELECT id, name, tenant_id, code FROM programs WHERE tenant_id = :tenant_id AND code = :code",
+            {"tenant_id": TENANT_ID, "code": MERIDIAN_PROGRAM_CODE},
+        )
+    PROGRAM_ID = program["id"]
+
+    project = None
+    if PROJECT_ID is not None:
+        project = fetch_one(
+            "SELECT id, name, tenant_id, program_id, code FROM projects WHERE id = :project_id",
+            {"project_id": PROJECT_ID},
+        )
+    if project is None:
+        project = fetch_one(
+            "SELECT id, name, tenant_id, program_id, code FROM projects WHERE program_id = :program_id AND code = :code",
+            {"program_id": PROGRAM_ID, "code": MERIDIAN_PROJECT_CODE},
+        )
+    if project is None:
+        db.session.execute(
+            db.text(
+                """
+                INSERT INTO projects
+                    (tenant_id, program_id, code, name, type, status, is_default, description,
+                     wave_number, sap_product, project_type, methodology, deployment_option,
+                     priority, project_rag, rag_scope, rag_timeline, rag_budget, rag_quality,
+                     rag_resources, created_at, updated_at)
+                VALUES
+                    (:tenant_id, :program_id, :code, :name, :type, :status, :is_default, :description,
+                     :wave_number, :sap_product, :project_type, :methodology, :deployment_option,
+                     :priority, :project_rag, :rag_scope, :rag_timeline, :rag_budget, :rag_quality,
+                     :rag_resources, :created_at, :updated_at)
+                """
+            ),
+            {
+                "tenant_id": TENANT_ID,
+                "program_id": PROGRAM_ID,
+                "code": MERIDIAN_PROJECT_CODE,
+                "name": EXPECTED_PROJECT_NAME,
+                "type": "implementation",
+                "status": "active",
+                "is_default": True,
+                "description": "Default execution project for Meridian S/4HANA transformation scope.",
+                "wave_number": 1,
+                "sap_product": "S/4HANA",
+                "project_type": "greenfield",
+                "methodology": "sap_activate",
+                "deployment_option": "on_premise",
+                "priority": "high",
+                "project_rag": "Amber",
+                "rag_scope": "Amber",
+                "rag_timeline": "Amber",
+                "rag_budget": "Green",
+                "rag_quality": "Green",
+                "rag_resources": "Amber",
+                "created_at": NOW,
+                "updated_at": NOW,
+            },
+        )
+        db.session.flush()
+        project = fetch_one(
+            "SELECT id, name, tenant_id, program_id, code FROM projects WHERE program_id = :program_id AND code = :code",
+            {"program_id": PROGRAM_ID, "code": MERIDIAN_PROJECT_CODE},
+        )
+    PROJECT_ID = project["id"]
+
+
+def validate_target_context():
+    tenant = fetch_one(
+        "SELECT id, name FROM tenants WHERE id = :tenant_id",
+        {"tenant_id": TENANT_ID},
+    )
+    if not tenant:
+        raise RuntimeError(f"Tenant {TENANT_ID} does not exist")
+
+    program = fetch_one(
+        "SELECT id, name, tenant_id FROM programs WHERE id = :program_id",
+        {"program_id": PROGRAM_ID},
+    )
+    if not program:
+        raise RuntimeError(f"Program {PROGRAM_ID} does not exist")
+
+    project = fetch_one(
+        "SELECT id, name, tenant_id, program_id FROM projects WHERE id = :project_id",
+        {"project_id": PROJECT_ID},
+    )
+    if not project:
+        raise RuntimeError(f"Project {PROJECT_ID} does not exist")
+
+    if program["tenant_id"] != TENANT_ID:
+        raise RuntimeError(
+            f"Program {PROGRAM_ID} belongs to tenant {program['tenant_id']}, expected tenant {TENANT_ID}"
+        )
+
+    if project["tenant_id"] != TENANT_ID:
+        raise RuntimeError(
+            f"Project {PROJECT_ID} belongs to tenant {project['tenant_id']}, expected tenant {TENANT_ID}"
+        )
+
+    if project["program_id"] != PROGRAM_ID:
+        raise RuntimeError(
+            f"Project {PROJECT_ID} belongs to program {project['program_id']}, expected program {PROGRAM_ID}"
+        )
+
+    if EXPECTED_TENANT_NAME and tenant["name"] != EXPECTED_TENANT_NAME:
+        raise RuntimeError(
+            f"Tenant {TENANT_ID} name mismatch: {tenant['name']!r} != {EXPECTED_TENANT_NAME!r}"
+        )
+
+    if EXPECTED_PROGRAM_NAME and program["name"] != EXPECTED_PROGRAM_NAME:
+        raise RuntimeError(
+            f"Program {PROGRAM_ID} name mismatch: {program['name']!r} != {EXPECTED_PROGRAM_NAME!r}"
+        )
+
+    if EXPECTED_PROJECT_NAME and project["name"] != EXPECTED_PROJECT_NAME:
+        raise RuntimeError(
+            f"Project {PROJECT_ID} name mismatch: {project['name']!r} != {EXPECTED_PROJECT_NAME!r}"
+        )
+
+    print(
+        "   Target context:",
+        f"tenant={tenant['id']}:{tenant['name']}",
+        f"program={program['id']}:{program['name']}",
+        f"project={project['id']}:{project['name']}",
+    )
 
 # ─── Existing Process Step IDs (for explore_decisions FK) ────────────────────
 EXISTING_STEPS = [
@@ -36,24 +276,108 @@ EXISTING_STEPS = [
     "0950289e-291a-46c7-8ae4-2976c9ebe517",
 ]
 
-# ─── Process Level IDs (existing) ─────────────────────────────────────────────
-PL = {
-    "L1_OTC": "2f437de8-1364-42bc-a207-b2b19b821a07",
-    "L1_PTP": "301c0b04-d2f0-42ac-a7e2-755c06617c35",
-    "L1_RTR": "f090a5bf-b191-462f-afba-54211df5b6a1",
-    "L1_PTD": "250520e5-7c19-468a-a8fc-9cf2dce1de3c",
-    "L1_HCM": "72069767-d9bd-413f-ac96-be63eb26c2aa",
-    "L2_SD_SALES": "7eeba0db-b299-4db3-b6c9-f399f518bc15",
-    "L2_SD_SHIP":  "ae390942-a344-4742-8b6e-2f142f09c3cb",
-    "L2_MM_PROC":  "84bca6b4-3e3c-46f4-8f46-064d71383b6b",
-    "L2_MM_INV":   "201b2581-0c6f-4c75-8088-a01c3e0ba0c3",
-    "L2_FI_GL":    "44e5a1c3-f3ac-4d5a-8826-c3153ba557a2",
-    "L2_FI_AP":    "ef10c76b-8959-4c6d-9460-d50fe96a119f",
-    "L2_PP_PLAN":  "df8bdcb6-ab40-43c5-b750-c3e3bec8575c",
-    "L2_PP_EXEC":  "e8f83ac9-aaec-48c6-8e8e-4ee16a5920db",
-    "L2_HR_PA":    "a1a304ee-b8cb-4ccd-a21c-4c4c7d131d49",
-    "L2_HR_TIME":  "e052ad1b-0705-4d98-978a-57173a713358",
+PL_CODE_MAP = {
+    "L1_OTC": "L1-OTC",
+    "L1_PTP": "L1-PTP",
+    "L1_RTR": "L1-RTR",
+    "L1_PTD": "L1-PTD",
+    "L1_HCM": "L1-HCM",
+    "L2_SD_SALES": "L2-SD-SALES",
+    "L2_SD_SHIP": "L2-SD-SHIP",
+    "L2_MM_PROC": "L2-MM-PROC",
+    "L2_MM_INV": "L2-MM-INV",
+    "L2_FI_GL": "L2-FI-GL",
+    "L2_FI_AP": "L2-FI-AP",
+    "L2_PP_PLAN": "L2-PP-PLAN",
+    "L2_PP_EXEC": "L2-PP-EXEC",
+    "L2_HR_PA": "L2-HR-PA",
+    "L2_HR_TIME": "L2-HR-TIME",
 }
+PL: dict[str, str] = {}
+
+PROCESS_LEVEL_SEED = [
+    {"code": "L1-OTC", "parent_code": None, "level": 1, "name": "Order to Cash", "area": "SD", "wave": 1, "sort": 1},
+    {"code": "L1-PTP", "parent_code": None, "level": 1, "name": "Procure to Pay", "area": "MM", "wave": 1, "sort": 2},
+    {"code": "L1-RTR", "parent_code": None, "level": 1, "name": "Record to Report", "area": "FI", "wave": 1, "sort": 3},
+    {"code": "L1-PTD", "parent_code": None, "level": 1, "name": "Plan to Deliver", "area": "PP", "wave": 2, "sort": 4},
+    {"code": "L1-HCM", "parent_code": None, "level": 1, "name": "Hire to Retire", "area": "HR", "wave": 3, "sort": 5},
+    {"code": "L2-SD-SALES", "parent_code": "L1-OTC", "level": 2, "name": "Sales Order Management", "area": "SD", "wave": 1, "sort": 1},
+    {"code": "L2-SD-SHIP", "parent_code": "L1-OTC", "level": 2, "name": "Delivery & Shipping", "area": "SD", "wave": 1, "sort": 2},
+    {"code": "L2-MM-PROC", "parent_code": "L1-PTP", "level": 2, "name": "Procurement", "area": "MM", "wave": 1, "sort": 1},
+    {"code": "L2-MM-INV", "parent_code": "L1-PTP", "level": 2, "name": "Invoice Verification", "area": "MM", "wave": 2, "sort": 2},
+    {"code": "L2-FI-GL", "parent_code": "L1-RTR", "level": 2, "name": "General Ledger", "area": "FI", "wave": 1, "sort": 1},
+    {"code": "L2-FI-AP", "parent_code": "L1-RTR", "level": 2, "name": "Accounts Payable", "area": "FI", "wave": 2, "sort": 2},
+    {"code": "L2-PP-PLAN", "parent_code": "L1-PTD", "level": 2, "name": "Production Planning", "area": "PP", "wave": 2, "sort": 1},
+    {"code": "L2-PP-EXEC", "parent_code": "L1-PTD", "level": 2, "name": "Shop Floor Execution", "area": "PP", "wave": 2, "sort": 2},
+    {"code": "L2-HR-PA", "parent_code": "L1-HCM", "level": 2, "name": "Personnel Administration", "area": "HR", "wave": 3, "sort": 1},
+    {"code": "L2-HR-TIME", "parent_code": "L1-HCM", "level": 2, "name": "Time Management", "area": "HR", "wave": 3, "sort": 2},
+]
+
+
+def _process_level_uuid(code: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"meridian-process-{PROJECT_ID}-{code}"))
+
+
+def ensure_process_hierarchy() -> None:
+    created_by_code: dict[str, str] = {}
+
+    for item in PROCESS_LEVEL_SEED:
+        existing = fetch_one(
+            "SELECT id FROM process_levels WHERE project_id = :project_id AND code = :code",
+            {"project_id": PROJECT_ID, "code": item["code"]},
+        )
+        if existing:
+            created_by_code[item["code"]] = existing["id"]
+            continue
+
+        parent_id = created_by_code.get(item["parent_code"]) if item["parent_code"] else None
+        db.session.execute(
+            db.text(
+                """
+                INSERT INTO process_levels
+                    (id, tenant_id, program_id, project_id, parent_id, level, code, name,
+                     description, scope_status, fit_status, bpmn_available,
+                     process_area_code, wave, sort_order, consolidated_decision_override,
+                     created_at, updated_at)
+                VALUES
+                    (:id, :tenant_id, :program_id, :project_id, :parent_id, :level, :code, :name,
+                     :description, :scope_status, :fit_status, :bpmn_available,
+                     :process_area_code, :wave, :sort_order, :consolidated_decision_override,
+                     :created_at, :updated_at)
+                """
+            ),
+            {
+                "id": _process_level_uuid(item["code"]),
+                "tenant_id": TENANT_ID,
+                "program_id": PROGRAM_ID,
+                "project_id": PROJECT_ID,
+                "parent_id": parent_id,
+                "level": item["level"],
+                "code": item["code"],
+                "name": item["name"],
+                "description": f"Meridian process hierarchy seed for {item['name']}",
+                "scope_status": "in_scope",
+                "fit_status": None,
+                "bpmn_available": False,
+                "process_area_code": item["area"],
+                "wave": item["wave"],
+                "sort_order": item["sort"],
+                "consolidated_decision_override": False,
+                "created_at": NOW,
+                "updated_at": NOW,
+            },
+        )
+        created_by_code[item["code"]] = _process_level_uuid(item["code"])
+
+    for key, code in PL_CODE_MAP.items():
+        row = fetch_one(
+            "SELECT id FROM process_levels WHERE project_id = :project_id AND code = :code",
+            {"project_id": PROJECT_ID, "code": code},
+        )
+        if not row:
+            raise RuntimeError(f"Missing process level for code {code} in project {PROJECT_ID}")
+        PL[key] = row["id"]
+
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -87,7 +411,7 @@ def seed_stakeholders():
               (program_id, tenant_id, name, title, organization, email,
                stakeholder_type, influence_level, interest_level,
                engagement_strategy, current_sentiment, is_active, created_at, updated_at)
-            VALUES (:prog,:t,:name,:title,:org,:email,:stype,:inf,:int,:eng,:sent,1,:now,:now)
+            VALUES (:prog,:t,:name,:title,:org,:email,:stype,:inf,:int,:eng,:sent,TRUE,:now,:now)
         """, dict(prog=PROGRAM_ID, t=TENANT_ID, name=r[0], title=r[1], org=r[2],
                   email=r[3], stype=r[4], inf=r[5], int=r[6], eng=r[7], sent=r[8], now=NOW))
     db.session.flush()
@@ -155,7 +479,7 @@ def seed_workshops():
             INSERT INTO process_steps
               (id, workshop_id, process_level_id, sort_order, fit_decision,
                demo_shown, bpmn_reviewed, project_id, program_id, tenant_id)
-            VALUES (:id,:w,:pl,0,'standard',0,0,:proj,:prog,:t)
+            VALUES (:id,:w,:pl,0,'standard',FALSE,FALSE,:proj,:prog,:t)
         """, dict(id=sid, w=wid, pl=pl_id, proj=PROJECT_ID, prog=PROGRAM_ID, t=TENANT_ID))
         step_ids[code] = sid
         # Also scope item link
@@ -220,11 +544,11 @@ def seed_explore_reqs():
                created_at, updated_at)
             VALUES (:id,:proj,:prog,:t,:code,:title,:type,
                     :fit,:status,:mod,:area,:priority,
-                    :pl,:wricef,:creator,0,:now,:now)
+                                        :pl,:wricef,:creator,FALSE,:now,:now)
         """, dict(id=uid(), proj=PROJECT_ID, prog=PROGRAM_ID, t=TENANT_ID,
                   code=code, title=title, type=rtype, fit=fit, status=status,
                   mod=sap_mod, area=area, priority=priority, pl=pl_id,
-                  wricef=1 if wricef else 0, creator=ADMIN_USER_ID, now=NOW))
+                                    wricef=wricef, creator=ADMIN_USER_ID, now=NOW))
     db.session.flush()
     print(f"    ✅ {len(rows)} explore requirements")
 
@@ -521,7 +845,7 @@ def seed_testing():
             VALUES (:prog,:proj,:t,
                     'Meridian S/4HANA — SIT Master Test Plan',
                     'System Integration Testing: FI, CO, MM, SD, PP, QM, HCM, BTP',
-                    'active','sit','development','2026-01-15','2026-06-30',:now,:now)
+                                        'active','sit','QAS','2026-01-15','2026-06-30',:now,:now)
             RETURNING id
         """), dict(prog=PROGRAM_ID, proj=PROJECT_ID, t=TENANT_ID, now=NOW))
         PLAN_ID = res.fetchone()[0]
@@ -535,12 +859,12 @@ def seed_testing():
     nc = db.session.execute(db.text("SELECT COUNT(*) FROM test_cycles WHERE plan_id=:p"), {"p": PLAN_ID}).scalar()
     if nc < 2:
         cycle_rows = [
-            ("SIT Round 1 — FI/CO/MM","sit","development","completed","2026-01-15","2026-01-31"),
-            ("SIT Round 2 — SD/PP/QM","sit","quality","completed","2026-02-03","2026-02-21"),
-            ("SIT Round 3 — Integration & Regression","integration","quality","in_progress","2026-03-02","2026-03-28"),
-            ("UAT Round 1 — Finance Users","uat","uat","not_started","2026-07-01","2026-07-31"),
-            ("UAT Round 2 — Operations Users","uat","uat","not_started","2026-08-04","2026-08-29"),
-            ("Performance — Load & Stress","performance","quality","not_started","2026-09-01","2026-09-15"),
+            ("SIT Round 1 — FI/CO/MM","sit","DEV","completed","2026-01-15","2026-01-31"),
+            ("SIT Round 2 — SD/PP/QM","sit","QAS","completed","2026-02-03","2026-02-21"),
+            ("SIT Round 3 — Integration & Regression","integration","QAS","in_progress","2026-03-02","2026-03-28"),
+            ("UAT Round 1 — Finance Users","uat","PRE","not_started","2026-07-01","2026-07-31"),
+            ("UAT Round 2 — Operations Users","uat","PRE","not_started","2026-08-04","2026-08-29"),
+            ("Performance — Load & Stress","performance","QAS","not_started","2026-09-01","2026-09-15"),
         ]
         ckeys = ["SIT-01","SIT-02","SIT-03","UAT-01","UAT-02","PERF-01"]
         for idx, (name, layer, env, status, start, end) in enumerate(cycle_rows):
@@ -700,7 +1024,7 @@ def seed_testing():
                 INSERT INTO test_runs
                   (cycle_id, test_case_id, tenant_id, run_type, status, result,
                    environment, tester, created_at, updated_at)
-                VALUES (:cycle,:tc,:t,'manual',:status,:result,'quality',:tester,:now,:now)
+                VALUES (:cycle,:tc,:t,'manual',:status,:result,'QAS',:tester,:now,:now)
             """, dict(cycle=cycle_id, tc=tc_id, t=TENANT_ID, status=result,
                       result=actual, tester=testers[i % len(testers)], now=NOW))
         db.session.flush()
@@ -1091,7 +1415,7 @@ def seed_cutover():
                    planned_duration_min, is_critical_path, responsible, created_at, updated_at)
                 VALUES (:si,:t,:code,:title,:status,:dur,:cp,:resp,:now,:now)
             """, dict(si=ref_si, t=TENANT_ID, code=code, title=title, status=status,
-                      dur=dur_min, cp=1 if is_cp else 0, resp=responsible, now=NOW))
+                      dur=dur_min, cp=is_cp, resp=responsible, now=NOW))
     db.session.flush()
 
     # Go/No-Go Items — uses criterion + verdict + source_domain
@@ -1179,6 +1503,9 @@ def main():
     with app.app_context():
         print("\n🚀 Meridian Industries A.Ş. — Comprehensive Data Seed")
         print("=" * 60)
+        ensure_target_context()
+        validate_target_context()
+        ensure_process_hierarchy()
 
         seed_stakeholders()
         seed_workshops()
@@ -1201,35 +1528,42 @@ def main():
 
         print("\n📊 Final Record Counts:")
         checks = [
-            ("Stakeholders",           "stakeholders WHERE program_id=1"),
-            ("Explore Workshops",      "explore_workshops WHERE project_id=1"),
-            ("Explore Requirements",   "explore_requirements WHERE project_id=1"),
-            ("Explore Open Items",     "explore_open_items WHERE project_id=1"),
-            ("Explore Decisions",      "explore_decisions WHERE project_id=1"),
-            ("Sprints",                "sprints WHERE program_id=1"),
-            ("Backlog Items (WRICEF)", "backlog_items WHERE program_id=1"),
-            ("Config Items",           "config_items WHERE program_id=1"),
-            ("Test Suites",            "test_suites WHERE program_id=1"),
-            ("Test Cases",             "test_cases WHERE program_id=1"),
+            ("Stakeholders",           "stakeholders WHERE program_id=:program_id"),
+            ("Explore Workshops",      "explore_workshops WHERE project_id=:project_id"),
+            ("Explore Requirements",   "explore_requirements WHERE project_id=:project_id"),
+            ("Explore Open Items",     "explore_open_items WHERE project_id=:project_id"),
+            ("Explore Decisions",      "explore_decisions WHERE project_id=:project_id"),
+            ("Sprints",                "sprints WHERE program_id=:program_id"),
+            ("Backlog Items (WRICEF)", "backlog_items WHERE program_id=:program_id"),
+            ("Config Items",           "config_items WHERE program_id=:program_id"),
+            ("Test Suites",            "test_suites WHERE program_id=:program_id"),
+            ("Test Cases",             "test_cases WHERE program_id=:program_id"),
             ("Test Runs",              "test_runs"),
-            ("Defects",                "defects WHERE program_id=1"),
-            ("Risks",                  "risks WHERE program_id=1"),
-            ("Actions",                "actions WHERE program_id=1"),
-            ("Issues",                 "issues WHERE program_id=1"),
-            ("Decisions",              "decisions WHERE program_id=1"),
-            ("Interfaces",             "interfaces WHERE program_id=1"),
-            ("Data Objects",           "data_objects WHERE program_id=1"),
-            ("Cleansing Tasks",        "cleansing_tasks WHERE tenant_id=1"),
-            ("Cutover Scope Items",    "cutover_scope_items WHERE tenant_id=1"),
-            ("Runbook Tasks",          "runbook_tasks WHERE tenant_id=1"),
-            ("Go/No-Go Items",         "go_no_go_items WHERE tenant_id=1"),
-            ("Rehearsals",             "rehearsals WHERE tenant_id=1"),
-            ("Comm. Plan Entries",     "communication_plan_entries WHERE program_id=1"),
-            ("Stakeholders",           "stakeholders WHERE program_id=1"),
+            ("Defects",                "defects WHERE program_id=:program_id"),
+            ("Risks",                  "risks WHERE program_id=:program_id"),
+            ("Actions",                "actions WHERE program_id=:program_id"),
+            ("Issues",                 "issues WHERE program_id=:program_id"),
+            ("Decisions",              "decisions WHERE program_id=:program_id"),
+            ("Interfaces",             "interfaces WHERE program_id=:program_id"),
+            ("Data Objects",           "data_objects WHERE program_id=:program_id"),
+            ("Cleansing Tasks",        "cleansing_tasks WHERE tenant_id=:tenant_id"),
+            ("Cutover Scope Items",    "cutover_scope_items WHERE tenant_id=:tenant_id"),
+            ("Runbook Tasks",          "runbook_tasks WHERE tenant_id=:tenant_id"),
+            ("Go/No-Go Items",         "go_no_go_items WHERE tenant_id=:tenant_id"),
+            ("Rehearsals",             "rehearsals WHERE tenant_id=:tenant_id"),
+            ("Comm. Plan Entries",     "communication_plan_entries WHERE program_id=:program_id"),
+            ("Stakeholders",           "stakeholders WHERE program_id=:program_id"),
         ]
         for label, clause in checks:
             try:
-                n = db.session.execute(db.text(f"SELECT COUNT(*) FROM {clause}")).scalar()
+                n = db.session.execute(
+                    db.text(f"SELECT COUNT(*) FROM {clause}"),
+                    {
+                        "tenant_id": TENANT_ID,
+                        "program_id": PROGRAM_ID,
+                        "project_id": PROJECT_ID,
+                    },
+                ).scalar()
                 print(f"   {label:30s}: {n}")
             except Exception:
                 pass
